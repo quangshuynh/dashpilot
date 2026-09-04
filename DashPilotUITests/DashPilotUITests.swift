@@ -56,6 +56,23 @@ final class DashPilotUITests: XCTestCase {
         )
     }
 
+    /// The authorization panel is on screen from launch, in whatever state the
+    /// device is in.
+    ///
+    /// Only its presence is asserted: which state it shows depends on the
+    /// simulator's permission database, and this test must not depend on that.
+    /// The mapping from each authorization state to what is displayed is
+    /// covered by `LocationAuthorizationServiceTests` instead, and no test
+    /// drives the system permission alert — automating it would be brittle and
+    /// would change the device state other tests run against.
+    @MainActor
+    func testShowsLocationAuthorizationState() throws {
+        let app = launchWithEmptyStore()
+
+        let status = app.descendants(matching: .any)["locationAuthorizationStatus"]
+        XCTAssertTrue(status.waitForExistence(timeout: 10))
+    }
+
     @MainActor
     func testLaunchPerformance() throws {
         measure(metrics: [XCTApplicationLaunchMetric()]) {
