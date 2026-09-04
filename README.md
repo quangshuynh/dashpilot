@@ -19,16 +19,22 @@ The project is early. This section describes what exists, not what is intended.
 - Versioned SwiftData schema (`DashPilotSchemaV1`) with a migration plan wired in from v1.
 - `Shift` model: start timestamp, optional end timestamp, elapsed and completed duration, with
   guarded end transitions.
+- Shift lifecycle: start a shift, end the running shift, and a single-active-shift rule enforced in
+  `ShiftService` against the store rather than by disabling a button. Rejected and failed
+  transitions are reported to the driver instead of being swallowed.
+- Relaunch recovery: a shift still running when the app was terminated is picked up on the next
+  launch with its original start time, because the store is the only place shift state lives.
+- Root screen: start/end controls, an elapsed timer derived from the start timestamp, and a list of
+  completed shifts.
 - `Money`, a `Decimal`-backed monetary type covering the app's arithmetic, rounding, rate division
   and formatting.
 - App shell that surfaces a store-open failure as a visible state instead of crashing.
-- Read-only shift list on the root screen.
 
 **Not implemented yet**
 
-Starting and ending shifts from the UI, location authorization, route capture, mileage, earnings
-entry, delivery records, wait-time measurement, maps, App Intents, Live Activities and
-recommendations. See `AGENTS.md` for the intended order of work.
+Location authorization, route capture, mileage, earnings entry, delivery records, wait-time
+measurement, maps, App Intents, Live Activities and recommendations. Nothing about a shift is
+recorded beyond its start and end times. See `AGENTS.md` for the intended order of work.
 
 ## Privacy
 
