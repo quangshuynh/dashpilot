@@ -11,7 +11,7 @@ DashPilot/
   Domain/        Framework-independent value types and calculations
   Models/        SwiftData @Model types
   Persistence/   Versioned schema, migration plan, container construction
-  Services/      Application services that own state transitions
+  Services/      Application services that own state transitions and platform adapters
   Support/       Cross-cutting utilities (logging, launch arguments)
 DashPilotTests/  Swift Testing suites
 DashPilotUITests/ XCUITest journeys
@@ -86,10 +86,93 @@ service to mutate, so SwiftData stays the single source of truth for what is dis
 is rendered by a `TimelineView` that recomputes `Shift.elapsed(asOf:)` each second; no changing
 duration is stored, and VoiceOver reads the value to the minute rather than announcing seconds.
 
+## Location authorization
+
+DashPilot reads its permission to use location. It does not read location. No `CLLocation` is
+requested, held or written anywhere in the app, and no background location capability is enabled.
+
+Three layers, each with one job:
+
+- `LocationAuthorization` (Domain) — the permission facts as plain values: whether system-wide
+  Location Services is on, the app's own `LocationAuthorizationStatus`, and the granted
+  `LocationAccuracyAuthorization`. Core Location is not imported here.
+- `LocationAuthorizationProviding` (Services) — the seam. Four members: read the facts, be notified
+  when they change, request When In Use permission, re-read. It is not a general Core Location
+  wrapper; location updates, regions and accuracy escalation will get their own seams when a feature
+  needs them, so this type does not grow into an object that owns permission, recording, mileage and
+  analytics at once.
+- `CoreLocationAuthorizationProvider` (Services) — the only file that imports Core Location. It owns
+  the single `CLLocationManager`, maps `CLAuthorizationStatus` and `CLAccuracyAuthorization` onto the
+  domain enums, and is the app's `CLLocationManagerDelegate`. The root view is deliberately not the
+  delegate: delegate callbacks are an adapter concern, not a view's.
+
+`LocationAuthorizationService` is the `@Observable` type SwiftUI reads. It holds the current
+`LocationAuthorization`, applies provider changes, logs transitions and gates the permission request.
+`DashPilotApp` owns one instance and puts it in the environment, so one location manager exists per
+process.
+
+### Authorization and accuracy are separate
+
+A driver can grant permission and still withhold precise location. Collapsing the two into one enum
+would hide a state that is authorized but not accurate enough to measure distance, so
+`LocationAuthorizationStatus` and `LocationAccuracyAuthorization` are independent. `grantedAccuracy`
+returns `nil` unless a grant is held, because Core Location reports full accuracy by default before
+the user has been asked and surfacing that would claim precision the app does not have.
+
+Both enums carry an `unrecognised(rawValue:)` case. A future platform value maps there rather than
+being forced into a known case, and `grantsAccess` is false for it, so a value this app has never
+seen can never be read as permission.
+
+### Condition precedence
+
+`LocationAuthorization.condition` reduces the three facts to the one thing the interface should
+explain, in this order:
+
+1. **Restricted** outranks everything. Enabling Location Services or opening Settings will not give
+   the app permission, so offering either would be a false promise.
+2. **Location Services off** outranks the app's own grant. An authorized app still cannot read
+   location while the system switch is off, and that has to be said plainly.
+3. Otherwise the app's own authorization decides.
+
+`recovery` follows from the condition, and only ever offers an action that works: request the prompt
+when not determined; open the app's Settings page when denied (that page holds the app's location
+toggle); describe where Location Services lives when it is off, with no deep link, because iOS
+exposes a URL for an app's own settings page and not for the system-wide switch; nothing at all when
+restricted, unrecognised, or already authorized.
+
+### Permission strategy
+
+When In Use only. Requesting Always because background route capture may exist later would ask a
+driver to grant more than the app can currently justify, and iOS does not re-prompt once a scope has
+been chosen — so escalation is a deliberate later decision, made when background behaviour actually
+exists. `INFOPLIST_KEY_NSLocationWhenInUseUsageDescription` is set in the app target's build
+settings (the project generates its Info.plist); no Always string and no temporary-accuracy purpose
+key are declared, because neither is requested.
+
+The prompt is never triggered at launch. iOS shows it once, and a prompt that appears before the
+driver has any reason to grant it is the surest way to have it declined permanently, so the request
+is always a tap. `requestAuthorization()` additionally refuses unless the status is not determined:
+re-requesting after a denial does nothing visible, and a button that appears to do nothing reads as
+a broken app.
+
+### Staying current
+
+Core Location reports authorization and accuracy through
+`locationManagerDidChangeAuthorization(_:)`, which also fires once when the delegate is set. It
+reports nothing about the system-wide switch, so `CLLocationManager.locationServicesEnabled()` is
+polled — at init, on each authorization callback, and when the app returns to the foreground
+(`RootView` watches `scenePhase`). That call blocks, so it runs off the main actor and the result is
+published back; until the first result arrives the app assumes the switch is on, rather than
+flashing "Location Services off" at every launch.
+
 ## Logging
 
 `AppLog` defines the OSLog subsystem and categories. Logs record lifecycle, state transitions,
 counts and errors. Coordinates, addresses and earnings amounts are never logged.
+
+The `location` category records authorization transitions, Location Services availability changes,
+accuracy changes and unrecognised platform values — what the app is allowed to do. Since the
+authorization layer never reads a position, there is no coordinate available to it to leak.
 
 ## Concurrency
 
@@ -110,3 +193,11 @@ in-memory store disappears with its container.
 Debug builds accept `-dashpilot-in-memory-store` (`LaunchArgument.inMemoryStore`) so the UI journey
 test starts from a known empty state and never writes into the store a real driver's history would
 live in.
+
+`StubLocationAuthorizationProvider` (debug builds only) satisfies `LocationAuthorizationProviding`
+with caller-supplied state, so every authorization, accuracy and services combination — including
+ones a simulator cannot easily be put into — is exercised without the real permission database or a
+tapped system alert. It also counts permission requests, which is how "asks exactly once, and only
+when the prompt can be shown" is verified. The UI test asserts only that the panel is on screen;
+which state it displays depends on the device, and no test drives the system alert, because
+automating it would be brittle and would change the permission state other tests run against.

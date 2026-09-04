@@ -26,21 +26,30 @@ The project is early. This section describes what exists, not what is intended.
   launch with its original start time, because the store is the only place shift state lives.
 - Root screen: start/end controls, an elapsed timer derived from the start timestamp, and a list of
   completed shifts.
+- Location authorization: DashPilot models Core Location's permission and accuracy states
+  separately — not determined, denied, restricted, When In Use, Always, plus the system-wide
+  Location Services switch and full versus reduced accuracy — and shows the current state on the
+  root screen with the one recovery that actually applies to it. Permission is requested only when
+  the driver taps, and only at the When In Use scope.
 - `Money`, a `Decimal`-backed monetary type covering the app's arithmetic, rounding, rate division
   and formatting.
 - App shell that surfaces a store-open failure as a visible state instead of crashing.
 
 **Not implemented yet**
 
-Location authorization, route capture, mileage, earnings entry, delivery records, wait-time
-measurement, maps, App Intents, Live Activities and recommendations. Nothing about a shift is
-recorded beyond its start and end times. See `AGENTS.md` for the intended order of work.
+Route capture, mileage, earnings entry, delivery records, wait-time measurement, maps, App Intents,
+Live Activities and recommendations. Nothing about a shift is recorded beyond its start and end
+times. DashPilot reads its location *permission* but does not read, record or store any location:
+there is no tracking, no background location and no route history. See `AGENTS.md` for the intended
+order of work.
 
 ## Privacy
 
 - All data stays on device. There are no accounts, no sync, no analytics, no telemetry and no ads.
 - Precise coordinates, routes, earnings and delivery history are treated as sensitive: they are not
   logged through OSLog and are never committed to this repository.
+- Location logging records permission and accuracy state only — what the app is allowed to do, never
+  where the device is.
 - Sample data in tests, previews and documentation is synthetic.
 
 ## Architecture
