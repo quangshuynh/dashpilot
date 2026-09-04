@@ -14,4 +14,7 @@ nonisolated enum AppLog {
 
     /// Store creation, migration and save behaviour.
     static let persistence = Logger(subsystem: subsystem, category: "persistence")
+
+    /// Shift lifecycle transitions and the rules that reject them.
+    static let shift = Logger(subsystem: subsystem, category: "shift")
 }

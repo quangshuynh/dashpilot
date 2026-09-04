@@ -7,7 +7,14 @@ struct DashPilotApp: App {
     private let container: Result<ModelContainer, Error>
 
     init() {
-        container = Result { try ModelContainerFactory.makeAppContainer() }
+        container = Result<ModelContainer, Error> {
+            #if DEBUG
+            if LaunchArgument.isPresent(LaunchArgument.inMemoryStore) {
+                return try ModelContainerFactory.makeInMemoryContainer()
+            }
+            #endif
+            return try ModelContainerFactory.makeAppContainer()
+        }
     }
 
     var body: some Scene {
