@@ -63,3 +63,5 @@ fastlane/test_output
 
 .claude/
 CONTEXT.md
+# macOS
+.DS_Store
