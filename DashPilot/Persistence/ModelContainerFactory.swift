@@ -23,8 +23,23 @@ nonisolated enum ModelContainerFactory {
         try makeContainer(inMemory: true)
     }
 
+    /// A container backed by a store at an explicit location.
+    ///
+    /// Tests use this to close a store and reopen it, which is the only way to
+    /// demonstrate that state survives app termination: an in-memory store
+    /// disappears with the container that owns it.
+    static func makeContainer(at url: URL) throws -> ModelContainer {
+        try makeContainer(configuration: ModelConfiguration(schema: currentSchema, url: url))
+    }
+
     private static func makeContainer(inMemory: Bool) throws -> ModelContainer {
-        let configuration = ModelConfiguration(schema: currentSchema, isStoredInMemoryOnly: inMemory)
+        try makeContainer(
+            configuration: ModelConfiguration(schema: currentSchema, isStoredInMemoryOnly: inMemory),
+            inMemory: inMemory
+        )
+    }
+
+    private static func makeContainer(configuration: ModelConfiguration, inMemory: Bool = false) throws -> ModelContainer {
         do {
             let container = try ModelContainer(
                 for: currentSchema,
