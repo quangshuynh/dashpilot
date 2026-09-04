@@ -102,23 +102,25 @@ struct LocationAuthorizationPanel: View {
         }
     }
 
-    /// Copy describes what the permission allows, not what the app is doing:
-    /// DashPilot does not record location yet, and an authorized state must not
-    /// suggest that a route is being captured.
+    /// Copy describes what the permission allows, and says plainly what the app
+    /// does with it: it records the route of a running shift while the app is
+    /// open, and nothing at any other time. Permission granted is not the same
+    /// as a route being captured — whether capture is actually running is shown
+    /// on the running shift itself, not here.
     private var explanation: String {
         switch authorization.condition {
         case .notDetermined:
-            "DashPilot needs your permission before it can use location to measure the distance you drive during a shift."
+            "DashPilot needs your permission before it can record where you drive during a shift."
         case .denied:
-            "Location access is off for DashPilot, so it cannot measure shift distance. You can turn it back on in Settings."
+            "Location access is off for DashPilot, so it cannot record your route during a shift. You can turn it back on in Settings."
         case .restricted:
             "Location access is restricted on this device and cannot be changed from DashPilot. This is usually a parental control or a device management profile."
         case .servicesDisabled:
             "Location Services is off for this device, so no app can use location. Turn it on in Settings, under Privacy & Security."
         case .authorized(_, .full):
-            "DashPilot can use precise location while you are using the app. It is not recording your location — distance measurement is not built yet."
+            "DashPilot can use precise location while a shift is running and the app is open. Your route is stored on this device only."
         case .authorized(_, .reduced):
-            "DashPilot has approximate location only, which is not precise enough to measure driving distance. Precise Location can be turned on in Settings."
+            "DashPilot has approximate location only, which is usually too imprecise to record a useful route. Precise Location can be turned on in Settings."
         case .authorized(_, .unrecognised):
             "DashPilot has location access, but this version of iOS reports an accuracy setting it does not recognise."
         case .unrecognised:

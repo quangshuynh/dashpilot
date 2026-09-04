@@ -1,8 +1,10 @@
 #if DEBUG
 import Foundation
 import SwiftData
+import SwiftUI
 
-/// Synthetic data for SwiftUI previews. Never contains real driver history.
+/// Synthetic data and services for SwiftUI previews. Never contains real driver
+/// history, and never a real coordinate.
 enum PreviewSupport {
     static func emptyContainer() -> ModelContainer {
         // Previews cannot meaningfully recover from a container failure.
@@ -33,6 +35,29 @@ enum PreviewSupport {
         try? context.save()
 
         return container
+    }
+
+    /// The root screen with both location services stubbed.
+    ///
+    /// Previews get the stub tracking provider, so no preview ever starts a
+    /// `CLLocationManager` or reads a position.
+    @MainActor
+    static func rootView(
+        container: ModelContainer,
+        status: LocationAuthorizationStatus = .authorizedWhenInUse
+    ) -> some View {
+        let authorization = LocationAuthorizationService(
+            provider: StubLocationAuthorizationProvider(status: status)
+        )
+        let routeCapture = LocationTrackingService(
+            context: container.mainContext,
+            authorization: authorization,
+            provider: StubLocationTrackingProvider()
+        )
+        return RootView()
+            .modelContainer(container)
+            .environment(authorization)
+            .environment(routeCapture)
     }
 }
 #endif

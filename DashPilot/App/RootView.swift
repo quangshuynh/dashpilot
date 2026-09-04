@@ -5,6 +5,7 @@ import SwiftUI
 struct RootView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(LocationAuthorizationService.self) private var locationAuthorization
+    @Environment(LocationTrackingService.self) private var routeCapture
     @Environment(\.scenePhase) private var scenePhase
 
     /// Unfinished shifts, newest first.
@@ -30,7 +31,11 @@ struct RootView: View {
             List {
                 Section {
                     if let activeShift {
-                        ActiveShiftPanel(shift: activeShift, end: endShift)
+                        ActiveShiftPanel(
+                            shift: activeShift,
+                            captureState: routeCapture.state,
+                            end: endShift
+                        )
                     } else {
                         StartShiftPanel(start: startShift)
                     }
@@ -55,13 +60,38 @@ struct RootView: View {
                 }
             }
             .navigationTitle("DashPilot")
-            // Location permission and the system-wide Location Services switch
-            // are changed outside the app, and Core Location reports neither
-            // while DashPilot is backgrounded, so the panel is re-read on
-            // return rather than left showing a stale state.
+            // A shift that was still running when the app was terminated is
+            // still running now, so capture resumes here rather than waiting for
+            // the driver to touch anything.
+            .task { routeCapture.synchronize() }
             .onChange(of: scenePhase) { _, phase in
-                if phase == .active { locationAuthorization.refresh() }
+                switch phase {
+                case .active:
+                    // Location permission and the system-wide Location Services
+                    // switch are changed outside the app, and Core Location
+                    // reports neither while DashPilot is backgrounded, so both
+                    // the panel and capture are re-read on return rather than
+                    // left showing a stale state.
+                    locationAuthorization.refresh()
+                    routeCapture.enterForeground()
+                case .background:
+                    routeCapture.enterBackground()
+                case .inactive:
+                    // Transient: the app switcher, a call banner, the
+                    // notification shade. Stopping here would chop the route
+                    // into fragments for interruptions the driver never left
+                    // the app for. `.background` is the state that means the app
+                    // is no longer running in the foreground.
+                    break
+                @unknown default:
+                    break
+                }
             }
+            // Capture follows the store's shift state, so it is reconciled
+            // whenever the active shift changes — including changes this screen
+            // did not make.
+            .onChange(of: activeShift?.id) { _, _ in routeCapture.synchronize() }
+            .onChange(of: locationAuthorization.authorization) { _, _ in routeCapture.synchronize() }
             .alert(
                 "Shift Not Updated",
                 isPresented: isShowingLifecycleError,
@@ -83,10 +113,18 @@ struct RootView: View {
 
     private func startShift() {
         perform { try ShiftService(context: modelContext).startShift() }
+        // After, not before: capture starts only once the store holds a running
+        // shift, so a refused or failed start cannot leave it recording.
+        routeCapture.synchronize()
     }
 
     private func endShift() {
+        // Before, so that no candidate can be judged against a shift the store
+        // has already closed. `synchronize()` afterwards restarts capture if the
+        // end did not go through, which is why stopping first latches nothing.
+        routeCapture.prepareForShiftEnd()
         perform { try ShiftService(context: modelContext).endActiveShift() }
+        routeCapture.synchronize()
     }
 
     /// Surfaces a rejected or failed transition instead of leaving the tap
@@ -126,6 +164,7 @@ private struct StartShiftPanel: View {
 
 private struct ActiveShiftPanel: View {
     let shift: Shift
+    let captureState: RouteCaptureState
     let end: () -> Void
 
     var body: some View {
@@ -145,6 +184,8 @@ private struct ActiveShiftPanel: View {
                 Text(shift.startedAt, format: .dateTime.hour().minute())
             }
             .font(.subheadline)
+
+            RouteCaptureStatusView(state: captureState)
 
             Button(action: end) {
                 Text("End Shift")
@@ -210,30 +251,21 @@ private struct CompletedShiftRow: View {
 }
 
 #if DEBUG
-@MainActor
-private func previewLocationService(
-    status: LocationAuthorizationStatus = .authorizedWhenInUse
-) -> LocationAuthorizationService {
-    LocationAuthorizationService(
-        provider: StubLocationAuthorizationProvider(status: status)
+#Preview("No shift") {
+    PreviewSupport.rootView(
+        container: PreviewSupport.emptyContainer(),
+        status: .notDetermined
     )
 }
 
-#Preview("No shift") {
-    RootView()
-        .modelContainer(PreviewSupport.emptyContainer())
-        .environment(previewLocationService(status: .notDetermined))
-}
-
 #Preview("Active shift") {
-    RootView()
-        .modelContainer(PreviewSupport.populatedContainer())
-        .environment(previewLocationService())
+    PreviewSupport.rootView(container: PreviewSupport.populatedContainer())
 }
 
 #Preview("History only") {
-    RootView()
-        .modelContainer(PreviewSupport.populatedContainer(includingActiveShift: false))
-        .environment(previewLocationService(status: .denied))
+    PreviewSupport.rootView(
+        container: PreviewSupport.populatedContainer(includingActiveShift: false),
+        status: .denied
+    )
 }
 #endif
