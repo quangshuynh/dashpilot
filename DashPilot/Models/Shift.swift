@@ -15,6 +15,10 @@ nonisolated enum ShiftError: Error, Equatable {
 /// mileage, deliveries and earnings are all scoped to one shift. It is
 /// deliberately narrow at this stage — recorded distance and earnings arrive
 /// with the features that can actually produce them.
+///
+/// Route samples are the first thing to attach to it. They are collected only
+/// while the shift is running; `endedAt` being set is what stops that, and
+/// nothing appends to a shift that has ended.
 @Model
 nonisolated final class Shift {
     /// Stable identifier, used for cross-store references and future export.
@@ -24,6 +28,16 @@ nonisolated final class Shift {
 
     /// `nil` while the shift is still running.
     private(set) var endedAt: Date?
+
+    /// Positions retained while this shift was running, in no guaranteed order.
+    ///
+    /// The delete rule is `.cascade`: a shift's route describes that shift and
+    /// nothing else, so deleting the shift must take the samples with it rather
+    /// than leaving a table of coordinates belonging to a shift that no longer
+    /// exists. That matters more than usual here — the orphans would be exactly
+    /// the sensitive data the app promises to keep accountable to a shift.
+    @Relationship(deleteRule: .cascade, inverse: \RouteSample.shift)
+    private(set) var routeSamples: [RouteSample] = []
 
     init(id: UUID = UUID(), startedAt: Date) {
         self.id = id

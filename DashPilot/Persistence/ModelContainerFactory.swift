@@ -10,7 +10,7 @@ import SwiftData
 /// default because the store holds work the driver cannot re-enter.
 nonisolated enum ModelContainerFactory {
     static var currentSchema: Schema {
-        Schema(versionedSchema: DashPilotSchemaV1.self)
+        Schema(versionedSchema: DashPilotSchemaV2.self)
     }
 
     /// The on-disk container backing the running app.
@@ -32,6 +32,18 @@ nonisolated enum ModelContainerFactory {
         try makeContainer(configuration: ModelConfiguration(schema: currentSchema, url: url))
     }
 
+    /// A container for a store written under a specific historical schema
+    /// version, opened *without* the migration plan.
+    ///
+    /// This is a test seam. It is the only way to produce a store shaped the
+    /// way an older build of the app would have left one, so that opening it
+    /// through ``makeContainer(at:)`` exercises the real migration path rather
+    /// than a store that was already current.
+    static func makeContainer(versionedSchema: any VersionedSchema.Type, at url: URL) throws -> ModelContainer {
+        let schema = Schema(versionedSchema: versionedSchema)
+        return try ModelContainer(for: schema, configurations: ModelConfiguration(schema: schema, url: url))
+    }
+
     private static func makeContainer(inMemory: Bool) throws -> ModelContainer {
         try makeContainer(
             configuration: ModelConfiguration(schema: currentSchema, isStoredInMemoryOnly: inMemory),
@@ -47,7 +59,7 @@ nonisolated enum ModelContainerFactory {
                 configurations: configuration
             )
             AppLog.persistence.info(
-                "Opened store (inMemory: \(inMemory, privacy: .public), schema: \(DashPilotSchemaV1.versionIdentifier.description, privacy: .public))"
+                "Opened store (inMemory: \(inMemory, privacy: .public), schema: \(DashPilotSchemaV2.versionIdentifier.description, privacy: .public))"
             )
             return container
         } catch {
