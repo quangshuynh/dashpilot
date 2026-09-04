@@ -9,7 +9,10 @@ enum PreviewSupport {
         try! ModelContainerFactory.makeInMemoryContainer()
     }
 
-    static func populatedContainer(referenceDate: Date = Date(timeIntervalSince1970: 1_756_000_000)) -> ModelContainer {
+    static func populatedContainer(
+        referenceDate: Date = Date(timeIntervalSince1970: 1_756_000_000),
+        includingActiveShift: Bool = true
+    ) -> ModelContainer {
         let container = emptyContainer()
         let context = ModelContext(container)
 
@@ -19,9 +22,12 @@ enum PreviewSupport {
         let earlier = Shift(startedAt: referenceDate.addingTimeInterval(-30 * 3600))
         try? earlier.end(at: referenceDate.addingTimeInterval(-25 * 3600))
 
-        let running = Shift(startedAt: referenceDate.addingTimeInterval(-1800))
+        var shifts = [completed, earlier]
+        if includingActiveShift {
+            shifts.append(Shift(startedAt: referenceDate.addingTimeInterval(-1800)))
+        }
 
-        for shift in [completed, earlier, running] {
+        for shift in shifts {
             context.insert(shift)
         }
         try? context.save()
