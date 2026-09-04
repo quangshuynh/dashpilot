@@ -4,6 +4,8 @@ import SwiftUI
 /// Entry screen: the shift control on top, completed shifts below.
 struct RootView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(LocationAuthorizationService.self) private var locationAuthorization
+    @Environment(\.scenePhase) private var scenePhase
 
     /// Unfinished shifts, newest first.
     ///
@@ -35,6 +37,12 @@ struct RootView: View {
                 }
 
                 Section {
+                    LocationAuthorizationPanel()
+                } header: {
+                    Text("Location")
+                }
+
+                Section {
                     ForEach(completedShifts) { shift in
                         CompletedShiftRow(shift: shift)
                     }
@@ -47,6 +55,13 @@ struct RootView: View {
                 }
             }
             .navigationTitle("DashPilot")
+            // Location permission and the system-wide Location Services switch
+            // are changed outside the app, and Core Location reports neither
+            // while DashPilot is backgrounded, so the panel is re-read on
+            // return rather than left showing a stale state.
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .active { locationAuthorization.refresh() }
+            }
             .alert(
                 "Shift Not Updated",
                 isPresented: isShowingLifecycleError,
@@ -195,18 +210,30 @@ private struct CompletedShiftRow: View {
 }
 
 #if DEBUG
+@MainActor
+private func previewLocationService(
+    status: LocationAuthorizationStatus = .authorizedWhenInUse
+) -> LocationAuthorizationService {
+    LocationAuthorizationService(
+        provider: StubLocationAuthorizationProvider(status: status)
+    )
+}
+
 #Preview("No shift") {
     RootView()
         .modelContainer(PreviewSupport.emptyContainer())
+        .environment(previewLocationService(status: .notDetermined))
 }
 
 #Preview("Active shift") {
     RootView()
         .modelContainer(PreviewSupport.populatedContainer())
+        .environment(previewLocationService())
 }
 
 #Preview("History only") {
     RootView()
         .modelContainer(PreviewSupport.populatedContainer(includingActiveShift: false))
+        .environment(previewLocationService(status: .denied))
 }
 #endif
