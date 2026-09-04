@@ -17,4 +17,8 @@ nonisolated enum AppLog {
 
     /// Shift lifecycle transitions and the rules that reject them.
     static let shift = Logger(subsystem: subsystem, category: "shift")
+
+    /// Location permission, accuracy and services availability. Records what
+    /// the app is allowed to do, never where the device is.
+    static let location = Logger(subsystem: subsystem, category: "location")
 }
