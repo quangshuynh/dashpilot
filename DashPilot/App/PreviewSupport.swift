@@ -32,9 +32,69 @@ enum PreviewSupport {
         for shift in shifts {
             context.insert(shift)
         }
+
+        // The most recent completed shift gets a short synthetic route in two
+        // capture sessions, so the history row shows a measured, partial
+        // distance. The older one keeps no route, so the "nothing to measure"
+        // wording is visible too.
+        for sample in syntheticRoute(from: completed.startedAt) {
+            context.insert(sample.attached(to: completed))
+        }
+
         try? context.save()
 
         return container
+    }
+
+    /// A short made-up route: two capture sessions with a gap between them.
+    ///
+    /// The origin is a round number in open country chosen for arithmetic, not a
+    /// place anyone has driven, and every position is an explicit offset north
+    /// of it. No preview contains a real coordinate.
+    private static func syntheticRoute(from start: Date) -> [PreviewRouteSample] {
+        let firstSession = UUID()
+        let secondSession = UUID()
+        let metresPerDegreeLatitude = 111_320.0
+
+        func sample(secondsIn: TimeInterval, northMetres: Double, session: UUID) -> PreviewRouteSample {
+            PreviewRouteSample(
+                timestamp: start.addingTimeInterval(secondsIn),
+                latitude: 40.0 + northMetres / metresPerDegreeLatitude,
+                longitude: -75.0,
+                captureSessionID: session
+            )
+        }
+
+        return (0..<12).map { step in
+            sample(secondsIn: Double(step) * 20, northMetres: Double(step) * 400, session: firstSession)
+        } + (0..<8).map { step in
+            // Half an hour later and further along: the driver had DashPilot in
+            // the background in between, and that distance is not recorded.
+            sample(
+                secondsIn: 1800 + Double(step) * 20,
+                northMetres: 9_000 + Double(step) * 400,
+                session: secondSession
+            )
+        }
+    }
+
+    /// A position waiting to be attached to a shift.
+    private struct PreviewRouteSample {
+        let timestamp: Date
+        let latitude: Double
+        let longitude: Double
+        let captureSessionID: UUID
+
+        func attached(to shift: Shift) -> RouteSample {
+            RouteSample(
+                shift: shift,
+                timestamp: timestamp,
+                latitude: latitude,
+                longitude: longitude,
+                horizontalAccuracy: 8,
+                captureSessionID: captureSessionID
+            )
+        }
     }
 
     /// The root screen with both location services stubbed.
