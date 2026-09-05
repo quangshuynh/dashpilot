@@ -106,8 +106,9 @@ order over the whole shift. This is **presentation only**:
 
 - It is **not persisted**, and it is not a platform order number, a batch identifier, or anything
   anyone outside the app would recognise.
-- It exists because two cards on screen have to be told apart, and the alternatives — a restaurant
-  name, an address, an order ID — are data DashPilot deliberately does not collect.
+- It exists because two cards on screen have to be told apart, and it does that whether or not
+  anything else is recorded. A [pickup place](pickup-identity.md) is optional and often absent, and an
+  address or a platform order ID is data DashPilot does not collect at all.
 - Numbering runs over every delivery in the shift, so finishing one does not renumber the others.
 - Every control acts on the **persisted delivery**, not on its number or its row, so even a
   renumbering could not send an event to the wrong record.
@@ -155,15 +156,20 @@ Each card also carries a bordered `Cancel Delivery 2` control — named, never a
 Delivery" that picks its own target — behind a confirmation that repeats which delivery it will end
 and says the delivery is kept as cancelled rather than deleted.
 
-Deliberately absent: any field to type into. No restaurant, no customer, no address, no note and no
-amount is asked for at any point, so a lifecycle event is one tap that can be made while stopped.
+Deliberately absent from the running shift itself: any field to type into. No customer, no address,
+no note and no amount is asked for at any point, so a lifecycle event is one tap that can be made
+while stopped. The card's one secondary control — `Add Pickup Place` — opens a
+[sheet](pickup-identity.md#recording-one) rather than putting a keyboard beside the lifecycle
+buttons, and it can be answered in one tap from a recent place or ignored entirely.
+
 `End Shift` is bordered rather than prominent, because emphasising the once-a-shift, hard-to-undo
 button over the ones tapped many times a shift is how a shift gets ended by mistake.
 
 ## On a completed shift
 
-The shift's detail screen lists what each delivery recorded: its outcome, the lifecycle events that
-happened with their times, and the two intervals both of whose ends exist. Deliveries appear in
+The shift's detail screen lists what each delivery recorded: its outcome, the
+[pickup place](pickup-identity.md) if one was named, the lifecycle events that happened with their
+times, and the two intervals both of whose ends exist. Deliveries appear in
 acceptance order, under the same numbers they had on the running shift. It sits below the earnings,
 route and performance sections, because it is the only one that grows with the shift.
 
@@ -201,11 +207,20 @@ neither is presented as work, driving or productive time. The full definitions, 
 earnings per active delivery hour derived from them, are on
 [Earnings and metrics](earnings-and-metrics.md#delivery-active-time).
 
+### Pickup place
+
+A delivery may optionally name the place it was collected from. It is typed by the driver, entirely
+optional, and reused across deliveries when the same name is entered again — the local number and the
+place are shown together, `Delivery 1` above `Nowhere Noodles`. Nothing about the lifecycle depends
+on it, and a delivery with no place named is a complete, ordinary delivery.
+
+The rules, the normalisation policy and what a place deliberately does not hold are on
+[Pickup identity](pickup-identity.md).
+
 ## What a delivery does not hold
 
-- **No restaurant or business name.** Naming a pickup introduces typing while driving,
-  normalisation, duplicate matching and a privacy question, none of which the lifecycle needs.
-- **No customer, address or note.** DashPilot stores nothing that identifies who received an order.
+- **No customer, address or note.** DashPilot stores nothing that identifies who received an order,
+  and a [pickup place](pickup-identity.md) is a name the driver typed rather than a located business.
 - **No per-delivery earnings.** A shift's gross earnings are one number the driver typed for the
   whole shift, and DashPilot has no source from which to split it between deliveries. Inventing an
   allocation would produce a per-delivery figure nobody recorded.
@@ -217,22 +232,24 @@ earnings per active delivery hour derived from them, are on
 
 ## What is not built on this yet
 
-The lifecycle records events, derives two factual intervals per delivery, and unions those intervals
-into a shift's delivery active time and the one rate over it. Beyond that, nothing: no restaurant
-rating, no wait-time recommendation, no offer-profitability figure, no per-delivery earnings, no
-aggregate across shifts, no analysis of *why* deliveries overlapped, and no prediction of any kind.
+The lifecycle records events, derives two factual intervals per delivery, unions those intervals into
+a shift's delivery active time and the one rate over it, and lets a delivery name where it was picked
+up. Beyond that, nothing: no restaurant rating, no wait-time statistic per place, no
+offer-profitability figure, no per-delivery earnings, no aggregate across shifts, no analysis of
+*why* deliveries overlapped, and no prediction of any kind.
 See [Limitations](../reference/limitations.md).
 
 ## Schema
 
-Neither concurrent deliveries nor delivery active time **changed the persisted shape**, and there is
-no version 6. Active time is derived from the timestamps already stored, every time it is shown; no
-`activeDuration`, `nonDeliveryDuration` or `activeHourlyRate` column exists, for the reason no
-mileage or rate column does.
-
-Supporting concurrent deliveries did not change the shape either.
 The store has held `Delivery` as its own entity with a to-many `Shift.deliveries` relationship since
-[version 5](../architecture/migrations.md) — it could always describe several unfinished deliveries
-for one shift. "At most one active delivery" was an application invariant enforced by a service, not
-a shape the database imposed, so removing it changed behaviour and nothing about storage. A
-migration would have had nothing to migrate.
+[version 5](../architecture/migrations.md).
+
+Neither concurrent deliveries nor delivery active time changed that shape. Version 5 could always
+describe several unfinished deliveries for one shift — "at most one active delivery" was an
+application invariant enforced by a service, not a constraint the database imposed — so removing it
+changed behaviour and nothing about storage. Active time is derived from the timestamps already
+stored, every time it is shown; no `activeDuration`, `nonDeliveryDuration` or `activeHourlyRate`
+column exists, for the reason no mileage or rate column does.
+
+[Version 6](pickup-identity.md#schema) added the optional pickup place, as a new entity and a new
+optional reference. Existing deliveries migrated with none.

@@ -2,7 +2,7 @@
 
 ```text
 DashPilot/
-  App/            SwiftUI entry point, root screen, delivery controls, shift detail, failure state, preview fixtures
+  App/            SwiftUI entry point, root screen, delivery controls, editors, shift detail, failure state, preview fixtures
   Domain/         Framework-independent value types and calculations
   Models/         SwiftData @Model types
   Persistence/    Versioned schema, migration plan, container construction

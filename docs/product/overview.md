@@ -35,13 +35,19 @@ is recomputed from the stored route every time rather than saved as a second tot
 
 **Delivery lifecycle.** A delivery belongs to one shift and moves through accepted, arrived at
 pickup, picked up and delivered, or ends cancelled from any of those. Every event is recorded
-because the driver tapped one large control; nothing is detected, imported or inferred. At most one
-delivery belongs to exactly one shift, transitions must happen in order, and a shift cannot be ended
-while any of its deliveries is still running. Several deliveries can be in progress at once, as they
+because the driver tapped one large control; nothing is detected, imported or inferred. A delivery
+belongs to exactly one shift, transitions must happen in order, and a shift cannot be ended while any
+of its deliveries is still running. Several deliveries can be in progress at once, as they
 are in stacked work: each advances independently, and every event is recorded against one named
 delivery. Deliveries left in progress when the app was terminated are
 picked up on the next launch at the step it had reached. See
 [Delivery lifecycle](delivery-lifecycle.md).
+
+**Pickup identity.** A delivery can optionally name the place it was collected from. The name is
+typed by the driver — there is no geocoding, no place search and no address — and a name equivalent
+to one already recorded reuses that place rather than creating a second, so a recurring pickup has
+one stable identity. It is added or corrected from a small sheet, on a running shift or afterwards
+from history, and the lifecycle never waits for one. See [Pickup identity](pickup-identity.md).
 
 **Manual gross earnings.** A completed shift can store one optional amount the driver types,
 through a locale-aware input layer that reads what a decimal pad produces and refuses anything it
@@ -55,13 +61,14 @@ zero.
 
 **Completed-shift detail and deletion.** Tapping a shift in history opens a screen for that shift
 alone: when it ran and for how long, how much of it a delivery was active for, the deliveries
-recorded during it, what it paid, what its route recorded, and all three rates with an explanation
+recorded during it and where each was picked up from, what it paid, what its route recorded, and all
+three rates with an explanation
 for any that are missing. A finished shift can be
 deleted from there behind a confirmation that names what goes with it. Deleting a shift also deletes
 the route positions and the deliveries recorded during it. A running shift cannot be deleted, and
 deletion is not undoable.
 
-**Persistence.** Schema v5, with lightweight migrations from v1, v2, v3 and v4, covered by tests
+**Persistence.** Schema v6, with lightweight migrations from every earlier version, covered by tests
 that open stores written under each older version. A store that fails to open is surfaced as a
 visible state rather than a crash, and the failure screen deliberately offers no "reset the
 database" action.
@@ -69,9 +76,9 @@ database" action.
 ## Not implemented
 
 Expenses, fuel, taxes, mileage deductions, a tips-versus-base breakdown, per-delivery earnings,
-restaurant or customer identity, wait-time analysis, offer profitability, automatic delivery
-detection, maps, route visualisation, weekly or all-time totals, export, App Intents, Live Activities
-and recommendations.
+customer identity, wait-time analysis per pickup place, merchant scoring, offer profitability,
+automatic delivery or pickup detection, geocoding, maps, route visualisation, weekly or all-time
+totals, export, App Intents, Live Activities and recommendations.
 
 Deliveries are recorded, and one figure is built on them: the shift time at least one delivery was
 active, with overlapping deliveries counted once, and gross earnings over it. Beyond that the app
