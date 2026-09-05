@@ -134,19 +134,38 @@ jobs:
       - name: Run the domain test suite (DashPilotTests)
         run: |
           set -euo pipefail
+
+          rm -rf TestResults-Domain.xcresult
+
           xcodebuild test-without-building \
             -project "$XCODE_PROJECT" \
             -scheme "$XCODE_SCHEME" \
             -destination "platform=iOS Simulator,id=$SIMULATOR_ID" \
             -derivedDataPath DerivedData \
-            -only-testing:DashPilotTests
+            -only-testing:DashPilotTests \
+            -resultBundlePath TestResults-Domain.xcresult
 
       - name: Run the UI journeys (DashPilotUITests)
         run: |
           set -euo pipefail
+
+          rm -rf TestResults-UI.xcresult
+
           xcodebuild test-without-building \
             -project "$XCODE_PROJECT" \
             -scheme "$XCODE_SCHEME" \
             -destination "platform=iOS Simulator,id=$SIMULATOR_ID" \
             -derivedDataPath DerivedData \
-            -only-testing:DashPilotUITests
+            -only-testing:DashPilotUITests \
+            -parallel-testing-enabled NO \
+            -resultBundlePath TestResults-UI.xcresult
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcode-test-results
+          path: |
+            TestResults-Domain.xcresult
+            TestResults-UI.xcresult
+          if-no-files-found: ignore
