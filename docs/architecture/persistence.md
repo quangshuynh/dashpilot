@@ -82,7 +82,9 @@ answer to what a delivery is doing and it is the same data that forms the histor
 "Active" is likewise a query, not a flag: `deliveredAt == nil && cancelledAt == nil`. That is what
 makes relaunch recovery ordinary rather than a code path — a delivery left running when the app was
 terminated is simply still running when a new `DeliveryService` reads the store, with its original
-timestamps. The single-active-delivery rule is enforced by that same fetch, so it holds across a
+timestamps, all of them, each with its own state. Several unfinished deliveries are ordinary rather
+than an anomaly; what the same fetch reports as a structural fault is an active delivery attached to
+a shift that has already ended. The rule holds across a
 relaunch as well as within a session.
 
 ## Writes during capture

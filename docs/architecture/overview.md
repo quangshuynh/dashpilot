@@ -63,33 +63,39 @@ duration is stored, and VoiceOver reads the value to the minute rather than anno
 `DeliveryService` is the only place deliveries start, advance and finish. It is shaped exactly like
 `ShiftService`: one `ModelContext`, no cached state, every rule checked against the store.
 
-**At most one delivery is active at a time**, where active means `deliveredAt == nil &&
-cancelledAt == nil`. The service resolves the active delivery itself rather than accepting one as a
-parameter, which is what makes an out-of-order transition unrepresentable rather than merely
-refused: there is no way to address a finished delivery, or a second active one, through the API.
+**Any number of deliveries may be active at once**, where active means `deliveredAt == nil &&
+cancelledAt == nil`. That is what stacked delivery work is, so every mutation takes the delivery it
+applies to as a parameter — `markPickedUp(_:at:)`, `cancelDelivery(_:at:)` — and none of them
+resolves a target internally. With two active, "the active delivery" is not something the service
+could resolve, and resolving one anyway would attach a driver's tap to a record they did not mean.
+
+`activeDeliveries()` and `activeDeliveries(for:)` are queries for presentation and recovery, not
+mutation seams. Both order by acceptance ascending, with the record's identity breaking a tie, rather
+than trusting the fetch's own order.
 
 `Delivery` owns its own transitions and refuses a skipped step, a repeated event, any transition
 after a terminal state, and a timestamp earlier than the last recorded event. Its `state` is derived
 from which timestamps exist, so nothing persisted can disagree with the events it summarises.
 
 The two services meet at exactly one point: `endActiveShift(at:)` refuses to end a shift whose
-`activeDelivery` is not `nil`. That is the whole coupling. `DeliveryService` does not know about
-route capture, and `ShiftService` does not know how a delivery advances.
+`activeDeliveries` is not empty, and the refusal carries the count so the message can be pluralised.
+That is the whole coupling. `DeliveryService` does not know about route capture, and `ShiftService`
+does not know how a delivery advances.
 
 ### Failure handling
 
-- Starting a delivery outside a running shift, starting a second one, advancing when none is
-  running, and every refused transition throw `DeliveryLifecycleError` cases the view turns into an
-  alert.
+- Starting a delivery outside a running shift, advancing a delivery whose shift has already ended,
+  and every refused transition throw `DeliveryLifecycleError` cases the view turns into an alert.
 - A failed `save()` is followed by `rollback()`, so an in-memory delivery never claims an event the
   store does not record.
 - An event timestamped before the previous one is clamped forward and logged, the same rule
   `endActiveShift(at:)` applies to a backwards clock. A clamped event produces a zero-length
   interval, never a negative one.
-- Finding more than one unfinished delivery is treated as a damaged store: the most recently
-  accepted is reported as active, the anomaly is logged as a fault, and nothing is closed, cancelled
-  or deleted to tidy it up. Starting another delivery and ending the shift both stay refused, which
-  is visible rather than silent.
+- Several unfinished deliveries are **expected**, not a damaged store. What is impossible is an
+  active delivery attached to a shift that has ended, or to no shift at all: that is logged as a
+  fault, refused for further transitions, and otherwise left exactly as it is. Nothing is closed,
+  cancelled, deleted or reparented to tidy it up, because each of those would invent a fact about
+  work the driver did.
 
 ## Nothing derived is stored
 

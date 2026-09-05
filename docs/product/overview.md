@@ -36,8 +36,10 @@ is recomputed from the stored route every time rather than saved as a second tot
 **Delivery lifecycle.** A delivery belongs to one shift and moves through accepted, arrived at
 pickup, picked up and delivered, or ends cancelled from any of those. Every event is recorded
 because the driver tapped one large control; nothing is detected, imported or inferred. At most one
-delivery is active at a time, transitions must happen in order, and a shift cannot be ended while
-one of its deliveries is still running. A delivery left in progress when the app was terminated is
+delivery belongs to exactly one shift, transitions must happen in order, and a shift cannot be ended
+while any of its deliveries is still running. Several deliveries can be in progress at once, as they
+are in stacked work: each advances independently, and every event is recorded against one named
+delivery. Deliveries left in progress when the app was terminated are
 picked up on the next launch at the step it had reached. See
 [Delivery lifecycle](delivery-lifecycle.md).
 
