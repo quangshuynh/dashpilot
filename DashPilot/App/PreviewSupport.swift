@@ -60,9 +60,14 @@ enum PreviewSupport {
         // a delivered lifecycle, a cancelled one, both derived intervals, and a
         // pair whose lifecycles overlap. Every timestamp is an invented offset
         // from the fixture's start.
-        for delivery in syntheticDeliveries(in: completed, from: completed.startedAt) {
+        let deliveries = syntheticDeliveries(in: completed, from: completed.startedAt)
+        for delivery in deliveries {
             context.insert(delivery)
         }
+
+        // Two of the three name the same pickup place, which is what a reused
+        // local place looks like in history.
+        attachPickupPlaces(to: deliveries, in: context, at: completed.startedAt)
 
         try? context.save()
 
@@ -118,9 +123,52 @@ enum PreviewSupport {
         try? carrying.markPickedUp(at: referenceDate.addingTimeInterval(-240))
         context.insert(carrying)
 
+        // One of the running deliveries already names a place and one does not,
+        // so both states of the card's secondary control are on screen at once.
+        if let name = try? PickupPlaceName(SyntheticPickupPlace.noodles) {
+            let place = PickupPlace(name: name, createdAt: referenceDate.addingTimeInterval(-5000))
+            context.insert(place)
+            carrying.setPickupPlace(place)
+        }
+
         try? context.save()
 
         return container
+    }
+
+    /// Invented pickup-place names, obviously fictional and used everywhere a
+    /// fixture needs one.
+    ///
+    /// No real business is named in this repository. These exist so a preview,
+    /// a screenshot and a UI test can show that a delivery carries a pickup
+    /// place — and that two deliveries can share one — without putting a
+    /// merchant, or a driver's actual working area, into the project.
+    enum SyntheticPickupPlace {
+        static let noodles = "Nowhere Noodles"
+        static let diner = "Example Diner"
+    }
+
+    /// A pickup place attached to the deliveries that name it.
+    ///
+    /// Built directly rather than through ``PickupPlaceService`` because a
+    /// fixture is describing a store that already exists, not performing the
+    /// driver's action. Reuse is expressed the way the service would leave it:
+    /// one place object, referenced by two deliveries.
+    private static func attachPickupPlaces(to deliveries: [Delivery], in context: ModelContext, at date: Date) {
+        guard let noodles = try? PickupPlaceName(SyntheticPickupPlace.noodles),
+              let diner = try? PickupPlaceName(SyntheticPickupPlace.diner) else { return }
+
+        let shared = PickupPlace(name: noodles, createdAt: date)
+        let other = PickupPlace(name: diner, createdAt: date.addingTimeInterval(60))
+        context.insert(shared)
+        context.insert(other)
+
+        // The first and third share a place, so the history screen shows a
+        // repeated pickup; the second carries a different one and any further
+        // delivery carries none, which is the ordinary case.
+        if deliveries.indices.contains(0) { deliveries[0].setPickupPlace(shared) }
+        if deliveries.indices.contains(1) { deliveries[1].setPickupPlace(other) }
+        if deliveries.indices.contains(2) { deliveries[2].setPickupPlace(shared) }
     }
 
     /// Three made-up deliveries for one shift: two delivered and one cancelled
@@ -130,8 +178,9 @@ enum PreviewSupport {
     /// second was still open — so the history screen has a stacked pair to
     /// present, with each delivery's own intervals and no total across them.
     ///
-    /// Offsets only. No restaurant, no customer and no address appears anywhere
-    /// in DashPilot, so there is none to invent here either.
+    /// Offsets only, plus an invented pickup place attached separately. No
+    /// customer and no address appears anywhere in DashPilot, so there is none
+    /// to invent here either.
     private static func syntheticDeliveries(in shift: Shift, from start: Date) -> [Delivery] {
         func delivery(
             acceptedAfter: TimeInterval,
@@ -276,9 +325,11 @@ enum PreviewSupport {
             for sample in syntheticRoute(from: start) {
                 container.mainContext.insert(sample.attached(to: shift))
             }
-            for delivery in syntheticDeliveries(in: shift, from: start) {
+            let deliveries = syntheticDeliveries(in: shift, from: start)
+            for delivery in deliveries {
                 container.mainContext.insert(delivery)
             }
+            attachPickupPlaces(to: deliveries, in: container.mainContext, at: start)
         }
         try? container.mainContext.save()
 
@@ -300,6 +351,40 @@ enum PreviewSupport {
         container.mainContext.insert(shift)
 
         return ShiftEarningsEditor(shift: shift).modelContainer(container)
+    }
+
+    /// The pickup-place editor over a synthetic delivery.
+    ///
+    /// The store is seeded with a second delivery that already names a place, so
+    /// the sheet has a recent place to offer as well as an empty field.
+    @MainActor
+    static func pickupPlaceEditor(withRecordedPlace: Bool) -> some View {
+        let container = emptyContainer()
+        let context = container.mainContext
+        let start = Date(timeIntervalSince1970: 1_756_000_000)
+
+        let shift = Shift(startedAt: start)
+        context.insert(shift)
+
+        let earlier = Delivery(shift: shift, acceptedAt: start.addingTimeInterval(300))
+        let subject = Delivery(shift: shift, acceptedAt: start.addingTimeInterval(1_800))
+        context.insert(earlier)
+        context.insert(subject)
+
+        if let name = try? PickupPlaceName(SyntheticPickupPlace.diner) {
+            let place = PickupPlace(name: name, createdAt: start)
+            context.insert(place)
+            earlier.setPickupPlace(place)
+        }
+        if withRecordedPlace, let name = try? PickupPlaceName(SyntheticPickupPlace.noodles) {
+            let place = PickupPlace(name: name, createdAt: start.addingTimeInterval(60))
+            context.insert(place)
+            subject.setPickupPlace(place)
+        }
+        try? context.save()
+
+        let numbered = NumberedDelivery(number: 2, delivery: subject)
+        return PickupPlaceEditor(numbered: numbered).modelContainer(container)
     }
 }
 #endif

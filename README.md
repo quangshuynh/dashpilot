@@ -41,6 +41,9 @@ derived legitimately from device sensors and stored history is typed by the driv
   one primary control per delivery, **several deliveries recordable at once** for stacked orders,
   every event targeted at one delivery, transitions enforced against the store, relaunch recovery for
   each of them, and a shift end refused while any delivery is running.
+- **Optional pickup identity**: a delivery can name the place it was collected from, typed by the
+  driver and reused across deliveries when the same name is entered again, with no address, no
+  lookup and no platform involved.
 - **Manual gross earnings**, optional, locale-aware, refused rather than reinterpreted when it
   cannot be read.
 - **Delivery active time**: the union of a shift's delivery intervals, so deliveries worked at the
@@ -55,7 +58,7 @@ derived legitimately from device sensors and stored history is typed by the driv
 Swift, SwiftUI, SwiftData, Core Location, OSLog, Swift Testing and XCUITest. **No third-party
 runtime dependencies.**
 
-Versioned schema at v5 with lightweight migrations from v1, tested by opening stores written under
+Versioned schema at v6 with lightweight migrations from v1, tested by opening stores written under
 each older version. Domain calculations import neither SwiftUI nor SwiftData, so every rule is
 tested without a container or a rendered view. Money is `Decimal` throughout: no monetary value
 passes through binary floating point, in memory or in the store. Nothing derived is stored, so
