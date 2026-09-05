@@ -58,13 +58,47 @@ service to mutate, so SwiftData stays the single source of truth for what is dis
 is rendered by a `TimelineView` that recomputes `Shift.elapsed(asOf:)` each second; no changing
 duration is stored, and VoiceOver reads the value to the minute rather than announcing seconds.
 
+## Delivery lifecycle
+
+`DeliveryService` is the only place deliveries start, advance and finish. It is shaped exactly like
+`ShiftService`: one `ModelContext`, no cached state, every rule checked against the store.
+
+**At most one delivery is active at a time**, where active means `deliveredAt == nil &&
+cancelledAt == nil`. The service resolves the active delivery itself rather than accepting one as a
+parameter, which is what makes an out-of-order transition unrepresentable rather than merely
+refused: there is no way to address a finished delivery, or a second active one, through the API.
+
+`Delivery` owns its own transitions and refuses a skipped step, a repeated event, any transition
+after a terminal state, and a timestamp earlier than the last recorded event. Its `state` is derived
+from which timestamps exist, so nothing persisted can disagree with the events it summarises.
+
+The two services meet at exactly one point: `endActiveShift(at:)` refuses to end a shift whose
+`activeDelivery` is not `nil`. That is the whole coupling. `DeliveryService` does not know about
+route capture, and `ShiftService` does not know how a delivery advances.
+
+### Failure handling
+
+- Starting a delivery outside a running shift, starting a second one, advancing when none is
+  running, and every refused transition throw `DeliveryLifecycleError` cases the view turns into an
+  alert.
+- A failed `save()` is followed by `rollback()`, so an in-memory delivery never claims an event the
+  store does not record.
+- An event timestamped before the previous one is clamped forward and logged, the same rule
+  `endActiveShift(at:)` applies to a backwards clock. A clamped event produces a zero-length
+  interval, never a negative one.
+- Finding more than one unfinished delivery is treated as a damaged store: the most recently
+  accepted is reported as active, the anomaly is logged as a fault, and nothing is closed, cancelled
+  or deleted to tidy it up. Starting another delivery and ending the shift both stay refused, which
+  is visible rather than silent.
+
 ## Nothing derived is stored
 
-Recorded mileage, both rates and the wording that qualifies them are computed on demand from the
-shift's timestamps, its recorded amount and its retained route. A stored `hourlyRate` or a stored
-distance would be a second answer to a question the store can already answer: it would keep the old
+Recorded mileage, both rates, a delivery's state, its two derived intervals and the wording that
+qualifies all of them are computed on demand from the shift's timestamps, its recorded amount, its
+retained route and its deliveries. A stored `hourlyRate`, a stored distance or a stored delivery
+state would be a second answer to a question the store can already answer: it would keep the old
 number after the calculation improved, and it would have to be rewritten every time the driver
-edited an amount.
+edited an amount or recorded an event.
 
 If measuring a long route ever proves too slow to do on demand, caching is a deliberate change to
 make then, with a measurement behind it.
@@ -74,17 +108,18 @@ make then, with a measurement behind it.
 The project builds with `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`, so views and view state are
 main-actor isolated without annotation.
 
-Domain types (`Money`, `MoneyInput`, `Shift`, `RouteSample`, `LocationSample`, `RoutePoint`,
-`RouteSampleFilter`, `RouteCaptureState`, `RouteDistance`, `RouteMileageCalculator`,
-`GeographicDistance`, `ShiftMetrics`, `ShiftMetricsCalculator`, the error enums) and infrastructure
+Domain types (`Money`, `MoneyInput`, `Shift`, `RouteSample`, `Delivery`, `DeliveryState`,
+`DeliveryAction`, `DeliverySummary`, `LocationSample`, `RoutePoint`, `RouteSampleFilter`,
+`RouteCaptureState`, `RouteDistance`, `RouteMileageCalculator`, `GeographicDistance`,
+`ShiftMetrics`, `ShiftMetricsCalculator`, the error enums) and infrastructure
 (`AppLog`, `ModelContainerFactory`, `LaunchArgument`) are explicitly `nonisolated`. They carry no UI
 state, they are used from tests that are not main-actor bound, and background persistence work will
 need them off the main actor.
 
-`ShiftService` is deliberately the opposite. It is `@MainActor` because it drives the main context
-the views observe, and that isolation is what serialises lifecycle operations: each operation runs
-to completion without suspending, so two concurrent callers cannot interleave the check with the
-insert that follows it. That is the whole concurrency story for a single-user on-device app, and no
+`ShiftService` and `DeliveryService` are deliberately the opposite. Both are `@MainActor` because
+they drive the main context the views observe, and that isolation is what serialises lifecycle
+operations: each operation runs to completion without suspending, so two concurrent callers cannot
+interleave the check with the insert that follows it. That is the whole concurrency story for a single-user on-device app, and no
 locking is added beyond it. `LocationTrackingService` is main-actor isolated for the same reason,
 which is what keeps a location callback from interleaving with a shift transition.
 

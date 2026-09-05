@@ -12,13 +12,18 @@ rather than a store reset.
 | 2.0.0 | Adds `RouteSample`, and a `Shift.routeSamples` relationship |
 | 3.0.0 | Adds `RouteSample.captureSessionID`, an optional marker of capture continuity |
 | 4.0.0 | Adds `Shift.grossEarningsAmount`, an optional `Decimal` holding manually entered earnings |
+| 5.0.0 | Adds the `Delivery` entity and a `Shift.deliveries` relationship |
 
-The current version is **v4**. Field-level detail is on [Data model](../reference/data-model.md).
+The current version is **v5**. Field-level detail is on [Data model](../reference/data-model.md).
 
-`DashPilotSchemaV1`, `DashPilotSchemaV2` and `DashPilotSchemaV3` hold frozen copies of their models
-rather than reusing the file-scope types, which have moved on. The plan then describes where a store
-is coming from as truthfully as where it is going, and the copies are never used at runtime outside
+`DashPilotSchemaV1` through `DashPilotSchemaV4` hold frozen copies of their models rather than
+reusing the file-scope types, which have moved on. The plan then describes where a store is coming
+from as truthfully as where it is going, and the copies are never used at runtime outside
 migration.
+
+`DashPilotSchemaV4` was frozen in the interval that added v5: the file-scope `Shift` gained a
+`deliveries` relationship, so reusing it would have made v4 claim a shape no store on a device ever
+had. Each version gets its copies at the moment the next one moves the models on.
 
 ## Every stage so far is lightweight, deliberately
 
@@ -52,6 +57,18 @@ way afterwards to tell a fabricated zero from one they typed.
 
 Migrated shifts keep `nil`, and the interface offers to add an amount rather than showing one.
 
+### v4 to v5
+
+A new entity and a new empty relationship — the same shape as v1 to v2, and with the same nothing to
+derive. A shift recorded before delivery recording existed genuinely has no deliveries: DashPilot
+observes no delivery platform, so there is no source anywhere in the store from which a past
+delivery could be reconstructed. Inventing one per hour, per route segment or per anything else
+would write work into a driver's history that they never recorded, and nothing afterwards could
+tell it from work they did.
+
+Existing shifts migrate with zero deliveries, and their route samples, capture session identifiers
+and recorded amounts are untouched.
+
 It becomes a custom stage the first time a version step actually has to transform something.
 
 ## Proving a migration rather than assuming it
@@ -65,6 +82,8 @@ That is how "a v1 store keeps its shifts" is proven. The suite covers each step:
 - A v1 store's shifts survive, with their start and end timestamps intact and no route.
 - A v2 store's shifts and route samples survive, and the migrated samples carry no capture session.
 - A v3 store's shifts, samples and sessions survive, and their earnings are absent rather than zero.
+- A v4 store's shifts, samples, sessions and recorded amounts survive, and no delivery is
+  fabricated for any of them.
 
 ## Rules for the next schema change
 

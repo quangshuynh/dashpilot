@@ -20,6 +20,9 @@ test cannot see, such as a screen that renders a sentence the model never claime
 | --- | --- |
 | Shift lifecycle, Shift service | Start, end, single-active-shift, clamped clocks, rollback, relaunch recovery |
 | Persistence, Route sample persistence, Shift earnings persistence | Store round trips and the v1, v2 and v3 migrations |
+| Delivery lifecycle, Delivery service | Every transition and refusal, the single-active-delivery rule, clamped clocks, the shift-end policy and cascade |
+| Delivery persistence | The v4 to v5 migration, and an active delivery recovered from a reopened store |
+| Delivery wording | The one action each state offers, its spoken label, and the delivery counts |
 | Location authorization state, Location authorization service | Condition precedence, accuracy independence, unrecognised values, request gating |
 | Route capture, Route sample filter | The capture invariant and every acceptance rule |
 | Route mileage | Segments, gaps, inferred continuity, unmeasurable routes |
@@ -74,26 +77,32 @@ a period locale and a comma locale side by side.
 
 ## Launch arguments
 
-Debug builds accept two arguments, both used only by UI tests and screenshots:
+Debug builds accept three arguments, all used only by UI tests and screenshots:
 
 | Argument | Effect |
 | --- | --- |
 | `-dashpilot-in-memory-store` | Starts from a known empty state, so a journey never writes into the store a real driver's history would live in |
-| `-dashpilot-seeded-history` | Opens an in-memory store already holding synthetic history: one completed shift with an amount and a route recorded in two capture sessions, and one with neither |
+| `-dashpilot-seeded-history` | Opens an in-memory store already holding synthetic history: one completed shift with an amount, a route recorded in two capture sessions and three deliveries (two delivered, one cancelled), and one shift with none of those |
+| `-dashpilot-seeded-active-delivery` | Opens an in-memory store holding a running shift whose delivery has already been picked up, which is the state a relaunch recovers into |
 
 A UI test cannot make a simulator record a route, so a measured, partial route and the
-per-recorded-mile rate over it would otherwise be unreachable end to end. The fixture is invented
+per-recorded-mile rate over it would otherwise be unreachable end to end. Nor can it terminate and
+reopen the in-memory store the other journeys use, so an already-running delivery is seeded at
+launch instead; that the *store* recovers one is proved against a real reopened store in
+`DeliveryPersistenceTests`. The fixture is invented
 amounts and offsets from a round-number origin, the same data `SyntheticRoute` builds for the unit
 tests.
 
-The seeded-history path is app code that exists only for tests. It is DEBUG-only and in-memory, and
-it is one more launch path to keep honest.
+The seeded paths are app code that exists only for tests. They are DEBUG-only and in-memory, and
+they are two more launch paths to keep honest.
 
 ## UI journeys
 
-The UI target covers a handful of paths: launching, starting and ending a shift, opening a completed
-shift, adding and editing an amount, reading the detail screen's route and rate statements, and
-deleting a shift through its confirmation.
+The UI target covers a handful of paths: launching, starting and ending a shift, recording a
+delivery through its whole lifecycle, cancelling one, being refused a shift end while a delivery is
+running, recovering an already-running delivery at launch, opening a completed shift, adding and
+editing an amount, reading the detail screen's delivery, route and rate statements, and deleting a
+shift through its confirmation.
 
 The permission panel is asserted only to be on screen. Which state it displays depends on the
 device, and no test drives the system alert, because automating it would be brittle and would change

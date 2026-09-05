@@ -20,13 +20,30 @@ and one they cannot.
   timestamps and they are always reported as partial.
 - **Nothing is drawn.** There is no map and no route visualisation.
 
+## Deliveries
+
+- **Nothing is detected.** Every delivery timestamp exists because the driver tapped a control.
+  DashPilot cannot see an order, a restaurant handover or a customer receipt, so a delivery that was
+  not recorded is not in the app, and an event recorded late is recorded late.
+- **No restaurant, customer or address.** A delivery holds timestamps and its shift, and nothing
+  that says where it went or who it was for.
+- **No per-delivery earnings.** Gross earnings are one figure for the whole shift, and DashPilot has
+  no source from which to split it between deliveries.
+- **Deliveries are not used in any rate.** The hourly rate still divides by the shift's whole
+  elapsed time; nothing derives active-versus-idle time, a per-delivery rate or an average wait.
+- **A recorded delivery cannot be edited or deleted individually.** A mis-tapped event stays as
+  recorded, and only deleting the whole shift removes it.
+- **One delivery at a time.** A driver stacking two orders can record only one lifecycle, so the
+  second order's events are either merged into the first or not recorded at all.
+- **Ending a shift is blocked by a delivery in progress**, deliberately. It costs one extra tap.
+
 ## Earnings and metrics
 
 - **Earnings are typed by the driver.** Nothing is imported, and the app cannot know whether an
   amount includes tips, bonuses, promotions, adjustments or reimbursements.
-- **The hourly rate divides by elapsed time**, because active delivery time does not exist yet. For
-  a driver who idles a lot it understates how the driving itself performed, and the app cannot say
-  by how much.
+- **The hourly rate divides by elapsed time.** Recorded deliveries are not used in it, so for a
+  driver who idles a lot it understates how the driving itself performed, and the app cannot say by
+  how much.
 - **The per-recorded-mile rate is biased upward** by exactly the mileage capture missed, so it is
   not comparable to a per-mile figure from an app that records in the background.
 - **Both rates are gross.** Nothing subtracts fuel, wear, insurance or tax. Neither is a profit,
@@ -46,8 +63,8 @@ and one they cannot.
 
 ## Product scope
 
-- **No delivery records.** Deliveries, pickups, wait times and per-delivery earnings are not
-  recorded, which is why active-versus-idle time does not exist.
+- **Nothing is built on the delivery records yet.** No restaurant scoring, no wait-time
+  recommendation, no offer profitability, no aggregate across shifts and no automatic detection.
 - **No recommendations, predictions or machine learning.** None is implemented, and none is claimed.
 - **No delivery-platform integration**, by design and permanently. See
   [Product overview](../product/overview.md#boundaries-the-project-will-not-cross).

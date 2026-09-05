@@ -10,11 +10,15 @@ flowchart TD
     C -->|Yes, and location usable| D[Positions recorded]
     C -->|No| E[Capture paused, shift keeps running]
     C -->|Permission lost| F[Capture unavailable, shift keeps running]
-    D --> G[End shift]
-    E --> G
-    F --> G
+    D --> J[Record deliveries, one tap per event]
+    E --> J
+    F --> J
+    J --> K{Delivery in progress?}
+    K -->|Yes| L[End refused: deliver or cancel it first]
+    L --> J
+    K -->|No| G[End shift]
     G --> H[Completed shift in history]
-    H --> I[Detail: route, earnings, rates, delete]
+    H --> I[Detail: earnings, route, rates, deliveries, delete]
 ```
 
 ## Starting a shift
@@ -58,7 +62,18 @@ actually works: the prompt when permission has not been decided, the app's Setti
 was denied, a description of where the Location Services switch lives when the system-wide switch
 is off, and nothing at all when access is restricted or already granted.
 
+## Recording deliveries
+
+A running shift offers one primary delivery control, and what it says depends on what the driver has
+already recorded: `Start Delivery`, then `Arrived at Pickup`, `Picked Up` and `Delivered`. Nothing
+is typed and nothing is detected. The full lifecycle, its rules and its limits are on
+[Delivery lifecycle](delivery-lifecycle.md).
+
 ## Ending a shift
+
+**A shift cannot be ended while one of its deliveries is in progress.** The end is refused with a
+message saying to mark the delivery delivered or cancel it first — silently completing it would
+record a delivery the driver never made, and silently discarding it would erase one they did.
 
 Ending records an end timestamp. Capture is stopped and any pending positions are written before
 the end is recorded, so no position is judged against a shift the store has already closed. If
@@ -95,7 +110,11 @@ numbers*.
 | Earnings | The recorded amount or "No amount recorded", and Add or Edit Earnings |
 | Route | Recorded mileage, capture segments, capture gaps, and what qualifies them |
 | Performance | Both derived rates, or the reason each could not be derived |
+| Deliveries | How many were completed and cancelled, and what each one recorded |
 | Delete | Delete Shift, behind a confirmation |
+
+The delivery log is last of the reading sections because it is the only one that grows with the
+shift; the four above it summarise the shift in a fixed number of lines.
 
 It is a summary, not a dashboard: no chart, no map, no gauge and no score. Only completed shifts
 have a detail screen, because a running shift has no finalised duration, no earnings it may record
