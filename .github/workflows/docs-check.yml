@@ -1,0 +1,75 @@
+name: Docs check
+
+# Validates the documentation site on pull requests. This workflow never
+# deploys: publication is handled separately by docs.yml on main.
+
+on:
+  pull_request:
+    paths:
+      - 'docs/**'
+      - 'mkdocs.yml'
+      - 'requirements-docs.txt'
+      - 'README.md'
+      - '.github/workflows/docs-check.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: mkdocs build --strict
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements-docs.txt
+
+      - name: Install the documentation toolchain
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-docs.txt
+
+      - name: Build the site strictly
+        run: mkdocs build --strict
+
+      - name: Check that every relative link in the README resolves
+        run: |
+          python3 - <<'PY'
+          import pathlib, re, sys
+
+          readme = pathlib.Path("README.md")
+          text = readme.read_text(encoding="utf-8")
+
+          targets = re.findall(r"\[[^\]]*\]\(([^)]+)\)", text)
+          targets += re.findall(r'<img[^>]*src="([^"]+)"', text)
+
+          missing = []
+          for target in targets:
+              if target.startswith(("http://", "https://", "#", "mailto:")):
+                  continue
+              path = pathlib.Path(target.split("#", 1)[0])
+              if not path.as_posix():
+                  continue
+              if not path.exists():
+                  missing.append(target)
+
+          if missing:
+              print("README links that do not resolve:", file=sys.stderr)
+              for target in missing:
+                  print(f"  {target}", file=sys.stderr)
+              raise SystemExit(1)
+
+          print(f"Checked {len(targets)} README links, all resolve.")
+          PY
