@@ -96,8 +96,76 @@ enum DashPilotSchemaV2: VersionedSchema {
 /// `nil` capture session: nothing in a v2 store records whether capture was
 /// interrupted, and inventing an identifier would manufacture exactly the
 /// continuity the attribute exists to prove.
+///
+/// Both models are frozen copies, for the same reason the earlier versions
+/// freeze theirs: the file-scope `Shift` has since gained recorded earnings,
+/// and reusing it here would make v3 claim a shape no store on a device ever
+/// had.
 enum DashPilotSchemaV3: VersionedSchema {
     static var versionIdentifier: Schema.Version { Schema.Version(3, 0, 0) }
+
+    static var models: [any PersistentModel.Type] { [Shift.self, RouteSample.self] }
+
+    /// The v3 shift: timestamps and a route, with nothing recorded about what
+    /// the shift paid.
+    @Model
+    nonisolated final class Shift {
+        @Attribute(.unique) private(set) var id: UUID
+        private(set) var startedAt: Date
+        private(set) var endedAt: Date?
+
+        @Relationship(deleteRule: .cascade, inverse: \RouteSample.shift)
+        private(set) var routeSamples: [RouteSample] = []
+
+        init(id: UUID = UUID(), startedAt: Date, endedAt: Date? = nil) {
+            self.id = id
+            self.startedAt = startedAt
+            self.endedAt = endedAt
+        }
+    }
+
+    /// The v3 route sample: a position, its accuracy and the capture session it
+    /// was recorded in.
+    @Model
+    nonisolated final class RouteSample {
+        private(set) var timestamp: Date
+        private(set) var latitude: Double
+        private(set) var longitude: Double
+        private(set) var horizontalAccuracy: Double
+        private(set) var captureSessionID: UUID?
+        private(set) var shift: Shift?
+
+        init(
+            shift: Shift,
+            timestamp: Date,
+            latitude: Double,
+            longitude: Double,
+            horizontalAccuracy: Double,
+            captureSessionID: UUID?
+        ) {
+            self.timestamp = timestamp
+            self.latitude = latitude
+            self.longitude = longitude
+            self.horizontalAccuracy = horizontalAccuracy
+            self.captureSessionID = captureSessionID
+            self.shift = shift
+        }
+    }
+}
+
+/// Version 4 of the persisted schema: a shift can record what it paid.
+///
+/// `Shift` gains one optional attribute, `grossEarningsAmount`, a `Decimal`
+/// holding gross earnings the driver typed. It is optional because earnings are
+/// optional: a shift with no amount recorded is a complete, valid shift.
+///
+/// Nothing is backfilled, and that distinction is the point. A v3 store records
+/// no earnings at all, which is not the same statement as "these shifts paid
+/// nothing". Writing `0` into every existing shift would turn the absence of a
+/// figure into a claim about every shift a driver has ever recorded. They keep
+/// `nil`, and the interface offers to add an amount rather than showing one.
+enum DashPilotSchemaV4: VersionedSchema {
+    static var versionIdentifier: Schema.Version { Schema.Version(4, 0, 0) }
 
     static var models: [any PersistentModel.Type] { [Shift.self, RouteSample.self] }
 }
@@ -109,10 +177,10 @@ enum DashPilotSchemaV3: VersionedSchema {
 /// than only on a device that happens to hold an old store.
 enum DashPilotMigrationPlan: SchemaMigrationPlan {
     static var schemas: [any VersionedSchema.Type] {
-        [DashPilotSchemaV1.self, DashPilotSchemaV2.self, DashPilotSchemaV3.self]
+        [DashPilotSchemaV1.self, DashPilotSchemaV2.self, DashPilotSchemaV3.self, DashPilotSchemaV4.self]
     }
 
-    static var stages: [MigrationStage] { [v1ToV2, v2ToV3] }
+    static var stages: [MigrationStage] { [v1ToV2, v2ToV3, v3ToV4] }
 
     /// V1 → V2 is lightweight.
     ///
@@ -141,5 +209,19 @@ enum DashPilotMigrationPlan: SchemaMigrationPlan {
     static let v2ToV3 = MigrationStage.lightweight(
         fromVersion: DashPilotSchemaV2.self,
         toVersion: DashPilotSchemaV3.self
+    )
+
+    /// V3 → V4 is lightweight.
+    ///
+    /// One new optional attribute on an existing entity, which SwiftData can add
+    /// without being told how, and nothing to derive: a shift recorded before
+    /// earnings entry existed has no amount because none was ever entered. It
+    /// keeps `nil`, which the app reads as "not recorded" and never as `0.00`.
+    /// Fabricating a zero would be the one mistake this stage can make — it
+    /// would put a figure a driver never typed into their history, and there
+    /// would be no way afterwards to tell it from one they did.
+    static let v3ToV4 = MigrationStage.lightweight(
+        fromVersion: DashPilotSchemaV3.self,
+        toVersion: DashPilotSchemaV4.self
     )
 }
