@@ -13,9 +13,9 @@ import SwiftUI
 /// row is the wrong place to tell them.
 ///
 /// It is a summary, not a dashboard. No chart, no map, no gauge and no score:
-/// the shift's own recorded facts, the two rates derived from them, and the two
-/// destructive-ish actions that belong to a finished shift — editing what it
-/// paid, and deleting it.
+/// the shift's own recorded facts, the two rates derived from them, the log of
+/// deliveries recorded during it, and the two destructive-ish actions that
+/// belong to a finished shift — editing what it paid, and deleting it.
 ///
 /// Only completed shifts reach it. A running shift has no finalised duration, no
 /// earnings it is allowed to record and nothing that may be deleted, and the
@@ -67,6 +67,11 @@ struct CompletedShiftDetailView: View {
             earningsSection
             routeSection
             performanceSection
+            // Last of the reading sections, deliberately. The four above
+            // summarise the shift in a fixed number of lines; this one grows
+            // with the shift, and a long per-delivery log between the header
+            // and the figures would bury everything that summarises it.
+            deliveriesSection
             deleteSection
         }
         .navigationTitle(shift.startedAt.formatted(date: .abbreviated, time: .omitted))
@@ -302,6 +307,45 @@ struct CompletedShiftDetailView: View {
         }
     }
 
+    // MARK: Deliveries
+
+    /// What this shift recorded delivery by delivery.
+    ///
+    /// A list and two derived intervals, not an analysis. Nothing here rates a
+    /// restaurant, scores a shift, averages a wait or compares one delivery to
+    /// another: those need data DashPilot does not have, and a number presented
+    /// beside a name is read as a judgement of it.
+    ///
+    /// A cancelled delivery appears with the times that genuinely occurred. It
+    /// is not hidden and not counted as completed — it is work the driver did
+    /// that did not end in a delivery.
+    private var deliveriesSection: some View {
+        Section {
+            let deliveries = shift.deliveriesInOrder
+            let summary = shift.deliverySummary
+
+            Text(summary.statement)
+                .font(.headline)
+                .accessibilityLabel(summary.spokenStatement)
+                .accessibilityIdentifier("shiftDetailDeliverySummary")
+
+            ForEach(Array(deliveries.enumerated()), id: \.element.id) { index, delivery in
+                DeliveryHistoryRow(number: index + 1, delivery: delivery)
+            }
+        } header: {
+            Text("Deliveries")
+        } footer: {
+            Text(
+                """
+                Every time below was recorded because you tapped a control during the shift. \
+                DashPilot is not connected to any delivery platform and detects nothing on its own, \
+                so a delivery you did not record is not here. No amount is attributed to an \
+                individual delivery.
+                """
+            )
+        }
+    }
+
     // MARK: Deletion
 
     private var deleteSection: some View {
@@ -373,6 +417,90 @@ struct CompletedShiftDetailView: View {
             ? [.minutes, .seconds]
             : [.hours, .minutes]
         return Duration.seconds(duration).formatted(.units(allowed: units, width: .abbreviated))
+    }
+}
+
+/// One delivery in a completed shift's history.
+///
+/// The lifecycle events that happened, and the two intervals both of whose ends
+/// exist. An interval with a missing end is left out rather than filled in with
+/// zero or with the shift's own times.
+private struct DeliveryHistoryRow: View {
+    let number: Int
+    let delivery: Delivery
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Label(
+                "Delivery \(number) · \(delivery.state.historyDescription)",
+                systemImage: delivery.state.symbolName
+            )
+            .font(.subheadline.weight(.semibold))
+
+            ForEach(events, id: \.label) { event in
+                LabeledContent(event.label) {
+                    Text(event.date, format: .dateTime.hour().minute())
+                        .monospacedDigit()
+                }
+                .font(.footnote)
+            }
+
+            ForEach(intervals, id: \.label) { interval in
+                LabeledContent(interval.label) {
+                    Text(CompletedShiftDetailView.durationText(interval.duration))
+                        .monospacedDigit()
+                }
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.vertical, 2)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(accessibilityLabel)
+        .accessibilityIdentifier("shiftDetailDeliveryRow")
+    }
+
+    /// The lifecycle events that were actually recorded, in order.
+    private var events: [(label: String, date: Date)] {
+        var recorded: [(String, Date)] = [("Accepted", delivery.acceptedAt)]
+        if let arrivedAtPickupAt = delivery.arrivedAtPickupAt {
+            recorded.append(("Arrived at pickup", arrivedAtPickupAt))
+        }
+        if let pickedUpAt = delivery.pickedUpAt {
+            recorded.append(("Picked up", pickedUpAt))
+        }
+        if let deliveredAt = delivery.deliveredAt {
+            recorded.append(("Delivered", deliveredAt))
+        }
+        if let cancelledAt = delivery.cancelledAt {
+            recorded.append(("Cancelled", cancelledAt))
+        }
+        return recorded.map { (label: $0.0, date: $0.1) }
+    }
+
+    /// The intervals both of whose ends exist. Nothing else is derived here.
+    private var intervals: [(label: String, duration: TimeInterval)] {
+        var derived: [(String, TimeInterval)] = []
+        if let pickupWait = delivery.pickupWait {
+            derived.append(("Waited at pickup", pickupWait))
+        }
+        if let completedDuration = delivery.completedDuration {
+            derived.append(("Accepted to delivered", completedDuration))
+        }
+        return derived.map { (label: $0.0, duration: $0.1) }
+    }
+
+    /// Sentences rather than a table, because a row read as a list of
+    /// unattached times is unintelligible.
+    private var accessibilityLabel: String {
+        var sentences = ["Delivery \(number), \(delivery.state.historyDescription.lowercased())"]
+        sentences += events.map { event in
+            "\(event.label) at \(event.date.formatted(date: .omitted, time: .shortened))"
+        }
+        sentences += intervals.map { interval in
+            "\(interval.label) \(CompletedShiftDetailView.durationText(interval.duration))"
+        }
+        return sentences.joined(separator: ". ")
     }
 }
 
