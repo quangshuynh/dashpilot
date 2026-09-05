@@ -10,7 +10,7 @@ import SwiftData
 /// default because the store holds work the driver cannot re-enter.
 nonisolated enum ModelContainerFactory {
     static var currentSchema: Schema {
-        Schema(versionedSchema: DashPilotSchemaV4.self)
+        Schema(versionedSchema: DashPilotSchemaV5.self)
     }
 
     /// The on-disk container backing the running app.
@@ -59,7 +59,7 @@ nonisolated enum ModelContainerFactory {
                 configurations: configuration
             )
             AppLog.persistence.info(
-                "Opened store (inMemory: \(inMemory, privacy: .public), schema: \(DashPilotSchemaV4.versionIdentifier.description, privacy: .public))"
+                "Opened store (inMemory: \(inMemory, privacy: .public), schema: \(DashPilotSchemaV5.versionIdentifier.description, privacy: .public))"
             )
             return container
         } catch {

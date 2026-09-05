@@ -27,6 +27,12 @@ nonisolated enum AppLog {
     /// is exactly the kind of value this project keeps out of the logs.
     static let earnings = Logger(subsystem: subsystem, category: "earnings")
 
+    /// Delivery lifecycle transitions and the rules that reject them. Records
+    /// that a delivery started, advanced or finished — never when, never where,
+    /// and never what it paid. A driver's delivery timing is work history, and
+    /// the log is not the place for it.
+    static let delivery = Logger(subsystem: subsystem, category: "delivery")
+
     /// Route sample capture: when it starts and stops, why it cannot run, how
     /// many samples were kept, and which rule rejected a candidate. Records the
     /// behaviour of the pipeline, never a coordinate that went through it.
