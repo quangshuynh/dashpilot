@@ -47,18 +47,32 @@ The project is early. This section describes what exists, not what is intended.
   figure is derived from the stored route every time rather than saved as a second total, and a
   shift's history row shows it as recorded — and as partial when the route is known not to cover the
   whole shift.
-- Schema v3, with lightweight migrations from v1 and v2, covered by tests that open stores written
-  under each older version and check their shifts and positions survive.
+- Manual gross earnings: a completed shift can store one optional amount the driver types, with a
+  locale-aware input layer that reads what a decimal pad produces — a whole number, one or two
+  decimal places, a currency symbol, grouping separators — and refuses anything it cannot read
+  rather than reinterpreting it. Amounts are added, edited and removed from a sheet on the shift's
+  history row, never during a running shift, and the row shows the recorded amount.
+- Schema v4, with lightweight migrations from v1, v2 and v3, covered by tests that open stores
+  written under each older version and check their shifts, positions and absent earnings survive.
 - `Money`, a `Decimal`-backed monetary type covering the app's arithmetic, rounding, rate division
-  and formatting.
+  and formatting. No monetary value passes through binary floating point, in memory or in the store.
 - App shell that surfaces a store-open failure as a visible state instead of crashing.
 
 **Not implemented yet**
 
-Earnings entry, delivery records, wait-time measurement, maps, App Intents, Live Activities and
-recommendations. A shift records its start time, its end time and its route, and its distance is
-measured from that route; nothing else is derived from it. No route is drawn anywhere, and no
-mileage is shown while a shift is still running. See `AGENTS.md` for the intended order of work.
+Earnings per hour, earnings per mile, expenses, fuel, taxes, mileage deductions, a tips-versus-base
+breakdown, per-delivery earnings, delivery records, wait-time measurement, maps, App Intents, Live
+Activities and recommendations. A shift records its start time, its end time, its route and — if the
+driver types one — a single gross earnings figure. No rate is calculated or displayed anywhere, no
+route is drawn, and no mileage is shown while a shift is still running. See `AGENTS.md` for the
+intended order of work.
+
+**Earnings are what the driver typed.** DashPilot is not connected to a delivery platform, holds no
+account credentials and imports nothing: the amount on a shift is one number a driver chose to
+associate with it. The app does not know whether it includes tips, bonuses, promotions, adjustments
+or reimbursements, so it is labelled gross earnings and never profit, take-home or a taxable amount.
+Entering an amount is optional — a shift with none recorded is a complete shift, and that is a
+different state from a shift recorded as paying `$0.00`.
 
 **Recorded mileage is what was recorded, not what was driven.** Capture is foreground-only, so a
 shift's route has a gap whenever DashPilot was not open. Distance across a gap is left out rather
@@ -85,6 +99,8 @@ paused. Background route continuity is a separate, later decision.
 - A route sample belongs to exactly one shift and is deleted with it.
 - Mileage is calculated on device and never logged: distance is a trip metric, and the logs record
   what the app did, not where the driver went or how far.
+- Earnings are stored on device and never logged. The earnings log records that an amount was added,
+  changed or removed, or that a save failed — never the amount itself.
 - Sample data in tests, previews and documentation is synthetic.
 
 ## Architecture
