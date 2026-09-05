@@ -76,6 +76,18 @@ nonisolated struct DeliverySummary: Equatable, Sendable {
         return parts.joined(separator: ". ")
     }
 
+    /// The running shift's headline: how many deliveries are being worked right
+    /// now.
+    ///
+    /// Separate from ``statement`` because the two answer different questions. A
+    /// driver glancing at a running shift wants to know how many orders they are
+    /// carrying; the statement is the shift's whole record, in-progress count
+    /// included.
+    var inProgressStatement: String {
+        guard inProgress > 0 else { return "No delivery in progress" }
+        return "\(inProgress) \(Self.noun(inProgress)) in progress"
+    }
+
     private static func noun(_ count: Int) -> String {
         count == 1 ? "delivery" : "deliveries"
     }

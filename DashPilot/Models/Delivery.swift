@@ -42,6 +42,15 @@ nonisolated enum DeliveryError: Error, Equatable {
 /// delivery cancelled after the driver waited twenty minutes at the pickup
 /// still records that they arrived. A cancelled delivery is never deleted: it
 /// is what happened.
+///
+/// ## Several at once
+///
+/// A delivery is independent of every other delivery. It owns its own
+/// timestamps and derives its own state from them, so two, three or more can be
+/// running at the same time with overlapping lifecycles — which is what stacked
+/// delivery work actually is. Nothing here knows how many others exist, and no
+/// shared "current delivery" state sits above these records deciding which one
+/// an event belongs to.
 @Model
 nonisolated final class Delivery {
     /// Stable identifier, used for cross-store references and future export.
@@ -187,5 +196,26 @@ nonisolated final class Delivery {
     /// produce a negative duration on a driver's screen.
     private func clamped(from start: Date, to end: Date) -> TimeInterval {
         max(0, end.timeIntervalSince(start))
+    }
+}
+
+extension Delivery {
+    /// Deterministic order for a shift's deliveries: earliest acceptance first,
+    /// with identity breaking a tie.
+    ///
+    /// The order has to be total and repeatable, because it decides which
+    /// concurrent delivery is labelled `Delivery 1` and which is `Delivery 2`.
+    /// Acceptance time alone is not enough: two deliveries accepted in the same
+    /// instant would be free to swap places between two reads, and the labels on
+    /// screen would swap with them. Identity is an arbitrary tie-break, but an
+    /// arbitrary *stable* one is exactly what is needed, and a tie is only
+    /// reachable when two taps land on the same instant.
+    ///
+    /// SwiftData's own fetch order is not relied on anywhere, for the same
+    /// reason: it is incidental, and reading a delivery's number out of it would
+    /// be reading meaning into an implementation detail.
+    static func acceptedBefore(_ lhs: Delivery, _ rhs: Delivery) -> Bool {
+        if lhs.acceptedAt != rhs.acceptedAt { return lhs.acceptedAt < rhs.acceptedAt }
+        return lhs.id.uuidString < rhs.id.uuidString
     }
 }
