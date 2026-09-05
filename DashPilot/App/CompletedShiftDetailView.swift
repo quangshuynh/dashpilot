@@ -520,7 +520,6 @@ struct CompletedShiftDetailView: View {
     private var metrics: ShiftMetrics? {
         recordedDistance.map { shift.metrics(for: $0) }
     }
-
 }
 
 /// One delivery in a completed shift's history.
