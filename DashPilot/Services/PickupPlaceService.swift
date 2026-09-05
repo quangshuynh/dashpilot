@@ -2,10 +2,45 @@ import Foundation
 import OSLog
 import SwiftData
 
+/// The identifying facts of a pickup place, carried where the place itself
+/// cannot go.
+///
+/// ``PickupPlaceError`` is thrown, and a thrown value crosses isolation
+/// boundaries, so it may not hold a `PickupPlace` — a SwiftData model is not
+/// `Sendable`, and a persistent object outliving the operation that produced it
+/// is exactly the stale reference this service refuses elsewhere. A rename
+/// collision needs to say *which* place it collided with, and this is the whole
+/// of what saying that requires: the name to show the driver, and the identity
+/// to match the place back up with if a screen ever needs to.
+nonisolated struct PickupPlaceIdentity: Equatable, Hashable, Sendable, Identifiable {
+    let id: UUID
+    let displayName: String
+
+    init(_ place: PickupPlace) {
+        id = place.id
+        displayName = place.displayName
+    }
+
+    init(id: UUID, displayName: String) {
+        self.id = id
+        self.displayName = displayName
+    }
+}
+
 /// Failures raised when a pickup place cannot be recorded against a delivery.
 nonisolated enum PickupPlaceError: Error {
     /// The typed name broke one of ``PickupPlaceName``'s two rules.
     case invalidName(PickupPlaceNameError)
+    /// A rename would give this place a name another place is already found by.
+    ///
+    /// Carries the place that holds the key, because the answer offered to the
+    /// driver is to **merge** into it — and a refusal that cannot name what it
+    /// collided with is a dead end.
+    case placeAlreadyExists(existingPlace: PickupPlaceIdentity)
+    /// A merge named one place as both its source and its destination.
+    case cannotMergeIntoItself
+    /// A place in the operation is not, or is no longer, a row the store holds.
+    case placeNoLongerExists
     /// The local store could not be read or written.
     case storeUnavailable(underlying: any Error)
 }
@@ -16,6 +51,9 @@ nonisolated extension PickupPlaceError: Equatable {
     static func == (lhs: Self, rhs: Self) -> Bool {
         switch (lhs, rhs) {
         case let (.invalidName(lhsError), .invalidName(rhsError)): lhsError == rhsError
+        case let (.placeAlreadyExists(lhsPlace), .placeAlreadyExists(rhsPlace)): lhsPlace == rhsPlace
+        case (.cannotMergeIntoItself, .cannotMergeIntoItself): true
+        case (.placeNoLongerExists, .placeNoLongerExists): true
         case (.storeUnavailable, .storeUnavailable): true
         default: false
         }
@@ -27,6 +65,15 @@ nonisolated extension PickupPlaceError: LocalizedError {
         switch self {
         case let .invalidName(error):
             error.errorDescription
+        case let .placeAlreadyExists(existingPlace):
+            """
+            You already have a pickup place called \(existingPlace.displayName). To put both places' \
+            deliveries together under one name, merge this place into it instead.
+            """
+        case .cannotMergeIntoItself:
+            "A pickup place cannot be merged into itself. Choose a different place to merge into."
+        case .placeNoLongerExists:
+            "That pickup place is no longer in DashPilot, so nothing was changed."
         case .storeUnavailable:
             "DashPilot could not save to its local data store, so the pickup place was not changed."
         }
@@ -57,11 +104,28 @@ nonisolated extension PickupPlaceError: LocalizedError {
 ///
 /// ## Display spelling
 ///
-/// **The first accepted spelling wins.** A later entry that matches an existing
-/// place reuses it without rewriting what it is called. Renaming a place a
-/// driver has been reading all week because tonight they typed it in lower case
-/// is a surprise, and choosing which of two spellings is the "better" one is not
-/// a judgement this app can make.
+/// **The first accepted spelling wins, by matching.** A later entry that matches
+/// an existing place reuses it without rewriting what it is called. Renaming a
+/// place a driver has been reading all week because tonight they typed it in
+/// lower case is a surprise, and choosing which of two spellings is the "better"
+/// one is not a judgement this app can make.
+///
+/// ## Correcting a place the driver got wrong
+///
+/// The rule above is about what *typing* may do. It is not a claim that a place
+/// is unchangeable, and two deliberate corrections live here:
+///
+/// - ``rename(_:to:)`` gives one place a new spelling and a new key, keeping
+///   every delivery attached to it.
+/// - ``merge(_:into:)`` moves every delivery off one place onto another and
+///   removes the one left empty.
+///
+/// Both are explicit acts by the driver, on one named place, with the direction
+/// stated. **Nothing merges automatically.** There is no similarity check, no
+/// "did you mean", no background scan for near-duplicates, and no rule beyond the
+/// exact normalised-key reuse above — a duplicate the driver can see is a
+/// nuisance, and a merge they did not ask for is a distinction the app cannot
+/// give back.
 ///
 /// ## What it does not do
 ///
@@ -81,8 +145,23 @@ struct PickupPlaceService {
 
     private let context: ModelContext
 
-    init(context: ModelContext) {
+    /// How a change is handed to the store.
+    ///
+    /// `ModelContext.save()` everywhere in the app, and injectable for exactly
+    /// one reason: ``merge(_:into:)`` claims to be atomic, and a claim about what
+    /// happens when a save is refused is untestable while the save can only
+    /// succeed. A test substitutes a commit that throws; the rollback it triggers
+    /// is the real ``ModelContext/rollback()``, so what the test asserts is the
+    /// store's own behaviour rather than a stand-in for it.
+    ///
+    /// Deliberately a closure and not a protocol: one function, one call site per
+    /// operation, no second conformance to write and nothing for the app to
+    /// configure.
+    private let commit: (ModelContext) throws -> Void
+
+    init(context: ModelContext, commit: @escaping (ModelContext) throws -> Void = { try $0.save() }) {
         self.context = context
+        self.commit = commit
     }
 
     // MARK: Resolving
@@ -197,6 +276,166 @@ struct PickupPlaceService {
         AppLog.pickupPlace.info("Pickup place removed")
     }
 
+    // MARK: Correcting identity
+
+    /// Gives `place` a new name, keeping every delivery attached to it.
+    ///
+    /// The name goes through ``PickupPlaceName`` — the same type, the same two
+    /// rules and the same normalisation as creating a place, because a second
+    /// policy here would be a second way for two spellings to disagree about
+    /// whether they mean the same place.
+    ///
+    /// ## What a rename is, and is not
+    ///
+    /// It changes identity **text**: the spelling on screen and the key the
+    /// catalogue is searched by. It moves no delivery, deletes nothing, and
+    /// touches no lifecycle timestamp — so the place's delivery count, its
+    /// recorded waits, their median and its position in the recent list are all
+    /// exactly what they were. Afterwards the new spelling is authoritative:
+    /// typing it again finds this place rather than creating another.
+    ///
+    /// ## Collisions are refused, never merged
+    ///
+    /// If the new name normalises to a key another place already holds,
+    /// ``PickupPlaceError/placeAlreadyExists(existingPlace:)`` is thrown and
+    /// **nothing is written**. Quietly folding this place into that one would be
+    /// a merge, and a merge destroys a place — a driver correcting a typo has not
+    /// asked for that. The refusal carries the place it collided with so the
+    /// interface can offer ``merge(_:into:)`` as the deliberate next step.
+    ///
+    /// A rename to a name this place already matches — a capitalisation or
+    /// spacing fix — is not a collision and is applied as the display change it
+    /// is. A rename to exactly what is already stored writes nothing.
+    ///
+    /// - Throws: ``PickupPlaceError``.
+    @discardableResult
+    func rename(_ place: PickupPlace, to rawName: String) throws -> PickupPlace {
+        guard isRecorded(place) else {
+            AppLog.pickupPlace.notice("Refused a pickup place rename: the place is not in the store")
+            throw PickupPlaceError.placeNoLongerExists
+        }
+
+        let name: PickupPlaceName
+        do {
+            name = try PickupPlaceName(rawName)
+        } catch {
+            // The rule that was broken, never the text that broke it.
+            AppLog.pickupPlace.notice(
+                "Refused a pickup place rename: \(String(describing: error), privacy: .public)"
+            )
+            throw PickupPlaceError.invalidName(error)
+        }
+
+        if let existing = try self.place(matching: name.key), existing.id != place.id {
+            // Which rule refused it, never which name or which key.
+            AppLog.pickupPlace.notice("Refused a pickup place rename: another place already holds that name")
+            throw PickupPlaceError.placeAlreadyExists(existingPlace: PickupPlaceIdentity(existing))
+        }
+
+        guard place.displayName != name.display || place.normalizedName != name.key else { return place }
+
+        place.rename(to: name)
+        try save(describing: "a pickup place rename")
+
+        AppLog.pickupPlace.info("Pickup place renamed")
+        return place
+    }
+
+    /// The places `place` could be merged into, in the order they are offered.
+    ///
+    /// **Display name alphabetical**, compared the way a person reads a list —
+    /// `localizedStandardCompare`, so case and accents do not scatter it — with
+    /// the catalogue's own order breaking a tie. Deterministic, and the same on
+    /// every read.
+    ///
+    /// Alphabetical rather than recent-first on purpose: a driver merging is
+    /// looking for one particular name they already have in mind, and a list that
+    /// reorders itself as work is recorded makes that name harder to find, not
+    /// easier. There is no relevance ranking, no similarity score and no
+    /// suggested destination — the app has no opinion about which of these places
+    /// is the "right" one.
+    ///
+    /// - Throws: ``PickupPlaceError/storeUnavailable(underlying:)``.
+    func mergeDestinations(for place: PickupPlace) throws -> [PickupPlace] {
+        try allPlaces()
+            .filter { $0.id != place.id }
+            .sorted(by: PickupPlace.displayedBefore)
+    }
+
+    /// Moves every delivery recorded under `source` onto `destination`, then
+    /// removes `source`.
+    ///
+    /// ## The destination wins, entirely
+    ///
+    /// `destination` keeps its `id`, its spelling, its key and the date it was
+    /// first named. Nothing is combined, no alias is kept and no record of the
+    /// merge is written: the source contributes its delivery relationships and
+    /// nothing else. What survives is one of the two places the driver already
+    /// had, chosen by them.
+    ///
+    /// ## What the deliveries keep
+    ///
+    /// All of it. A reassigned delivery keeps its acceptance, arrival, pickup,
+    /// delivery and cancellation timestamps unchanged, so its recorded wait is
+    /// the same interval it always was. Nothing is deleted: the deliveries move,
+    /// and afterwards the destination's history is the two histories read
+    /// together — recomputed from the relationship, because no figure was ever
+    /// stored on a place to go stale. Recency follows for the same reason.
+    ///
+    /// ## One operation
+    ///
+    /// The reassignment and the deletion are committed **together**. Saving
+    /// between them would make a refused second save the worst outcome available:
+    /// deliveries already moved onto the destination and a source still standing
+    /// beside it, with the driver's history split differently than before but
+    /// still split. Instead a failure rolls the context back, and the store is
+    /// exactly as it was — both places, every delivery where it started.
+    ///
+    /// - Throws: ``PickupPlaceError/cannotMergeIntoItself`` if the two are one
+    ///   place, ``PickupPlaceError/placeNoLongerExists`` if either is not a row
+    ///   the store holds, or
+    ///   ``PickupPlaceError/storeUnavailable(underlying:)``.
+    func merge(_ source: PickupPlace, into destination: PickupPlace) throws {
+        guard source.id != destination.id else {
+            AppLog.pickupPlace.notice("Refused a pickup place merge: a place cannot merge into itself")
+            throw PickupPlaceError.cannotMergeIntoItself
+        }
+        guard isRecorded(source), isRecorded(destination) else {
+            // Nothing has been mutated yet, which is the point of checking here:
+            // a half-applied merge is worse than a refused one.
+            AppLog.pickupPlace.notice("Refused a pickup place merge: a place is not in the store")
+            throw PickupPlaceError.placeNoLongerExists
+        }
+
+        // Snapshotted before the loop: reassigning a delivery empties the
+        // relationship being iterated, and a source with no deliveries left is a
+        // perfectly ordinary merge rather than a special case.
+        let reassigned = source.deliveries
+        for delivery in reassigned {
+            delivery.setPickupPlace(destination)
+        }
+        context.delete(source)
+
+        try save(describing: "a pickup place merge")
+
+        // That two places became one, and nothing about which two. Not a name,
+        // not a key, and not how many deliveries moved — a count of a driver's
+        // pickups at one place is the history this category exists to keep out of
+        // the log.
+        AppLog.pickupPlace.info("Pickup places merged")
+    }
+
+    /// Whether this place is still a row the store holds.
+    ///
+    /// A view can hold a place across a sheet dismissal, another screen's
+    /// deletion or its own merge, so an object arriving here is not proof of a
+    /// row. `modelContext` is `nil` for one that was never inserted, and
+    /// `isDeleted` covers one already removed — both are refused before anything
+    /// is mutated.
+    private func isRecorded(_ place: PickupPlace) -> Bool {
+        place.modelContext != nil && !place.isDeleted
+    }
+
     // MARK: Reading
 
     /// The places most recently used, newest first.
@@ -261,7 +500,7 @@ struct PickupPlaceService {
     /// and typed as a `StaticString` so a place's name cannot become the value.
     private func save(describing operation: StaticString) throws {
         do {
-            try context.save()
+            try commit(context)
         } catch {
             context.rollback()
             AppLog.pickupPlace.error("Failed to persist \(operation, privacy: .public): \(error)")
