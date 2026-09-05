@@ -547,37 +547,72 @@ struct CompletedShiftDetailView: View {
 private struct DeliveryHistoryRow: View {
     let numbered: NumberedDelivery
 
+    /// Naming a pickup is offered here as well as on the running shift, because
+    /// this is where a driver sitting still afterwards actually reviews what
+    /// they recorded — and where they notice a place tapped onto the wrong card.
+    @State private var isEditingPickupPlace = false
+
     private var delivery: Delivery { numbered.delivery }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Label(
-                "\(numbered.title) · \(delivery.state.historyDescription)",
-                systemImage: delivery.state.symbolName
-            )
-            .font(.subheadline.weight(.semibold))
+            // The recorded facts, read as one element. The control below is
+            // deliberately outside it: a button folded into a combined element
+            // is not reachable by VoiceOver.
+            VStack(alignment: .leading, spacing: 4) {
+                Label(
+                    "\(numbered.title) · \(delivery.state.historyDescription)",
+                    systemImage: delivery.state.symbolName
+                )
+                .font(.subheadline.weight(.semibold))
 
-            ForEach(events, id: \.label) { event in
-                LabeledContent(event.label) {
-                    Text(event.date, format: .dateTime.hour().minute())
-                        .monospacedDigit()
+                // The place supplements the local number rather than replacing
+                // it: `Delivery 2` is what this delivery was called all shift.
+                // Absent when none was recorded — a "no pickup place" line on
+                // every delivery would be noise on the ordinary case.
+                if let place = delivery.pickupPlace {
+                    Label(place.displayName, systemImage: "bag")
+                        .font(.footnote)
                 }
+
+                ForEach(events, id: \.label) { event in
+                    LabeledContent(event.label) {
+                        Text(event.date, format: .dateTime.hour().minute())
+                            .monospacedDigit()
+                    }
+                    .font(.footnote)
+                }
+
+                ForEach(intervals, id: \.label) { interval in
+                    LabeledContent(interval.label) {
+                        Text(CompletedShiftDetailView.durationText(interval.duration))
+                            .monospacedDigit()
+                    }
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                }
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(accessibilityLabel)
+            .accessibilityIdentifier("shiftDetailDeliveryRow")
+
+            Button {
+                isEditingPickupPlace = true
+            } label: {
+                Label(
+                    numbered.pickupPlaceActionTitle(hasPlace: delivery.pickupPlace != nil),
+                    systemImage: delivery.pickupPlace == nil ? "plus.circle" : "pencil"
+                )
                 .font(.footnote)
             }
-
-            ForEach(intervals, id: \.label) { interval in
-                LabeledContent(interval.label) {
-                    Text(CompletedShiftDetailView.durationText(interval.duration))
-                        .monospacedDigit()
-                }
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-            }
+            .buttonStyle(.borderless)
+            .accessibilityLabel(numbered.spokenPickupPlaceLabel(hasPlace: delivery.pickupPlace != nil))
+            .accessibilityIdentifier("shiftDetailPickupPlaceButton")
         }
         .padding(.vertical, 2)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(accessibilityLabel)
-        .accessibilityIdentifier("shiftDetailDeliveryRow")
+        .sheet(isPresented: $isEditingPickupPlace) {
+            PickupPlaceEditor(numbered: numbered)
+        }
     }
 
     /// The lifecycle events that were actually recorded, in order.
@@ -614,6 +649,11 @@ private struct DeliveryHistoryRow: View {
     /// unattached times is unintelligible.
     private var accessibilityLabel: String {
         var sentences = ["\(numbered.title), \(delivery.state.historyDescription.lowercased())"]
+        // The place is spoken as it is written. The key it is matched by is
+        // never exposed anywhere, aloud or otherwise.
+        if let place = delivery.pickupPlace {
+            sentences.append("Picked up from \(place.displayName)")
+        }
         sentences += events.map { event in
             "\(event.label) at \(event.date.formatted(date: .omitted, time: .shortened))"
         }

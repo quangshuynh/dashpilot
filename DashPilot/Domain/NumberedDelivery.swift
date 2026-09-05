@@ -66,4 +66,22 @@ nonisolated struct NumberedDelivery: Identifiable {
     /// The spoken label for this delivery's cancel control, named for the same
     /// reason: cancelling the wrong delivery is not an error the driver can undo.
     var spokenCancelLabel: String { "\(title). Cancel this delivery" }
+
+    /// What the pickup-place control prints, which depends only on whether one
+    /// is already recorded.
+    ///
+    /// Short, because it sits under a delivery that has already named itself and
+    /// beside a lifecycle button that must stay the prominent thing on the card.
+    func pickupPlaceActionTitle(hasPlace: Bool) -> String {
+        hasPlace ? "Change Pickup Place" : "Add Pickup Place"
+    }
+
+    /// What VoiceOver hears for that control.
+    ///
+    /// The delivery is named, exactly as it is for every other control on a card
+    /// — with three cards on screen, "Add pickup place" alone identifies its
+    /// target by nothing but where it happens to sit.
+    func spokenPickupPlaceLabel(hasPlace: Bool) -> String {
+        hasPlace ? "Change pickup place for \(title)" : "Add pickup place for \(title)"
+    }
 }

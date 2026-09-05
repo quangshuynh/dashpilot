@@ -214,6 +214,11 @@ private struct ActiveDeliveryCard: View {
     let advance: () -> Void
     let cancel: () -> Void
 
+    /// Presented from the card's secondary pickup control. Sheet state rather
+    /// than a navigation push, because naming a pickup is a short aside from the
+    /// running shift rather than somewhere to be.
+    @State private var isEditingPickupPlace = false
+
     private var delivery: Delivery { numbered.delivery }
 
     var body: some View {
@@ -221,6 +226,12 @@ private struct ActiveDeliveryCard: View {
             VStack(alignment: .leading, spacing: 2) {
                 Label(numbered.statusTitle, systemImage: delivery.state.symbolName)
                     .font(.headline)
+
+                if let place = delivery.pickupPlace {
+                    Label(place.displayName, systemImage: "bag")
+                        .font(.subheadline)
+                        .lineLimit(1)
+                }
 
                 LabeledContent("Accepted") {
                     Text(delivery.acceptedAt, format: .dateTime.hour().minute())
@@ -232,6 +243,11 @@ private struct ActiveDeliveryCard: View {
             .accessibilityElement(children: .combine)
             .accessibilityLabel(spokenStatus)
             .accessibilityIdentifier("activeDeliveryStatus")
+
+            // Secondary in every way that matters: small, plain, and above the
+            // lifecycle button rather than in its place. Naming a pickup is
+            // optional and this delivery advances identically without it.
+            pickupPlaceControl
 
             // Only the one step this delivery can actually take. A card for a
             // finished delivery does not exist, so the absence is defensive.
@@ -253,13 +269,44 @@ private struct ActiveDeliveryCard: View {
                 .accessibilityLabel(numbered.spokenCancelLabel)
                 .accessibilityIdentifier("cancelDeliveryButton")
         }
+        .sheet(isPresented: $isEditingPickupPlace) {
+            PickupPlaceEditor(numbered: numbered)
+        }
     }
 
-    /// "Delivery 2, waiting at the pickup, accepted at 5:12 PM" — the identity
-    /// first, because that is what tells the listener which card they are on.
+    /// The one control for pickup identity: add it, or change what is recorded.
+    ///
+    /// Deliberately not a text field on the card. A running shift is the one
+    /// screen a driver may look at with the engine on, and a keyboard that
+    /// appears beside the lifecycle buttons is exactly the interaction this
+    /// project refuses to design. The sheet it opens can be answered in one tap
+    /// from a recent place, or dismissed and ignored entirely.
+    private var pickupPlaceControl: some View {
+        Button {
+            isEditingPickupPlace = true
+        } label: {
+            Label(
+                numbered.pickupPlaceActionTitle(hasPlace: delivery.pickupPlace != nil),
+                systemImage: delivery.pickupPlace == nil ? "plus.circle" : "pencil"
+            )
+            .font(.subheadline)
+        }
+        .buttonStyle(.borderless)
+        .accessibilityLabel(numbered.spokenPickupPlaceLabel(hasPlace: delivery.pickupPlace != nil))
+        .accessibilityIdentifier("pickupPlaceButton")
+    }
+
+    /// "Delivery 2, waiting at the pickup, from Nowhere Noodles, accepted at
+    /// 5:12 PM" — the identity first, because that is what tells the listener
+    /// which card they are on, and the place only when one was recorded.
     private var spokenStatus: String {
         let accepted = delivery.acceptedAt.formatted(date: .omitted, time: .shortened)
-        return "\(numbered.spokenStatus), accepted at \(accepted)"
+        var parts = [numbered.spokenStatus]
+        if let place = delivery.pickupPlace {
+            parts.append("from \(place.displayName)")
+        }
+        parts.append("accepted at \(accepted)")
+        return parts.joined(separator: ", ")
     }
 }
 
