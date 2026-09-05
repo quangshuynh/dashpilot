@@ -1,0 +1,15 @@
+# Documentation toolchain only. DashPilot itself is a native iOS application and
+# needs none of this to build or run; these packages exist so the MkDocs site can
+# be built locally and in CI.
+#
+#   python3 -m venv .venv
+#   source .venv/bin/activate
+#   pip install -r requirements-docs.txt
+
+mkdocs>=1.6,<2.0
+mkdocs-material>=9.5,<10.0
+
+# Used directly by mkdocs.yml (superfences, details, tabbed, highlight, keys).
+# Installed transitively by mkdocs-material as well; pinned here because the
+# site configuration depends on it by name.
+pymdown-extensions>=10.8,<11.0

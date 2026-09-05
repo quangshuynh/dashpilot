@@ -1,0 +1,152 @@
+name: CI
+
+# Builds DashPilot for an iOS simulator and runs both test targets. No signing,
+# no archive, no Apple Developer account and no third-party CI service.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+# Cancel superseded runs on the same branch or pull request, never runs on
+# another ref.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: Build and test on iOS Simulator
+    runs-on: macos-26
+    timeout-minutes: 60
+    env:
+      XCODE_PROJECT: DashPilot.xcodeproj
+      XCODE_SCHEME: DashPilot
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v7
+
+      - name: Select an Xcode that has the required iOS SDK
+        run: |
+          set -euo pipefail
+
+          required="$(awk -F' = ' '/IPHONEOS_DEPLOYMENT_TARGET/ { gsub(/[; ]/, "", $2); print $2; exit }' "$XCODE_PROJECT/project.pbxproj")"
+          if [ -z "$required" ]; then
+            echo "Could not read IPHONEOS_DEPLOYMENT_TARGET from the project." >&2
+            exit 1
+          fi
+          echo "Project deployment target: iOS $required"
+
+          # True when $1 >= $2, comparing dotted versions.
+          version_ge() { [ "$(printf '%s\n%s\n' "$2" "$1" | sort -V | head -n 1)" = "$2" ]; }
+
+          best_app=""
+          best_sdk=""
+          for app in /Applications/Xcode*.app; do
+            settings="$app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator.sdk/SDKSettings.plist"
+            [ -f "$settings" ] || continue
+            sdk="$(/usr/libexec/PlistBuddy -c 'Print :Version' "$settings" 2>/dev/null || true)"
+            [ -n "$sdk" ] || continue
+            echo "  $app has iOS Simulator SDK $sdk"
+            version_ge "$sdk" "$required" || continue
+            if [ -z "$best_sdk" ] || version_ge "$sdk" "$best_sdk"; then
+              best_app="$app"
+              best_sdk="$sdk"
+            fi
+          done
+
+          if [ -z "$best_app" ]; then
+            echo "No installed Xcode provides an iOS Simulator SDK of at least $required." >&2
+            exit 1
+          fi
+
+          echo "Using $best_app (iOS Simulator SDK $best_sdk)"
+          echo "DEVELOPER_DIR=$best_app/Contents/Developer" >> "$GITHUB_ENV"
+          echo "REQUIRED_IOS_VERSION=$required" >> "$GITHUB_ENV"
+
+      - name: Show tool versions
+        run: |
+          set -euo pipefail
+          sw_vers
+          xcodebuild -version
+          swift --version
+          xcrun simctl list runtimes ios
+
+      - name: Choose an available iPhone simulator
+        run: |
+          set -euo pipefail
+          xcrun simctl list devices available --json > /tmp/simulators.json
+          python3 - <<'PY' >> "$GITHUB_ENV"
+          import json, os, re
+
+          required = tuple(int(part) for part in os.environ["REQUIRED_IOS_VERSION"].split("."))
+          devices = json.load(open("/tmp/simulators.json"))["devices"]
+
+          candidates = []
+          for runtime, entries in devices.items():
+              match = re.search(r"SimRuntime\.iOS-([0-9-]+)$", runtime)
+              if not match:
+                  continue
+              version = tuple(int(part) for part in match.group(1).split("-"))
+              if version < required:
+                  continue
+              for device in entries:
+                  if device.get("isAvailable") and device["name"].startswith("iPhone"):
+                      candidates.append((version, device["name"], device["udid"]))
+
+          if not candidates:
+              raise SystemExit(
+                  f"No available iPhone simulator on iOS {'.'.join(map(str, required))} or newer."
+              )
+
+          # Newest runtime first, then a plain "iPhone <n>" over a variant, then a
+          # stable order by name, so the same runner image always picks the same
+          # device without the workflow naming one.
+          def preference(candidate):
+              version, name, _ = candidate
+              return (version, 1 if re.fullmatch(r"iPhone \d+", name) else 0, name)
+
+          candidates.sort(key=preference, reverse=True)
+          version, name, udid = candidates[0]
+          print(f"SIMULATOR_NAME={name} (iOS {'.'.join(map(str, version))})")
+          print(f"SIMULATOR_ID={udid}")
+          PY
+
+      - name: Report the selected simulator
+        run: echo "Building against $SIMULATOR_NAME ($SIMULATOR_ID)"
+
+      - name: Build the app and both test bundles
+        run: |
+          set -euo pipefail
+          xcodebuild build-for-testing \
+            -project "$XCODE_PROJECT" \
+            -scheme "$XCODE_SCHEME" \
+            -destination "platform=iOS Simulator,id=$SIMULATOR_ID" \
+            -derivedDataPath DerivedData \
+            -quiet \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO
+
+      - name: Run the domain test suite (DashPilotTests)
+        run: |
+          set -euo pipefail
+          xcodebuild test-without-building \
+            -project "$XCODE_PROJECT" \
+            -scheme "$XCODE_SCHEME" \
+            -destination "platform=iOS Simulator,id=$SIMULATOR_ID" \
+            -derivedDataPath DerivedData \
+            -only-testing:DashPilotTests
+
+      - name: Run the UI journeys (DashPilotUITests)
+        run: |
+          set -euo pipefail
+          xcodebuild test-without-building \
+            -project "$XCODE_PROJECT" \
+            -scheme "$XCODE_SCHEME" \
+            -destination "platform=iOS Simulator,id=$SIMULATOR_ID" \
+            -derivedDataPath DerivedData \
+            -only-testing:DashPilotUITests
