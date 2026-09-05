@@ -210,13 +210,16 @@ struct RouteQualityTests {
 /// value at all.
 @Suite("Unavailable rate explanations")
 struct ShiftRateUnavailabilityExplanationTests {
-    private static let allReasons: [ShiftRateUnavailability] = [
-        .shiftNotCompleted,
-        .earningsNotRecorded,
-        .noElapsedTime,
-        .noRouteRecorded,
-        .routeNotMeasurable,
-        .zeroRecordedDistance
+    /// Every case, from the enum itself rather than from a list kept by hand:
+    /// a reason added without a sentence is exactly the omission these tests
+    /// exist to catch, and a hand-written list would quietly stop covering it.
+    private static let allReasons = ShiftRateUnavailability.allCases
+
+    /// The reasons that describe a real measurement of zero. Every other reason
+    /// describes an absence, and must not read as a value.
+    private static let measuredZeroReasons: Set<ShiftRateUnavailability> = [
+        .zeroRecordedDistance,
+        .zeroDeliveryActiveTime
     ]
 
     @Test("Every reason has a sentence, and no two reasons share one")
@@ -229,7 +232,7 @@ struct ShiftRateUnavailabilityExplanationTests {
 
     @Test("No explanation presents the missing rate as a zero")
     func noExplanationImpliesZero() {
-        for reason in Self.allReasons where reason != .zeroRecordedDistance {
+        for reason in Self.allReasons where !Self.measuredZeroReasons.contains(reason) {
             #expect(!reason.explanation.contains("0"), "\(reason) reads as a value of zero")
             #expect(!reason.explanation.contains("$"), "\(reason) reads as an amount")
         }
@@ -246,5 +249,34 @@ struct ShiftRateUnavailabilityExplanationTests {
 
         #expect(explanation.contains("did not move"))
         #expect(!explanation.contains("no distance"))
+    }
+
+    /// Three different facts about a shift's deliveries, each with its own
+    /// sentence. A shift nobody recorded a delivery on, one whose records cannot
+    /// describe a stretch of it, and one whose deliveries genuinely covered no
+    /// time are not the same thing, and none of them is a rate of zero.
+    @Test("The three delivery-time reasons say three different things")
+    func deliveryReasonsAreDistinct() {
+        let noDeliveries = ShiftRateUnavailability.noDeliveriesRecorded.explanation
+        let notMeasurable = ShiftRateUnavailability.deliveryActiveTimeNotMeasurable.explanation
+        let zero = ShiftRateUnavailability.zeroDeliveryActiveTime.explanation
+
+        #expect(noDeliveries.contains("No deliveries were recorded"))
+        #expect(notMeasurable.contains("do not describe a stretch"))
+        #expect(zero.contains("covered no measurable time"))
+        #expect(Set([noDeliveries, notMeasurable, zero]).count == 3)
+    }
+
+    /// The vocabulary the whole interval avoids. None of these sentences may
+    /// describe the time as work, driving or productivity, because DashPilot
+    /// does not know that it was any of them.
+    @Test("No explanation calls delivery active time working, driving or productive time")
+    func noExplanationOverclaimsWhatActiveTimeMeans() {
+        for reason in Self.allReasons {
+            let explanation = reason.explanation.lowercased()
+            for claim in ["driving time", "working time", "productive", "billable", "idle"] {
+                #expect(!explanation.contains(claim), "\(reason) describes the time as \(claim)")
+            }
+        }
     }
 }

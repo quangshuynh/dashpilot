@@ -128,8 +128,9 @@ final class DashPilotUITests: XCTestCase {
         )
     }
 
-    /// A completed shift with earnings and a measured route shows both rates,
-    /// each saying what it divides by.
+    /// A completed shift with earnings and a measured route shows the rates over
+    /// elapsed time and over recorded mileage, each saying what it divides by.
+    /// The third, over delivery active time, has its own journey below.
     @MainActor
     func testDetailShowsBothDerivedRates() throws {
         let app = launchWithSeededHistory()
@@ -156,6 +157,102 @@ final class DashPilotUITests: XCTestCase {
             perMile.label.contains("per mile driven"),
             "A bare per-mile claim would present recorded mileage as the mileage driven: \(perMile.label)"
         )
+    }
+
+    /// A completed shift states how much of it a delivery was active for, and
+    /// what is left over — with overlapping deliveries counted once.
+    ///
+    /// The fixture's three deliveries run 5–30, 40–60 and 50–80 minutes into a
+    /// three-hour shift. Two of them overlap, so the union is 65 minutes where
+    /// their durations sum to 75.
+    @MainActor
+    func testDetailShowsDeliveryActiveAndNonDeliveryTime() throws {
+        let app = launchWithSeededHistory()
+        openFirstShift(in: app)
+
+        let active = app.descendants(matching: .any)["shiftDetailDeliveryActiveTime"]
+        XCTAssertTrue(active.waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            active.label.contains("delivery active time"),
+            "VoiceOver must hear which duration this is: \(active.label)"
+        )
+        XCTAssertTrue(active.label.contains("1 hour"), "The union is 65 minutes: \(active.label)")
+        XCTAssertTrue(active.label.contains("5 minutes"))
+        XCTAssertFalse(
+            active.label.contains("15 minutes"),
+            "Adding the overlapping deliveries' durations would give 1 hour 15: \(active.label)"
+        )
+
+        let nonDelivery = app.descendants(matching: .any)["shiftDetailNonDeliveryTime"]
+        XCTAssertTrue(nonDelivery.exists)
+        XCTAssertTrue(
+            nonDelivery.label.contains("non-delivery time"),
+            "The rest of the shift is named for what it is, not called idle: \(nonDelivery.label)"
+        )
+        XCTAssertTrue(nonDelivery.label.contains("1 hour"))
+        XCTAssertTrue(nonDelivery.label.contains("55 minutes"), "Three hours less 65 minutes: \(nonDelivery.label)")
+
+        // The three durations are told apart in words, not by position.
+        let elapsed = app.descendants(matching: .any)["shiftDetailDuration"]
+        XCTAssertTrue(elapsed.label.contains("elapsed shift time"), "\(elapsed.label)")
+    }
+
+    /// The active-hour rate divides by the unioned active time, not by the sum
+    /// of the deliveries' durations.
+    ///
+    /// $86.25 over 65 minutes is $79.62. Over the 75 minutes the same three
+    /// deliveries add up to it would be $69.00, which is the mistake this rate
+    /// exists to avoid.
+    @MainActor
+    func testDetailActiveHourRateDividesByTheUnionedTime() throws {
+        let app = launchWithSeededHistory()
+        openFirstShift(in: app)
+
+        let rate = app.descendants(matching: .any)["shiftDetailActiveHourlyRate"]
+        XCTAssertTrue(scrollTo(rate, in: app), "The performance section should be reachable")
+        XCTAssertTrue(
+            rate.label.contains("$79.62 gross earnings per delivery active hour"),
+            "The denominator is the union of the overlapping deliveries: \(rate.label)"
+        )
+        XCTAssertFalse(
+            rate.label.contains("$69.00"),
+            "Summing the deliveries' durations would understate the rate: \(rate.label)"
+        )
+
+        // It remains gross earnings, and it never claims to measure work.
+        for overclaim in ["wage", "true hourly", "net", "working", "driving"] {
+            XCTAssertFalse(
+                rate.label.lowercased().contains(overclaim),
+                "The rate must not be described as \(overclaim): \(rate.label)"
+            )
+        }
+    }
+
+    /// A shift that recorded no deliveries shows no active time and no
+    /// active-hour rate, rather than zero minutes and a rate divided by nothing.
+    @MainActor
+    func testShiftWithoutDeliveriesInventsNoActiveTime() throws {
+        let app = launchWithSeededHistory()
+        let history = rows(in: app)
+        XCTAssertTrue(history.firstMatch.waitForExistence(timeout: 10))
+
+        history.element(boundBy: 1).tap()
+
+        let elapsed = app.descendants(matching: .any)["shiftDetailDuration"]
+        XCTAssertTrue(elapsed.waitForExistence(timeout: 5), "The shift still has an elapsed duration")
+        XCTAssertFalse(
+            app.descendants(matching: .any)["shiftDetailDeliveryActiveTime"].exists,
+            "No deliveries recorded is not zero minutes of delivery active time"
+        )
+        XCTAssertFalse(app.descendants(matching: .any)["shiftDetailNonDeliveryTime"].exists)
+
+        let rate = app.descendants(matching: .any)["shiftDetailActiveHourlyRate"]
+        XCTAssertTrue(scrollTo(rate, in: app))
+        XCTAssertTrue(
+            rate.label.contains("No gross earnings per delivery active hour"),
+            "An absent rate is stated as absent: \(rate.label)"
+        )
+        XCTAssertFalse(rate.label.contains("$"), "Nothing may stand in for the rate: \(rate.label)")
     }
 
     /// A route with known gaps is marked partial, and the detail screen says
@@ -186,7 +283,9 @@ final class DashPilotUITests: XCTestCase {
 
         // The fixture is two capture sessions with a gap in between, which is
         // what makes the route partial in the first place.
-        XCTAssertEqual(app.descendants(matching: .any)["shiftDetailCaptureSegments"].label, "2 capture segments")
+        let segments = app.descendants(matching: .any)["shiftDetailCaptureSegments"]
+        XCTAssertTrue(scrollTo(segments, in: app), "The route section's counts should be reachable")
+        XCTAssertEqual(segments.label, "2 capture segments")
         XCTAssertTrue(
             app.descendants(matching: .any)["shiftDetailCaptureGaps"].label.contains("capture gap"),
             "Detail counts the gaps the mileage excluded"
