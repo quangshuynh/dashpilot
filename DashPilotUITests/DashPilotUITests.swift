@@ -4,6 +4,9 @@ final class DashPilotUITests: XCTestCase {
     /// Must match `LaunchArgument.inMemoryStore`; a UI test target cannot link the app target.
     private static let inMemoryStoreArgument = "-dashpilot-in-memory-store"
 
+    /// Must match `LaunchArgument.seededHistory`, for the same reason.
+    private static let seededHistoryArgument = "-dashpilot-seeded-history"
+
     override func setUpWithError() throws {
         continueAfterFailure = false
     }
@@ -14,6 +17,19 @@ final class DashPilotUITests: XCTestCase {
     private func launchWithEmptyStore() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments.append(Self.inMemoryStoreArgument)
+        app.launch()
+        return app
+    }
+
+    /// Launches against a throwaway store holding the synthetic history fixture.
+    ///
+    /// A UI test cannot make the simulator record a route, so a measured,
+    /// partial route — and the per-recorded-mile rate over it — can only be
+    /// reached from seeded data.
+    @MainActor
+    private func launchWithSeededHistory() -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments.append(Self.seededHistoryArgument)
         app.launch()
         return app
     }
@@ -105,7 +121,7 @@ final class DashPilotUITests: XCTestCase {
     @MainActor
     func testInvalidEarningsAreNotSaved() throws {
         let app = launchWithEmptyStore()
-        let row = completeAShift(in: app)
+        _ = completeAShift(in: app)
 
         app.buttons["editShiftEarningsButton"].tap()
         type("1.2.3", into: app)
@@ -125,6 +141,91 @@ final class DashPilotUITests: XCTestCase {
             app.buttons["editShiftEarningsButton"].label,
             "Add Earnings",
             "A refused amount leaves the shift with no earnings recorded"
+        )
+    }
+
+    /// A completed shift with earnings and a measured route shows both rates.
+    ///
+    /// The row is one combined accessibility element, so the assertions read its
+    /// label — which is also what a VoiceOver user hears. The hourly figure is
+    /// asserted exactly because it comes from the fixture's timestamps
+    /// ($86.25 over three hours); the per-mile figure is asserted by its wording
+    /// only, because the distance comes from measuring synthetic coordinates and
+    /// pinning its cents would test the haversine, not the row.
+    @MainActor
+    func testShowsDerivedRatesOnACompletedShift() throws {
+        let app = launchWithSeededHistory()
+
+        let row = app.descendants(matching: .any).matching(identifier: "completedShiftRow").firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 10))
+
+        XCTAssertTrue(
+            row.label.contains("$28.75 gross earnings per shift hour"),
+            "The hourly rate divides by the whole elapsed shift: \(row.label)"
+        )
+        XCTAssertTrue(
+            row.label.contains("gross earnings per recorded mile"),
+            "The per-mile rate must say which miles it divides by: \(row.label)"
+        )
+        XCTAssertFalse(
+            row.label.contains("earnings per mile"),
+            "A bare per-mile claim would present recorded mileage as the mileage driven: \(row.label)"
+        )
+    }
+
+    /// A route with known gaps stays labelled as partial next to the rate that
+    /// divides by it.
+    @MainActor
+    func testPartialRouteRemainsLabelled() throws {
+        let app = launchWithSeededHistory()
+
+        let row = app.descendants(matching: .any).matching(identifier: "completedShiftRow").firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 10))
+
+        XCTAssertTrue(
+            row.label.contains("partial route"),
+            "The visible mileage line marks the route partial: \(row.label)"
+        )
+        XCTAssertTrue(
+            row.label.contains("Route capture was partial"),
+            "And it is said again where the rate is spoken: \(row.label)"
+        )
+    }
+
+    /// A shift with no amount recorded shows no rates at all, rather than rates
+    /// of zero.
+    @MainActor
+    func testShiftWithoutEarningsShowsNoRates() throws {
+        let app = launchWithSeededHistory()
+
+        let rows = app.descendants(matching: .any).matching(identifier: "completedShiftRow")
+        XCTAssertTrue(rows.firstMatch.waitForExistence(timeout: 10))
+        XCTAssertEqual(rows.count, 2, "The fixture holds one shift with earnings and one without")
+
+        let withoutEarnings = rows.element(boundBy: 1)
+        XCTAssertFalse(
+            withoutEarnings.label.contains("gross earnings per"),
+            "No amount recorded means no rate, not a rate of zero: \(withoutEarnings.label)"
+        )
+        XCTAssertFalse(withoutEarnings.label.contains("$0.00"))
+    }
+
+    /// Earnings on a shift with no route give an hourly rate and no invented
+    /// per-mile one.
+    @MainActor
+    func testEarningsWithoutARouteShowNoPerMileRate() throws {
+        let app = launchWithEmptyStore()
+        let row = completeAShift(in: app)
+
+        app.buttons["editShiftEarningsButton"].tap()
+        type("86.25", into: app)
+        app.buttons["saveEarningsButton"].tap()
+
+        XCTAssertTrue(waitForRowLabel(row, toContain: "gross earnings per shift hour"))
+        XCTAssertTrue(row.label.contains("No route recorded"))
+        XCTAssertFalse(
+            row.label.contains("recorded mile"),
+            "A shift with nothing measurable in its route has no per-mile rate: \(row.label)"
         )
     }
 
