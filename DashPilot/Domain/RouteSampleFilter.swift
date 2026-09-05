@@ -188,19 +188,16 @@ nonisolated struct RouteSampleFilter: Equatable, Sendable {
     ///
     /// This exists to support the movement and speed rules and is **not** the
     /// app's mileage calculation: driven distance has to account for the whole
-    /// retained route, rejected gaps and accuracy, and belongs to the feature
-    /// that computes it. Nothing user-facing reads this value.
+    /// retained route and the gaps in it, which is ``RouteMileageCalculator``'s
+    /// job. Both measure two positions the same way, through
+    /// ``GeographicDistance``, so capture and mileage cannot disagree about how
+    /// far apart two fixes are.
     static func distance(from start: LocationSample, to end: LocationSample) -> Double {
-        // Mean Earth radius. Good to a few tenths of a percent, which is far
-        // finer than the thresholds this feeds.
-        let earthRadius = 6_371_008.8
-        let lat1 = start.latitude * .pi / 180
-        let lat2 = end.latitude * .pi / 180
-        let deltaLatitude = (end.latitude - start.latitude) * .pi / 180
-        let deltaLongitude = (end.longitude - start.longitude) * .pi / 180
-
-        let haversine = sin(deltaLatitude / 2) * sin(deltaLatitude / 2)
-            + cos(lat1) * cos(lat2) * sin(deltaLongitude / 2) * sin(deltaLongitude / 2)
-        return 2 * earthRadius * atan2(sqrt(haversine), sqrt(max(0, 1 - haversine)))
+        GeographicDistance.metres(
+            fromLatitude: start.latitude,
+            longitude: start.longitude,
+            toLatitude: end.latitude,
+            longitude: end.longitude
+        )
     }
 }

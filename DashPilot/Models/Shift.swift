@@ -74,3 +74,30 @@ nonisolated final class Shift {
         max(0, end.timeIntervalSince(start))
     }
 }
+
+extension Shift {
+    /// Distance recorded for this shift, measured from its retained route.
+    ///
+    /// Derived on demand and never stored. A shift's mileage is a *reading* of
+    /// its route, not a second fact about the shift that could drift away from
+    /// it: caching the total would mean an improvement to the calculation left
+    /// every historical shift showing the old number, and a store holding two
+    /// answers to the same question. If measuring a long route ever proves too
+    /// slow to do on demand, caching is a deliberate change to make then.
+    ///
+    /// Only this shift's samples are measured. Distance across a gap in capture
+    /// is excluded rather than guessed, so the result is what the route can
+    /// support and usually less than the miles actually driven — see
+    /// ``RouteDistance``.
+    func recordedDistance(
+        using calculator: RouteMileageCalculator = RouteMileageCalculator()
+    ) -> RouteDistance {
+        calculator.distance(
+            of: routeSamples.map(\.routePoint),
+            // A finished shift has a window the route can be checked against. A
+            // running one does not: the route is still being recorded, and
+            // measuring it against "now" would report a gap for every red light.
+            covering: endedAt.map { startedAt...$0 }
+        )
+    }
+}
