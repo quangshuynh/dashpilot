@@ -7,7 +7,7 @@ kept flat and explicit; layers are introduced when a concrete problem calls for 
 
 ```
 DashPilot/
-  App/           SwiftUI entry point, root screen, failure state, preview fixtures
+  App/           SwiftUI entry point, root screen, shift detail, failure state, preview fixtures
   Domain/        Framework-independent value types and calculations
   Models/        SwiftData @Model types
   Persistence/   Versioned schema, migration plan, container construction
@@ -510,7 +510,8 @@ evidence of anything. Idle measurement gets its own data when it gets its own fe
 
 ### What is displayed
 
-A completed shift's row reads `12.4 mi recorded`, with `· partial route` when gaps are known. A
+A completed shift's row reads `12.4 mi recorded`, with `· partial route` when gaps are known, and
+its detail screen adds the segment and gap counts behind that figure. A
 route with nothing measurable in it says so instead of showing `0.0 mi`, which a driver would read
 as "you did not move" rather than "no distance could be measured". Nothing says total, complete,
 tax or deductible mileage: capture is foreground-only, the number is what was recorded, and the app
@@ -598,39 +599,131 @@ disagree about what a mile is.
 
 ### What is displayed
 
-One caption line under the mileage, in the history row of a completed shift:
+The history row is a compact summary and a single navigation target:
 
 ```
 Sat, Aug 23                              $86.25
 5:46 PM – 8:46 PM · 3 hr
-4.5 mi recorded · partial route
-$28.75/hr · $19.30 / recorded mi
+4.5 mi recorded · partial route · $28.75/hr
 ```
 
-Only available rates appear. An unavailable one leaves nothing behind — no dash, no `$0.00`, no
-placeholder — because the row already says what the route holds and already offers to add an amount.
-Active shifts show no rates at all: a live earnings rate is a different feature with different
-honesty problems, and the useful moment for these is when the shift is done. There is no chart, no
-dashboard and no detail screen.
+Three lines, no controls. The row carries the one rate that answers "how did this shift go"; the
+per-recorded-mile rate needs its denominator explained to be read correctly, and that explanation
+belongs on the screen the row opens. Only available figures appear — an unavailable rate leaves
+nothing behind, no dash and no `$0.00` — and active shifts show no rates at all, because a live
+earnings rate is a different feature with different honesty problems.
 
-At accessibility text sizes the two rates stack instead of sharing a line: a rate truncated
-mid-figure is worse than a second line.
+At accessibility text sizes the date and the amount stack rather than share a line, and the summary
+wraps rather than truncating: the first thing a truncation takes is the end of "recorded", which is
+the word that makes the mileage honest.
 
-`ShiftRatesLabel` renders the line and owns no arithmetic — `ShiftMetricsCalculator` decides which
-rates exist and what they are, and the row derives them from the distance it measured once when it
-appeared.
+Both rates, with the reasons behind an absent one, are on [the detail screen](#completed-shift-detail).
 
 ### Accessibility
 
-The row is one combined element, so a VoiceOver user hears the shift as a shift. The rates line
-carries its own label, because the abbreviations that read well are poor to hear:
+The row is one combined element with an explicit label, so a VoiceOver user hears the shift as a
+shift rather than three fragments — and hears sentences rather than the separators and abbreviations
+that read well and hear badly:
 
-> $28.75 gross earnings per shift hour. $19.30 gross earnings per recorded mile. Route capture was
-> partial, so recorded miles are fewer than the miles driven.
+> Saturday, August 23, 2025. 5:46 PM to 8:46 PM. 3 hr. $86.25 gross earnings recorded. 4.5 miles
+> recorded. Partial route: DashPilot was not recording for part of this shift, so more miles were
+> driven than were recorded. $28.75 gross earnings per shift hour.
 
-Partiality is visible on the mileage line directly above the rate that divides by it, and stated
-again in that label rather than left to the listener to carry across two lines. It is never conveyed
-by colour.
+Partiality is a two-word marker beside the figure it qualifies and a full claim when spoken, because
+the marker is legible next to the mileage and unintelligible on its own. It is never conveyed by
+colour.
+
+## Completed shift detail
+
+Tapping a completed history row pushes `CompletedShiftDetailView` — a standard `NavigationStack`
+with a typed `navigationDestination(for: Shift.self)`, and no navigation infrastructure of its own.
+Only completed shifts have one; a running shift has no finalised duration, no earnings it may
+record and nothing that may be deleted.
+
+The row answers *what shift is this and roughly how did it perform*. The detail screen answers the
+two questions the row has no room for: **what exactly happened in this shift**, and **how
+trustworthy are these numbers**. It is a summary, not a dashboard: no chart, no map, no gauge, no
+score.
+
+| Section | What it holds |
+| --- | --- |
+| Shift | start time, end time, elapsed duration |
+| Earnings | the recorded amount or "No amount recorded", and Add/Edit Earnings |
+| Route | recorded mileage, capture segments, capture gaps, and what qualifies them |
+| Performance | both derived rates, or the reason each could not be derived |
+| — | Delete Shift |
+
+### Route quality
+
+`RouteQuality` holds the vocabulary for a measured route, next to `RouteDistance`, which holds the
+measurement. Wording is the part that is easy to get wrong here — a foreground-only capture is a
+*floor* on the distance driven, and almost every natural phrase for it claims more — so the phrasing
+is one tested type rather than strings spread across two views that can drift apart.
+
+Only what the stored data supports is shown: recorded mileage, how many unbroken stretches of
+capture contributed distance, how many stretches of the shift the route does not account for,
+whether the route is partial, and whether its continuity was inferred rather than recorded (a route
+stored before schema v3, whose short gaps cannot be detected at all). No coordinates, no sample
+list, no accuracy diagnostics.
+
+**There is no coverage percentage**, and there will not be one until there is a denominator. The
+denominator would have to be the distance actually driven, which is exactly the number DashPilot
+does not have. Segments and gaps are counts of what capture did, so they are facts; a percentage
+over them would be an invention. For the same reason a gap count of zero reads as "No capture gaps
+detected" — a statement about the detection, not a claim that the whole shift was recorded.
+
+An unmeasurable route reports no counts rather than counts of zero, and says which kind of nothing
+it is: no usable position was recorded at all, or positions exist but no two of them were captured
+continuously.
+
+### Explaining a rate that does not exist
+
+The row shows nothing for an absent rate. The detail screen shows the reason, because a driver who
+wonders why there is no per-mile figure should be told — and `ShiftRateUnavailability` already
+carries which reason it is. The value reads "Not available" with a sentence under it; nothing is
+ever filled in with a zero, and the sentence for a missing amount asks for one ("Add what this shift
+paid to see this rate") rather than implying the shift paid nothing.
+
+### Earnings
+
+The same `ShiftEarningsEditor` sheet the history row used to present, moved rather than duplicated:
+one parser, one draft, one Cancel semantics, one place that writes. Remove Earnings stays inside the
+editor, where it is next to the amount it removes.
+
+### Deletion
+
+`ShiftService.deleteCompletedShift(_:)` owns it, beside the lifecycle transitions, because the rule
+it has to keep is a lifecycle rule: **a running shift cannot be deleted.** Deleting one would leave
+capture recording against a shift the store no longer holds and would take the driver's current work
+with it. The check is made against the model, so a wrong navigation state cannot destroy a running
+shift; hiding the button is not the protection.
+
+The shift's route samples go with it through the relationship's existing `.cascade` delete rule
+rather than a loop in the service — the same rule that has been in place since v2, now covered by
+tests that assert the deleted shift's positions are gone, another shift's positions and recorded
+amount are untouched, and a refused delete changes nothing at all. A failed save rolls back, so the
+interface cannot show a history the store no longer holds, or hold one it no longer shows.
+
+**No schema change.** The store is still v4: deletion needed a correct delete rule, and the schema
+already had one.
+
+Deletion is confirmed in an alert — not a confirmation dialog, which is presented as a popover in
+some layouts where iOS drops the explicit Cancel button — and the confirmation names what it
+destroys, including the count of route positions, because that is the part a driver is least likely
+to have in mind and cannot re-enter by hand. There is no undo, no trash and no archive; adding one
+would be a feature with its own retention and privacy questions, not a detail of this screen.
+
+The screen stops reading the shift the moment the store accepts the delete. SwiftUI may rebuild a
+destination while the stack pops, and reading a property of a deleted model is not a thing to
+discover on a driver's device.
+
+### Accessibility
+
+Each metric is one combined element with an explicit label, so a rate is heard as a claim
+("$19.30 gross earnings per recorded mile") rather than as a heading and a number, and an absent one
+as "No gross earnings per recorded mile" followed by the reason. Route partiality and gap counts are
+plain language in the label, never an icon or a colour. The delete confirmation is a standard
+destructive alert with both choices labelled.
 
 ## Logging
 
@@ -648,6 +741,12 @@ an unavailable rate is a normal result, shown to the driver.
 Mileage is not logged at all. The calculation reads coordinates and produces a trip metric, and
 neither belongs in a log: there is no failure it can report — an unmeasurable route is a normal
 result, shown to the driver — so a log line would only record how far somebody drove.
+
+The `shift` category records the lifecycle: a shift started, a shift ended, a transition refused,
+a store read or write that failed — and now that a completed shift was deleted with its route
+samples, that a deletion was refused because the shift was still running, or that the delete could
+not be written. It records nothing about the shift itself: not when it ran, not what it earned, not
+how far it went. A deletion is the last moment to start writing a driver's history into a log.
 
 The `earnings` category records that an amount was added, updated or removed, and that a save
 failed. It never records the amount. There is no diagnostic value in the figure — every failure it
