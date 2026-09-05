@@ -52,6 +52,11 @@ The project is early. This section describes what exists, not what is intended.
   decimal places, a currency symbol, grouping separators — and refuses anything it cannot read
   rather than reinterpreting it. Amounts are added, edited and removed from a sheet on the shift's
   history row, never during a running shift, and the row shows the recorded amount.
+- Completed-shift metrics: gross earnings per elapsed shift hour and gross earnings per recorded
+  mile, derived from what is already stored and shown on the shift's history row. Nothing is saved
+  as a second total, and a rate that cannot be derived is absent rather than shown as zero — a shift
+  with no amount recorded, a shift with no measurable route and a shift that covered no time each
+  say nothing rather than something false.
 - Schema v4, with lightweight migrations from v1, v2 and v3, covered by tests that open stores
   written under each older version and check their shifts, positions and absent earnings survive.
 - `Money`, a `Decimal`-backed monetary type covering the app's arithmetic, rounding, rate division
@@ -60,11 +65,11 @@ The project is early. This section describes what exists, not what is intended.
 
 **Not implemented yet**
 
-Earnings per hour, earnings per mile, expenses, fuel, taxes, mileage deductions, a tips-versus-base
-breakdown, per-delivery earnings, delivery records, wait-time measurement, maps, App Intents, Live
-Activities and recommendations. A shift records its start time, its end time, its route and — if the
-driver types one — a single gross earnings figure. No rate is calculated or displayed anywhere, no
-route is drawn, and no mileage is shown while a shift is still running. See `AGENTS.md` for the
+Expenses, fuel, taxes, mileage deductions, a tips-versus-base breakdown, per-delivery earnings,
+active-versus-idle time, delivery records, wait-time measurement, maps, App Intents, Live Activities
+and recommendations. A shift records its start time, its end time, its route and — if the driver
+types one — a single gross earnings figure. Rates are shown only on completed shifts, no route is
+drawn, and no mileage or live rate is shown while a shift is still running. See `AGENTS.md` for the
 intended order of work.
 
 **Earnings are what the driver typed.** DashPilot is not connected to a delivery platform, holds no
@@ -73,6 +78,13 @@ associate with it. The app does not know whether it includes tips, bonuses, prom
 or reimbursements, so it is labelled gross earnings and never profit, take-home or a taxable amount.
 Entering an amount is optional — a shift with none recorded is a complete shift, and that is a
 different state from a shift recorded as paying `$0.00`.
+
+**The rates are gross, and each says what it divides by.** The hourly figure is gross earnings over
+the shift's whole elapsed time — waiting and idling included — because DashPilot does not know how
+much of a shift was spent on a delivery; it is not an active or working hourly rate. The per-mile
+figure is gross earnings over *recorded* miles, which are normally fewer than the miles driven, so
+the rate is normally higher than earnings per mile driven. Neither subtracts expenses, fuel, wear or
+tax, and neither is a profit, net earnings or tax figure.
 
 **Recorded mileage is what was recorded, not what was driven.** Capture is foreground-only, so a
 shift's route has a gap whenever DashPilot was not open. Distance across a gap is left out rather
@@ -99,6 +111,8 @@ paused. Background route continuity is a separate, later decision.
 - A route sample belongs to exactly one shift and is deleted with it.
 - Mileage is calculated on device and never logged: distance is a trip metric, and the logs record
   what the app did, not where the driver went or how far.
+- Derived rates are calculated on device and never logged, for the same reason as the amounts and
+  the mileage they come from.
 - Earnings are stored on device and never logged. The earnings log records that an amount was added,
   changed or removed, or that a save failed — never the amount itself.
 - Sample data in tests, previews and documentation is synthetic.
