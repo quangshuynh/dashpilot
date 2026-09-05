@@ -21,11 +21,11 @@ struct ShiftEarningsPersistenceTests {
 
     // MARK: Schema
 
-    @Test("Version 4 is current, and adds earnings to the shift")
+    @Test("Version 4 added earnings to the shift, and is still in the plan")
     func schemaVersion() throws {
         #expect(DashPilotSchemaV4.versionIdentifier == Schema.Version(4, 0, 0))
-        #expect(DashPilotMigrationPlan.schemas.count == 4)
-        #expect(DashPilotMigrationPlan.stages.count == 3)
+        #expect(DashPilotMigrationPlan.schemas.count == 5)
+        #expect(DashPilotMigrationPlan.stages.count == 4)
 
         let shift = try #require(
             ModelContainerFactory.currentSchema.entities.first { $0.name == "Shift" }
@@ -240,8 +240,8 @@ struct ShiftEarningsPersistenceTests {
         #expect(shift.grossEarnings == Money(exact: "42.00"))
     }
 
-    @Test("A version 1 store migrates all the way to version 4 without earnings")
-    func migratesAVersionOneStoreToVersionFour() throws {
+    @Test("A version 1 store migrates all the way to the current version without earnings")
+    func migratesAVersionOneStoreToCurrent() throws {
         let (storeURL, cleanUp) = try makeStoreURL()
         defer { cleanUp() }
         let shiftID = UUID()
