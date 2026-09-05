@@ -40,10 +40,11 @@ the shipping store, so a schema mistake fails in tests rather than only on devic
 | --- | --- |
 | 1.0.0 | `Shift` only: id, start, optional end |
 | 2.0.0 | adds `RouteSample`, and a `Shift.routeSamples` relationship |
+| 3.0.0 | adds `RouteSample.captureSessionID`, an optional marker of capture continuity |
 
-`DashPilotSchemaV1` holds a frozen copy of the v1 `Shift` rather than reusing the file-scope type,
-which has moved on. The plan then describes where a store is coming from as truthfully as where it
-is going; the copy is never used at runtime outside migration.
+`DashPilotSchemaV1` and `DashPilotSchemaV2` hold frozen copies of their models rather than reusing
+the file-scope types, which have moved on. The plan then describes where a store is coming from as
+truthfully as where it is going; the copies are never used at runtime outside migration.
 
 **V1 → V2 is a lightweight stage.** The change is purely additive — a new entity and a new empty
 relationship — and SwiftData can apply that without being told how. There is nothing to derive or
@@ -51,6 +52,13 @@ backfill either: a shift recorded before route capture existed genuinely has no 
 stage would be code with nothing to do, and a `willMigrate`/`didMigrate` pair that walks every shift
 for no reason is a way to lose data, not a way to protect it. It becomes a custom stage the first
 time a version step actually has to transform something.
+
+**V2 → V3 is a lightweight stage too.** One new optional attribute on an existing entity. Nothing is
+backfilled, and that is the point: a capture session identifier states that two samples were recorded
+without an interruption, and a v2 store holds no evidence of that either way. Grouping legacy samples
+into invented sessions would produce exactly what the attribute exists to prevent — a gap presented
+as a continuous stretch of driving. Migrated samples keep `nil`, and the mileage calculation treats
+their continuity as inferred rather than proven.
 
 `ModelContainerFactory.makeContainer(versionedSchema:at:)` is a test seam that opens a store under a
 historical version without the plan, so a test can write a store shaped the way an older build would
@@ -71,10 +79,10 @@ invent one.
 started, and elapsed time clamps at zero so a backwards device clock cannot produce a negative
 duration. Later features (deliveries, earnings) attach to a shift rather than replacing this shape.
 
-`RouteSample` is the first thing to attach. It stores a timestamp, a latitude, a longitude and a
-horizontal accuracy, and nothing else: `CLLocation` also reports speed, course, altitude and their
-accuracies, but nothing implemented reads them, and a coordinate history is sensitive enough that
-each field needs a reason rather than an availability.
+`RouteSample` is the first thing to attach. It stores a timestamp, a latitude, a longitude, a
+horizontal accuracy and the capture session it was recorded in, and nothing else: `CLLocation` also
+reports speed, course, altitude and their accuracies, but nothing implemented reads them, and a
+coordinate history is sensitive enough that each field needs a reason rather than an availability.
 
 The relationship's delete rule is `.cascade`. A shift's route describes that shift and nothing else,
 so deleting the shift takes the samples with it; the orphans would otherwise be exactly the
@@ -324,11 +332,12 @@ Walking `shift.routeSamples` to find it would load an entire shift's route to lo
 ### What is shown
 
 `RouteCaptureStatusView` is one line inside the running shift's panel: tracking active, foreground
-tracking paused, permission required, or unavailable. No map, no distance, no coordinates, no sample
-count — nothing implemented can be shown as a measurement yet, and a screen implying otherwise would
-claim a capability the app does not have. It is shown because the alternative is worse: a driver who
-assumes their route is being recorded, while permission is off or the app spent the shift in the
-background, loses the shift's data and only finds out afterwards.
+tracking paused, permission required, or unavailable. No map, no coordinates, no sample count, and
+no live distance — a running shift's route is still being recorded, and a figure changing under the
+driver as they drive is not what the number is for. It is shown because the alternative is worse: a
+driver who assumes their route is being recorded, while permission is off or the app spent the shift
+in the background, loses the shift's data and only finds out afterwards. What the route measured
+appears once the shift is finished, in history — see [Recorded mileage](#recorded-mileage).
 
 ### Concurrency
 
@@ -341,6 +350,84 @@ Everything downstream is `@MainActor` and synchronous. A candidate is judged and
 uninterrupted run, so it cannot arrive part-way through starting or ending a shift, and the
 active-shift invariant needs no locking to hold at the boundaries.
 
+## Recorded mileage
+
+DashPilot derives a shift's distance from its retained route. Nothing is stored: `Shift.recordedDistance()`
+measures the samples every time it is asked, so a fix to the calculation improves every historical
+shift and the store never holds two answers to the same question. If measuring a long route ever
+proves too slow to do on demand, caching is a deliberate change to make then.
+
+### Never measure across a gap
+
+**A gap in capture is never counted as driven distance.** A position, an interruption, then another
+position is not a straight line somebody drove; it is two pieces of route with an unknown amount of
+driving between them. Foreground-only capture means those interruptions are the normal case, so this
+is the rule the whole calculation is built around.
+
+`RouteMileageCalculator` splits a route into continuous segments, sums the distance between adjacent
+positions *within* each segment, and reports what it left out. Two positions are continuous when
+both hold:
+
+1. **They share a capture session.** `LocationTrackingService` mints a `captureSessionID` whenever
+   updates start and clears it whenever they stop, so a change of identifier is direct evidence that
+   capture was interrupted — backgrounding, a lost permission, a failed save, a new process. This is
+   the fact timestamps cannot supply: twenty seconds in another app and twenty seconds at a red
+   light look identical in a list of timestamps.
+2. **They are no more than `maximumSampleInterval` apart.** The identifier proves the app kept
+   recording, not that positions kept arriving. Two minutes is the initial value: while a vehicle is
+   moving, accepted positions arrive seconds apart, so ordinary driving is never fragmented, and a
+   longer silence means either a stationary vehicle — where the straight line omitted is a few
+   metres — or positions that stopped arriving, where a straight line cannot be trusted. It is an
+   engineering choice, not a calibration, and it is a property so it can be tuned once there is
+   recorded driving to tune it against.
+
+Positions stored before v3 carry no session. Continuity between two of them is inferred from their
+timestamps, `RouteDistance.usesInferredContinuity` says so, and such a route is always reported as
+partial: its gaps cannot be seen.
+
+When the shift's own window is known — every completed shift — a route that starts long after the
+shift did, or stops long before it ended, counts as a gap as well. Without that check a shift whose
+capture stopped an hour before it finished would look completely recorded.
+
+### What the result says
+
+`RouteDistance` exists so the answer is not an unexplained `Double`: distance in metres, how many
+segments contributed, how many gaps were excluded, how many positions were usable, and whether any
+continuity was inferred. From those, `isMeasured` (any distance measured at all) and `isPartial`
+(the total is known to be less than the distance driven) are what the interface reads.
+
+Distance is held in metres and converted once, in `RouteDistance.measurement` and
+`formattedMiles(locale:)`. No view holds a conversion constant. One decimal place is what the
+measurement supports: positions carry error radii of up to 100 m and the gaps are unmeasured.
+
+### Separation from capture
+
+The calculator does not re-judge sample quality. Accuracy, staleness, implausible speed and
+negligible movement are `RouteSampleFilter`'s rules, applied once when a sample is captured;
+repeating them here would be two policies to keep in agreement. It rejects only positions that could
+not describe anywhere on Earth, because stored data should not be assumed to stay perfect forever.
+It sorts, breaks ties on coordinates and collapses positions sharing a timestamp, so an imperfect
+stored route produces a deterministic number rather than one that depends on fetch order.
+
+Both layers measure two positions the same way, through `GeographicDistance` — one haversine
+implementation on a spherical Earth. `CLLocation.distance(from:)` would be marginally more precise
+but would put Core Location inside the domain layer, where calculations are deliberately
+framework-free and testable without a device; the difference is far smaller than the error already
+in the positions.
+
+Idle time is deliberately not inferred from the route. The capture filter drops movement under five
+metres, so a parked vehicle records nothing, and a stretch of route with no positions is not
+evidence of anything. Idle measurement gets its own data when it gets its own feature.
+
+### What is displayed
+
+A completed shift's row reads `12.4 mi recorded`, with `· partial route` when gaps are known. A
+route with nothing measurable in it says so instead of showing `0.0 mi`, which a driver would read
+as "you did not move" rather than "no distance could be measured". Nothing says total, complete,
+tax or deductible mileage: capture is foreground-only, the number is what was recorded, and the app
+is not a tax tool. Active shifts show no mileage — a live figure would need a recomputing dashboard
+to be worth anything, and the useful moment is when the shift is done.
+
 ## Logging
 
 `AppLog` defines the OSLog subsystem and categories. Logs record lifecycle, state transitions,
@@ -349,6 +436,10 @@ counts and errors. Coordinates, addresses and earnings amounts are never logged.
 The `location` category records authorization transitions, Location Services availability changes,
 accuracy changes and unrecognised platform values — what the app is allowed to do. Since the
 authorization layer never reads a position, there is no coordinate available to it to leak.
+
+Mileage is not logged at all. The calculation reads coordinates and produces a trip metric, and
+neither belongs in a log: there is no failure it can report — an unmeasurable route is a normal
+result, shown to the driver — so a log line would only record how far somebody drove.
 
 The `route-capture` category does read positions, so its rule is explicit: it logs when capture
 starts and stops, why it could not start, how many samples were retained, how many were persisted,
@@ -360,7 +451,8 @@ asserts that every rejection reason is a plain rule name.
 
 The project builds with `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`, so views and view state are
 main-actor isolated without annotation. Domain types (`Money`, `Shift`, `RouteSample`,
-`LocationSample`, `RouteSampleFilter`, `RouteCaptureState`, the error enums) and infrastructure
+`LocationSample`, `RoutePoint`, `RouteSampleFilter`, `RouteCaptureState`, `RouteDistance`,
+`RouteMileageCalculator`, `GeographicDistance`, the error enums) and infrastructure
 (`AppLog`, `ModelContainerFactory`, `LaunchArgument`) are
 explicitly `nonisolated`: they carry no UI state, they are used from tests that are not main-actor
 bound, and background persistence work will need them off the main actor. `ShiftService` is
@@ -385,7 +477,9 @@ duplicate, a stale fix, a wild jump or a sample from outside the shift window is
 nothing at all is kept once a shift has ended — and none of that can be demonstrated against a
 simulator location feed, which delivers whatever it likes when it likes. `LocationTrackingService`
 also takes its clock and its save batch size, so staleness and batching are decided by the test
-rather than by how long the test took to run. Every coordinate in the tests and previews comes from
+rather than by how long the test took to run. The capture tests use it to drive two kilometres of
+route through a sixty second backgrounding — shorter than the mileage gap threshold, so only the
+recorded break in capture can exclude it — and assert the distance is not counted. Every coordinate in the tests and previews comes from
 `SyntheticRoute`: a round-number origin and explicit offsets, not a place anyone has driven.
 
 `StubLocationAuthorizationProvider` (debug builds only) satisfies `LocationAuthorizationProviding`
