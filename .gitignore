@@ -74,3 +74,6 @@ site/
 
 # Local Python environment for the documentation toolchain
 .venv/
+
+# Xcode derived data, when building from the command line into the working tree
+DerivedData/
