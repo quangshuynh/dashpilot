@@ -246,6 +246,56 @@ struct DeliveryTests {
         #expect(delivery.lastEventAt == at(1_200))
     }
 
+    // MARK: Order among deliveries
+
+    @Test("Deliveries order by acceptance, earliest first")
+    func ordersByAcceptance() {
+        let early = makeDelivery(acceptedAfter: 300)
+        let late = makeDelivery(acceptedAfter: 900)
+
+        #expect(Delivery.acceptedBefore(early, late))
+        #expect(!Delivery.acceptedBefore(late, early))
+        #expect([late, early].sorted(by: Delivery.acceptedBefore).map(\.id) == [early.id, late.id])
+    }
+
+    @Test("Two deliveries accepted in the same instant still have one fixed order")
+    func ordersIdenticalAcceptanceTimesDeterministically() {
+        // Two taps a moment apart can land on the same recorded instant. The
+        // order still has to be total, because it decides which one the
+        // interface calls Delivery 1.
+        let one = makeDelivery(acceptedAfter: 300)
+        let other = makeDelivery(acceptedAfter: 300)
+        let expected = [one, other].sorted { $0.id.uuidString < $1.id.uuidString }.map(\.id)
+
+        #expect([one, other].sorted(by: Delivery.acceptedBefore).map(\.id) == expected)
+        #expect([other, one].sorted(by: Delivery.acceptedBefore).map(\.id) == expected)
+        #expect(
+            Delivery.acceptedBefore(one, other) != Delivery.acceptedBefore(other, one),
+            "Exactly one of them comes first, whichever way round they are read"
+        )
+    }
+
+    @Test("A delivery does not come before itself")
+    func orderIsIrreflexive() {
+        let delivery = makeDelivery()
+
+        #expect(!Delivery.acceptedBefore(delivery, delivery))
+    }
+
+    @Test("Ordering ignores how far along each delivery is")
+    func orderIgnoresState() throws {
+        let early = makeDelivery(acceptedAfter: 300)
+        let late = makeDelivery(acceptedAfter: 900)
+        // The later delivery races ahead: accepted second, in the car first.
+        try late.markArrivedAtPickup(at: at(1_000))
+        try late.markPickedUp(at: at(1_100))
+
+        #expect(
+            [late, early].sorted(by: Delivery.acceptedBefore).map(\.id) == [early.id, late.id],
+            "Acceptance decides the order, not progress: stacked deliveries overtake each other"
+        )
+    }
+
     // MARK: Derived intervals
 
     @Test("The pickup wait is the time between arriving and collecting")
