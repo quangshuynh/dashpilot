@@ -21,4 +21,9 @@ nonisolated enum AppLog {
     /// Location permission, accuracy and services availability. Records what
     /// the app is allowed to do, never where the device is.
     static let location = Logger(subsystem: subsystem, category: "location")
+
+    /// Route sample capture: when it starts and stops, why it cannot run, how
+    /// many samples were kept, and which rule rejected a candidate. Records the
+    /// behaviour of the pipeline, never a coordinate that went through it.
+    static let routeCapture = Logger(subsystem: subsystem, category: "route-capture")
 }

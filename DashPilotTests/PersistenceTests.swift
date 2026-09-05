@@ -13,10 +13,10 @@ struct PersistenceTests {
         return ModelContext(container)
     }
 
-    @Test("The current schema is version 1.0.0 and contains the shift model")
-    func schemaVersion() {
-        #expect(DashPilotSchemaV1.versionIdentifier == Schema.Version(1, 0, 0))
-        #expect(DashPilotMigrationPlan.schemas.count == 1)
+    @Test("The current schema contains the shift model")
+    func schemaContainsShift() {
+        // Version identifiers and the migration between them are covered by
+        // `RouteSamplePersistenceTests`.
         #expect(ModelContainerFactory.currentSchema.entities.contains { $0.name == "Shift" })
     }
 

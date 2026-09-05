@@ -43,6 +43,11 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertTrue(endButton.waitForExistence(timeout: 5))
         XCTAssertTrue(app.descendants(matching: .any)["activeShiftStatus"].exists)
         XCTAssertTrue(app.descendants(matching: .any)["elapsedTime"].exists)
+        // A driver has to be able to see whether their route is being recorded.
+        // Only its presence is asserted: which state it shows depends on the
+        // simulator's location permission, and every mapping from a capture
+        // state to what is displayed is covered by the service tests instead.
+        XCTAssertTrue(app.descendants(matching: .any)["routeCaptureStatus"].exists)
         XCTAssertFalse(startButton.exists, "Only one shift may be running at a time")
 
         endButton.tap()
