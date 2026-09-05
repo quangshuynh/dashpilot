@@ -23,6 +23,19 @@ nonisolated enum LaunchArgument {
     /// touch a real store.
     static let seededHistory = "-dashpilot-seeded-history"
 
+    /// Runs against a throwaway store already holding a running shift with a
+    /// delivery in progress.
+    ///
+    /// A UI test cannot terminate and relaunch the app into a store it wrote
+    /// earlier — the in-memory store the other journeys use disappears with the
+    /// process. Seeding an active delivery at launch reproduces the state a
+    /// relaunch recovers into, which is the only way to assert end to end that
+    /// the interface offers the *next* step of the delivery already running
+    /// rather than offering to start a second one. That recovery is proved
+    /// against a real reopened store in `DeliveryPersistenceTests`. Debug builds
+    /// only, and in memory, so it can never touch a real store.
+    static let seededActiveDelivery = "-dashpilot-seeded-active-delivery"
+
     static func isPresent(_ argument: String, in processInfo: ProcessInfo = .processInfo) -> Bool {
         processInfo.arguments.contains(argument)
     }
