@@ -155,8 +155,9 @@ Remove — nothing is written per keystroke, and Cancel leaves the recorded amou
 A refused amount keeps the sheet open with what was typed and says which rule it broke, rather than
 discarding the driver's work.
 
-No rate is shown anywhere. What a shift paid per hour or per recorded mile is a separate calculation
-that has not been built, and a figure next to a duration and a distance must not imply one.
+The rates derived from the amount are a separate line in a smaller style, so the figure the driver
+recorded is never confused with the ones DashPilot worked out — see
+[Completed shift metrics](#completed-shift-metrics).
 
 Logging follows the project's rule: `AppLog.earnings` records that an amount was added, updated or
 removed, or that a save failed. The amount never reaches a logger.
@@ -516,6 +517,121 @@ tax or deductible mileage: capture is foreground-only, the number is what was re
 is not a tax tool. Active shifts show no mileage — a live figure would need a recomputing dashboard
 to be worth anything, and the useful moment is when the shift is done.
 
+## Completed shift metrics
+
+A completed shift is read as two rates. Both are **gross**, both are **derived**, and both say in
+their own wording what they divide by.
+
+| Metric | Definition | Shown as |
+| --- | --- | --- |
+| Gross earnings per shift hour | the recorded amount ÷ the shift's elapsed wall-clock hours (`startedAt` to `endedAt`) | `$28.75/hr` |
+| Gross earnings per recorded mile | the recorded amount ÷ the miles the shift's retained route measured | `$19.30 / recorded mi` |
+
+**The hourly rate divides by elapsed time, not by working time.** The denominator is the whole shift
+— waiting at a restaurant, idling between offers, a break — because that is the only duration
+DashPilot knows. It is never called an active, working or delivery hourly rate: the app does not
+record when a delivery started or ended, and naming the figure as though it did would claim a
+capability that does not exist.
+
+**The per-mile rate divides by recorded mileage.** Capture is foreground-only and distance across a
+gap is excluded rather than guessed, so the denominator is normally lower than the miles actually
+driven — which makes the rate normally *higher* than earnings per mile driven. The word `recorded`
+is in the visible text, not only in this document, and it is spelled out in full for VoiceOver.
+Neither figure is a tax, deduction, profit or net number; no expense, fuel cost or tax is subtracted
+anywhere in the app.
+
+### Nothing is persisted
+
+There is **no schema change in this work**, and the current version is still v4. A stored
+`hourlyRate` or `earningsPerMile` would be a second answer to a question the store can already
+answer: it would keep the old number after the calculation improved, and it would have to be
+recomputed and rewritten every time a driver edited an amount. `ShiftMetrics` is built on demand
+from the shift's own timestamps, its recorded amount and its measured route, exactly like
+`RouteDistance` is.
+
+### Explicit unavailable states
+
+`ShiftRate` is `.available(Money)` or `.unavailable(ShiftRateUnavailability)`. A `Money?` would
+carry the value and lose the reason, and the reasons are the point of the type:
+
+| Reason | The fact it states |
+| --- | --- |
+| `shiftNotCompleted` | the shift is still running; finalised rates describe finished shifts |
+| `earningsNotRecorded` | no amount has been entered. **Not** an amount of zero |
+| `noElapsedTime` | the shift covers no measurable time, including one clamped to zero by a backwards device clock |
+| `noRouteRecorded` | the shift retained no usable position at all |
+| `routeNotMeasurable` | positions exist, but no two of them were recorded continuously |
+| `zeroRecordedDistance` | a distance *was* measured, and it was zero |
+
+The precedence is `shiftNotCompleted` → `earningsNotRecorded` → the denominator's own reason: a
+missing numerator is the same absence for both rates, so it is reported once rather than described
+twice in the vocabulary of two different denominators.
+
+Two distinctions carry the whole design. **Missing earnings never become zero** — a shift nobody has
+entered an amount for produces no rate, while a shift recorded as paying nothing produces a real
+`$0.00/hr` and `$0.00 / recorded mi`. **An unmeasurable route never becomes zero miles** — `0.0` in
+the denominator is not a small number, it is an absent one, so a shift with no route shows no
+per-mile rate rather than a rate divided by nothing.
+
+### Precision
+
+Money stays exact. The numerator is the `Decimal` the driver typed, division goes through
+`Money.divided(by:scale:)`, and no monetary value passes through binary floating point.
+
+The **denominators are the boundary**, and it is deliberate. A duration is a `TimeInterval` and a
+distance is a `Double` of metres; both are binary before this calculation ever sees them and neither
+can be made exact afterwards. Each therefore crosses into `Decimal` exactly once, in
+`ShiftMetricsCalculator.decimal(_:scale:)`, rounded to a scale far finer than the result is read at —
+a duration to the millisecond, a distance to a millionth of a mile (under two millimetres, against
+positions carrying error radii of up to 100 m). `Decimal(_: Double)` is deliberately not used:
+scaling to an integer and dividing by a power of ten is an explicit rule stated in one place rather
+than a platform's conversion behaviour.
+
+The quotient keeps six fraction digits — four more than the two it is displayed at — so that the
+value the display rounds is effectively the exact quotient rather than one already rounded at an
+adjacent scale. Rounding to cents happens where every other rounding in the app happens, in
+`Money.formatted`.
+
+Miles come from `RouteDistance.miles`, which is the same conversion `formattedMiles(locale:)` uses.
+No metres-to-miles constant exists anywhere else, so the rate and the distance beside it cannot
+disagree about what a mile is.
+
+### What is displayed
+
+One caption line under the mileage, in the history row of a completed shift:
+
+```
+Sat, Aug 23                              $86.25
+5:46 PM – 8:46 PM · 3 hr
+4.5 mi recorded · partial route
+$28.75/hr · $19.30 / recorded mi
+```
+
+Only available rates appear. An unavailable one leaves nothing behind — no dash, no `$0.00`, no
+placeholder — because the row already says what the route holds and already offers to add an amount.
+Active shifts show no rates at all: a live earnings rate is a different feature with different
+honesty problems, and the useful moment for these is when the shift is done. There is no chart, no
+dashboard and no detail screen.
+
+At accessibility text sizes the two rates stack instead of sharing a line: a rate truncated
+mid-figure is worse than a second line.
+
+`ShiftRatesLabel` renders the line and owns no arithmetic — `ShiftMetricsCalculator` decides which
+rates exist and what they are, and the row derives them from the distance it measured once when it
+appeared.
+
+### Accessibility
+
+The row is one combined element, so a VoiceOver user hears the shift as a shift. The rates line
+carries its own label, because the abbreviations that read well are poor to hear:
+
+> $28.75 gross earnings per shift hour. $19.30 gross earnings per recorded mile. Route capture was
+> partial, so recorded miles are fewer than the miles driven.
+
+Partiality is visible on the mileage line directly above the rate that divides by it, and stated
+again in that label rather than left to the listener to carry across two lines. It is never conveyed
+by colour.
+
 ## Logging
 
 `AppLog` defines the OSLog subsystem and categories. Logs record lifecycle, state transitions,
@@ -524,6 +640,10 @@ counts and errors. Coordinates, addresses and earnings amounts are never logged.
 The `location` category records authorization transitions, Location Services availability changes,
 accuracy changes and unrecognised platform values — what the app is allowed to do. Since the
 authorization layer never reads a position, there is no coordinate available to it to leak.
+
+Derived metrics are not logged either, for the same reasons: an hourly rate is an earnings figure
+and a per-mile rate is an earnings figure over a trip metric, and neither has a failure to report —
+an unavailable rate is a normal result, shown to the driver.
 
 Mileage is not logged at all. The calculation reads coordinates and produces a trip metric, and
 neither belongs in a log: there is no failure it can report — an unmeasurable route is a normal
@@ -546,7 +666,8 @@ asserts that every rejection reason is a plain rule name.
 The project builds with `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`, so views and view state are
 main-actor isolated without annotation. Domain types (`Money`, `Shift`, `RouteSample`,
 `LocationSample`, `RoutePoint`, `RouteSampleFilter`, `RouteCaptureState`, `RouteDistance`,
-`RouteMileageCalculator`, `GeographicDistance`, `MoneyInput`, the error enums) and infrastructure
+`RouteMileageCalculator`, `GeographicDistance`, `MoneyInput`, `ShiftMetrics`,
+`ShiftMetricsCalculator`, the error enums) and infrastructure
 (`AppLog`, `ModelContainerFactory`, `LaunchArgument`) are
 explicitly `nonisolated`: they carry no UI state, they are used from tests that are not main-actor
 bound, and background persistence work will need them off the main actor. `ShiftService` is
@@ -564,6 +685,13 @@ in-memory store disappears with its container.
 Debug builds accept `-dashpilot-in-memory-store` (`LaunchArgument.inMemoryStore`) so the UI journey
 test starts from a known empty state and never writes into the store a real driver's history would
 live in.
+
+They also accept `-dashpilot-seeded-history` (`LaunchArgument.seededHistory`), which opens an
+in-memory store already holding the synthetic history the previews use: one completed shift with an
+amount and a route recorded in two capture sessions, and one with neither. A UI test cannot make a
+simulator record a route, so a measured, partial route — and the per-recorded-mile rate over it —
+would otherwise be unreachable end to end. The fixture is invented amounts and offsets from a
+round-number origin, the same data `SyntheticRoute` builds for the unit tests.
 
 `StubLocationTrackingProvider` (debug builds only) replaces Core Location's position updates and
 nothing else. The capture pipeline has to be verifiable — that a good sample is retained, that a
