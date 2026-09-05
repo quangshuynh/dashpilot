@@ -10,8 +10,8 @@ import Foundation
 ///
 /// The distance is held in metres. Miles are a presentation choice for the
 /// drivers this app is for, and the conversion happens in one place —
-/// ``measurement`` and ``formattedMiles(locale:)`` — rather than as a constant
-/// copied into views.
+/// ``measurement``, ``miles`` and ``formattedMiles(locale:)`` — rather than as a
+/// constant copied into views or into a calculation that divides by mileage.
 nonisolated struct RouteDistance: Equatable, Sendable {
     /// Distance recorded within continuous capture, in metres.
     ///
@@ -71,6 +71,14 @@ nonisolated struct RouteDistance: Equatable, Sendable {
 
     /// The distance as a unit-carrying value, for conversion and formatting.
     var measurement: Measurement<UnitLength> { Measurement(value: metres, unit: .meters) }
+
+    /// The distance in miles.
+    ///
+    /// The one conversion, shared by the formatted string and by any
+    /// calculation that divides by mileage, so nothing re-derives a
+    /// metres-to-miles constant of its own and no two parts of the app can
+    /// disagree about what a mile is.
+    var miles: Double { measurement.converted(to: .miles).value }
 
     /// The distance in miles, rendered to one decimal place, e.g. `"12.4 mi"`.
     ///
