@@ -13,6 +13,8 @@ nonisolated enum ShiftLifecycleError: Error {
     case noActiveShift
     /// Deletion was requested for a shift that has not finished.
     case cannotDeleteActiveShift
+    /// An end was requested while a delivery on that shift was still in progress.
+    case activeDeliveryInProgress
     /// The shift model rejected the transition.
     case invalidTransition(ShiftError)
     /// The local store could not be read or written.
@@ -27,6 +29,7 @@ nonisolated extension ShiftLifecycleError: Equatable {
         case let (.shiftAlreadyActive(lhsDate), .shiftAlreadyActive(rhsDate)): lhsDate == rhsDate
         case (.noActiveShift, .noActiveShift): true
         case (.cannotDeleteActiveShift, .cannotDeleteActiveShift): true
+        case (.activeDeliveryInProgress, .activeDeliveryInProgress): true
         case let (.invalidTransition(lhsError), .invalidTransition(rhsError)): lhsError == rhsError
         case (.storeUnavailable, .storeUnavailable): true
         default: false
@@ -43,6 +46,8 @@ nonisolated extension ShiftLifecycleError: LocalizedError {
             "There is no shift in progress to end."
         case .cannotDeleteActiveShift:
             "A shift that is still in progress cannot be deleted. End it first."
+        case .activeDeliveryInProgress:
+            "A delivery is still in progress. Mark it delivered or cancel it before ending the shift."
         case .invalidTransition(.shiftNotCompleted):
             "Earnings can be recorded once the shift has ended."
         case .invalidTransition(.negativeEarnings):
@@ -146,6 +151,18 @@ struct ShiftService {
             throw ShiftLifecycleError.noActiveShift
         }
 
+        // A shift cannot close over work that is still happening. The
+        // alternatives were both dishonest: marking the delivery delivered
+        // would record a completion the driver never made, and discarding it
+        // would erase a delivery they did make. So the end is refused, and the
+        // driver resolves the delivery — delivered or cancelled — first. The
+        // rule is checked against the shift's own persisted deliveries rather
+        // than against whichever button a screen happens to show.
+        if shift.activeDelivery != nil {
+            AppLog.shift.notice("Refused to end a shift: a delivery is still in progress")
+            throw ShiftLifecycleError.activeDeliveryInProgress
+        }
+
         // A driver must always be able to end a shift. If the device clock has
         // moved behind the recorded start, ending at the start records a zero
         // length shift, which keeps the ordering truthful and is preferable to
@@ -188,11 +205,11 @@ struct ShiftService {
     /// screen happens to show, so a wrong navigation state cannot destroy a
     /// running shift.
     ///
-    /// The shift's route samples go with it. That is the relationship's
-    /// `.cascade` delete rule doing its job rather than a loop here — a shift's
-    /// positions describe that shift and nothing else, and the orphans would be
-    /// exactly the sensitive rows the app promises to keep accountable to a
-    /// shift.
+    /// The shift's route samples and its deliveries go with it. That is the
+    /// relationships' `.cascade` delete rule doing its job rather than a loop
+    /// here — a shift's positions and deliveries describe that shift and
+    /// nothing else, and the orphans would be exactly the sensitive rows the
+    /// app promises to keep accountable to a shift.
     ///
     /// - Throws: ``ShiftLifecycleError/cannotDeleteActiveShift`` if the shift has
     ///   not finished, or ``ShiftLifecycleError/storeUnavailable(underlying:)``
@@ -217,7 +234,7 @@ struct ShiftService {
         // Structural only. Not when the shift ran, not what it earned, not how
         // far it went — a deletion is the last moment to start writing a
         // driver's history into the log.
-        AppLog.shift.info("Completed shift deleted with its route samples")
+        AppLog.shift.info("Completed shift deleted with its route samples and deliveries")
     }
 
     // MARK: Earnings
