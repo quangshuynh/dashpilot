@@ -218,6 +218,8 @@ private struct ElapsedTimeLabel: View {
     private var duration: Duration { .seconds(elapsed) }
 }
 
+/// One finished shift in history: when it ran, what its route measured, what
+/// the driver recorded it paid, and the way to record or change that.
 private struct CompletedShiftRow: View {
     let shift: Shift
 
@@ -228,22 +230,81 @@ private struct CompletedShiftRow: View {
     /// the number is still derived from the route every time the row is built.
     @State private var recordedDistance: RouteDistance?
 
+    /// Earnings are edited in a sheet rather than in the row: a draft the
+    /// driver can abandon, instead of a field that writes to the store as they
+    /// type.
+    @State private var isEditingEarnings = false
+
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(shift.startedAt, format: .dateTime.weekday(.abbreviated).month().day())
-                .font(.headline)
-            Text(detail)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-            if let recordedMileage {
-                Text(recordedMileage)
-                    .font(.caption)
+        VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 4) {
+                heading
+                Text(detail)
+                    .font(.subheadline)
                     .foregroundStyle(.secondary)
+                if let recordedMileage {
+                    Text(recordedMileage)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            // One element so VoiceOver reads the shift as a shift, rather than
+            // four unrelated fragments. The button below stays separate,
+            // because it has to remain individually reachable.
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("completedShiftRow")
+
+            Button {
+                isEditingEarnings = true
+            } label: {
+                Label(
+                    shift.grossEarnings == nil ? "Add Earnings" : "Edit Earnings",
+                    systemImage: shift.grossEarnings == nil ? "plus.circle" : "pencil"
+                )
+            }
+            .buttonStyle(.bordered)
+            .accessibilityIdentifier("editShiftEarningsButton")
+        }
+        .padding(.vertical, 4)
+        .task(id: shift.id) { recordedDistance = shift.recordedDistance() }
+        .sheet(isPresented: $isEditingEarnings) {
+            ShiftEarningsEditor(shift: shift)
+        }
+    }
+
+    /// The date, with the recorded amount alongside it — or under it once the
+    /// text is large enough that two items cannot share a line without one of
+    /// them being truncated. A shortened date and a shortened amount are both
+    /// worse than a second line.
+    @ViewBuilder
+    private var heading: some View {
+        let date = Text(shift.startedAt, format: .dateTime.weekday(.abbreviated).month().day())
+            .font(.headline)
+
+        if dynamicTypeSize.isAccessibilitySize {
+            date
+            recordedEarnings
+        } else {
+            HStack(alignment: .firstTextBaseline) {
+                date
+                Spacer(minLength: 8)
+                recordedEarnings
             }
         }
-        .task(id: shift.id) { recordedDistance = shift.recordedDistance() }
-        .accessibilityElement(children: .combine)
-        .accessibilityIdentifier("completedShiftRow")
+    }
+
+    /// The amount, and only the amount. No rate: what a shift paid per hour or
+    /// per recorded mile is a separate calculation that has not been built, and
+    /// a figure sitting next to a duration and a distance must not imply one.
+    @ViewBuilder
+    private var recordedEarnings: some View {
+        if let earnings = shift.grossEarnings {
+            Text(earnings.formatted())
+                .font(.headline)
+                .monospacedDigit()
+        }
     }
 
     /// What the route can honestly be said to show.
