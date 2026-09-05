@@ -5,8 +5,8 @@
 <h1 align="center">DashPilot</h1>
 
 <p align="center">
-  A native, local-first iOS companion that measures a delivery driver's shifts, routes, recorded
-  mileage and gross earnings on device.
+  A native, local-first iOS companion that measures a delivery driver's shifts, deliveries, routes,
+  recorded mileage and gross earnings on device.
 </p>
 
 <p align="center">
@@ -19,9 +19,9 @@
 
 ---
 
-DashPilot records what a shift actually did: when it ran, how much of its route was captured, what
-the driver says it paid, and the two rates that follow from those facts. Everything stays on the
-device.
+DashPilot records what a shift actually did: when it ran, which deliveries the driver recorded
+inside it, how much of its route was captured, what they say it paid, and the two rates that follow
+from those facts. Everything stays on the device.
 
 It is a general delivery-driver tool. It has no integration with DoorDash or any other delivery
 platform, it does not observe, automate or interfere with those apps, and anything that cannot be
@@ -37,18 +37,21 @@ derived legitimately from device sensors and stored history is typed by the driv
   fixes, duplicate and out-of-order timestamps, negligible movement and implausible jumps.
 - **Recorded mileage** derived from the retained route, summing only what was captured continuously
   and excluding the distance across detected gaps.
+- **Delivery lifecycle** — accepted, arrived at pickup, picked up, delivered, or cancelled — with
+  one primary control per state, one active delivery at a time, transitions enforced against the
+  store, relaunch recovery, and a shift end refused while a delivery is running.
 - **Manual gross earnings**, optional, locale-aware, refused rather than reinterpreted when it
   cannot be read.
 - **Completed-shift metrics and detail**: gross earnings per shift hour and per recorded mile, with
-  the reason stated whenever a rate cannot be derived, plus a confirmed delete that also removes the
-  shift's route positions.
+  the reason stated whenever a rate cannot be derived, its deliveries listed with their recorded
+  events, and a confirmed delete that removes the shift's route positions and deliveries with it.
 
 ## Technology
 
 Swift, SwiftUI, SwiftData, Core Location, OSLog, Swift Testing and XCUITest. **No third-party
 runtime dependencies.**
 
-Versioned schema at v4 with lightweight migrations from v1, tested by opening stores written under
+Versioned schema at v5 with lightweight migrations from v1, tested by opening stores written under
 each older version. Domain calculations import neither SwiftUI nor SwiftData, so every rule is
 tested without a container or a rendered view. Money is `Decimal` throughout: no monetary value
 passes through binary floating point, in memory or in the store. Nothing derived is stored, so
@@ -59,8 +62,9 @@ mileage and both rates are recomputed from the stored data every time they are s
 All data stays on device. There are no accounts, no sync, no analytics, no telemetry, no ads and no
 network code in the project. Coordinates, routes and earnings are never logged: the location logs
 record what the app was allowed to do and which rule rejected a sample, never where the device was.
-A shift's route positions are deleted with the shift. Every example in the tests, previews and
-documentation is synthetic.
+A shift's route positions and deliveries are deleted with the shift, and a delivery stores no
+restaurant, customer or address. Every example in the tests, previews and documentation is
+synthetic.
 
 ## Build and test
 
@@ -94,6 +98,7 @@ Once GitHub Pages is enabled for this repository, the deployment workflow publis
 
 Start with [`docs/index.md`](docs/index.md), or go straight to
 [product overview](docs/product/overview.md),
+[delivery lifecycle](docs/product/delivery-lifecycle.md),
 [architecture](docs/architecture/overview.md),
 [building](docs/development/building.md),
 [testing](docs/development/testing.md) or the
@@ -111,10 +116,13 @@ The short version, with the full list in [`docs/reference/limitations.md`](docs/
 - **Both rates are gross.** The hourly rate divides by elapsed shift time, not working time; the
   per-mile rate divides by recorded miles, which makes it normally higher than earnings per mile
   driven.
+- **Deliveries are what the driver tapped.** Nothing is detected, imported or inferred, no amount is
+  attributed to a delivery, and only one delivery can be recorded at a time.
 - **No delivery-platform integration**, permanently and by design.
 - **Local only.** No export, no backup, no sync, and deleting a shift is permanent.
-- Not implemented yet: deliveries, wait times, active-versus-idle time, expenses, aggregates over a
-  period, maps, App Intents, Live Activities and recommendations.
+- Not implemented yet: anything built on the delivery records (restaurant scoring, wait-time
+  analysis, offer profitability), active-versus-idle time, expenses, aggregates over a period, maps,
+  App Intents, Live Activities and recommendations.
 
 ## License
 

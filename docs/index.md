@@ -10,8 +10,8 @@ hide:
 </p>
 
 DashPilot is a native, local-first iOS companion for delivery drivers. It measures shifts,
-routes, recorded mileage and gross earnings on device, so a driver can see how their work
-actually performed without handing that history to a server.
+deliveries, routes, recorded mileage and gross earnings on device, so a driver can see how their
+work actually performed without handing that history to a server.
 
 It is a general delivery-driver tool. It has no integration with DoorDash or any other delivery
 platform, it does not observe, automate or interfere with those apps, and anything that cannot be
@@ -30,17 +30,20 @@ monetary precision and honest wording seriously.
 ```mermaid
 flowchart LR
     A[Start shift] --> B[Foreground route capture]
-    B --> C[End shift]
-    C --> D[Enter gross earnings]
-    D --> E[Review mileage and rates]
+    B --> C[Record deliveries, one tap per event]
+    C --> D[End shift]
+    D --> E[Enter gross earnings]
+    E --> F[Review deliveries, mileage and rates]
 ```
 
-One shift runs at a time. While it runs and DashPilot is in the foreground, accepted positions are
-recorded against it. When the shift ends, the driver may type what it paid, and the completed
-shift's detail screen states its recorded mileage, the shape of its route, and two derived rates
-together with the reason either one could not be derived.
+One shift runs at a time, and one delivery within it. While the shift runs and DashPilot is in the
+foreground, accepted positions are recorded against it, and one large control records each delivery
+event the driver taps. When the shift ends, the driver may type what it paid, and the completed
+shift's detail screen states what each delivery recorded, the shift's recorded mileage, the shape of
+its route, and two derived rates together with the reason either one could not be derived.
 
 [Read the shift workflow](product/shift-workflow.md){ .md-button .md-button--primary }
+[Read the delivery lifecycle](product/delivery-lifecycle.md){ .md-button }
 [See what is and is not implemented](product/overview.md){ .md-button }
 
 ## Engineering characteristics
@@ -50,9 +53,9 @@ together with the reason either one could not be derived.
 - **Versioned persistence.** The schema has been versioned since v1 and carries a migration plan
   exercised by tests that open stores written under every older version. See
   [Migrations](architecture/migrations.md).
-- **Nothing derived is stored.** Recorded mileage and both rates are recomputed from the stored
-  route, timestamps and amount every time they are shown, so the store never holds two answers to
-  the same question.
+- **Nothing derived is stored.** Recorded mileage, a delivery's state and both rates are recomputed
+  from the stored route, timestamps and amount every time they are shown, so the store never holds
+  two answers to the same question.
 - **Decimal money.** No monetary value passes through binary floating point, in memory or in the
   store. See [Money and metrics](architecture/money-and-metrics.md).
 - **Deliberate location handling.** Authorization, accuracy, the system-wide Location Services
@@ -69,6 +72,7 @@ together with the reason either one could not be derived.
   was not open, and DashPilot says so instead of guessing across it.
 - No claim that recorded mileage equals the miles driven, and no tax or deduction figure.
 - No profit, take-home or net earnings. Gross earnings are one number the driver typed.
+- No automatic delivery detection. Every delivery event is one the driver recorded.
 - No machine learning, no offer recommendations and no automated decisions.
 
 The full list, including the parts that are simply not built yet, is on
@@ -85,5 +89,5 @@ The full list, including the parts that are simply not built yet, is on
 
 !!! note "Documentation status"
 
-    This site documents schema v4 and the shift, route, earnings, metrics and detail work
-    completed so far. Every amount, coordinate and route in it is synthetic.
+    This site documents schema v5 and the shift, route, earnings, metrics, detail and delivery
+    lifecycle work completed so far. Every amount, coordinate and route in it is synthetic.

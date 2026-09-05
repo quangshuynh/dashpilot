@@ -26,27 +26,33 @@ device.
 
 ## What is stored
 
-Two entities. Their fields are listed under [Data model](../reference/data-model.md).
+Three entities. Their fields are listed under [Data model](../reference/data-model.md).
 
 `Shift` holds a start timestamp, an optional end timestamp and an optional gross earnings amount.
 Everything else about a shift, including its duration, its distance and its rates, is derived when
 it is asked for.
+
+`Delivery` stores five timestamps and its shift. Its state is derived from which of those
+timestamps exist rather than stored beside them, so nothing in the store can disagree with the
+events it summarises. Nothing identifying a restaurant, a customer or an address is stored, and no
+amount is attributed to a delivery.
 
 `RouteSample` stores a timestamp, a latitude, a longitude, a horizontal accuracy and the capture
 session it was recorded in, and nothing else. `CLLocation` also reports speed, course, altitude and
 their accuracies, but nothing implemented reads them, and a coordinate history is sensitive enough
 that each field needs a reason rather than an availability.
 
-## The delete rule
+## The delete rules
 
-`Shift.routeSamples` uses `deleteRule: .cascade`, and has since v2. A shift's route describes that
-shift and nothing else, so deleting the shift takes its positions with it. The orphans would
-otherwise be exactly the sensitive rows the app promises to keep accountable to a shift.
+`Shift.routeSamples` uses `deleteRule: .cascade`, and has since v2. `Shift.deliveries` uses it too,
+since v5. A shift's route and its deliveries describe that shift and nothing else, so deleting the
+shift takes both with it. The orphans would otherwise be exactly the sensitive rows the app promises
+to keep accountable to a shift.
 
-When a driver deletes a completed shift, the samples go through this existing rule rather than
-through a loop in the service. Tests assert that the deleted shift's positions are gone, that
-another shift's positions and recorded amount are untouched, and that a refused delete changes
-nothing at all.
+When a driver deletes a completed shift, both go through these existing rules rather than through a
+loop in the service. Tests assert that the deleted shift's positions and deliveries are gone, that
+another shift's rows and recorded amount are untouched, that no delivery is left without a shift,
+and that a refused delete changes nothing at all.
 
 ## Earnings are stored as a decimal
 
@@ -66,6 +72,18 @@ an amount the app would refuse to display: earnings can be recorded only on a **
 and never **negative**. `ShiftService` adds the store write and the same rollback rule the lifecycle
 transitions use, so an amount can never be showing in the interface while the store holds something
 else.
+
+## Delivery state is not a column
+
+`Delivery` has no persisted `state` and no `isPickedUp`-style booleans. `state` is computed from
+`arrivedAtPickupAt`, `pickedUpAt`, `deliveredAt` and `cancelledAt`, so there is one authoritative
+answer to what a delivery is doing and it is the same data that forms the historical record.
+
+"Active" is likewise a query, not a flag: `deliveredAt == nil && cancelledAt == nil`. That is what
+makes relaunch recovery ordinary rather than a code path — a delivery left running when the app was
+terminated is simply still running when a new `DeliveryService` reads the store, with its original
+timestamps. The single-active-delivery rule is enforced by that same fetch, so it holds across a
+relaunch as well as within a session.
 
 ## Writes during capture
 
