@@ -27,7 +27,8 @@ test cannot see, such as a screen that renders a sentence the model never claime
 | Route capture, Route sample filter | The capture invariant and every acceptance rule |
 | Route mileage | Segments, gaps, inferred continuity, unmeasurable routes |
 | Money, Money input | Decimal arithmetic, rounding, division, and locale-aware parsing in more than one locale |
-| Completed shift metrics, Shift metrics from the model | Both rates, every unavailable reason, precedence and precision |
+| Completed shift metrics, Shift metrics from the model | All three rates, non-delivery time, every unavailable reason, precedence and precision |
+| Delivery active time, Delivery active time of a shift | The interval union — overlap, nesting, chains, touching, shared starts and ends, zero length, malformed, unfinished, unsorted, a thousand at a time — order independence over every permutation, clipping to the shift window, and cancelled deliveries counting until cancellation |
 | Route quality wording, Unavailable rate explanations | The exact sentences the interface is allowed to say |
 | Completed shift deletion | Cascade, refusal for a running shift, and that a refused delete changes nothing |
 

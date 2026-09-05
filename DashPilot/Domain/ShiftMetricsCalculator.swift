@@ -67,16 +67,27 @@ nonisolated struct ShiftMetricsCalculator: Equatable, Sendable {
     ///   - recordedDistance: what the shift's retained route measured. It
     ///     already distinguishes an unmeasurable route from a measured one, and
     ///     that distinction is carried through rather than flattened here.
+    ///   - deliveryActiveTime: the union of the shift's delivery intervals, from
+    ///     ``DeliveryActiveTimeCalculator``. It defaults to ``DeliveryActiveTime/none``,
+    ///     which is the truthful reading of a shift with no deliveries to
+    ///     measure and produces no active-hour rate rather than a fabricated one.
     func metrics(
         grossEarnings: Money?,
         elapsedDuration: TimeInterval?,
-        recordedDistance: RouteDistance
+        recordedDistance: RouteDistance,
+        deliveryActiveTime: DeliveryActiveTime = .none
     ) -> ShiftMetrics {
         ShiftMetrics(
             grossEarnings: grossEarnings,
             elapsedDuration: elapsedDuration,
             recordedDistance: recordedDistance,
+            deliveryActiveTime: deliveryActiveTime,
             grossPerElapsedHour: hourlyRate(of: grossEarnings, over: elapsedDuration),
+            grossPerDeliveryActiveHour: activeHourlyRate(
+                of: grossEarnings,
+                over: deliveryActiveTime,
+                elapsedDuration: elapsedDuration
+            ),
             grossPerRecordedMile: mileageRate(of: grossEarnings, over: recordedDistance, elapsedDuration: elapsedDuration)
         )
     }
@@ -86,21 +97,67 @@ nonisolated struct ShiftMetricsCalculator: Equatable, Sendable {
     /// Gross earnings per hour of **elapsed** shift time.
     ///
     /// The denominator is the whole wall-clock length of the shift, waiting and
-    /// idling included, because that is the only duration DashPilot knows. An
-    /// active or per-delivery hourly rate would need delivery timing the app
-    /// does not record.
+    /// idling included. It is the figure that does not depend on the driver
+    /// having recorded their deliveries, which is why it stays even though
+    /// ``activeHourlyRate(of:over:elapsedDuration:)`` now exists beside it.
     private func hourlyRate(of grossEarnings: Money?, over elapsedDuration: TimeInterval?) -> ShiftRate {
         guard let elapsedDuration else { return .unavailable(.shiftNotCompleted) }
         guard let grossEarnings else { return .unavailable(.earningsNotRecorded) }
+        // A shift ended at the moment it started — including one whose end was
+        // clamped to its start by a backwards device clock — covers no time to
+        // earn over.
+        return rate(of: grossEarnings, overHoursIn: elapsedDuration, otherwise: .noElapsedTime)
+    }
+
+    /// Gross earnings per hour at least one recorded delivery was active.
+    ///
+    /// The denominator is the **union** of the shift's delivery intervals, so
+    /// two deliveries carried at the same time contribute their overlap once.
+    /// Summing their durations instead would let the denominator exceed the
+    /// shift and would drive the rate down precisely when a driver stacked well.
+    ///
+    /// Still gross, and still one amount recorded for the whole shift: no
+    /// earnings are attributed to an individual delivery anywhere in DashPilot.
+    /// The three absent cases are kept apart for the reason every other pair is
+    /// — a shift with no deliveries, one whose deliveries describe no usable
+    /// interval, and one whose deliveries genuinely covered no time are three
+    /// different facts, and none of them is a rate of zero.
+    private func activeHourlyRate(
+        of grossEarnings: Money?,
+        over deliveryActiveTime: DeliveryActiveTime,
+        elapsedDuration: TimeInterval?
+    ) -> ShiftRate {
+        guard elapsedDuration != nil else { return .unavailable(.shiftNotCompleted) }
+        guard let grossEarnings else { return .unavailable(.earningsNotRecorded) }
+        guard deliveryActiveTime.isAvailable else {
+            return .unavailable(
+                deliveryActiveTime.sourceIntervalCount == 0
+                    ? .noDeliveriesRecorded
+                    : .deliveryActiveTimeNotMeasurable
+            )
+        }
+        return rate(of: grossEarnings, overHoursIn: deliveryActiveTime.duration, otherwise: .zeroDeliveryActiveTime)
+    }
+
+    /// An amount divided by a duration expressed in hours, or `reason` when the
+    /// duration cannot be a denominator.
+    ///
+    /// Shared by both hourly rates so there is one crossing into decimal
+    /// seconds, one conversion to hours and one rounding scale between them. A
+    /// second copy would be free to drift, and two hourly figures on the same
+    /// screen disagreeing in the last cent is exactly the kind of difference
+    /// nobody would think to look for.
+    private func rate(
+        of grossEarnings: Money,
+        overHoursIn duration: TimeInterval,
+        otherwise reason: ShiftRateUnavailability
+    ) -> ShiftRate {
         guard
-            let seconds = Self.decimal(elapsedDuration, scale: Self.durationScale),
+            let seconds = Self.decimal(duration, scale: Self.durationScale),
             seconds > 0,
             let rate = grossEarnings.divided(by: seconds / Self.secondsPerHour, scale: Self.rateScale)
         else {
-            // A shift ended at the moment it started — including one whose end
-            // was clamped to its start by a backwards device clock — covers no
-            // time to earn over.
-            return .unavailable(.noElapsedTime)
+            return .unavailable(reason)
         }
         return .available(rate)
     }
@@ -171,6 +228,11 @@ extension Shift {
     /// measuring a route walks every position it holds, and the caller normally
     /// already has the result — the history row measures once when it appears.
     /// ``Shift/recordedDistance(using:)`` is what produces it.
+    ///
+    /// Delivery active time is derived here rather than passed in, because a
+    /// shift holds a handful of deliveries where it holds thousands of
+    /// positions: the union sorts a list short enough that measuring it on
+    /// demand costs nothing worth arranging around.
     func metrics(
         for recordedDistance: RouteDistance,
         using calculator: ShiftMetricsCalculator = ShiftMetricsCalculator()
@@ -178,7 +240,8 @@ extension Shift {
         calculator.metrics(
             grossEarnings: grossEarnings,
             elapsedDuration: completedDuration,
-            recordedDistance: recordedDistance
+            recordedDistance: recordedDistance,
+            deliveryActiveTime: deliveryActiveTime()
         )
     }
 }
