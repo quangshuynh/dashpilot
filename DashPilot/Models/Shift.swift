@@ -44,6 +44,17 @@ nonisolated final class Shift {
     @Relationship(deleteRule: .cascade, inverse: \RouteSample.shift)
     private(set) var routeSamples: [RouteSample] = []
 
+    /// Deliveries recorded during this shift, in no guaranteed order.
+    ///
+    /// The delete rule is `.cascade`, for the same reason the route's is: a
+    /// delivery is a record of work done *within* one shift and means nothing
+    /// apart from it, so deleting the shift must take its deliveries rather
+    /// than leaving a table of timestamps belonging to a shift that no longer
+    /// exists. Orphaned deliveries would also be exactly the sensitive
+    /// work-history rows the app promises to keep accountable to a shift.
+    @Relationship(deleteRule: .cascade, inverse: \Delivery.shift)
+    private(set) var deliveries: [Delivery] = []
+
     /// Gross earnings for this shift, exactly as entered, or `nil` if none were.
     ///
     /// Stored as a `Decimal` rather than as a ``Money``: SwiftData persists a
@@ -167,5 +178,28 @@ extension Shift {
     /// state the caller asked for.
     func clearGrossEarnings() {
         grossEarningsAmount = nil
+    }
+}
+
+extension Shift {
+    /// The delivery still in progress in this shift, if there is one.
+    ///
+    /// Read from the store's own rows rather than from a flag: a shift's
+    /// deliveries are the authority on whether one is running, and the rule
+    /// that a shift cannot end while one is depends on that being true after a
+    /// relaunch as much as during a session.
+    var activeDelivery: Delivery? {
+        deliveries.first { $0.isActive }
+    }
+
+    /// This shift's deliveries in the order they were accepted, which is the
+    /// order they happened in.
+    var deliveriesInOrder: [Delivery] {
+        deliveries.sorted { $0.acceptedAt < $1.acceptedAt }
+    }
+
+    /// How many deliveries this shift recorded, and how they ended.
+    var deliverySummary: DeliverySummary {
+        DeliverySummary(states: deliveries.map(\.state))
     }
 }
