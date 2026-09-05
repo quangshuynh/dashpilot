@@ -461,6 +461,259 @@ struct ShiftMetricsTests {
         #expect(metrics.elapsedDuration == TimeInterval(3 * 3600))
         #expect(metrics.recordedDistance == route)
     }
+
+    // MARK: Gross earnings per delivery active hour
+
+    /// A delivery active time built from plain values, so a rate test states its
+    /// own denominator instead of assembling deliveries to reach one.
+    private func activeTime(
+        minutes: Double,
+        sourceIntervalCount: Int = 1,
+        countedIntervalCount: Int = 1,
+        mergedIntervalCount: Int = 1
+    ) -> DeliveryActiveTime {
+        DeliveryActiveTime(
+            duration: minutes * 60,
+            sourceIntervalCount: sourceIntervalCount,
+            countedIntervalCount: countedIntervalCount,
+            mergedIntervalCount: mergedIntervalCount,
+            unfinishedIntervalCount: 0,
+            malformedIntervalCount: 0
+        )
+    }
+
+    @Test("A completed shift earns a rate over the hours its deliveries were active")
+    func activeHourlyRateOfANormalShift() throws {
+        let metrics = calculator.metrics(
+            grossEarnings: try money("86.25"),
+            elapsedDuration: 5 * 3600,
+            recordedDistance: .none,
+            deliveryActiveTime: activeTime(minutes: 180)
+        )
+
+        #expect(metrics.grossPerDeliveryActiveHour == .available(try money("28.75")))
+    }
+
+    @Test("A fractional active hour divides by the fraction, not by a rounded hour")
+    func activeHourlyRateOfAFractionalHour() throws {
+        let metrics = calculator.metrics(
+            grossEarnings: try money("37.20"),
+            elapsedDuration: 4 * 3600,
+            recordedDistance: .none,
+            deliveryActiveTime: activeTime(minutes: 90)
+        )
+
+        #expect(metrics.grossPerDeliveryActiveHour == .available(try money("24.80")))
+    }
+
+    /// The interval's central claim, read through the rate: two deliveries
+    /// overlapping by twenty minutes give a denominator of forty minutes, not of
+    /// the fifty-five their durations sum to, and the rate follows the union.
+    @Test("Stacked deliveries change the denominator to their union, not their sum")
+    func activeHourlyRateUsesTheUnionedDenominator() throws {
+        let start = Date(timeIntervalSince1970: 1_756_000_000)
+        let union = DeliveryActiveTimeCalculator().activeTime(
+            of: [
+                DeliveryActiveInterval(start: start, end: start.addingTimeInterval(30 * 60)),
+                DeliveryActiveInterval(
+                    start: start.addingTimeInterval(10 * 60),
+                    end: start.addingTimeInterval(40 * 60)
+                )
+            ]
+        )
+
+        let metrics = calculator.metrics(
+            grossEarnings: try money("20.00"),
+            elapsedDuration: 2 * 3600,
+            recordedDistance: .none,
+            deliveryActiveTime: union
+        )
+
+        #expect(union.duration == 40 * 60)
+        #expect(metrics.grossPerDeliveryActiveHour == .available(try money("30.00")))
+        #expect(
+            metrics.grossPerDeliveryActiveHour != .available(try money("21.818182")),
+            "Summing the two durations would divide by 55 minutes and understate the rate"
+        )
+    }
+
+    @Test("A shift recorded as paying nothing has an active rate of zero, not an absent one")
+    func activeHourlyRateOfZeroEarnings() throws {
+        let metrics = calculator.metrics(
+            grossEarnings: .zero,
+            elapsedDuration: 4 * 3600,
+            recordedDistance: .none,
+            deliveryActiveTime: activeTime(minutes: 120)
+        )
+
+        #expect(metrics.grossPerDeliveryActiveHour == .available(.zero))
+    }
+
+    @Test("A shift with no amount recorded has no active rate, and is not treated as zero")
+    func activeHourlyRateWithoutEarnings() {
+        let metrics = calculator.metrics(
+            grossEarnings: nil,
+            elapsedDuration: 4 * 3600,
+            recordedDistance: .none,
+            deliveryActiveTime: activeTime(minutes: 120)
+        )
+
+        #expect(metrics.grossPerDeliveryActiveHour == .unavailable(.earningsNotRecorded))
+        #expect(metrics.grossPerDeliveryActiveHour.amount == nil)
+    }
+
+    @Test("A shift that recorded no deliveries has no active rate, and says so in its own words")
+    func activeHourlyRateWithoutDeliveries() throws {
+        let metrics = calculator.metrics(
+            grossEarnings: try money("48.00"),
+            elapsedDuration: 4 * 3600,
+            recordedDistance: .none,
+            deliveryActiveTime: .none
+        )
+
+        #expect(metrics.grossPerDeliveryActiveHour == .unavailable(.noDeliveriesRecorded))
+        #expect(metrics.grossPerElapsedHour == .available(try money("12.00")), "The elapsed rate is unaffected")
+    }
+
+    @Test("Deliveries that describe no usable interval are not the same as no deliveries")
+    func activeHourlyRateWithUnusableDeliveries() throws {
+        let unusable = DeliveryActiveTime(
+            duration: 0,
+            sourceIntervalCount: 2,
+            countedIntervalCount: 0,
+            mergedIntervalCount: 0,
+            unfinishedIntervalCount: 1,
+            malformedIntervalCount: 1
+        )
+
+        let metrics = calculator.metrics(
+            grossEarnings: try money("48.00"),
+            elapsedDuration: 4 * 3600,
+            recordedDistance: .none,
+            deliveryActiveTime: unusable
+        )
+
+        #expect(metrics.grossPerDeliveryActiveHour == .unavailable(.deliveryActiveTimeNotMeasurable))
+    }
+
+    @Test("Deliveries measured at no length produce no rate rather than an infinite one")
+    func activeHourlyRateOfZeroActiveTime() throws {
+        let metrics = calculator.metrics(
+            grossEarnings: try money("48.00"),
+            elapsedDuration: 4 * 3600,
+            recordedDistance: .none,
+            deliveryActiveTime: activeTime(minutes: 0)
+        )
+
+        #expect(metrics.grossPerDeliveryActiveHour == .unavailable(.zeroDeliveryActiveTime))
+        #expect(metrics.grossPerDeliveryActiveHour.amount == nil)
+    }
+
+    @Test("A running shift reports no active rate, whatever its deliveries hold")
+    func activeHourlyRateOfARunningShift() throws {
+        let metrics = calculator.metrics(
+            grossEarnings: try money("48.00"),
+            elapsedDuration: nil,
+            recordedDistance: .none,
+            deliveryActiveTime: activeTime(minutes: 60)
+        )
+
+        #expect(metrics.grossPerDeliveryActiveHour == .unavailable(.shiftNotCompleted))
+    }
+
+    /// Both hourly figures divide the same amount through the same code path, so
+    /// a shift whose deliveries covered all of it must report them identically
+    /// rather than differ in the last cent.
+    @Test("The two hourly rates agree when the deliveries covered the whole shift")
+    func hourlyRatesAgreeOverTheSameDenominator() throws {
+        let metrics = calculator.metrics(
+            grossEarnings: try money("103.75"),
+            elapsedDuration: 7 * 3600,
+            recordedDistance: .none,
+            deliveryActiveTime: activeTime(minutes: 7 * 60)
+        )
+
+        #expect(metrics.grossPerDeliveryActiveHour == metrics.grossPerElapsedHour)
+    }
+
+    @Test("Rates are available whenever any denominator is")
+    func hasAnyRateCountsTheActiveHourlyRate() throws {
+        let metrics = calculator.metrics(
+            grossEarnings: try money("30.00"),
+            elapsedDuration: 0,
+            recordedDistance: .none,
+            deliveryActiveTime: activeTime(minutes: 45)
+        )
+
+        #expect(metrics.grossPerElapsedHour == .unavailable(.noElapsedTime))
+        #expect(metrics.grossPerDeliveryActiveHour == .available(try money("40.00")))
+        #expect(metrics.hasAnyRate)
+    }
+
+    // MARK: Non-delivery time
+
+    @Test("Non-delivery time is the shift's elapsed time less its delivery active time")
+    func nonDeliveryTimeOfANormalShift() throws {
+        let metrics = calculator.metrics(
+            grossEarnings: try money("86.25"),
+            elapsedDuration: 3 * 3600,
+            recordedDistance: .none,
+            deliveryActiveTime: activeTime(minutes: 65)
+        )
+
+        #expect(metrics.nonDeliveryDuration == TimeInterval(115 * 60))
+    }
+
+    @Test("A shift its deliveries covered entirely has no non-delivery time, rather than none reported")
+    func nonDeliveryTimeOfAFullyCoveredShift() throws {
+        let metrics = calculator.metrics(
+            grossEarnings: try money("40.00"),
+            elapsedDuration: 2 * 3600,
+            recordedDistance: .none,
+            deliveryActiveTime: activeTime(minutes: 120)
+        )
+
+        #expect(metrics.nonDeliveryDuration == 0)
+    }
+
+    @Test("A shift with nothing measurable reports no non-delivery time rather than the whole shift")
+    func nonDeliveryTimeWithoutDeliveries() throws {
+        let metrics = calculator.metrics(
+            grossEarnings: try money("40.00"),
+            elapsedDuration: 2 * 3600,
+            recordedDistance: .none,
+            deliveryActiveTime: .none
+        )
+
+        #expect(metrics.nonDeliveryDuration == nil)
+    }
+
+    @Test("A running shift has no non-delivery time to report")
+    func nonDeliveryTimeOfARunningShift() throws {
+        let metrics = calculator.metrics(
+            grossEarnings: nil,
+            elapsedDuration: nil,
+            recordedDistance: .none,
+            deliveryActiveTime: activeTime(minutes: 30)
+        )
+
+        #expect(metrics.nonDeliveryDuration == nil)
+    }
+
+    /// Clipping already makes this unreachable through the shift adapter. It is
+    /// asserted anyway, because a negative duration must never reach a driver's
+    /// screen whatever a damaged store holds.
+    @Test("Non-delivery time never goes negative, whatever the stored data claims")
+    func nonDeliveryTimeIsNeverNegative() throws {
+        let metrics = calculator.metrics(
+            grossEarnings: try money("40.00"),
+            elapsedDuration: 30 * 60,
+            recordedDistance: .none,
+            deliveryActiveTime: activeTime(minutes: 90)
+        )
+
+        #expect(metrics.nonDeliveryDuration == 0)
+    }
 }
 
 /// The adapter from the stored shift to the calculation, and the states a real
@@ -585,4 +838,5 @@ struct ShiftMetricsModelTests {
         #expect(metrics.grossPerRecordedMile.amount == nil, "Nothing measurable must not become a rate")
         #expect(metrics.grossPerRecordedMile == .unavailable(.noRouteRecorded))
     }
+
 }
