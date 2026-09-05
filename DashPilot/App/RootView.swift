@@ -49,7 +49,14 @@ struct RootView: View {
 
                 Section {
                     ForEach(completedShifts) { shift in
-                        CompletedShiftRow(shift: shift)
+                        // The whole row is one destination: a finished shift is
+                        // a thing to open, not a row with controls scattered
+                        // across it. Everything that was a button here now
+                        // lives on the screen it opens.
+                        NavigationLink(value: shift) {
+                            CompletedShiftRow(shift: shift)
+                        }
+                        .accessibilityIdentifier("completedShiftRow")
                     }
                 } header: {
                     Text("History")
@@ -60,6 +67,9 @@ struct RootView: View {
                 }
             }
             .navigationTitle("DashPilot")
+            .navigationDestination(for: Shift.self) { shift in
+                CompletedShiftDetailView(shift: shift)
+            }
             // A shift that was still running when the app was terminated is
             // still running now, so capture resumes here rather than waiting for
             // the driver to touch anything.
@@ -218,8 +228,18 @@ private struct ElapsedTimeLabel: View {
     private var duration: Duration { .seconds(elapsed) }
 }
 
-/// One finished shift in history: when it ran, what its route measured, what
-/// the driver recorded it paid, and the way to record or change that.
+/// One finished shift in history: what shift it was, and roughly how it went.
+///
+/// Deliberately three lines and no controls. The row's job is to be scanned and
+/// tapped; everything it used to carry inline — the second rate, the route's
+/// segments and gaps, the earnings editor, and now deletion — belongs to
+/// ``CompletedShiftDetailView``, which has the room to explain it.
+///
+/// What survives here is what a driver picking a shift out of a list needs:
+/// when it ran, how long it lasted, what it paid, what its route recorded, and
+/// the one rate that answers "how did this shift go" — gross earnings per shift
+/// hour. The per-recorded-mile rate needs its denominator explained to be read
+/// correctly, and that explanation is a detail-screen thing.
 private struct CompletedShiftRow: View {
     let shift: Shift
 
@@ -230,51 +250,33 @@ private struct CompletedShiftRow: View {
     /// the number is still derived from the route every time the row is built.
     @State private var recordedDistance: RouteDistance?
 
-    /// Earnings are edited in a sheet rather than in the row: a draft the
-    /// driver can abandon, instead of a field that writes to the store as they
-    /// type.
-    @State private var isEditingEarnings = false
-
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.locale) private var locale
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            VStack(alignment: .leading, spacing: 4) {
-                heading
-                Text(detail)
-                    .font(.subheadline)
+        VStack(alignment: .leading, spacing: 4) {
+            heading
+            Text(schedule)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            if let summary {
+                Text(summary)
+                    .font(.caption)
                     .foregroundStyle(.secondary)
-                if let recordedMileage {
-                    Text(recordedMileage)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                if let metrics {
-                    ShiftRatesLabel(metrics: metrics)
-                }
+                    .monospacedDigit()
+                    // Wrap rather than truncate. The first thing a truncation
+                    // takes is the end of "recorded", which is the word that
+                    // makes the mileage honest.
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            // One element so VoiceOver reads the shift as a shift, rather than
-            // four unrelated fragments. The button below stays separate,
-            // because it has to remain individually reachable.
-            .accessibilityElement(children: .combine)
-            .accessibilityIdentifier("completedShiftRow")
-
-            Button {
-                isEditingEarnings = true
-            } label: {
-                Label(
-                    shift.grossEarnings == nil ? "Add Earnings" : "Edit Earnings",
-                    systemImage: shift.grossEarnings == nil ? "plus.circle" : "pencil"
-                )
-            }
-            .buttonStyle(.bordered)
-            .accessibilityIdentifier("editShiftEarningsButton")
         }
         .padding(.vertical, 4)
         .task(id: shift.id) { recordedDistance = shift.recordedDistance() }
-        .sheet(isPresented: $isEditingEarnings) {
-            ShiftEarningsEditor(shift: shift)
-        }
+        // One element so VoiceOver reads the shift as a shift rather than three
+        // unrelated fragments, with an explicit label because the abbreviations
+        // that read well — "mi", "/hr", "·" — are poor to hear.
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(accessibilityLabel)
     }
 
     /// The date, with the recorded amount alongside it — or under it once the
@@ -298,16 +300,80 @@ private struct CompletedShiftRow: View {
         }
     }
 
-    /// The amount, and only the amount. The rates derived from it are a
-    /// separate line, in a smaller style, so the figure the driver actually
-    /// recorded is never confused with the ones DashPilot worked out.
+    /// The amount, and only the amount. The rate derived from it is a separate
+    /// line, in a smaller style, so the figure the driver actually recorded is
+    /// never confused with the one DashPilot worked out.
     @ViewBuilder
     private var recordedEarnings: some View {
         if let earnings = shift.grossEarnings {
-            Text(earnings.formatted())
+            Text(earnings.formatted(locale: locale))
                 .font(.headline)
                 .monospacedDigit()
         }
+    }
+
+    /// The third line: what the route recorded, and the shift's hourly rate.
+    ///
+    /// Both are omitted when they do not exist. An unavailable rate leaves
+    /// nothing behind — no dash, no `$0.00` — because a shift with no amount
+    /// recorded and a shift that paid nothing are different facts; the detail
+    /// screen is where the difference is explained.
+    private var summary: String? {
+        guard let quality else { return nil }
+        var parts = [quality.mileageStatement(locale: locale)]
+        if let marker = quality.partialMarker {
+            parts.append(marker)
+        }
+        if let hourly = metrics?.grossPerElapsedHour.amount {
+            parts.append("\(hourly.formatted(locale: locale))/hr")
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    /// When the shift ran and how long it lasted.
+    private var schedule: String {
+        let started = shift.startedAt.formatted(date: .omitted, time: .shortened)
+        guard let endedAt = shift.endedAt, let completedDuration = shift.completedDuration else {
+            return started
+        }
+        let ended = endedAt.formatted(date: .omitted, time: .shortened)
+        return "\(started) – \(ended) · \(CompletedShiftDetailView.durationText(completedDuration))"
+    }
+
+    /// What VoiceOver says instead of the abbreviations.
+    ///
+    /// Sentences rather than separators, spelled-out miles, and the partial
+    /// route stated as a claim rather than as a two-word marker — the marker is
+    /// legible beside the figure it qualifies and unintelligible on its own.
+    private var accessibilityLabel: String {
+        var sentences = [shift.startedAt.formatted(date: .complete, time: .omitted)]
+
+        if let endedAt = shift.endedAt, let completedDuration = shift.completedDuration {
+            let started = shift.startedAt.formatted(date: .omitted, time: .shortened)
+            let ended = endedAt.formatted(date: .omitted, time: .shortened)
+            sentences.append("\(started) to \(ended)")
+            sentences.append(CompletedShiftDetailView.durationText(completedDuration))
+        }
+
+        if let earnings = shift.grossEarnings {
+            sentences.append("\(earnings.formatted(locale: locale)) gross earnings recorded")
+        } else {
+            sentences.append("No earnings recorded")
+        }
+
+        if let quality {
+            sentences.append(quality.spokenMileageStatement(locale: locale))
+        }
+
+        if let hourly = metrics?.grossPerElapsedHour.amount {
+            sentences.append("\(hourly.formatted(locale: locale)) gross earnings per shift hour")
+        }
+
+        return sentences.joined(separator: ". ")
+    }
+
+    private var quality: RouteQuality? {
+        recordedDistance.map(RouteQuality.init)
     }
 
     /// The rates this shift can support, derived from the amount recorded on it
@@ -321,43 +387,6 @@ private struct CompletedShiftRow: View {
     /// every rule, including which rates exist at all.
     private var metrics: ShiftMetrics? {
         recordedDistance.map { shift.metrics(for: $0) }
-    }
-
-    /// What the route can honestly be said to show.
-    ///
-    /// The wording never claims to be every mile driven. Capture is
-    /// foreground-only and its gaps are excluded from the total, so "recorded"
-    /// is the strongest word available; "partial route" is added when the shift
-    /// is known to have stretches the route does not cover.
-    ///
-    /// A route with nothing measurable in it says so rather than showing
-    /// `0.0 mi`, which a driver would read as "you did not move" instead of "no
-    /// distance could be measured".
-    private var recordedMileage: String? {
-        guard let recordedDistance else { return nil }
-        guard recordedDistance.isMeasured else {
-            return recordedDistance.usableSampleCount == 0
-                ? "No route recorded"
-                : "Not enough route recorded to measure"
-        }
-        let miles = recordedDistance.formattedMiles()
-        return recordedDistance.isPartial ? "\(miles) recorded · partial route" : "\(miles) recorded"
-    }
-
-    private var detail: String {
-        let started = shift.startedAt.formatted(date: .omitted, time: .shortened)
-        guard let endedAt = shift.endedAt, let completedDuration = shift.completedDuration else {
-            return started
-        }
-        let ended = endedAt.formatted(date: .omitted, time: .shortened)
-        // Shifts are measured in hours, but a shift ended moments after it
-        // started should read as seconds rather than as "0 min".
-        let units: Set<Duration.UnitsFormatStyle.Unit> = completedDuration < 60
-            ? [.minutes, .seconds]
-            : [.hours, .minutes]
-        let length = Duration.seconds(completedDuration)
-            .formatted(.units(allowed: units, width: .abbreviated))
-        return "\(started) – \(ended) · \(length)"
     }
 }
 

@@ -61,32 +61,14 @@ enum PreviewSupport {
         return container
     }
 
-    /// Derived metrics over invented inputs, for previewing the rates line
-    /// without building a shift and a route to hang them from.
-    ///
-    /// `miles` of `nil` is a shift with nothing measurable in its route, which
-    /// is the state that must not turn into a rate of zero.
-    static func metrics(
-        grossEarnings: Money?,
-        elapsedDuration: TimeInterval?,
-        miles: Double?,
-        isPartial: Bool
-    ) -> ShiftMetrics {
-        let recordedDistance = miles.map { miles in
-            RouteDistance(
-                metres: Measurement(value: miles, unit: UnitLength.miles).converted(to: .meters).value,
-                segmentCount: 1,
-                gapCount: isPartial ? 1 : 0,
-                usableSampleCount: 40,
-                usesInferredContinuity: false
-            )
-        } ?? .none
-
-        return ShiftMetricsCalculator().metrics(
-            grossEarnings: grossEarnings,
-            elapsedDuration: elapsedDuration,
-            recordedDistance: recordedDistance
-        )
+    /// The shapes of completed shift a detail screen has to handle.
+    enum DetailFixture {
+        /// An amount recorded and a measured route with a gap in it, which is
+        /// the ordinary case and the one where every figure exists.
+        case withEarningsAndRoute
+        /// Neither, which is the case where the screen has to explain absences
+        /// rather than show numbers.
+        case withoutEarningsOrRoute
     }
 
     /// A short made-up route: two capture sessions with a gap between them.
@@ -161,6 +143,34 @@ enum PreviewSupport {
             .modelContainer(container)
             .environment(authorization)
             .environment(routeCapture)
+    }
+
+    /// The completed shift detail screen over a synthetic shift.
+    ///
+    /// Wrapped in its own `NavigationStack` so the title and the destructive
+    /// confirmation appear the way they do when a history row pushes it.
+    @MainActor
+    static func completedShiftDetail(_ fixture: DetailFixture) -> some View {
+        let container = emptyContainer()
+        let start = Date(timeIntervalSince1970: 1_756_000_000)
+        let shift = Shift(startedAt: start)
+        try? shift.end(at: start.addingTimeInterval(3 * 3600))
+
+        if fixture == .withEarningsAndRoute {
+            try? shift.setGrossEarnings(Money(minorUnits: 8625))
+        }
+        container.mainContext.insert(shift)
+        if fixture == .withEarningsAndRoute {
+            for sample in syntheticRoute(from: start) {
+                container.mainContext.insert(sample.attached(to: shift))
+            }
+        }
+        try? container.mainContext.save()
+
+        return NavigationStack {
+            CompletedShiftDetailView(shift: shift)
+        }
+        .modelContainer(container)
     }
 
     /// The earnings editor over a synthetic completed shift.
