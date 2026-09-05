@@ -1,0 +1,120 @@
+site_name: DashPilot
+site_description: >-
+  Documentation for DashPilot, a local-first iOS companion that measures a delivery
+  driver's shifts, routes, recorded mileage and gross earnings on device.
+site_url: https://quangshuynh.github.io/dashpilot/
+site_author: Quang
+
+repo_url: https://github.com/quangshuynh/dashpilot
+repo_name: quangshuynh/dashpilot
+edit_uri: ""
+
+copyright: MIT licensed. Every figure in this documentation is synthetic.
+
+docs_dir: docs
+site_dir: site
+
+theme:
+  name: material
+  logo: images/dashpilot-mark.png
+  favicon: images/dashpilot-mark.png
+  icon:
+    repo: fontawesome/brands/github
+  palette:
+    - media: "(prefers-color-scheme)"
+      toggle:
+        icon: material/brightness-auto
+        name: Follow the system theme
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: blue
+      accent: deep orange
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: blue
+      accent: deep orange
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  font:
+    text: Inter
+    code: JetBrains Mono
+  features:
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.sections
+    - navigation.top
+    - navigation.tracking
+    - navigation.footer
+    - toc.follow
+    - search.suggest
+    - search.highlight
+    - search.share
+    - content.code.copy
+    - content.tooltips
+
+plugins:
+  - search
+
+markdown_extensions:
+  - abbr
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+      permalink_title: Link to this section
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.keys
+  - pymdownx.smartsymbols
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+
+# Fail the build on a broken internal link, a missing anchor or an
+# unreferenced page, so the site cannot ship with dead navigation.
+strict: true
+validation:
+  omitted_files: warn
+  absolute_links: warn
+  unrecognized_links: warn
+  anchors: warn
+  nav:
+    omitted_files: warn
+    not_found: warn
+
+nav:
+  - Home: index.md
+  - Product:
+      - Overview: product/overview.md
+      - Shift workflow: product/shift-workflow.md
+      - Recorded mileage: product/recorded-mileage.md
+      - Earnings and metrics: product/earnings-and-metrics.md
+  - Architecture:
+      - Overview: architecture/overview.md
+      - Persistence: architecture/persistence.md
+      - Migrations: architecture/migrations.md
+      - Location: architecture/location.md
+      - Route measurement: architecture/route-measurement.md
+      - Money and metrics: architecture/money-and-metrics.md
+      - Privacy: architecture/privacy.md
+  - Development:
+      - Building: development/building.md
+      - Testing: development/testing.md
+      - Project structure: development/project-structure.md
+  - Reference:
+      - Data model: reference/data-model.md
+      - Limitations: reference/limitations.md

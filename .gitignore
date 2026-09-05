@@ -68,3 +68,9 @@ CONTEXT.md
 context.md
 # macOS
 .DS_Store
+
+# MkDocs
+site/
+
+# Local Python environment for the documentation toolchain
+.venv/
