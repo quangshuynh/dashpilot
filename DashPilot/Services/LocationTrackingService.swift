@@ -20,6 +20,15 @@ import SwiftData
 /// grow: the filter rejects every candidate for a shift with an end timestamp,
 /// and ``prepareForShiftEnd()`` stops updates before the end is recorded.
 ///
+/// ## Continuity
+///
+/// Each stretch of capture is stamped with a capture session identifier, minted
+/// when updates start and cleared when they stop. It is the only record the
+/// stored route keeps of its own gaps, and the mileage calculation refuses to
+/// measure across a change of it. Every way capture can stop — backgrounding, a
+/// lost permission, a failed save, a new process — therefore ends a session, and
+/// nothing resumes one.
+///
 /// ## Foreground only
 ///
 /// This is the whole of the current behaviour. No background location mode, no
@@ -61,6 +70,17 @@ final class LocationTrackingService {
     /// The last sample retained for ``recordingShift``, which the filter judges
     /// the next candidate against.
     @ObservationIgnored private var lastAccepted: LocationSample?
+
+    /// Identifies the stretch of capture in progress, or `nil` when capture is
+    /// not running.
+    ///
+    /// A new identifier is minted every time updates start and cleared every
+    /// time they stop, so samples sharing one were retained with no interruption
+    /// between them. That is the only thing the stored route says about its own
+    /// continuity, and the mileage calculation depends on it: without it a
+    /// twenty second backgrounding and a twenty second wait at a light are the
+    /// same twenty seconds of missing samples.
+    @ObservationIgnored private var captureSessionID: UUID?
 
     /// Accepted samples inserted but not yet saved.
     @ObservationIgnored private var unsavedSampleCount = 0
@@ -153,6 +173,7 @@ final class LocationTrackingService {
 
         if !provider.isUpdating {
             retainedSampleCount = 0
+            captureSessionID = UUID()
             provider.startUpdates()
             AppLog.routeCapture.info("Route capture started")
         }
@@ -240,7 +261,7 @@ final class LocationTrackingService {
                 synchronize()
             }
         case .accept:
-            retain(candidate, for: shift)
+            retain(candidate, for: shift, in: currentCaptureSession())
         }
     }
 
@@ -260,8 +281,8 @@ final class LocationTrackingService {
 
     // MARK: Persistence
 
-    private func retain(_ sample: LocationSample, for shift: Shift) {
-        context.insert(RouteSample(shift: shift, sample: sample))
+    private func retain(_ sample: LocationSample, for shift: Shift, in session: UUID) {
+        context.insert(RouteSample(shift: shift, sample: sample, captureSessionID: session))
         lastAccepted = sample
         unsavedSampleCount += 1
         retainedSampleCount += 1
@@ -307,6 +328,22 @@ final class LocationTrackingService {
         recordingShift = shift
         lastAccepted = lastRetainedSample(of: shift)
         unsavedSampleCount = 0
+        // A different shift is a different route. Nothing recorded for the
+        // previous one may share a capture session with what follows.
+        captureSessionID = nil
+    }
+
+    /// The capture session samples are currently being recorded in.
+    ///
+    /// Capture starting is what normally opens one. If a candidate is somehow
+    /// accepted without an open session, a fresh one is opened rather than the
+    /// sample being stored with unknown continuity: an extra break under-reports
+    /// distance, while a missing one would report a gap as driving.
+    private func currentCaptureSession() -> UUID {
+        if let captureSessionID { return captureSessionID }
+        let session = UUID()
+        captureSessionID = session
+        return session
     }
 
     /// The newest sample already stored for a shift.
@@ -339,6 +376,9 @@ final class LocationTrackingService {
         let wasUpdating = provider.isUpdating
         provider.stopUpdates()
         flush()
+        // Whatever happens next was not recorded continuously with what came
+        // before, including when a failed flush has just discarded rows.
+        captureSessionID = nil
         if wasUpdating {
             AppLog.routeCapture.info(
                 "Route capture stopped after \(self.retainedSampleCount, privacy: .public) retained samples"

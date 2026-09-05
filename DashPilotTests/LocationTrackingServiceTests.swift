@@ -621,4 +621,108 @@ struct LocationTrackingServiceTests {
         #expect(harness.tracking.state == .tracking)
         #expect(harness.provider.isUpdating)
     }
+
+    // MARK: Capture continuity
+
+    @Test("Retained samples record the stretch of capture they belong to")
+    func stampsSamplesWithACaptureSession() throws {
+        let harness = try makeHarness()
+        try harness.shifts.startShift(at: shiftStart)
+        harness.tracking.synchronize()
+
+        for step in 1...3 {
+            harness.provider.emit(
+                sample(harness, secondsAfterStart: TimeInterval(step) * 10, northMetres: Double(step) * 100)
+            )
+        }
+
+        let sessions = Set(try harness.storedSamples().map(\.captureSessionID))
+        #expect(sessions.count == 1, "One uninterrupted stretch of capture is one session")
+        #expect(sessions.first != nil, "A sample recorded now is not a legacy sample")
+    }
+
+    @Test("Returning to the foreground starts a new capture session")
+    func opensANewSessionAfterBackgrounding() throws {
+        let harness = try makeHarness()
+        try harness.shifts.startShift(at: shiftStart)
+        harness.tracking.synchronize()
+        harness.provider.emit(sample(harness, secondsAfterStart: 10))
+
+        harness.tracking.enterBackground()
+        harness.tracking.enterForeground()
+        harness.provider.emit(sample(harness, secondsAfterStart: 70, northMetres: 2_000))
+
+        let stored = try harness.storedSamples()
+        #expect(stored.count == 2)
+        #expect(
+            stored.first?.captureSessionID != stored.last?.captureSessionID,
+            "Capture stopped in between, and the route has to say so"
+        )
+    }
+
+    @Test("The distance covered while DashPilot was backgrounded is not counted as driving")
+    func doesNotCountDistanceAcrossABackgroundedPause() throws {
+        let harness = try makeHarness()
+        let shift = try harness.shifts.startShift(at: shiftStart)
+        harness.tracking.synchronize()
+
+        for step in 0...2 {
+            harness.provider.emit(
+                sample(harness, secondsAfterStart: TimeInterval(step) * 10, northMetres: Double(step) * 100)
+            )
+        }
+
+        // A minute in another app, two kilometres of driving. The pause is
+        // deliberately shorter than the mileage calculation's gap threshold, so
+        // only the recorded break in capture can exclude it.
+        harness.tracking.enterBackground()
+        harness.tracking.enterForeground()
+
+        for step in 0...2 {
+            harness.provider.emit(
+                sample(
+                    harness,
+                    secondsAfterStart: 80 + TimeInterval(step) * 10,
+                    northMetres: 2_200 + Double(step) * 100
+                )
+            )
+        }
+
+        harness.tracking.prepareForShiftEnd()
+        try harness.shifts.endActiveShift(at: shiftStart.addingTimeInterval(110))
+
+        let distance = shift.recordedDistance()
+
+        #expect(shift.routeSamples.count == 6)
+        #expect(
+            SyntheticRoute.isCloseEnough(distance.metres, to: 400),
+            "measured \(distance.metres) m; the two kilometres driven in the background must not be counted"
+        )
+        #expect(distance.segmentCount == 2)
+        #expect(distance.gapCount == 1)
+        #expect(distance.isPartial)
+    }
+
+    @Test("A new shift's route never continues the previous shift's capture session")
+    func opensANewSessionForANewShift() throws {
+        let harness = try makeHarness()
+
+        let first = try harness.shifts.startShift(at: shiftStart)
+        harness.tracking.synchronize()
+        harness.provider.emit(sample(harness, secondsAfterStart: 10))
+        harness.tracking.prepareForShiftEnd()
+        try harness.shifts.endActiveShift(at: shiftStart.addingTimeInterval(60))
+        harness.tracking.synchronize()
+
+        let second = try harness.shifts.startShift(at: shiftStart.addingTimeInterval(120))
+        harness.tracking.synchronize()
+        harness.provider.emit(sample(harness, secondsAfterStart: 130, northMetres: 3_000))
+
+        let firstSessions = Set(first.routeSamples.map(\.captureSessionID))
+        let secondSessions = Set(second.routeSamples.map(\.captureSessionID))
+
+        #expect(firstSessions.count == 1)
+        #expect(secondSessions.count == 1)
+        #expect(firstSessions.isDisjoint(with: secondSessions))
+    }
 }

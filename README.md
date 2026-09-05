@@ -16,7 +16,7 @@ The project is early. This section describes what exists, not what is intended.
 **Implemented**
 
 - Xcode project targeting iOS 26.5 (SwiftUI lifecycle, Swift Testing, XCUITest).
-- Versioned SwiftData schema (`DashPilotSchemaV1`) with a migration plan wired in from v1.
+- Versioned SwiftData schema with a migration plan wired in from v1 and exercised by tests.
 - `Shift` model: start timestamp, optional end timestamp, elapsed and completed duration, with
   guarded end transitions.
 - Shift lifecycle: start a shift, end the running shift, and a single-active-shift rule enforced in
@@ -40,18 +40,32 @@ The project is early. This section describes what exists, not what is intended.
   invalid coordinates, invalid or poor accuracy, cached stale fixes, duplicate and out-of-order
   timestamps, movement too small to be movement, and jumps too fast to be real. A rejected sample is
   dropped and capture continues.
-- Schema v2 with a lightweight migration from v1, covered by a test that opens a v1 store containing
-  shifts and checks they survive.
+- Capture continuity: every retained position records the uninterrupted stretch of capture it
+  belongs to, which is what lets mileage tell a recorded route apart from the gaps in it.
+- Recorded mileage: DashPilot derives a completed shift's distance from its retained route, summing
+  only what was captured continuously and excluding the distance across detected capture gaps. The
+  figure is derived from the stored route every time rather than saved as a second total, and a
+  shift's history row shows it as recorded — and as partial when the route is known not to cover the
+  whole shift.
+- Schema v3, with lightweight migrations from v1 and v2, covered by tests that open stores written
+  under each older version and check their shifts and positions survive.
 - `Money`, a `Decimal`-backed monetary type covering the app's arithmetic, rounding, rate division
   and formatting.
 - App shell that surfaces a store-open failure as a visible state instead of crashing.
 
 **Not implemented yet**
 
-Mileage, earnings entry, delivery records, wait-time measurement, maps, App Intents, Live Activities
-and recommendations. A shift records its start time, its end time and its route samples, and nothing
-else. Route samples are stored but not yet measured: no distance is calculated or displayed
-anywhere, and nothing draws a route. See `AGENTS.md` for the intended order of work.
+Earnings entry, delivery records, wait-time measurement, maps, App Intents, Live Activities and
+recommendations. A shift records its start time, its end time and its route, and its distance is
+measured from that route; nothing else is derived from it. No route is drawn anywhere, and no
+mileage is shown while a shift is still running. See `AGENTS.md` for the intended order of work.
+
+**Recorded mileage is what was recorded, not what was driven.** Capture is foreground-only, so a
+shift's route has a gap whenever DashPilot was not open. Distance across a gap is left out rather
+than guessed at with a straight line, which means the figure is normally lower than the miles
+actually driven, and a shift with known gaps is labelled a partial route. It is not a tax or
+deduction figure, no mileage is separated per delivery, and nothing here is calibrated against real
+driving yet.
 
 **Route capture is foreground only.** There is no background location mode, no Always authorization,
 no significant-location-change or region monitoring and no background task. When DashPilot is not in
@@ -69,6 +83,8 @@ paused. Background route continuity is a separate, later decision.
   name of the rule that rejected a sample — what the app is allowed to do and what the pipeline did,
   never where the device is.
 - A route sample belongs to exactly one shift and is deleted with it.
+- Mileage is calculated on device and never logged: distance is a trip metric, and the logs record
+  what the app did, not where the driver went or how far.
 - Sample data in tests, previews and documentation is synthetic.
 
 ## Architecture
