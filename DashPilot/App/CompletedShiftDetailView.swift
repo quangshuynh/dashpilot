@@ -536,11 +536,16 @@ private struct DeliveryHistoryRow: View {
     /// they recorded — and where they notice a place tapped onto the wrong card.
     @State private var isEditingPickupPlace = false
 
+    /// The place's own recorded history, reached from the delivery that names
+    /// it. This is a review surface: it is offered on a finished shift and
+    /// nowhere on a running one.
+    @State private var isShowingPickupHistory = false
+
     private var delivery: Delivery { numbered.delivery }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            // The recorded facts, read as one element. The control below is
+            // The recorded facts, read as one element. The controls below sit
             // deliberately outside it: a button folded into a combined element
             // is not reachable by VoiceOver.
             VStack(alignment: .leading, spacing: 4) {
@@ -580,22 +585,44 @@ private struct DeliveryHistoryRow: View {
             .accessibilityLabel(accessibilityLabel)
             .accessibilityIdentifier("shiftDetailDeliveryRow")
 
-            Button {
-                isEditingPickupPlace = true
-            } label: {
-                Label(
-                    numbered.pickupPlaceActionTitle(hasPlace: delivery.pickupPlace != nil),
-                    systemImage: delivery.pickupPlace == nil ? "plus.circle" : "pencil"
-                )
-                .font(.footnote)
+            HStack(spacing: 16) {
+                Button {
+                    isEditingPickupPlace = true
+                } label: {
+                    Label(
+                        numbered.pickupPlaceActionTitle(hasPlace: delivery.pickupPlace != nil),
+                        systemImage: delivery.pickupPlace == nil ? "plus.circle" : "pencil"
+                    )
+                    .font(.footnote)
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel(numbered.spokenPickupPlaceLabel(hasPlace: delivery.pickupPlace != nil))
+                .accessibilityIdentifier("shiftDetailPickupPlaceButton")
+
+                // Only where there is a place to have a history. A delivery
+                // that names none has nothing to group by, and offering the
+                // control anyway would suggest the app knows where it was.
+                if let place = delivery.pickupPlace {
+                    Button {
+                        isShowingPickupHistory = true
+                    } label: {
+                        Label("Pickup History", systemImage: "clock.arrow.circlepath")
+                            .font(.footnote)
+                    }
+                    .buttonStyle(.borderless)
+                    .accessibilityLabel("Recorded pickup waits at \(place.displayName)")
+                    .accessibilityIdentifier("shiftDetailPickupHistoryButton")
+                }
             }
-            .buttonStyle(.borderless)
-            .accessibilityLabel(numbered.spokenPickupPlaceLabel(hasPlace: delivery.pickupPlace != nil))
-            .accessibilityIdentifier("shiftDetailPickupPlaceButton")
         }
         .padding(.vertical, 2)
         .sheet(isPresented: $isEditingPickupPlace) {
             PickupPlaceEditor(numbered: numbered)
+        }
+        .sheet(isPresented: $isShowingPickupHistory) {
+            if let place = delivery.pickupPlace {
+                PickupPlaceHistoryView(place: place)
+            }
         }
     }
 
