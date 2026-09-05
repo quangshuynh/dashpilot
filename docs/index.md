@@ -36,9 +36,9 @@ flowchart LR
     E --> F[Review deliveries, mileage and rates]
 ```
 
-One shift runs at a time, and one delivery within it. While the shift runs and DashPilot is in the
-foreground, accepted positions are recorded against it, and one large control records each delivery
-event the driver taps. When the shift ends, the driver may type what it paid, and the completed
+One shift runs at a time, and as many deliveries within it as the driver is actually working. While
+the shift runs and DashPilot is in the foreground, accepted positions are recorded against it, and
+each delivery in progress gets its own large control offering only its own next step. When the shift ends, the driver may type what it paid, and the completed
 shift's detail screen states what each delivery recorded, the shift's recorded mileage, the shape of
 its route, and two derived rates together with the reason either one could not be derived.
 

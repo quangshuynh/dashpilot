@@ -33,9 +33,18 @@ and one they cannot.
   elapsed time; nothing derives active-versus-idle time, a per-delivery rate or an average wait.
 - **A recorded delivery cannot be edited or deleted individually.** A mis-tapped event stays as
   recorded, and only deleting the whole shift removes it.
-- **One delivery at a time.** A driver stacking two orders can record only one lifecycle, so the
-  second order's events are either merged into the first or not recorded at all.
-- **Ending a shift is blocked by a delivery in progress**, deliberately. It costs one extra tap.
+- **Overlapping deliveries are not aggregated.** Deliveries worked at the same time are recorded
+  separately with their own durations, and nothing turns their overlapping spans into a single
+  "active time" figure. A 30-minute delivery and a 25-minute one overlapping by 20 minutes is not 55
+  minutes of work, and DashPilot does not claim it is.
+- **Nothing analyses stacking.** DashPilot records that two deliveries overlapped. It does not know
+  they were offered together, does not group or pair them, and derives nothing from the fact that
+  they overlapped.
+- **Delivery numbers are local presentation.** `Delivery 1` and `Delivery 2` are counted from the
+  order the shift accepted them. They are not persisted, and they are not a delivery platform's
+  order numbers.
+- **Ending a shift is blocked while any delivery is in progress**, deliberately. It costs one extra
+  tap per unfinished delivery.
 
 ## Earnings and metrics
 

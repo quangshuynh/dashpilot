@@ -23,8 +23,10 @@ Derived, never stored:
 | `elapsed(asOf:)` | Elapsed seconds for a running shift, clamped at zero |
 | `recordedDistance(...)` | A `RouteDistance` measured from the retained route |
 | `grossEarnings` | The stored decimal as a `Money`, or `nil` |
-| `activeDelivery` | The delivery in this shift that is neither delivered nor cancelled |
-| `deliveriesInOrder` | This shift's deliveries sorted by acceptance |
+| `activeDeliveries` | This shift's deliveries that are neither delivered nor cancelled, in acceptance order |
+| `deliveriesInOrder` | This shift's deliveries sorted by acceptance, with identity breaking a tie |
+| `numberedDeliveries` | The same list paired with the local `Delivery 1`, `Delivery 2` labels |
+| `numberedActiveDeliveries` | The unfinished ones, keeping the numbers they have everywhere else |
 | `deliverySummary` | A `DeliverySummary` counting completed, cancelled and in-progress |
 
 `end(at:)` rejects ending a shift twice or ending it before it started. `setGrossEarnings(_:)`
@@ -66,12 +68,16 @@ Derived, never stored:
 | `lastEventAt` | The most recent recorded event, which the next one may not precede |
 | `pickupWait` | `pickedUpAt - arrivedAtPickupAt`, or `nil` if either end is missing |
 | `completedDuration` | `deliveredAt - acceptedAt`, or `nil` unless the delivery was delivered |
+| `acceptedBefore(_:_:)` | The total, repeatable order over deliveries: acceptance ascending, identity breaking a tie |
 
 `markArrivedAtPickup(at:)`, `markPickedUp(at:)` and `markDelivered(at:)` refuse a skipped step, a
 repeated event, a transition after a terminal state, and a timestamp earlier than the last recorded
 event. `cancel(at:)` is allowed from every active state. Nothing identifying a restaurant, a
-customer or an address is stored, and no amount is attributed to a delivery. See
-[Delivery lifecycle](../product/delivery-lifecycle.md).
+customer or an address is stored, and no amount is attributed to a delivery.
+
+A delivery is independent of every other delivery: it derives its state from its own timestamps
+alone, so several can be active at once with overlapping lifecycles, and nothing here records a
+relationship between them. See [Delivery lifecycle](../product/delivery-lifecycle.md).
 
 ## Schema versions
 
@@ -85,6 +91,11 @@ customer or an address is stored, and no amount is attributed to a delivery. See
 
 Every step so far is a lightweight stage, and none backfills a value. See
 [Migrations](../architecture/migrations.md).
+
+Version 5 is still current. Supporting several concurrent deliveries changed no persisted shape:
+`Shift.deliveries` was already a to-many relationship, so the store could always describe more than
+one unfinished delivery for a shift, and "at most one active delivery" was an application invariant
+rather than a constraint the database imposed. Removing it needed no migration.
 
 ## Domain value types
 
@@ -104,11 +115,14 @@ Every step so far is a lightweight stage, and none backfills a value. See
 | `LocationAuthorization` and its enums | Permission facts, condition precedence and recovery |
 | `ShiftLifecycleError` | Refused start, end and delete transitions |
 | `DeliveryState`, `DeliveryAction` | The five lifecycle states, the one action each offers next, and the wording |
-| `DeliverySummary` | How many deliveries a shift recorded and how they ended |
+| `DeliverySummary` | How many deliveries a shift recorded, how they ended, and how many are in progress |
+| `NumberedDelivery` | A delivery with the local number the interface labels it with. Presentation only, never persisted |
 | `DeliveryError`, `DeliveryLifecycleError` | Refused delivery transitions, and why |
 
 ## What is not in the store
 
 Durations, distances, rates, route quality wording and capture state are all computed when they are
-needed. A delivery's state is derived the same way. The store holds timestamps, positions and one optional
+needed. A delivery's state is derived the same way, and so is the `Delivery 1` / `Delivery 2`
+numbering the interface shows for concurrent deliveries — it is counted from the acceptance
+timestamps rather than stored beside them. The store holds timestamps, positions and one optional
 amount, and nothing that could disagree with them.
