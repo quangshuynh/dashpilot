@@ -130,6 +130,38 @@ struct RouteQualityTests {
         #expect(quality.inferredContinuityExplanation == nil)
     }
 
+    @Test("A shift with no route at all is not described as a partial one")
+    func noRouteIsNotAPartialRoute() {
+        // A completed shift with nothing usable counts its whole window as
+        // uncovered, so `RouteDistance.isPartial` is true. "No route recorded,
+        // partial route" would describe a route missing pieces, when what
+        // happened is that there is no route.
+        let quality = RouteQuality(
+            RouteDistance(
+                metres: 0,
+                segmentCount: 0,
+                gapCount: 2,
+                usableSampleCount: 0,
+                usesInferredContinuity: false
+            )
+        )
+
+        #expect(quality.partialMarker == nil)
+        #expect(quality.partialExplanation == nil)
+        #expect(quality.mileageStatement(locale: locale) == "No route recorded")
+        #expect(quality.spokenMileageStatement(locale: locale) == "No route recorded")
+        // What did happen is still stated.
+        #expect(quality.unmeasurableExplanation != nil)
+    }
+
+    @Test("Positions that could not be measured are not described as a partial route either")
+    func unmeasurableRouteIsNotAPartialRoute() {
+        let quality = route(miles: 0, segmentCount: 0, gapCount: 3, usableSampleCount: 4)
+
+        #expect(quality.partialMarker == nil)
+        #expect(quality.partialExplanation == nil)
+    }
+
     @Test("A legacy route whose continuity was only inferred is partial and says why")
     func inferredContinuity() {
         let quality = route(miles: 4.5, gapCount: 0, usesInferredContinuity: true)
@@ -145,6 +177,14 @@ struct RouteQualityTests {
         let spoken = route(miles: 4.5).spokenMileageStatement(locale: locale)
 
         #expect(spoken == "4.5 miles recorded")
+    }
+
+    @Test("The bare spoken figure carries no caveat, so a screen showing them cannot say each twice")
+    func spokenMileageOmitsCaveats() {
+        let quality = route(miles: 4.5, gapCount: 2)
+
+        #expect(quality.spokenMileage(locale: locale) == "4.5 miles recorded")
+        #expect(quality.spokenMileageStatement(locale: locale).contains("Partial route"))
     }
 
     @Test("The spoken mileage carries partiality as a claim, not as a two-word marker")

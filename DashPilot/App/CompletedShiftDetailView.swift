@@ -177,8 +177,11 @@ struct CompletedShiftDetailView: View {
                     }
                 }
                 .accessibilityElement(children: .combine)
+                // The bare spoken figure, because every caveat that qualifies it
+                // is already read out below it — the compact history row is the
+                // one that has to fold them into the mileage phrase.
                 .accessibilityLabel(
-                    ([quality.spokenMileageStatement(locale: locale)] + routeCaveats(of: quality))
+                    ([quality.spokenMileage(locale: locale)] + routeCaveats(of: quality))
                         .joined(separator: ". ")
                 )
                 .accessibilityIdentifier("shiftDetailRecordedMileage")
@@ -321,12 +324,12 @@ struct CompletedShiftDetailView: View {
     /// and a count is a fact about the shift rather than a location.
     private var deletionWarning: String {
         let sampleCount = shift.routeSamples.count
-        let route = switch sampleCount {
-        case 0: "This shift recorded no route positions."
-        case 1: "The 1 route position recorded during it is deleted with it."
-        default: "The \(sampleCount) route positions recorded during it are deleted with it."
+        let deleted = switch sampleCount {
+        case 0: "the amount recorded on it. It recorded no route positions"
+        case 1: "the 1 route position recorded during it, and the amount recorded on it"
+        default: "the \(sampleCount) route positions recorded during it, and the amount recorded on it"
         }
-        return "\(route) Deleting a shift also deletes the earnings recorded on it. This cannot be undone."
+        return "Deleting this shift also deletes \(deleted). This cannot be undone."
     }
 
     private var isShowingDeletionError: Binding<Bool> {
