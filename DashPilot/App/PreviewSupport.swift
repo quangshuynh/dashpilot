@@ -15,7 +15,17 @@ enum PreviewSupport {
         referenceDate: Date = Date(timeIntervalSince1970: 1_756_000_000),
         includingActiveShift: Bool = true
     ) -> ModelContainer {
-        let container = emptyContainer()
+        // Previews cannot meaningfully recover from a container failure.
+        try! seededHistoryContainer(referenceDate: referenceDate, includingActiveShift: includingActiveShift)
+    }
+
+    /// The same synthetic history, built through a throwing call so a UI test
+    /// launch can report a store failure rather than trapping inside it.
+    static func seededHistoryContainer(
+        referenceDate: Date = Date(timeIntervalSince1970: 1_756_000_000),
+        includingActiveShift: Bool = true
+    ) throws -> ModelContainer {
+        let container = try ModelContainerFactory.makeInMemoryContainer()
         let context = ModelContext(container)
 
         let completed = Shift(startedAt: referenceDate.addingTimeInterval(-4 * 3600))
@@ -49,6 +59,34 @@ enum PreviewSupport {
         try? context.save()
 
         return container
+    }
+
+    /// Derived metrics over invented inputs, for previewing the rates line
+    /// without building a shift and a route to hang them from.
+    ///
+    /// `miles` of `nil` is a shift with nothing measurable in its route, which
+    /// is the state that must not turn into a rate of zero.
+    static func metrics(
+        grossEarnings: Money?,
+        elapsedDuration: TimeInterval?,
+        miles: Double?,
+        isPartial: Bool
+    ) -> ShiftMetrics {
+        let recordedDistance = miles.map { miles in
+            RouteDistance(
+                metres: Measurement(value: miles, unit: UnitLength.miles).converted(to: .meters).value,
+                segmentCount: 1,
+                gapCount: isPartial ? 1 : 0,
+                usableSampleCount: 40,
+                usesInferredContinuity: false
+            )
+        } ?? .none
+
+        return ShiftMetricsCalculator().metrics(
+            grossEarnings: grossEarnings,
+            elapsedDuration: elapsedDuration,
+            recordedDistance: recordedDistance
+        )
     }
 
     /// A short made-up route: two capture sessions with a gap between them.

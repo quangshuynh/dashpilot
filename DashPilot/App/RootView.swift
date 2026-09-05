@@ -249,6 +249,9 @@ private struct CompletedShiftRow: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
+                if let metrics {
+                    ShiftRatesLabel(metrics: metrics)
+                }
             }
             // One element so VoiceOver reads the shift as a shift, rather than
             // four unrelated fragments. The button below stays separate,
@@ -295,9 +298,9 @@ private struct CompletedShiftRow: View {
         }
     }
 
-    /// The amount, and only the amount. No rate: what a shift paid per hour or
-    /// per recorded mile is a separate calculation that has not been built, and
-    /// a figure sitting next to a duration and a distance must not imply one.
+    /// The amount, and only the amount. The rates derived from it are a
+    /// separate line, in a smaller style, so the figure the driver actually
+    /// recorded is never confused with the ones DashPilot worked out.
     @ViewBuilder
     private var recordedEarnings: some View {
         if let earnings = shift.grossEarnings {
@@ -305,6 +308,19 @@ private struct CompletedShiftRow: View {
                 .font(.headline)
                 .monospacedDigit()
         }
+    }
+
+    /// The rates this shift can support, derived from the amount recorded on it
+    /// and the distance measured above.
+    ///
+    /// Deriving them here rather than in `.task` is deliberate: the expensive
+    /// part is measuring the route, which happens once, and the rates are two
+    /// divisions over the result. Recomputing them with the body is what keeps
+    /// them correct the moment the driver adds, changes or removes an amount.
+    /// Nothing is calculated in this view — ``ShiftMetricsCalculator`` owns
+    /// every rule, including which rates exist at all.
+    private var metrics: ShiftMetrics? {
+        recordedDistance.map { shift.metrics(for: $0) }
     }
 
     /// What the route can honestly be said to show.
