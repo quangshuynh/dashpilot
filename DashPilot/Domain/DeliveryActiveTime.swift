@@ -87,4 +87,28 @@ nonisolated struct DeliveryActiveTime: Equatable, Sendable {
     /// own durations, so a caller can say so rather than leaving a driver to
     /// wonder why the numbers do not add up.
     var hasOverlappingDeliveries: Bool { mergedIntervalCount < countedIntervalCount }
+
+    /// The part of `elapsedDuration` no recorded delivery was active for, or
+    /// `nil` when there is nothing to subtract from or nothing measured to
+    /// subtract.
+    ///
+    /// **Not idle time.** DashPilot has no idea what happened in it, and it
+    /// routinely holds real work: waiting for an offer, repositioning, a break,
+    /// a delivery the driver did not record, and every stretch the app was
+    /// simply not told about. It is named for what it is — the part of the shift
+    /// no recorded delivery covers — and nothing derives a judgement from it.
+    ///
+    /// Clamped at zero. Clipping the intervals to the shift already makes active
+    /// time no greater than elapsed time, so a negative result is unreachable;
+    /// it is clamped for the same reason ``Shift`` clamps its own durations,
+    /// because anomalous stored rows must not put a negative duration on a
+    /// driver's screen.
+    ///
+    /// It lives here rather than only on ``ShiftMetrics`` so the completed-shift
+    /// screen can state the two durations without first measuring a route it
+    /// does not need for them, and so both callers subtract by the same rule.
+    func nonDeliveryDuration(inElapsed elapsedDuration: TimeInterval?) -> TimeInterval? {
+        guard let elapsedDuration, isAvailable else { return nil }
+        return max(0, elapsedDuration - duration)
+    }
 }

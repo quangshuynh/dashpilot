@@ -8,7 +8,7 @@ import Foundation
 /// so are "nothing was recorded of the route" and "the route was recorded and
 /// measured zero metres". Collapsing any pair of these into one would let the
 /// interface say something the data does not support.
-nonisolated enum ShiftRateUnavailability: Equatable, Sendable {
+nonisolated enum ShiftRateUnavailability: CaseIterable, Equatable, Sendable {
     /// The shift is still running. Finalised rates describe finished shifts.
     case shiftNotCompleted
     /// The driver has not recorded what the shift paid. Not the same as `$0.00`.
@@ -103,7 +103,7 @@ nonisolated enum ShiftRate: Equatable, Sendable {
 /// question the store can already answer, and it would keep the old answer after
 /// the calculation improved. See ``ShiftMetricsCalculator``.
 ///
-/// Both rates are **gross**. The numerator is the figure the driver recorded for
+/// Every rate is **gross**. The numerator is the figure the driver recorded for
 /// the shift, with no expenses, fuel, wear or tax subtracted, and nothing is
 /// imported from a delivery platform.
 ///
@@ -117,9 +117,10 @@ nonisolated struct ShiftMetrics: Equatable, Sendable {
 
     /// The shift's elapsed wall-clock duration, or `nil` while it is running.
     ///
-    /// Elapsed, not worked: DashPilot does not know how much of a shift was
-    /// spent on a delivery, so this is the whole time between starting and
-    /// ending the shift, waiting and idling included.
+    /// Elapsed, not worked: this is the whole time between starting and ending
+    /// the shift, waiting and repositioning included. ``deliveryActiveTime``
+    /// says how much of it a recorded delivery was open for, which is a
+    /// different and much narrower claim.
     let elapsedDuration: TimeInterval?
 
     /// What the shift's retained route measured, including how much of the
@@ -172,21 +173,10 @@ nonisolated struct ShiftMetrics: Equatable, Sendable {
 
     /// The shift's elapsed time that no recorded delivery was active for, or
     /// `nil` when there is nothing to subtract from or nothing measured to
-    /// subtract.
-    ///
-    /// **Not idle time.** DashPilot has no idea what happened in it, and it
-    /// routinely holds real work: waiting for an offer, repositioning, a break,
-    /// a delivery the driver did not record, and every stretch the app was
-    /// simply not told about. It is named for what it is — the part of the shift
-    /// no recorded delivery covers — and nothing derives a judgement from it.
-    ///
-    /// Clamped at zero. Clipping the intervals to the shift already makes active
-    /// time no greater than elapsed time, so a negative result is unreachable;
-    /// it is clamped for the same reason ``Shift`` clamps its own durations,
-    /// because anomalous stored rows must not put a negative duration on a
-    /// driver's screen.
+    /// subtract. **Not idle time** — see
+    /// ``DeliveryActiveTime/nonDeliveryDuration(inElapsed:)``, which is the one
+    /// place the subtraction is defined.
     var nonDeliveryDuration: TimeInterval? {
-        guard let elapsedDuration, deliveryActiveTime.isAvailable else { return nil }
-        return max(0, elapsedDuration - deliveryActiveTime.duration)
+        deliveryActiveTime.nonDeliveryDuration(inElapsed: elapsedDuration)
     }
 }

@@ -13,7 +13,7 @@ import SwiftUI
 /// row is the wrong place to tell them.
 ///
 /// It is a summary, not a dashboard. No chart, no map, no gauge and no score:
-/// the shift's own recorded facts, the two rates derived from them, the log of
+/// the shift's own recorded facts, the three rates derived from them, the log of
 /// deliveries recorded during it, and the two destructive-ish actions that
 /// belong to a finished shift — editing what it paid, and deleting it.
 ///
@@ -115,14 +115,96 @@ struct CompletedShiftDetailView: View {
                 }
             }
             if let duration = shift.completedDuration {
-                LabeledContent("Elapsed") {
-                    Text(Self.durationText(duration)).monospacedDigit()
+                durationRow(
+                    "Elapsed",
+                    spokenAs: "elapsed shift time",
+                    duration: duration,
+                    identifier: "shiftDetailDuration"
+                )
+            }
+
+            // Both are absent rather than zero when the shift recorded no
+            // deliveries: a shift nobody recorded a delivery on is not a shift
+            // that spent no time on deliveries, and the screen must not say it
+            // was.
+            if deliveryActiveTime.isAvailable {
+                durationRow(
+                    "Delivery active",
+                    spokenAs: "delivery active time",
+                    duration: deliveryActiveTime.duration,
+                    identifier: "shiftDetailDeliveryActiveTime"
+                )
+
+                if let nonDelivery = deliveryActiveTime.nonDeliveryDuration(inElapsed: shift.completedDuration) {
+                    durationRow(
+                        "Non-delivery",
+                        spokenAs: "non-delivery time",
+                        duration: nonDelivery,
+                        identifier: "shiftDetailNonDeliveryTime"
+                    )
                 }
-                .accessibilityIdentifier("shiftDetailDuration")
             }
         } header: {
             Text("Shift")
+        } footer: {
+            Text(deliveryTimeExplanation)
         }
+    }
+
+    /// What the two derived durations mean, and what neither of them claims.
+    ///
+    /// The overlap sentence appears only when this shift actually has overlap,
+    /// because it explains a discrepancy a driver can otherwise see — the
+    /// delivery list adding up to more than the figure above it — and stating it
+    /// for a shift with no stacked work would explain nothing.
+    private var deliveryTimeExplanation: String {
+        guard deliveryActiveTime.isAvailable else {
+            return """
+            Elapsed time is the whole shift, from starting it to ending it.
+            """
+        }
+
+        var sentences = [
+            """
+            Delivery active time is the part of the shift at least one recorded delivery was open \
+            for, from accepting it until you marked it delivered or cancelled.
+            """
+        ]
+        if deliveryActiveTime.hasOverlappingDeliveries {
+            sentences.append(
+                """
+                Deliveries you worked at the same time are counted once, so this is less than their \
+                durations added together.
+                """
+            )
+        }
+        sentences.append(
+            """
+            Non-delivery time is the rest of the shift. It is not idle time: it includes waiting for \
+            an offer, repositioning, breaks, and any work you did not record. DashPilot does not know \
+            what you were doing during either.
+            """
+        )
+        return sentences.joined(separator: " ")
+    }
+
+    /// One duration, printed short and spoken in full.
+    ///
+    /// The visible label is short because three of these sit under one heading;
+    /// `spokenAs` is what VoiceOver hears, where "Elapsed, 3 hr" would leave the
+    /// three figures told apart by one word each and read the units wrong.
+    private func durationRow(
+        _ title: String,
+        spokenAs spokenTitle: String,
+        duration: TimeInterval,
+        identifier: String
+    ) -> some View {
+        LabeledContent(title) {
+            Text(Self.durationText(duration)).monospacedDigit()
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(Self.durationText(duration, width: .wide)) \(spokenTitle)")
+        .accessibilityIdentifier(identifier)
     }
 
     // MARK: Earnings
@@ -240,6 +322,12 @@ struct CompletedShiftDetailView: View {
                     identifier: "shiftDetailHourlyRate"
                 )
                 rateRow(
+                    "Per active delivery hour",
+                    spokenAs: "gross earnings per delivery active hour",
+                    rate: metrics.grossPerDeliveryActiveHour,
+                    identifier: "shiftDetailActiveHourlyRate"
+                )
+                rateRow(
                     "Per recorded mile",
                     spokenAs: "gross earnings per recorded mile",
                     rate: metrics.grossPerRecordedMile,
@@ -254,11 +342,13 @@ struct CompletedShiftDetailView: View {
         } footer: {
             Text(
                 """
-                Both figures are gross: nothing for fuel, wear, insurance or tax is subtracted \
-                anywhere in DashPilot. The hourly figure divides by the shift's whole elapsed time, \
-                waiting and idling included, because that is the only duration DashPilot knows. The \
-                per-mile figure divides by recorded miles, which are normally fewer than the miles \
-                driven — so it is normally higher than earnings per mile driven.
+                Every figure here is gross: nothing for fuel, wear, insurance or tax is subtracted \
+                anywhere in DashPilot. Per shift hour divides by the whole elapsed shift, waiting \
+                and repositioning included. Per active delivery hour divides by the time a recorded \
+                delivery was open, counting deliveries you worked at once only once — it is not a \
+                wage, and it says nothing about what you were doing in that time. Per recorded mile \
+                divides by recorded miles, which are normally fewer than the miles driven, so it is \
+                normally higher than earnings per mile driven.
                 """
             )
         }
@@ -323,8 +413,9 @@ struct CompletedShiftDetailView: View {
     /// Deliveries worked at the same time appear here with overlapping times,
     /// which is what stacked work looks like rather than a fault in the record.
     /// They are listed in the order they were accepted, and each one's intervals
-    /// are its own: nothing on this screen adds two overlapping deliveries
-    /// together.
+    /// are its own. Nothing here is summed across deliveries: the one figure
+    /// that spans them is the shift section's delivery active time, which unions
+    /// their intervals rather than adding their durations.
     private var deliveriesSection: some View {
         Section {
             let summary = shift.deliverySummary
@@ -348,8 +439,9 @@ struct CompletedShiftDetailView: View {
                 Every time below was recorded because you tapped a control during the shift. \
                 DashPilot is not connected to any delivery platform and detects nothing on its own, \
                 so a delivery you did not record is not here. Deliveries you worked at the same time \
-                overlap in this list, and their durations are not added together. No amount is \
-                attributed to an individual delivery.
+                overlap in this list, and their durations are never added together — the shift's \
+                delivery active time counts shared minutes once. No amount is attributed to an \
+                individual delivery.
                 """
             )
         }
@@ -412,6 +504,16 @@ struct CompletedShiftDetailView: View {
         recordedDistance.map(RouteQuality.init)
     }
 
+    /// How much of this shift a recorded delivery was active for.
+    ///
+    /// Derived here rather than held in state, unlike the route: it unions a
+    /// handful of timestamps where the route walks thousands of positions, so it
+    /// costs nothing to recompute and the shift section can state it without
+    /// waiting for the measurement the performance section needs.
+    private var deliveryActiveTime: DeliveryActiveTime {
+        shift.deliveryActiveTime()
+    }
+
     /// Derived from the distance measured once above, exactly as the history row
     /// does it: ``ShiftMetricsCalculator`` owns every rule, including which rates
     /// exist at all, and this screen only decides how to say so.
@@ -421,11 +523,19 @@ struct CompletedShiftDetailView: View {
 
     /// A shift ended moments after it started should read in seconds rather than
     /// as `0 min`.
-    static func durationText(_ duration: TimeInterval) -> String {
+    ///
+    /// `width` exists for VoiceOver, for the reason ``RouteDistance`` takes one:
+    /// `hr` reads well and hears badly, so a spoken description asks for `.wide`
+    /// and gets "1 hour, 5 minutes" from the same units and the same rule.
+    /// Nothing rewrites the abbreviated string into words.
+    static func durationText(
+        _ duration: TimeInterval,
+        width: Duration.UnitsFormatStyle.UnitWidth = .abbreviated
+    ) -> String {
         let units: Set<Duration.UnitsFormatStyle.Unit> = duration < 60
             ? [.minutes, .seconds]
             : [.hours, .minutes]
-        return Duration.seconds(duration).formatted(.units(allowed: units, width: .abbreviated))
+        return Duration.seconds(duration).formatted(.units(allowed: units, width: width))
     }
 }
 
