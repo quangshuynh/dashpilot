@@ -49,10 +49,19 @@ since v5. A shift's route and its deliveries describe that shift and nothing els
 shift takes both with it. The orphans would otherwise be exactly the sensitive rows the app promises
 to keep accountable to a shift.
 
-When a driver deletes a completed shift, both go through these existing rules rather than through a
-loop in the service. Tests assert that the deleted shift's positions and deliveries are gone, that
-another shift's rows and recorded amount are untouched, that no delivery is left without a shift,
-and that a refused delete changes nothing at all.
+`Delivery.pickupPlace`, added in v6, deliberately does **not** cascade, in either direction. A pickup
+place is shared between deliveries and between shifts, so deleting a delivery — or the shift that
+cascades to it — must leave the place standing for everything else that still names it, and deleting
+a place must never take deliveries with it. The inverse `PickupPlace.deliveries` nullifies. A place
+left referenced by nothing is kept rather than collected: it stops being *recent*, and typing the
+name again finds it. Deleting a driver's own vocabulary as a side effect of deleting a shift would
+widen the one operation this project keeps deliberately narrow.
+
+When a driver deletes a completed shift, all of this goes through the existing rules rather than
+through a loop in the service. Tests assert that the deleted shift's positions and deliveries are
+gone, that another shift's rows and recorded amount are untouched, that no delivery is left without a
+shift, that a pickup place another delivery still names survives, and that a refused delete changes
+nothing at all.
 
 ## Earnings are stored as a decimal
 
