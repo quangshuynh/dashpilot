@@ -24,6 +24,11 @@ enum PreviewSupport {
         let earlier = Shift(startedAt: referenceDate.addingTimeInterval(-30 * 3600))
         try? earlier.end(at: referenceDate.addingTimeInterval(-25 * 3600))
 
+        // One shift with an amount recorded and one without, so both the
+        // recorded figure and the "Add Earnings" affordance are visible. The
+        // amount is invented for the preview, like every other value here.
+        try? completed.setGrossEarnings(Money(minorUnits: 8625))
+
         var shifts = [completed, earlier]
         if includingActiveShift {
             shifts.append(Shift(startedAt: referenceDate.addingTimeInterval(-1800)))
@@ -118,6 +123,20 @@ enum PreviewSupport {
             .modelContainer(container)
             .environment(authorization)
             .environment(routeCapture)
+    }
+
+    /// The earnings editor over a synthetic completed shift.
+    @MainActor
+    static func earningsEditor(withRecordedEarnings: Bool) -> some View {
+        let container = emptyContainer()
+        let shift = Shift(startedAt: Date(timeIntervalSince1970: 1_756_000_000))
+        try? shift.end(at: Date(timeIntervalSince1970: 1_756_000_000 + 4 * 3600))
+        if withRecordedEarnings {
+            try? shift.setGrossEarnings(Money(minorUnits: 8625))
+        }
+        container.mainContext.insert(shift)
+
+        return ShiftEarningsEditor(shift: shift).modelContainer(container)
     }
 }
 #endif

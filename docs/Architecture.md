@@ -41,9 +41,10 @@ the shipping store, so a schema mistake fails in tests rather than only on devic
 | 1.0.0 | `Shift` only: id, start, optional end |
 | 2.0.0 | adds `RouteSample`, and a `Shift.routeSamples` relationship |
 | 3.0.0 | adds `RouteSample.captureSessionID`, an optional marker of capture continuity |
+| 4.0.0 | adds `Shift.grossEarningsAmount`, an optional `Decimal` holding manually entered earnings |
 
-`DashPilotSchemaV1` and `DashPilotSchemaV2` hold frozen copies of their models rather than reusing
-the file-scope types, which have moved on. The plan then describes where a store is coming from as
+`DashPilotSchemaV1`, `DashPilotSchemaV2` and `DashPilotSchemaV3` hold frozen copies of their models
+rather than reusing the file-scope types, which have moved on. The plan then describes where a store is coming from as
 truthfully as where it is going; the copies are never used at runtime outside migration.
 
 **V1 → V2 is a lightweight stage.** The change is purely additive — a new entity and a new empty
@@ -60,6 +61,13 @@ into invented sessions would produce exactly what the attribute exists to preven
 as a continuous stretch of driving. Migrated samples keep `nil`, and the mileage calculation treats
 their continuity as inferred rather than proven.
 
+**V3 → V4 is a lightweight stage as well.** One new optional attribute on `Shift`. Nothing is
+backfilled, and the distinction is the whole point: a v3 store records no earnings at all, which is
+not the same statement as "these shifts paid nothing". Writing `0` into every existing shift would
+turn the absence of a figure into a claim about every shift a driver has ever recorded, and there
+would be no way afterwards to tell a fabricated zero from one they typed. Migrated shifts keep
+`nil`, and the interface offers to add an amount rather than showing one.
+
 `ModelContainerFactory.makeContainer(versionedSchema:at:)` is a test seam that opens a store under a
 historical version without the plan, so a test can write a store shaped the way an older build would
 have left it and then open it normally. That is how "a v1 store keeps its shifts" is proven rather
@@ -72,6 +80,86 @@ drifts. `Money` wraps `Decimal`, stores amounts unrounded, and rounds only when 
 Division returns an optional because a zero divisor is a normal state for rate calculations — a
 shift may have no elapsed time or no recorded distance — and the app must show "no rate" rather than
 invent one.
+
+`Money.formatted(currencyCode:locale:)` is the only place a monetary string is built. No view
+assembles one from a symbol and a number, and no view configures a formatter. It rounds to
+`displayScale` there and only there, which is what keeps rounding a *display* decision: the store
+holds what the driver typed, exactly.
+
+The currency is one fixed code (`Money.displayCurrencyCode`, `"USD"`), not the device locale's.
+Nothing in the app converts between currencies or records which currency an amount was earned in, so
+reading the currency from the locale would relabel a US driver's earnings as euros the moment they
+set their phone to another region. Locale still decides how the amount is *written* — symbol
+placement, separators — it just does not decide what the money is.
+
+### Reading what a driver types
+
+`MoneyInput` is the locale-aware layer `Money(exact:)` deliberately is not: `Money(exact:)` reads one
+canonical form for fixtures and stored values, while a driver types whatever their keyboard offers.
+
+Nothing in it reinterprets input to make it work, which is the reason it exists at all.
+`Decimal(string:)` stops at the first character it cannot read, so `"12abc"` would silently become
+`12` and `"1.2.3"` would become `1.2`. Every candidate is therefore validated in full — a currency
+symbol and surrounding whitespace removed, then digits, one decimal separator, and grouping
+separators only in positions this locale actually writes them — before any number is built from it.
+Internal whitespace is rewritten as the grouping separator rather than deleted, because several
+locales group thousands with a space; deleting it would read `"125 50"` as twelve thousand.
+
+The rejections are separate cases because each is a different sentence the interface has to say:
+nothing entered, not a number, more precision than the currency has, negative, or beyond the bound.
+
+- **More than two fraction digits is refused, not rounded.** Rounding at the point of entry would
+  store a number the driver did not type. Rounding belongs to display.
+- **Negative is refused.** Gross earnings are what a shift paid; a shift that cost money is an
+  expense, and expenses are not recorded anywhere yet. Zero is allowed, and meaningful.
+- **`MoneyInput.maximumAmount` (1,000,000) is a guard against pathological input** — a pasted page of
+  digits, a stuck key — not a judgement about what a driver can earn. `Decimal` holds 38 significant
+  digits, so without a bound a shift could store an amount no formatting in the app is meaningful
+  for. It is checked in one place and documented so it can be raised if it is ever wrong.
+
+## Shift earnings
+
+A completed shift may hold one optional gross earnings amount: the figure the driver chose to
+associate with it, and nothing more. DashPilot does not know whether it includes tips, bonuses,
+promotions, adjustments or reimbursements, and nothing is imported from a delivery platform, so the
+word throughout the code and the interface is *gross earnings* — never profit, take-home, net or
+taxable income.
+
+**Stored as a `Decimal`, not as a `Money` and not as a `Double`.** SwiftData persists a `Decimal` as
+a decimal attribute, so the exact amount survives a round trip with no binary floating point in the
+store and no second monetary type in the app. `Shift.grossEarningsAmount` is private; `grossEarnings`
+and `setGrossEarnings(_:)` are the conversion, in one place, and the rest of the app only ever holds
+a `Money`.
+
+**`nil` and zero are different facts**, everywhere — in the model, in migration, in the row and in
+the editor. `nil` means the driver has not recorded what the shift paid; `0` means they recorded that
+it paid nothing. Nothing collapses one into the other, which is why removing an amount is its own
+operation (`clearGrossEarnings()`) rather than an empty text field that ambiguously means both
+"invalid" and "delete".
+
+Two invariants live on the model rather than in a view, so no screen, test or later caller can set an
+amount the app would refuse to display: earnings can be recorded only on a **completed** shift, and
+never **negative**. `ShiftService` adds the store write and the same rollback rule the lifecycle
+transitions use, so an amount can never be showing in the interface while the store holds something
+else.
+
+### What is shown, and when
+
+Earnings appear on completed shifts in history only. A running shift offers nothing to type into —
+typing is a task for a parked car, and the model refuses it as well, because a screen that is merely
+never presented is not a rule. The history row shows the amount and one button, `Add Earnings` or
+`Edit Earnings`; a sheet holds the field, Cancel and Save.
+
+Editing is a **draft**. The typed text is view state and the store is written once, on Save or
+Remove — nothing is written per keystroke, and Cancel leaves the recorded amount exactly as it was.
+A refused amount keeps the sheet open with what was typed and says which rule it broke, rather than
+discarding the driver's work.
+
+No rate is shown anywhere. What a shift paid per hour or per recorded mile is a separate calculation
+that has not been built, and a figure next to a duration and a distance must not imply one.
+
+Logging follows the project's rule: `AppLog.earnings` records that an amount was added, updated or
+removed, or that a save failed. The amount never reaches a logger.
 
 ## Shift model
 
@@ -441,6 +529,12 @@ Mileage is not logged at all. The calculation reads coordinates and produces a t
 neither belongs in a log: there is no failure it can report — an unmeasurable route is a normal
 result, shown to the driver — so a log line would only record how far somebody drove.
 
+The `earnings` category records that an amount was added, updated or removed, and that a save
+failed. It never records the amount. There is no diagnostic value in the figure — every failure it
+can report is about the store or the rule that refused the entry, not about the number — and what a
+driver earns is exactly the kind of value this project keeps out of the logs. The word naming the
+operation is a `StaticString` chosen in code, so it cannot accidentally become the value.
+
 The `route-capture` category does read positions, so its rule is explicit: it logs when capture
 starts and stops, why it could not start, how many samples were retained, how many were persisted,
 and the *name of the rule* that rejected a candidate — `RouteSampleRejection`'s raw value, never the
@@ -452,7 +546,7 @@ asserts that every rejection reason is a plain rule name.
 The project builds with `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`, so views and view state are
 main-actor isolated without annotation. Domain types (`Money`, `Shift`, `RouteSample`,
 `LocationSample`, `RoutePoint`, `RouteSampleFilter`, `RouteCaptureState`, `RouteDistance`,
-`RouteMileageCalculator`, `GeographicDistance`, the error enums) and infrastructure
+`RouteMileageCalculator`, `GeographicDistance`, `MoneyInput`, the error enums) and infrastructure
 (`AppLog`, `ModelContainerFactory`, `LaunchArgument`) are
 explicitly `nonisolated`: they carry no UI state, they are used from tests that are not main-actor
 bound, and background persistence work will need them off the main actor. `ShiftService` is
@@ -489,3 +583,9 @@ tapped system alert. It also counts permission requests, which is how "asks exac
 when the prompt can be shown" is verified. The UI test asserts only that the panel is on screen;
 which state it displays depends on the device, and no test drives the system alert, because
 automating it would be brittle and would change the permission state other tests run against.
+
+`MoneyInput` takes its `Locale`, and the editor passes the environment's, so every parsing and
+formatting test states the locale it is asserting about instead of inheriting whichever region the
+machine running the suite happens to be set to. The suites cover a period locale and a comma locale
+side by side, which is how "a separator this locale never writes is refused rather than
+reinterpreted" is proven rather than assumed.

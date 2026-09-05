@@ -38,6 +38,10 @@ nonisolated extension ShiftLifecycleError: LocalizedError {
             "A shift is already in progress. End it before starting another one."
         case .noActiveShift:
             "There is no shift in progress to end."
+        case .invalidTransition(.shiftNotCompleted):
+            "Earnings can be recorded once the shift has ended."
+        case .invalidTransition(.negativeEarnings):
+            "Gross earnings cannot be negative."
         case .invalidTransition:
             "That change could not be applied to the shift."
         case .storeUnavailable:
@@ -46,7 +50,8 @@ nonisolated extension ShiftLifecycleError: LocalizedError {
     }
 }
 
-/// Start and end transitions for the driver's shift.
+/// Start and end transitions for the driver's shift, and the recorded amounts
+/// that hang from a finished one.
 ///
 /// The service owns one invariant: **at most one shift may be unfinished at a
 /// time**. It is enforced here, against the store, rather than by whether a
@@ -165,4 +170,61 @@ struct ShiftService {
         AppLog.shift.info("Shift ended")
         return shift
     }
+
+    // MARK: Earnings
+
+    /// Records what a completed shift paid, replacing any amount already stored.
+    ///
+    /// The model enforces the invariants (completed only, never negative); this
+    /// adds the store write and the same rollback rule the lifecycle
+    /// transitions use, so an amount can never be showing in the interface
+    /// while the store holds something else.
+    ///
+    /// - Throws: ``ShiftLifecycleError/invalidTransition(_:)`` if the shift or
+    ///   the amount is not one earnings can be recorded against, or
+    ///   ``ShiftLifecycleError/storeUnavailable(underlying:)`` if the write fails.
+    func setGrossEarnings(_ earnings: Money, on shift: Shift) throws {
+        // Read before the write, so the log can say what happened without ever
+        // holding the amount that happened to it.
+        let isFirstAmount = shift.grossEarnings == nil
+
+        do {
+            try shift.setGrossEarnings(earnings)
+        } catch let error as ShiftError {
+            AppLog.earnings.error("Shift rejected recorded earnings: \(String(describing: error), privacy: .public)")
+            throw ShiftLifecycleError.invalidTransition(error)
+        }
+
+        try save(describing: isFirstAmount ? "add" : "update")
+        AppLog.earnings.info("Shift earnings \(isFirstAmount ? "recorded" : "updated", privacy: .public)")
+    }
+
+    /// Removes a shift's recorded earnings, returning it to having none.
+    ///
+    /// Distinct from recording zero: afterwards the shift is a shift with no
+    /// amount entered, which is what it was before the driver typed one.
+    ///
+    /// - Throws: ``ShiftLifecycleError/storeUnavailable(underlying:)`` if the write fails.
+    func clearGrossEarnings(on shift: Shift) throws {
+        shift.clearGrossEarnings()
+        try save(describing: "remove")
+        AppLog.earnings.info("Shift earnings removed")
+    }
+
+    /// Saves, and rolls back if the store refuses.
+    ///
+    /// `operation` is a fixed word naming what was attempted. It is written to
+    /// the log; the amount never is.
+    private func save(describing operation: StaticString) throws {
+        do {
+            try context.save()
+        } catch {
+            // The pending amount is discarded: the interface must not show a
+            // figure the store does not hold.
+            context.rollback()
+            AppLog.earnings.error("Failed to \(operation, privacy: .public) shift earnings: \(error)")
+            throw ShiftLifecycleError.storeUnavailable(underlying: error)
+        }
+    }
 }
+

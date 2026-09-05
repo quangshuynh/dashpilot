@@ -13,6 +13,16 @@ nonisolated struct Money: Hashable, Sendable, Codable, Comparable {
     /// Number of fraction digits used when presenting an amount.
     static let displayScale = 2
 
+    /// The currency DashPilot presents amounts in.
+    ///
+    /// One code, deliberately. Nothing in the app converts between currencies
+    /// or records which currency an amount was earned in, so taking the
+    /// currency from the device's locale would relabel a US driver's earnings
+    /// as euros the moment they set their phone to another region. Locale still
+    /// decides how the amount is written — symbol placement, separators — it
+    /// just does not decide what the money is.
+    static let displayCurrencyCode = "USD"
+
     /// The exact, unrounded amount.
     let amount: Decimal
 
@@ -79,9 +89,13 @@ nonisolated struct Money: Hashable, Sendable, Codable, Comparable {
         return Money(amount: result)
     }
 
-    /// Formats for display using the supplied currency code, defaulting to the device's currency.
-    func formatted(currencyCode: String? = nil, locale: Locale = .autoupdatingCurrent) -> String {
-        let code = currencyCode ?? locale.currency?.identifier ?? "USD"
-        return rounded().amount.formatted(.currency(code: code).locale(locale))
+    /// Formats an amount for display.
+    ///
+    /// The single place a monetary string is built in DashPilot: no view
+    /// assembles one from a symbol and a number, and no view configures a
+    /// formatter. Rounding to ``displayScale`` happens here and only here, so
+    /// presentation cannot change what is stored.
+    func formatted(currencyCode: String = Money.displayCurrencyCode, locale: Locale = .autoupdatingCurrent) -> String {
+        rounded().amount.formatted(.currency(code: currencyCode).locale(locale))
     }
 }
