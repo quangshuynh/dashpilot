@@ -39,8 +39,9 @@ flowchart LR
 One shift runs at a time, and as many deliveries within it as the driver is actually working. While
 the shift runs and DashPilot is in the foreground, accepted positions are recorded against it, and
 each delivery in progress gets its own large control offering only its own next step. When the shift ends, the driver may type what it paid, and the completed
-shift's detail screen states what each delivery recorded, the shift's recorded mileage, the shape of
-its route, and two derived rates together with the reason either one could not be derived.
+shift's detail screen states what each delivery recorded, how much of the shift a delivery was
+active for, the shift's recorded mileage, the shape of its route, and three derived rates together
+with the reason any of them could not be derived.
 
 [Read the shift workflow](product/shift-workflow.md){ .md-button .md-button--primary }
 [Read the delivery lifecycle](product/delivery-lifecycle.md){ .md-button }
@@ -53,9 +54,9 @@ its route, and two derived rates together with the reason either one could not b
 - **Versioned persistence.** The schema has been versioned since v1 and carries a migration plan
   exercised by tests that open stores written under every older version. See
   [Migrations](architecture/migrations.md).
-- **Nothing derived is stored.** Recorded mileage, a delivery's state and both rates are recomputed
-  from the stored route, timestamps and amount every time they are shown, so the store never holds
-  two answers to the same question.
+- **Nothing derived is stored.** Recorded mileage, a delivery's state, delivery active time and all
+  three rates are recomputed from the stored route, timestamps, deliveries and amount every time they
+  are shown, so the store never holds two answers to the same question.
 - **Decimal money.** No monetary value passes through binary floating point, in memory or in the
   store. See [Money and metrics](architecture/money-and-metrics.md).
 - **Deliberate location handling.** Authorization, accuracy, the system-wide Location Services

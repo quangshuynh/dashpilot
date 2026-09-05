@@ -180,13 +180,26 @@ never ended.
 record.** Each delivery's intervals are its own, measured between its own timestamps, and nothing
 adds two of them together.
 
-!!! warning "Overlapping durations are not active time"
+### Delivery active time
 
-    A delivery active for 30 minutes and another active for 25 minutes, overlapping by 20, is not 55
-    minutes of anything. Turning overlapping delivery spans into a single "active time" figure is a
-    union-of-intervals calculation that DashPilot **does not do** — not on this screen, not in a
-    rate, not anywhere. It is a deliberate future decision, not an omission to be filled in by
-    summing the column.
+The shift section states how much of the shift at least one delivery was active for, and how much of
+it was not:
+
+| Duration | Definition |
+| --- | --- |
+| Delivery active time | The **union** of every delivery's `acceptedAt` to terminal-event interval |
+| Non-delivery time | Elapsed shift time less delivery active time, clamped at zero |
+
+A delivery active for 30 minutes and another active for 25, overlapping by 20, is **35 minutes** of
+delivery active time — not the 55 their durations sum to. The overlapping minutes are counted once,
+because a driver cannot be in two places at once and summing them would let active time exceed the
+shift it happened in. A cancelled delivery contributes from acceptance until it was cancelled.
+
+Non-delivery time is **not idle time**: it holds waiting for an offer, repositioning, breaks and any
+work that was not recorded. Neither duration says anything about what the driver was doing, and
+neither is presented as work, driving or productive time. The full definitions, and the gross
+earnings per active delivery hour derived from them, are on
+[Earnings and metrics](earnings-and-metrics.md#delivery-active-time).
 
 ## What a delivery does not hold
 
@@ -204,14 +217,20 @@ adds two of them together.
 
 ## What is not built on this yet
 
-Nothing. The lifecycle records events and derives two factual intervals for presentation. There is
-no restaurant rating, no wait-time recommendation, no offer-profitability figure, no aggregate
-across shifts, no active-versus-idle time, no analysis of stacking, and no prediction of any kind.
+The lifecycle records events, derives two factual intervals per delivery, and unions those intervals
+into a shift's delivery active time and the one rate over it. Beyond that, nothing: no restaurant
+rating, no wait-time recommendation, no offer-profitability figure, no per-delivery earnings, no
+aggregate across shifts, no analysis of *why* deliveries overlapped, and no prediction of any kind.
 See [Limitations](../reference/limitations.md).
 
 ## Schema
 
-Supporting concurrent deliveries **did not change the persisted shape**, and there is no version 6.
+Neither concurrent deliveries nor delivery active time **changed the persisted shape**, and there is
+no version 6. Active time is derived from the timestamps already stored, every time it is shown; no
+`activeDuration`, `nonDeliveryDuration` or `activeHourlyRate` column exists, for the reason no
+mileage or rate column does.
+
+Supporting concurrent deliveries did not change the shape either.
 The store has held `Delivery` as its own entity with a to-many `Shift.deliveries` relationship since
 [version 5](../architecture/migrations.md) — it could always describe several unfinished deliveries
 for one shift. "At most one active delivery" was an application invariant enforced by a service, not
