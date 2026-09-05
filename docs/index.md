@@ -90,5 +90,6 @@ The full list, including the parts that are simply not built yet, is on
 
 !!! note "Documentation status"
 
-    This site documents schema v5 and the shift, route, earnings, metrics, detail and delivery
-    lifecycle work completed so far. Every amount, coordinate and route in it is synthetic.
+    This site documents schema v6 and the shift, route, earnings, metrics, detail, delivery
+    lifecycle and pickup identity work completed so far. Every amount, coordinate, route and business
+    name in it is synthetic.

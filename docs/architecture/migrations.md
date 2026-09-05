@@ -13,17 +13,19 @@ rather than a store reset.
 | 3.0.0 | Adds `RouteSample.captureSessionID`, an optional marker of capture continuity |
 | 4.0.0 | Adds `Shift.grossEarningsAmount`, an optional `Decimal` holding manually entered earnings |
 | 5.0.0 | Adds the `Delivery` entity and a `Shift.deliveries` relationship |
+| 6.0.0 | Adds the `PickupPlace` entity and an optional `Delivery.pickupPlace` reference |
 
-The current version is **v5**. Field-level detail is on [Data model](../reference/data-model.md).
+The current version is **v6**. Field-level detail is on [Data model](../reference/data-model.md).
 
-`DashPilotSchemaV1` through `DashPilotSchemaV4` hold frozen copies of their models rather than
+`DashPilotSchemaV1` through `DashPilotSchemaV5` hold frozen copies of their models rather than
 reusing the file-scope types, which have moved on. The plan then describes where a store is coming
 from as truthfully as where it is going, and the copies are never used at runtime outside
 migration.
 
-`DashPilotSchemaV4` was frozen in the interval that added v5: the file-scope `Shift` gained a
-`deliveries` relationship, so reusing it would have made v4 claim a shape no store on a device ever
-had. Each version gets its copies at the moment the next one moves the models on.
+`DashPilotSchemaV5` was frozen in the interval that added v6: the file-scope `Delivery` gained a
+`pickupPlace` reference, so reusing it would have made v5 claim a shape no store on a device ever
+had. Each version gets its copies at the moment the next one moves the models on, exactly as v4 got
+its own when v5 added deliveries.
 
 ## Every stage so far is lightweight, deliberately
 
@@ -69,6 +71,23 @@ tell it from work they did.
 Existing shifts migrate with zero deliveries, and their route samples, capture session identifiers
 and recorded amounts are untouched.
 
+### v5 to v6
+
+A new entity and a new optional reference to it, which SwiftData can add without being told how.
+Every existing delivery migrates with no pickup place, and the catalogue of places starts empty.
+
+That emptiness is the substantive decision, in the same shape as v4 to v5. A v5 store records nothing
+about which business any delivery came from, and DashPilot has no source from which to recover one:
+it reads no delivery platform, resolves no address, and holds no merchant data of any kind.
+Attributing a past delivery to a place by its route, its timing or its resemblance to another would
+write a business's name into a driver's history on the app's authority rather than theirs, and no
+later screen could tell that apart from a place the driver named themselves.
+
+The pickup place's own uniqueness is enforced in `PickupPlaceService`, not by a `.unique` attribute.
+That is partly a migration decision: a unique constraint would bind the store's shape to a
+normalisation policy that is allowed to improve, and improving it would then become a schema change
+rather than a code change. See [Pickup identity](../product/pickup-identity.md#reuse-and-which-spelling-wins).
+
 It becomes a custom stage the first time a version step actually has to transform something.
 
 ## Proving a migration rather than assuming it
@@ -84,6 +103,11 @@ That is how "a v1 store keeps its shifts" is proven. The suite covers each step:
 - A v3 store's shifts, samples and sessions survive, and their earnings are absent rather than zero.
 - A v4 store's shifts, samples, sessions and recorded amounts survive, and no delivery is
   fabricated for any of them.
+- A v5 store's shifts, samples, sessions, amounts and every delivery timestamp survive, and no
+  delivery is attributed to a pickup place that was never named.
+
+Each step is also walked from every earlier version, so a device that skipped several releases is
+covered by the same suite rather than by assumption.
 
 ## Rules for the next schema change
 

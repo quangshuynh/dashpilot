@@ -8,8 +8,11 @@ there is nothing to configure, disable or trust.
 - All data stays on device. There are no accounts, no sync, no analytics, no telemetry and no ads.
 - There is no third-party SDK of any kind, so nothing is collected on anyone else's behalf.
 - Recorded route samples never leave the device.
-- Precise coordinates, routes, earnings and delivery history are treated as sensitive: they are not
-  logged, and they are never committed to the repository.
+- Precise coordinates, routes, earnings, delivery history and pickup-place names are treated as
+  sensitive: they are not logged, and they are never committed to the repository. For a driver who
+  works a small area, the places they pick up from are close to a description of where they are.
+- Pickup places are typed by the driver. There is no geocoding, no place search and no directory
+  lookup, so no name here was obtained from, or sent to, anywhere off the device.
 - A route sample belongs to exactly one shift and is deleted with it, including when the driver
   deletes the shift themselves, so no coordinate is left behind belonging to a shift that no longer
   exists.
@@ -28,6 +31,7 @@ counts and errors. Coordinates, addresses and earnings amounts are never logged.
 | `location` | Authorization transitions, Location Services availability, accuracy changes, unrecognised platform values | Any position, because this layer never reads one |
 | `route-capture` | Capture started or stopped, why it could not start, how many samples were retained and persisted, and the *name* of the rule that rejected a candidate | Latitude, longitude, address or route geometry |
 | `earnings` | That an amount was added, updated or removed, or that a save failed | The amount |
+| `pickup-place` | That a place was assigned, changed, removed, reused or created; that a name was refused, by rule name; that a save failed | The name typed, and the normalised key derived from it |
 
 Three deliberate silences are worth stating.
 
@@ -42,15 +46,17 @@ rather than a failure.
 **A deletion records nothing about the shift.** Not when it ran, not what it earned, not how far it
 went. A deletion is the last moment to start writing a driver's history into a log.
 
-The word naming an earnings operation is a `StaticString` chosen in code, so it cannot accidentally
-become the value. A test asserts that every capture rejection reason is a plain rule name rather
-than a candidate position.
+The word naming an earnings or pickup-place operation is a `StaticString` chosen in code, so it
+cannot accidentally become the value; where a pickup log line has two forms, they are two literals
+rather than one interpolated word. A test asserts that every capture rejection reason is a plain rule
+name rather than a candidate position.
 
 ## Synthetic data everywhere
 
-Every coordinate, amount and route in this repository is invented. Tests, previews, fixtures,
-documentation and screenshots use `SyntheticRoute`, which builds offsets from a round-number origin
-rather than from anywhere anyone has driven, and amounts chosen to be obviously fictional.
+Every coordinate, amount, route and business name in this repository is invented. Tests, previews,
+fixtures, documentation and screenshots use `SyntheticRoute`, which builds offsets from a
+round-number origin rather than from anywhere anyone has driven, amounts chosen to be obviously
+fictional, and pickup places — `Nowhere Noodles`, `Example Diner` — that name no real business.
 
 The debug-only `-dashpilot-seeded-history` launch argument opens an in-memory store holding that
 same synthetic history, which is how a measured route and the rates over it are reachable in a UI

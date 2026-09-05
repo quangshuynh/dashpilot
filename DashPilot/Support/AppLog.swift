@@ -33,6 +33,14 @@ nonisolated enum AppLog {
     /// the log is not the place for it.
     static let delivery = Logger(subsystem: subsystem, category: "delivery")
 
+    /// Pickup identity: that a place was assigned, changed or removed, and
+    /// whether an existing place was reused or a new one created. **Never a
+    /// place's name**, in any form — not the spelling the driver typed and not
+    /// the normalised key derived from it. Where a driver picks up is work
+    /// history and, for a driver who works a small area, close to a description
+    /// of where they are.
+    static let pickupPlace = Logger(subsystem: subsystem, category: "pickup-place")
+
     /// Route sample capture: when it starts and stops, why it cannot run, how
     /// many samples were kept, and which rule rejected a candidate. Records the
     /// behaviour of the pipeline, never a coordinate that went through it.

@@ -25,8 +25,8 @@ and one they cannot.
 - **Nothing is detected.** Every delivery timestamp exists because the driver tapped a control.
   DashPilot cannot see an order, a restaurant handover or a customer receipt, so a delivery that was
   not recorded is not in the app, and an event recorded late is recorded late.
-- **No restaurant, customer or address.** A delivery holds timestamps and its shift, and nothing
-  that says where it went or who it was for.
+- **No customer or address.** A delivery holds timestamps, its shift and an optional pickup place,
+  and nothing that says where it went or who it was for.
 - **No per-delivery earnings.** Gross earnings are one figure for the whole shift, and DashPilot has
   no source from which to split it between deliveries.
 - **Delivery active time is only as good as the tapping.** It is the union of the intervals between
@@ -37,8 +37,10 @@ and one they cannot.
   non-delivery time is not idle time.
 - **No per-delivery rate and no average wait.** The one delivery-derived rate is over the whole
   shift's active time.
-- **A recorded delivery cannot be edited or deleted individually.** A mis-tapped event stays as
-  recorded, and only deleting the whole shift removes it.
+- **A recorded delivery's timestamps cannot be edited, and a delivery cannot be deleted
+  individually.** A mis-tapped lifecycle event stays as recorded, and only deleting the whole shift
+  removes it. The pickup place is the one exception, because it is not an event: it can be added,
+  changed or removed at any time, including on a finished delivery.
 - **Overlapping deliveries are unioned, never summed.** A 30-minute delivery and a 25-minute one
   overlapping by 20 minutes is 35 minutes of delivery active time. The per-delivery durations in the
   shift's delivery list are still separate figures and are never added together.
@@ -50,6 +52,28 @@ and one they cannot.
   order numbers.
 - **Ending a shift is blocked while any delivery is in progress**, deliberately. It costs one extra
   tap per unfinished delivery.
+
+## Pickup identity
+
+- **Entirely manual, and usually absent.** A pickup place exists only because the driver typed it.
+  Nothing detects a pickup, and a delivery they did not name has no place — so the catalogue is a
+  record of what they chose to record, not of where they actually went.
+- **No lookup of any kind.** No geocoding, no place search, no address, no coordinate, no phone
+  number and no store number. A place is a name and nothing else, and it would not be recognised
+  outside this app.
+- **Matching is exact after normalisation, not fuzzy.** Whitespace, case, Unicode composition and
+  apostrophe style are folded; punctuation, diacritics and abbreviations are not. `McDonald's` and
+  `McDonalds` are two places, and so are `Cafe Rio` and `Café Rio`. The rule errs toward duplicates,
+  which a driver can see and avoid, over merges, which they cannot undo.
+- **The normalisation key is persisted.** If a future OS changes how case folding behaves, a name
+  typed afterwards could fail to match a place stored before it, producing a duplicate. Nothing
+  re-keys the catalogue.
+- **The first spelling is permanent.** A place cannot be renamed. Correcting a typo means assigning a
+  new place to each delivery that used the old one.
+- **Unreferenced places are never collected.** A place whose deliveries have all been deleted stays
+  in the local catalogue. It stops appearing in the recent list, and typing the name finds it again.
+- **Nothing is derived from a place yet.** No wait statistic, no visit count, no ranking and no
+  score — see below.
 
 ## Earnings and metrics
 
@@ -78,9 +102,10 @@ and one they cannot.
 
 ## Product scope
 
-- **Little is built on the delivery records yet.** Delivery active time and the rate over it are
-  the whole of it: no restaurant scoring, no wait-time recommendation, no offer profitability, no
-  per-delivery earnings, no aggregate across shifts and no automatic detection.
+- **Little is built on the delivery records yet.** Delivery active time, the rate over it, and an
+  optional pickup place are the whole of it: no wait statistic per place, no merchant scoring, no
+  wait-time recommendation, no offer profitability, no per-delivery earnings, no aggregate across
+  shifts and no automatic detection.
 - **No recommendations, predictions or machine learning.** None is implemented, and none is claimed.
 - **No delivery-platform integration**, by design and permanently. See
   [Product overview](../product/overview.md#boundaries-the-project-will-not-cross).

@@ -1,7 +1,7 @@
 # Data model
 
-Three persisted entities, and a small set of value types derived from them. Current schema
-version: **v5**.
+Four persisted entities, and a small set of value types derived from them. Current schema
+version: **v6**.
 
 ## `Shift`
 
@@ -61,6 +61,7 @@ none are kept, because nothing implemented reads them.
 | `deliveredAt` | `Date?` | Terminal |
 | `cancelledAt` | `Date?` | Terminal. Set without erasing the events that preceded it |
 | `shift` | `Shift?` | Optional only because SwiftData models the inverse that way. The initializer requires a shift |
+| `pickupPlace` | `PickupPlace?` | Optional and often absent. A reference, so two deliveries from one place share a row. Nullify on delete |
 
 Derived, never stored:
 
@@ -75,8 +76,35 @@ Derived, never stored:
 
 `markArrivedAtPickup(at:)`, `markPickedUp(at:)` and `markDelivered(at:)` refuse a skipped step, a
 repeated event, a transition after a terminal state, and a timestamp earlier than the last recorded
-event. `cancel(at:)` is allowed from every active state. Nothing identifying a restaurant, a
-customer or an address is stored, and no amount is attributed to a delivery.
+event. `cancel(at:)` is allowed from every active state. `setPickupPlace(_:)` is deliberately
+unconditional: a pickup place is not an event, so correcting one changes no interval and is allowed
+on a finished delivery. Nothing identifying a customer or an address is stored, and no amount is
+attributed to a delivery.
+
+## `PickupPlace`
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `id` | `UUID` | Unique attribute |
+| `displayName` | `String` | The driver's own spelling. The first accepted one wins and is never rewritten |
+| `normalizedName` | `String` | The comparison key from `PickupPlaceName`. Never shown, spoken or logged |
+| `createdAt` | `Date` | When the place was first named on this device. Used for ordering, not analysis |
+| `deliveries` | `[Delivery]` | Nullify delete, inverse of `Delivery.pickupPlace` |
+
+Derived, never stored:
+
+| Member | Meaning |
+| --- | --- |
+| `lastUsedAt` | The latest `acceptedAt` among the deliveries naming this place, or `nil` if none do |
+| `namedBefore(_:_:)` | The total, repeatable order over places: creation ascending, identity breaking a tie |
+
+`normalizedName` is deliberately **not** a `.unique` attribute: a unique constraint in SwiftData
+resolves a collision by upserting, which would overwrite the row the reuse rule exists to preserve.
+Uniqueness is enforced in `PickupPlaceService` instead. **No counter, visit total, last-used date,
+wait statistic or score is stored on a place** — every such figure is derivable from its deliveries,
+and a stored copy could drift away from them. There is no address, coordinate, phone number, store
+number or platform identifier, and nothing here came from anywhere but the driver's keyboard. See
+[Pickup identity](../product/pickup-identity.md).
 
 A delivery is independent of every other delivery: it derives its state from its own timestamps
 alone, so several can be active at once with overlapping lifecycles, and nothing here records a
@@ -91,14 +119,16 @@ relationship between them. See [Delivery lifecycle](../product/delivery-lifecycl
 | 3.0.0 | Adds `RouteSample.captureSessionID` |
 | 4.0.0 | Adds `Shift.grossEarningsAmount` |
 | 5.0.0 | Adds `Delivery` and `Shift.deliveries` |
+| 6.0.0 | Adds `PickupPlace` and `Delivery.pickupPlace` |
 
 Every step so far is a lightweight stage, and none backfills a value. See
 [Migrations](../architecture/migrations.md).
 
-Version 5 is still current. Supporting several concurrent deliveries changed no persisted shape:
-`Shift.deliveries` was already a to-many relationship, so the store could always describe more than
-one unfinished delivery for a shift, and "at most one active delivery" was an application invariant
-rather than a constraint the database imposed. Removing it needed no migration.
+Two capabilities needed no version of their own. Supporting several concurrent deliveries changed no
+persisted shape: `Shift.deliveries` was already a to-many relationship, so the store could always
+describe more than one unfinished delivery for a shift, and "at most one active delivery" was an
+application invariant rather than a constraint the database imposed. Delivery active time changed
+none either — it is unioned from timestamps already stored, every time it is shown.
 
 ## Domain value types
 
@@ -121,11 +151,14 @@ rather than a constraint the database imposed. Removing it needed no migration.
 | `DeliverySummary` | How many deliveries a shift recorded, how they ended, and how many are in progress |
 | `NumberedDelivery` | A delivery with the local number the interface labels it with. Presentation only, never persisted |
 | `DeliveryError`, `DeliveryLifecycleError` | Refused delivery transitions, and why |
+| `PickupPlaceName` | The normalisation policy: a display spelling and the key identity is decided by |
+| `PickupPlaceNameError`, `PickupPlaceError` | Refused pickup names and failed pickup writes, and why |
 
 ## What is not in the store
 
 Durations, distances, rates, route quality wording and capture state are all computed when they are
 needed. A delivery's state is derived the same way, and so is the `Delivery 1` / `Delivery 2`
 numbering the interface shows for concurrent deliveries — it is counted from the acceptance
-timestamps rather than stored beside them. The store holds timestamps, positions and one optional
-amount, and nothing that could disagree with them.
+timestamps rather than stored beside them. A pickup place's recency is derived from the deliveries
+that reference it, for the same reason. The store holds timestamps, positions, one optional amount
+and the names a driver typed, and nothing that could disagree with them.

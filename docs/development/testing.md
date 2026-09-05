@@ -22,6 +22,9 @@ test cannot see, such as a screen that renders a sentence the model never claime
 | Persistence, Route sample persistence, Shift earnings persistence | Store round trips and the v1, v2 and v3 migrations |
 | Delivery lifecycle, Delivery service | Every transition and refusal, concurrent deliveries and their isolation, deterministic ordering and numbering, clamped clocks, the shift-end policy and cascade |
 | Delivery persistence | The v4 to v5 migration, and several active deliveries recovered independently from a reopened store |
+| Pickup place name | The normalisation policy: what is folded, and what is conservatively left alone |
+| Pickup place service | Reuse of an equivalent name, the first-spelling-wins policy, assign, change, remove, recent ordering, and deletion sparing a shared place |
+| Pickup place persistence | The v5 to v6 migration, every earlier version reaching v6, and a shared place surviving a reopened store |
 | Delivery wording | The one action each state offers, its spoken label, and the delivery counts |
 | Location authorization state, Location authorization service | Condition precedence, accuracy independence, unrecognised values, request gating |
 | Route capture, Route sample filter | The capture invariant and every acceptance rule |
