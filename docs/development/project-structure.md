@@ -2,7 +2,7 @@
 
 ```text
 DashPilot/
-  App/            SwiftUI entry point, root screen, shift detail, failure state, preview fixtures
+  App/            SwiftUI entry point, root screen, delivery controls, shift detail, failure state, preview fixtures
   Domain/         Framework-independent value types and calculations
   Models/         SwiftData @Model types
   Persistence/    Versioned schema, migration plan, container construction
@@ -31,11 +31,11 @@ measurement out of view bodies.
 ## Naming and conventions
 
 - Views are nouns describing what they show (`CompletedShiftDetailView`, `RouteCaptureStatusView`).
-- A service owns transitions, not data (`ShiftService`, `LocationTrackingService`).
+- A service owns transitions, not data (`ShiftService`, `DeliveryService`, `LocationTrackingService`).
 - A "Providing" protocol is a seam over a platform framework, and its Core Location implementation
   is the only file on that side allowed to import it.
 - Vocabulary the interface says out loud lives in a tested domain type (`RouteQuality`,
-  `ShiftRateUnavailability`), never as strings in a view.
+  `ShiftRateUnavailability`, `DeliveryAction`, `DeliverySummary`), never as strings in a view.
 
 ## Repository conventions
 

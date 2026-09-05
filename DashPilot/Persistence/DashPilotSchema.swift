@@ -164,10 +164,92 @@ enum DashPilotSchemaV3: VersionedSchema {
 /// nothing". Writing `0` into every existing shift would turn the absence of a
 /// figure into a claim about every shift a driver has ever recorded. They keep
 /// `nil`, and the interface offers to add an amount rather than showing one.
+///
+/// Both models are frozen copies, for the same reason the earlier versions
+/// freeze theirs: the file-scope `Shift` has since gained a `deliveries`
+/// relationship, and reusing it here would make v4 claim a shape no store on a
+/// device ever had.
 enum DashPilotSchemaV4: VersionedSchema {
     static var versionIdentifier: Schema.Version { Schema.Version(4, 0, 0) }
 
     static var models: [any PersistentModel.Type] { [Shift.self, RouteSample.self] }
+
+    /// The v4 shift: timestamps, a route and an optional recorded amount, with
+    /// nothing recorded about the deliveries performed during it.
+    @Model
+    nonisolated final class Shift {
+        @Attribute(.unique) private(set) var id: UUID
+        private(set) var startedAt: Date
+        private(set) var endedAt: Date?
+
+        @Relationship(deleteRule: .cascade, inverse: \RouteSample.shift)
+        private(set) var routeSamples: [RouteSample] = []
+
+        private(set) var grossEarningsAmount: Decimal?
+
+        init(
+            id: UUID = UUID(),
+            startedAt: Date,
+            endedAt: Date? = nil,
+            grossEarningsAmount: Decimal? = nil
+        ) {
+            self.id = id
+            self.startedAt = startedAt
+            self.endedAt = endedAt
+            self.grossEarningsAmount = grossEarningsAmount
+        }
+    }
+
+    /// The v4 route sample, unchanged from v3.
+    @Model
+    nonisolated final class RouteSample {
+        private(set) var timestamp: Date
+        private(set) var latitude: Double
+        private(set) var longitude: Double
+        private(set) var horizontalAccuracy: Double
+        private(set) var captureSessionID: UUID?
+        private(set) var shift: Shift?
+
+        init(
+            shift: Shift,
+            timestamp: Date,
+            latitude: Double,
+            longitude: Double,
+            horizontalAccuracy: Double,
+            captureSessionID: UUID?
+        ) {
+            self.timestamp = timestamp
+            self.latitude = latitude
+            self.longitude = longitude
+            self.horizontalAccuracy = horizontalAccuracy
+            self.captureSessionID = captureSessionID
+            self.shift = shift
+        }
+    }
+}
+
+/// Version 5 of the persisted schema: a shift can record its deliveries.
+///
+/// The change is additive in the same shape v1 to v2 was: a new `Delivery`
+/// entity and a new to-many relationship from `Shift` to it. No existing
+/// property is renamed, retyped or removed, so every v4 shift, route sample,
+/// capture session identifier and recorded amount carries over untouched, and
+/// the new relationship starts empty.
+///
+/// Empty is the truthful value. A store written before delivery recording
+/// existed holds no evidence that any particular delivery happened, and
+/// synthesising deliveries — one per hour, one per route segment, anything at
+/// all — would put work into a driver's history that they never recorded and
+/// that nothing could afterwards distinguish from work they did. Existing
+/// shifts migrate with zero deliveries.
+///
+/// This version reuses the file-scope models rather than freezing copies,
+/// because it *is* the current shape. It gets frozen copies of its own the
+/// first time v6 moves them on, exactly as v4 did here.
+enum DashPilotSchemaV5: VersionedSchema {
+    static var versionIdentifier: Schema.Version { Schema.Version(5, 0, 0) }
+
+    static var models: [any PersistentModel.Type] { [Shift.self, RouteSample.self, Delivery.self] }
 }
 
 /// Ordered history of schema versions and the migrations between them.
@@ -177,10 +259,16 @@ enum DashPilotSchemaV4: VersionedSchema {
 /// than only on a device that happens to hold an old store.
 enum DashPilotMigrationPlan: SchemaMigrationPlan {
     static var schemas: [any VersionedSchema.Type] {
-        [DashPilotSchemaV1.self, DashPilotSchemaV2.self, DashPilotSchemaV3.self, DashPilotSchemaV4.self]
+        [
+            DashPilotSchemaV1.self,
+            DashPilotSchemaV2.self,
+            DashPilotSchemaV3.self,
+            DashPilotSchemaV4.self,
+            DashPilotSchemaV5.self
+        ]
     }
 
-    static var stages: [MigrationStage] { [v1ToV2, v2ToV3, v3ToV4] }
+    static var stages: [MigrationStage] { [v1ToV2, v2ToV3, v3ToV4, v4ToV5] }
 
     /// V1 → V2 is lightweight.
     ///
@@ -223,5 +311,20 @@ enum DashPilotMigrationPlan: SchemaMigrationPlan {
     static let v3ToV4 = MigrationStage.lightweight(
         fromVersion: DashPilotSchemaV3.self,
         toVersion: DashPilotSchemaV4.self
+    )
+
+    /// V4 → V5 is lightweight.
+    ///
+    /// A new entity and a new empty relationship, which SwiftData can add
+    /// without being told how — the same shape as v1 → v2, and with the same
+    /// nothing to derive. A shift recorded before delivery recording existed
+    /// genuinely has no deliveries: DashPilot observes no delivery platform, so
+    /// there is no source anywhere in the store from which a past delivery
+    /// could be reconstructed. Inventing one per hour, per route segment or per
+    /// anything else would write work into a driver's history that they never
+    /// recorded, and nothing afterwards could tell it from work they did.
+    static let v4ToV5 = MigrationStage.lightweight(
+        fromVersion: DashPilotSchemaV4.self,
+        toVersion: DashPilotSchemaV5.self
     )
 }

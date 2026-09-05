@@ -33,6 +33,14 @@ continues.
 what was captured continuously and excluding the distance across detected capture gaps. The figure
 is recomputed from the stored route every time rather than saved as a second total.
 
+**Delivery lifecycle.** A delivery belongs to one shift and moves through accepted, arrived at
+pickup, picked up and delivered, or ends cancelled from any of those. Every event is recorded
+because the driver tapped one large control; nothing is detected, imported or inferred. At most one
+delivery is active at a time, transitions must happen in order, and a shift cannot be ended while
+one of its deliveries is still running. A delivery left in progress when the app was terminated is
+picked up on the next launch at the step it had reached. See
+[Delivery lifecycle](delivery-lifecycle.md).
+
 **Manual gross earnings.** A completed shift can store one optional amount the driver types,
 through a locale-aware input layer that reads what a decimal pad produces and refuses anything it
 cannot read rather than reinterpreting it. Amounts are added, edited and removed from the shift's
@@ -43,21 +51,27 @@ mile, both derived from what is already stored. A rate that cannot be derived is
 zero.
 
 **Completed-shift detail and deletion.** Tapping a shift in history opens a screen for that shift
-alone: when it ran and for how long, what it paid, what its route recorded, and both rates with an
-explanation for either one that is missing. A finished shift can be deleted from there behind a
-confirmation that names what goes with it. Deleting a shift also deletes the route positions
-recorded during it. A running shift cannot be deleted, and deletion is not undoable.
+alone: when it ran and for how long, the deliveries recorded during it, what it paid, what its route
+recorded, and both rates with an explanation for either one that is missing. A finished shift can be
+deleted from there behind a confirmation that names what goes with it. Deleting a shift also deletes
+the route positions and the deliveries recorded during it. A running shift cannot be deleted, and
+deletion is not undoable.
 
-**Persistence.** Schema v4, with lightweight migrations from v1, v2 and v3, covered by tests that
-open stores written under each older version. A store that fails to open is surfaced as a visible
-state rather than a crash, and the failure screen deliberately offers no "reset the database"
-action.
+**Persistence.** Schema v5, with lightweight migrations from v1, v2, v3 and v4, covered by tests
+that open stores written under each older version. A store that fails to open is surfaced as a
+visible state rather than a crash, and the failure screen deliberately offers no "reset the
+database" action.
 
 ## Not implemented
 
 Expenses, fuel, taxes, mileage deductions, a tips-versus-base breakdown, per-delivery earnings,
-active-versus-idle time, delivery records, wait-time measurement, maps, route visualisation, weekly
-or all-time totals, export, App Intents, Live Activities and recommendations.
+active-versus-idle time, restaurant or customer identity, wait-time analysis, offer profitability,
+automatic delivery detection, maps, route visualisation, weekly or all-time totals, export, App
+Intents, Live Activities and recommendations.
+
+Deliveries are recorded, but nothing is built on them yet: the app derives a pickup wait and a
+delivery duration for presentation and stops there. There is no restaurant rating, no average, no
+comparison between shifts and no prediction.
 
 Nothing is aggregated across shifts, no route is drawn on a map, and no mileage or live rate is
 shown while a shift is still running. There is no undo for a deleted shift and no backup of any
@@ -65,7 +79,7 @@ kind.
 
 ## What the numbers are not
 
-These four statements are the product, not a disclaimer appended to it. Each one is enforced in
+These five statements are the product, not a disclaimer appended to it. Each one is enforced in
 the wording the app itself uses.
 
 !!! warning "Earnings are what the driver typed"
@@ -88,10 +102,18 @@ the wording the app itself uses.
 !!! warning "The rates are gross, and each says what it divides by"
 
     The hourly figure is gross earnings over the shift's whole elapsed time, waiting and idling
-    included, because DashPilot does not know how much of a shift was spent on a delivery. It is
-    not an active or working hourly rate. The per-mile figure is gross earnings over *recorded*
+    included. Recorded deliveries are not used in any rate: nothing subtracts the time between them,
+    so this is not an active or working hourly rate. The per-mile figure is gross earnings over *recorded*
     miles, which are normally fewer than the miles driven, so the rate is normally higher than
     earnings per mile driven. Neither subtracts expenses, fuel, wear or tax.
+
+!!! warning "Deliveries are what the driver tapped"
+
+    DashPilot cannot see another delivery application, so it cannot know that an order was offered,
+    that a restaurant handed it over, or that a customer received it. Every delivery timestamp
+    exists because the driver recorded it, which means a delivery they did not record is not in the
+    app and a wait they recorded late reads as shorter than it was. No amount is attributed to an
+    individual delivery, and no restaurant, customer or address is stored at all.
 
 !!! warning "Route capture is foreground only"
 

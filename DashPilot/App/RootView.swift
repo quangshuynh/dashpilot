@@ -41,6 +41,21 @@ struct RootView: View {
                     }
                 }
 
+                if let activeShift {
+                    Section {
+                        DeliveryControlPanel(shift: activeShift)
+                    } header: {
+                        Text("Delivery")
+                    } footer: {
+                        Text(
+                            """
+                            DashPilot records only what you tap. It is not connected to any delivery \
+                            platform and cannot tell when an order was offered, handed over or received.
+                            """
+                        )
+                    }
+                }
+
                 Section {
                     LocationAuthorizationPanel()
                 } header: {
@@ -197,11 +212,16 @@ private struct ActiveShiftPanel: View {
 
             RouteCaptureStatusView(state: captureState)
 
+            // Bordered rather than prominent: the prominent control during a
+            // shift is the delivery action just below, which is tapped many
+            // times a shift, while this one is tapped once. Emphasising the
+            // rarer, harder-to-undo button over the frequent one is how a
+            // driver ends a shift by mistake.
             Button(action: end) {
                 Text("End Shift")
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.bordered)
             .controlSize(.large)
             .tint(.red)
             .accessibilityIdentifier("endShiftButton")
