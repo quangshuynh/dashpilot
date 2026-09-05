@@ -243,13 +243,127 @@ enum DashPilotSchemaV4: VersionedSchema {
 /// that nothing could afterwards distinguish from work they did. Existing
 /// shifts migrate with zero deliveries.
 ///
-/// This version reuses the file-scope models rather than freezing copies,
-/// because it *is* the current shape. It gets frozen copies of its own the
-/// first time v6 moves them on, exactly as v4 did here.
+/// All three models are frozen copies, for the same reason the earlier versions
+/// freeze theirs: the file-scope `Delivery` has since gained a pickup place, and
+/// reusing it here would make v5 claim a shape no store on a device ever had.
 enum DashPilotSchemaV5: VersionedSchema {
     static var versionIdentifier: Schema.Version { Schema.Version(5, 0, 0) }
 
     static var models: [any PersistentModel.Type] { [Shift.self, RouteSample.self, Delivery.self] }
+
+    /// The v5 shift: timestamps, a route, an optional amount and its deliveries.
+    @Model
+    nonisolated final class Shift {
+        @Attribute(.unique) private(set) var id: UUID
+        private(set) var startedAt: Date
+        private(set) var endedAt: Date?
+
+        @Relationship(deleteRule: .cascade, inverse: \RouteSample.shift)
+        private(set) var routeSamples: [RouteSample] = []
+
+        @Relationship(deleteRule: .cascade, inverse: \Delivery.shift)
+        private(set) var deliveries: [Delivery] = []
+
+        private(set) var grossEarningsAmount: Decimal?
+
+        init(
+            id: UUID = UUID(),
+            startedAt: Date,
+            endedAt: Date? = nil,
+            grossEarningsAmount: Decimal? = nil
+        ) {
+            self.id = id
+            self.startedAt = startedAt
+            self.endedAt = endedAt
+            self.grossEarningsAmount = grossEarningsAmount
+        }
+    }
+
+    /// The v5 route sample, unchanged from v3.
+    @Model
+    nonisolated final class RouteSample {
+        private(set) var timestamp: Date
+        private(set) var latitude: Double
+        private(set) var longitude: Double
+        private(set) var horizontalAccuracy: Double
+        private(set) var captureSessionID: UUID?
+        private(set) var shift: Shift?
+
+        init(
+            shift: Shift,
+            timestamp: Date,
+            latitude: Double,
+            longitude: Double,
+            horizontalAccuracy: Double,
+            captureSessionID: UUID?
+        ) {
+            self.timestamp = timestamp
+            self.latitude = latitude
+            self.longitude = longitude
+            self.horizontalAccuracy = horizontalAccuracy
+            self.captureSessionID = captureSessionID
+            self.shift = shift
+        }
+    }
+
+    /// The v5 delivery: five lifecycle timestamps and its shift, with nothing
+    /// recorded about where the order was collected from.
+    @Model
+    nonisolated final class Delivery {
+        @Attribute(.unique) private(set) var id: UUID
+        private(set) var acceptedAt: Date
+        private(set) var arrivedAtPickupAt: Date?
+        private(set) var pickedUpAt: Date?
+        private(set) var deliveredAt: Date?
+        private(set) var cancelledAt: Date?
+        private(set) var shift: Shift?
+
+        init(
+            id: UUID = UUID(),
+            shift: Shift,
+            acceptedAt: Date,
+            arrivedAtPickupAt: Date? = nil,
+            pickedUpAt: Date? = nil,
+            deliveredAt: Date? = nil,
+            cancelledAt: Date? = nil
+        ) {
+            self.id = id
+            self.acceptedAt = acceptedAt
+            self.arrivedAtPickupAt = arrivedAtPickupAt
+            self.pickedUpAt = pickedUpAt
+            self.deliveredAt = deliveredAt
+            self.cancelledAt = cancelledAt
+            self.shift = shift
+        }
+    }
+}
+
+/// Version 6 of the persisted schema: a delivery can name where it was picked up.
+///
+/// Two additions, both optional in the sense that matters: a new `PickupPlace`
+/// entity, and a new optional `Delivery.pickupPlace` reference to it with an
+/// empty `PickupPlace.deliveries` inverse. No existing property is renamed,
+/// retyped or removed, so every v5 shift, route sample, capture session
+/// identifier, recorded amount and delivery timestamp carries over untouched.
+///
+/// **Nothing is backfilled, and nothing could honestly be.** A store written
+/// before pickup identity existed holds no record of which business any past
+/// delivery came from — DashPilot observes no delivery platform, performs no
+/// lookup, and keeps no address or coordinate that names a merchant. Guessing a
+/// place from a route position, a timestamp or a repeated pattern would put a
+/// business's name against work the driver never attributed to it, and nothing
+/// afterwards could tell an inferred place from one they typed. Existing
+/// deliveries migrate with no pickup place, which is the truthful value.
+///
+/// This version reuses the file-scope models rather than freezing copies,
+/// because it *is* the current shape. It gets frozen copies of its own the first
+/// time v7 moves them on, exactly as v5 did here.
+enum DashPilotSchemaV6: VersionedSchema {
+    static var versionIdentifier: Schema.Version { Schema.Version(6, 0, 0) }
+
+    static var models: [any PersistentModel.Type] {
+        [Shift.self, RouteSample.self, Delivery.self, PickupPlace.self]
+    }
 }
 
 /// Ordered history of schema versions and the migrations between them.
@@ -264,11 +378,12 @@ enum DashPilotMigrationPlan: SchemaMigrationPlan {
             DashPilotSchemaV2.self,
             DashPilotSchemaV3.self,
             DashPilotSchemaV4.self,
-            DashPilotSchemaV5.self
+            DashPilotSchemaV5.self,
+            DashPilotSchemaV6.self
         ]
     }
 
-    static var stages: [MigrationStage] { [v1ToV2, v2ToV3, v3ToV4, v4ToV5] }
+    static var stages: [MigrationStage] { [v1ToV2, v2ToV3, v3ToV4, v4ToV5, v5ToV6] }
 
     /// V1 → V2 is lightweight.
     ///
@@ -326,5 +441,24 @@ enum DashPilotMigrationPlan: SchemaMigrationPlan {
     static let v4ToV5 = MigrationStage.lightweight(
         fromVersion: DashPilotSchemaV4.self,
         toVersion: DashPilotSchemaV5.self
+    )
+
+    /// V5 → V6 is lightweight.
+    ///
+    /// A new entity and a new optional reference to it, which SwiftData can add
+    /// without being told how. Every existing delivery migrates with no pickup
+    /// place, and the catalogue of places starts empty.
+    ///
+    /// That emptiness is the substantive decision. A v5 store records nothing
+    /// about which business any delivery came from, and DashPilot has no source
+    /// from which to recover one: it reads no delivery platform, resolves no
+    /// address, and holds no merchant data of any kind. Attributing a past
+    /// delivery to a place by its route, its timing or its resemblance to
+    /// another would write a business's name into a driver's history on the
+    /// app's authority rather than theirs, and no later screen could
+    /// distinguish that from a place they named themselves.
+    static let v5ToV6 = MigrationStage.lightweight(
+        fromVersion: DashPilotSchemaV5.self,
+        toVersion: DashPilotSchemaV6.self
     )
 }
