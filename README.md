@@ -53,10 +53,21 @@ The project is early. This section describes what exists, not what is intended.
   rather than reinterpreting it. Amounts are added, edited and removed from a sheet on the shift's
   history row, never during a running shift, and the row shows the recorded amount.
 - Completed-shift metrics: gross earnings per elapsed shift hour and gross earnings per recorded
-  mile, derived from what is already stored and shown on the shift's history row. Nothing is saved
-  as a second total, and a rate that cannot be derived is absent rather than shown as zero — a shift
-  with no amount recorded, a shift with no measurable route and a shift that covered no time each
-  say nothing rather than something false.
+  mile, derived from what is already stored. Nothing is saved as a second total, and a rate that
+  cannot be derived is never shown as zero — a shift with no amount recorded, a shift with no
+  measurable route and a shift that covered no time each say nothing rather than something false.
+- Completed-shift detail: tapping a shift in history opens a screen for that shift alone — when it
+  ran and for how long, what it paid, what its route recorded, and both derived rates. The route is
+  described with the segments and gaps capture actually produced and is marked partial when it is
+  known not to cover the whole shift; a rate that could not be derived is explained there rather
+  than left blank. Earnings are added, edited and removed from this screen, through the same editor
+  and the same draft-and-Cancel behaviour as before. The history row is a compact summary and a
+  single tap target.
+- Completed-shift deletion: a finished shift can be deleted from its detail screen behind a
+  confirmation that names what goes with it. **Deleting a shift also deletes the route positions
+  recorded during it**, and the amount recorded on it. A shift that is still running cannot be
+  deleted — the rule is enforced in `ShiftService` against the model, not by hiding a button — and
+  deletion is not undoable: there is no trash, archive or restore.
 - Schema v4, with lightweight migrations from v1, v2 and v3, covered by tests that open stores
   written under each older version and check their shifts, positions and absent earnings survive.
 - `Money`, a `Decimal`-backed monetary type covering the app's arithmetic, rounding, rate division
@@ -66,11 +77,13 @@ The project is early. This section describes what exists, not what is intended.
 **Not implemented yet**
 
 Expenses, fuel, taxes, mileage deductions, a tips-versus-base breakdown, per-delivery earnings,
-active-versus-idle time, delivery records, wait-time measurement, maps, App Intents, Live Activities
-and recommendations. A shift records its start time, its end time, its route and — if the driver
-types one — a single gross earnings figure. Rates are shown only on completed shifts, no route is
-drawn, and no mileage or live rate is shown while a shift is still running. See `AGENTS.md` for the
-intended order of work.
+active-versus-idle time, delivery records, wait-time measurement, maps, route visualization, weekly
+or all-time totals, App Intents, Live Activities and recommendations. A shift records its start
+time, its end time, its route and — if the driver types one — a single gross earnings figure. Rates
+are shown only on completed shifts, one shift at a time; nothing is aggregated across shifts, no
+route is drawn on a map, and no mileage or live rate is shown while a shift is still running. There
+is no undo for a deleted shift and no cloud backup of any kind. See `AGENTS.md` for the intended
+order of work.
 
 **Earnings are what the driver typed.** DashPilot is not connected to a delivery platform, holds no
 account credentials and imports nothing: the amount on a shift is one number a driver chose to
@@ -108,13 +121,20 @@ paused. Background route continuity is a separate, later decision.
 - Location logging records permission state, accuracy state, capture state, sample counts and the
   name of the rule that rejected a sample — what the app is allowed to do and what the pipeline did,
   never where the device is.
-- A route sample belongs to exactly one shift and is deleted with it.
+- A route sample belongs to exactly one shift and is deleted with it, including when the driver
+  deletes the shift themselves — no coordinate is left behind belonging to a shift that no longer
+  exists.
+- Deletion is local and permanent. A deleted shift is removed from the device's store; there is no
+  copy anywhere else to remove it from.
 - Mileage is calculated on device and never logged: distance is a trip metric, and the logs record
   what the app did, not where the driver went or how far.
 - Derived rates are calculated on device and never logged, for the same reason as the amounts and
   the mileage they come from.
 - Earnings are stored on device and never logged. The earnings log records that an amount was added,
   changed or removed, or that a save failed — never the amount itself.
+- Deleting a shift logs that a completed shift was deleted, or that the deletion was refused or
+  failed. It records nothing about the shift: not when it ran, not what it earned, not how far it
+  went.
 - Sample data in tests, previews and documentation is synthetic.
 
 ## Architecture

@@ -25,6 +25,32 @@ nonisolated enum ShiftRateUnavailability: Equatable, Sendable {
     case zeroRecordedDistance
 }
 
+nonisolated extension ShiftRateUnavailability {
+    /// Why the driver is not being shown a rate, in one sentence.
+    ///
+    /// A compact history row can afford to show nothing at all for an absent
+    /// rate; a detail screen cannot, because "what exactly happened in this
+    /// shift" includes why a figure the driver expected is missing. Each
+    /// sentence states the fact and, where there is one, the thing that would
+    /// produce the rate — without ever implying the missing value is zero.
+    var explanation: String {
+        switch self {
+        case .shiftNotCompleted:
+            "This shift is still running. Rates are worked out once it ends."
+        case .earningsNotRecorded:
+            "Add what this shift paid to see this rate."
+        case .noElapsedTime:
+            "This shift covered no measurable time, so there are no hours to divide by."
+        case .noRouteRecorded:
+            "No usable position was recorded for this shift, so there are no miles to divide by."
+        case .routeNotMeasurable:
+            "No two recorded positions were captured continuously, so no distance could be measured to divide by."
+        case .zeroRecordedDistance:
+            "The recorded positions did not move, so the distance measured was zero."
+        }
+    }
+}
+
 /// A derived rate, or the reason there is not one.
 ///
 /// A `Money?` would carry the value but lose the reason, and every reason here
