@@ -26,6 +26,11 @@ struct ShiftRatesLabel: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
+                // Wrap rather than truncate. Without this the row hands the
+                // label its ideal width and a long rate is cut short — and the
+                // first thing to disappear is the end of "recorded mi", which
+                // is the word that makes the figure honest.
+                .fixedSize(horizontal: false, vertical: true)
                 .accessibilityLabel(accessibilityLabel)
         }
     }
