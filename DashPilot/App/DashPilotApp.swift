@@ -20,6 +20,9 @@ struct DashPilotApp: App {
     init() {
         let container = Result<ModelContainer, Error> {
             #if DEBUG
+            if LaunchArgument.isPresent(LaunchArgument.seededHistory) {
+                return try PreviewSupport.seededHistoryContainer(includingActiveShift: false)
+            }
             if LaunchArgument.isPresent(LaunchArgument.inMemoryStore) {
                 return try ModelContainerFactory.makeInMemoryContainer()
             }
