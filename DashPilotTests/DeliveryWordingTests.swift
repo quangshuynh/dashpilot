@@ -45,6 +45,37 @@ struct DeliveryWordingTests {
         #expect(DeliveryAction.start.recordedState == nil, "Starting creates a delivery rather than advancing one")
     }
 
+    // MARK: Pickup place controls
+
+    @Test("The pickup control says whether it adds or changes")
+    func pickupControlNamesWhatItDoes() {
+        let numbered = NumberedDelivery(number: 2, delivery: makeDelivery())
+
+        #expect(numbered.pickupPlaceActionTitle(hasPlace: false) == "Add Pickup Place")
+        #expect(numbered.pickupPlaceActionTitle(hasPlace: true) == "Change Pickup Place")
+    }
+
+    @Test("The pickup control names its delivery aloud")
+    func pickupControlNamesItsDelivery() {
+        let numbered = NumberedDelivery(number: 2, delivery: makeDelivery())
+
+        #expect(numbered.spokenPickupPlaceLabel(hasPlace: false) == "Add pickup place for Delivery 2")
+        #expect(numbered.spokenPickupPlaceLabel(hasPlace: true) == "Change pickup place for Delivery 2")
+    }
+
+    @Test("Every delivery's pickup control is distinguishable by what it says")
+    func pickupControlsAreDistinguishable() {
+        let spoken = (1...3).map { number in
+            NumberedDelivery(number: number, delivery: makeDelivery(acceptedAfter: Double(number) * 60))
+                .spokenPickupPlaceLabel(hasPlace: false)
+        }
+
+        #expect(
+            Set(spoken).count == 3,
+            "With three cards on screen, a control identified only by position is unusable without sight"
+        )
+    }
+
     // MARK: Labels
 
     @Test("Every action names the event it records, in print and aloud")

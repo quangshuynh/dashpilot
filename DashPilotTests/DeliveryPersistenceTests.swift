@@ -25,24 +25,33 @@ struct DeliveryPersistenceTests {
 
     // MARK: Schema
 
-    /// Stacked deliveries did not change the persisted shape.
+    /// The delivery lifecycle's own shape, wherever the current version happens
+    /// to be.
     ///
-    /// `Shift.deliveries` was already a to-many relationship in v5, so the store
-    /// could always hold several unfinished deliveries for one shift; what
-    /// changed is that the application no longer refuses to create them. A
-    /// migration would have had nothing to migrate, so there is no v6 — the
-    /// version count below is the assertion that none was added.
-    @Test("Version 5 is still current: allowing concurrent deliveries changed no persisted shape")
+    /// Version 5 added the `Delivery` entity and the to-many `Shift.deliveries`
+    /// relationship, and allowing several concurrent deliveries needed no
+    /// version of its own: the store could always describe more than one
+    /// unfinished delivery for a shift, and "at most one active" was an
+    /// application invariant rather than a shape the database imposed. What the
+    /// current schema is, and what v6 added to it, is asserted in
+    /// `PickupPlacePersistenceTests`.
+    @Test("Deliveries are their own entity, related to a shift as a to-many")
     func schemaVersion() throws {
         #expect(DashPilotSchemaV5.versionIdentifier == Schema.Version(5, 0, 0))
-        #expect(DashPilotMigrationPlan.schemas.count == 5)
-        #expect(DashPilotMigrationPlan.stages.count == 4)
 
         let entities = Set(ModelContainerFactory.currentSchema.entities.map(\.name))
-        #expect(entities == ["Shift", "RouteSample", "Delivery"])
+        #expect(entities.contains("Delivery"))
 
         let shift = try #require(ModelContainerFactory.currentSchema.entities.first { $0.name == "Shift" })
         #expect(shift.properties.map(\.name).contains("deliveries"))
+
+        let delivery = try #require(ModelContainerFactory.currentSchema.entities.first { $0.name == "Delivery" })
+        let properties = Set(delivery.properties.map(\.name))
+        #expect(
+            properties.isSuperset(of: ["acceptedAt", "arrivedAtPickupAt", "pickedUpAt", "deliveredAt", "cancelledAt"]),
+            "State is derived from these timestamps, so all five are stored and no state column is"
+        )
+        #expect(!properties.contains("state"))
     }
 
     @Test("Version 4 described no deliveries")
