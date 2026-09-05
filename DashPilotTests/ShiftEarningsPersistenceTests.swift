@@ -21,11 +21,16 @@ struct ShiftEarningsPersistenceTests {
 
     // MARK: Schema
 
+    /// Version 4 is where earnings entered the store, and it is still on the
+    /// path a v3 device takes to reach the current version.
+    ///
+    /// How many versions the plan holds is asserted once, in
+    /// `PickupPlacePersistenceTests`, rather than restated by every suite that
+    /// happens to touch the plan.
     @Test("Version 4 added earnings to the shift, and is still in the plan")
     func schemaVersion() throws {
         #expect(DashPilotSchemaV4.versionIdentifier == Schema.Version(4, 0, 0))
-        #expect(DashPilotMigrationPlan.schemas.count == 5)
-        #expect(DashPilotMigrationPlan.stages.count == 4)
+        #expect(DashPilotMigrationPlan.schemas.contains { $0 == DashPilotSchemaV4.self })
 
         let shift = try #require(
             ModelContainerFactory.currentSchema.entities.first { $0.name == "Shift" }

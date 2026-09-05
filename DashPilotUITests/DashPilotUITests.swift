@@ -613,6 +613,7 @@ final class DashPilotUITests: XCTestCase {
         carrying.tap()
         XCTAssertTrue(waitForCount(app.buttons.matching(identifier: "deliveryActionButton"), toEqual: 1))
 
+        XCTAssertTrue(scrollToTop(reaching: app.buttons["endShiftButton"], in: app))
         app.buttons["endShiftButton"].tap()
         let singular = app.staticTexts.containing(
             NSPredicate(format: "label CONTAINS %@", "A delivery is still in progress")
@@ -633,6 +634,7 @@ final class DashPilotUITests: XCTestCase {
         accepted.tap()
 
         XCTAssertTrue(waitForCount(app.buttons.matching(identifier: "deliveryActionButton"), toEqual: 0))
+        XCTAssertTrue(scrollToTop(reaching: app.buttons["endShiftButton"], in: app))
         app.buttons["endShiftButton"].tap()
         XCTAssertTrue(rows(in: app).firstMatch.waitForExistence(timeout: 5), "The shift ends once nothing is running")
     }
@@ -720,6 +722,183 @@ final class DashPilotUITests: XCTestCase {
         )
     }
 
+    // MARK: Pickup identity
+
+    /// A pickup place is named on a running delivery, and the card shows it.
+    ///
+    /// The lifecycle assertions around it are the point as much as the name is:
+    /// the delivery's next step is still one tap away before and after, so the
+    /// identity is genuinely optional rather than a step in the flow.
+    @MainActor
+    func testAssignsAPickupPlaceToARunningDelivery() throws {
+        let app = launchWithEmptyStore()
+        startShiftAndDelivery(in: app)
+
+        let action = deliveryButton("deliveryActionButton", containing: "Delivery 1", in: app)
+        XCTAssertTrue(waitForLabel(action, toContain: "Mark arrived at pickup"))
+
+        let pickup = deliveryButton("pickupPlaceButton", containing: "Delivery 1", in: app)
+        XCTAssertTrue(scrollTo(pickup, in: app), "The card offers a pickup place control")
+        XCTAssertEqual(pickup.label, "Add pickup place for Delivery 1")
+        pickup.tap()
+
+        typePickupPlace(Self.noodles, in: app)
+        app.buttons["savePickupPlaceButton"].tap()
+
+        let status = deliveryStatus(containing: "Delivery 1", in: app)
+        XCTAssertTrue(waitForLabel(status, toContain: Self.noodles), "The card names the place: \(status.label)")
+        XCTAssertTrue(waitForLabel(pickup, toContain: "Change pickup place"), "And the control now offers a change")
+        XCTAssertEqual(
+            action.label,
+            "Delivery 1. Mark arrived at pickup",
+            "Naming a pickup advances nothing"
+        )
+
+        // And the lifecycle still runs, one tap per event, exactly as before.
+        for expected in ["Mark arrived at pickup", "Mark order picked up", "Mark delivery completed"] {
+            XCTAssertTrue(waitForLabel(action, toContain: expected), "Showed: \(action.label)")
+            action.tap()
+        }
+        XCTAssertFalse(app.buttons["deliveryActionButton"].exists)
+    }
+
+    /// A second delivery reuses the first delivery's place from the recent list,
+    /// in one tap and with no typing.
+    @MainActor
+    func testSecondDeliveryReusesARecentPickupPlace() throws {
+        let app = launchWithEmptyStore()
+        startShiftAndDelivery(in: app)
+
+        let first = deliveryButton("pickupPlaceButton", containing: "Delivery 1", in: app)
+        XCTAssertTrue(scrollTo(first, in: app))
+        first.tap()
+        typePickupPlace(Self.noodles, in: app)
+        app.buttons["savePickupPlaceButton"].tap()
+
+        let startDelivery = app.buttons["startDeliveryButton"]
+        XCTAssertTrue(scrollTo(startDelivery, in: app))
+        startDelivery.tap()
+
+        let second = deliveryButton("pickupPlaceButton", containing: "Delivery 2", in: app)
+        XCTAssertTrue(second.waitForExistence(timeout: 5))
+        second.tap()
+
+        // No keyboard: the place the first delivery named is offered as recent.
+        let recent = app.buttons
+            .matching(NSPredicate(format: "identifier == %@ AND label CONTAINS %@", "recentPickupPlaceButton", Self.noodles))
+            .firstMatch
+        XCTAssertTrue(recent.waitForExistence(timeout: 5), "The place used moments ago is offered")
+        recent.tap()
+
+        for number in ["Delivery 1", "Delivery 2"] {
+            let status = deliveryStatus(containing: number, in: app)
+            XCTAssertTrue(
+                waitForLabel(status, toContain: Self.noodles),
+                "\(number) should name the shared place, showed: \(status.label)"
+            )
+        }
+    }
+
+    /// A pickup place tapped onto the wrong delivery can be corrected.
+    @MainActor
+    func testChangesAPickupPlace() throws {
+        let app = launchWithEmptyStore()
+        startShiftAndDelivery(in: app)
+
+        let pickup = deliveryButton("pickupPlaceButton", containing: "Delivery 1", in: app)
+        XCTAssertTrue(scrollTo(pickup, in: app))
+        pickup.tap()
+        typePickupPlace(Self.noodles, in: app)
+        app.buttons["savePickupPlaceButton"].tap()
+
+        let status = deliveryStatus(containing: "Delivery 1", in: app)
+        XCTAssertTrue(waitForLabel(status, toContain: Self.noodles))
+
+        XCTAssertTrue(waitForLabel(pickup, toContain: "Change pickup place"))
+        pickup.tap()
+        let field = app.textFields["pickupPlaceNameField"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        XCTAssertEqual(field.value as? String, Self.noodles, "The editor opens on what was recorded")
+        clear(field, in: app)
+        field.typeText(Self.diner)
+        app.buttons["savePickupPlaceButton"].tap()
+
+        XCTAssertTrue(waitForLabel(status, toContain: Self.diner), "Showed: \(status.label)")
+        XCTAssertFalse(status.label.contains(Self.noodles), "The old place is gone from the card")
+    }
+
+    /// Removing a pickup place leaves the delivery and its lifecycle intact.
+    @MainActor
+    func testRemovesAPickupPlace() throws {
+        let app = launchWithEmptyStore()
+        startShiftAndDelivery(in: app)
+
+        let pickup = deliveryButton("pickupPlaceButton", containing: "Delivery 1", in: app)
+        XCTAssertTrue(scrollTo(pickup, in: app))
+        pickup.tap()
+        typePickupPlace(Self.noodles, in: app)
+        app.buttons["savePickupPlaceButton"].tap()
+
+        let action = deliveryButton("deliveryActionButton", containing: "Delivery 1", in: app)
+        XCTAssertTrue(waitForLabel(action, toContain: "Mark arrived at pickup"))
+        action.tap()
+        XCTAssertTrue(waitForLabel(action, toContain: "Mark order picked up"))
+
+        XCTAssertTrue(waitForLabel(pickup, toContain: "Change pickup place"))
+        pickup.tap()
+        let remove = app.buttons["removePickupPlaceButton"]
+        XCTAssertTrue(remove.waitForExistence(timeout: 5))
+        remove.tap()
+
+        let status = deliveryStatus(containing: "Delivery 1", in: app)
+        XCTAssertTrue(waitForLabel(status, toContain: "waiting at the pickup"), "Showed: \(status.label)")
+        XCTAssertFalse(status.label.contains(Self.noodles), "The place is gone")
+        XCTAssertEqual(
+            action.label,
+            "Delivery 1. Mark order picked up",
+            "And the delivery is exactly where it was in its lifecycle"
+        )
+        XCTAssertTrue(waitForLabel(pickup, toContain: "Add pickup place"))
+    }
+
+    /// A completed shift's delivery log shows the place each delivery recorded,
+    /// and shows nothing where none was recorded.
+    @MainActor
+    func testCompletedShiftDetailShowsPickupPlaces() throws {
+        let app = launchWithSeededHistory()
+        openFirstShift(in: app)
+
+        let summary = app.descendants(matching: .any)["shiftDetailDeliverySummary"]
+        XCTAssertTrue(scrollTo(summary, in: app))
+
+        // The fixture's first and third deliveries share one place; the second
+        // carries a different one.
+        let first = deliveryRow(containing: "Delivery 1, delivered", in: app)
+        XCTAssertTrue(scrollTo(first, in: app))
+        XCTAssertTrue(
+            first.label.contains("Picked up from \(Self.noodles)"),
+            "The place is spoken with the delivery: \(first.label)"
+        )
+        XCTAssertTrue(first.label.contains("Accepted at"), "And supplements the record rather than replacing it")
+
+        let second = deliveryRow(containing: "Delivery 2, cancelled", in: app)
+        XCTAssertTrue(scrollTo(second, in: app))
+        XCTAssertTrue(second.label.contains("Picked up from \(Self.diner)"), "Showed: \(second.label)")
+
+        let third = deliveryRow(containing: "Delivery 3, delivered", in: app)
+        XCTAssertTrue(scrollTo(third, in: app))
+        XCTAssertTrue(
+            third.label.contains("Picked up from \(Self.noodles)"),
+            "Two deliveries share one local place: \(third.label)"
+        )
+
+        // And every delivery offers the control that corrects it.
+        XCTAssertTrue(
+            app.buttons.matching(identifier: "shiftDetailPickupPlaceButton").firstMatch.exists,
+            "A place recorded on the wrong delivery is fixable from history"
+        )
+    }
+
     // MARK: Deletion
 
     /// Deletes a completed shift from its detail screen and returns to a history
@@ -776,6 +955,50 @@ final class DashPilotUITests: XCTestCase {
     }
 
     // MARK: Helpers
+
+    /// Invented pickup-place names, matching `PreviewSupport.SyntheticPickupPlace`;
+    /// a UI test target cannot link the app target, so they are repeated here.
+    /// No real business is named anywhere in this repository.
+    private static let noodles = "Nowhere Noodles"
+    private static let diner = "Example Diner"
+
+    /// Starts a shift and one delivery on it, which is the state three of the
+    /// pickup journeys begin from.
+    @MainActor
+    private func startShiftAndDelivery(in app: XCUIApplication) {
+        let startShift = app.buttons["startShiftButton"]
+        XCTAssertTrue(startShift.waitForExistence(timeout: 10))
+        startShift.tap()
+
+        let startDelivery = app.buttons["startDeliveryButton"]
+        XCTAssertTrue(scrollTo(startDelivery, in: app))
+        startDelivery.tap()
+    }
+
+    /// Types a name into the pickup-place sheet's only field.
+    @MainActor
+    private func typePickupPlace(_ name: String, in app: XCUIApplication) {
+        let field = app.textFields["pickupPlaceNameField"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        field.tap()
+        field.typeText(name)
+    }
+
+    /// One running delivery's status element, identified by which delivery it
+    /// names. It is a combined element, so what the card shows is read from its
+    /// label — which is also what VoiceOver says.
+    @MainActor
+    private func deliveryStatus(containing text: String, in app: XCUIApplication) -> XCUIElement {
+        app.descendants(matching: .any)
+            .matching(
+                NSPredicate(
+                    format: "identifier == %@ AND label CONTAINS %@",
+                    "activeDeliveryStatus",
+                    text
+                )
+            )
+            .firstMatch
+    }
 
     /// One of the running shift's delivery controls, identified by which
     /// delivery its label names rather than by where it sits in the list.
@@ -843,6 +1066,23 @@ final class DashPilotUITests: XCTestCase {
             app.swipeUp()
         }
         return element.exists
+    }
+
+    /// Scrolls back to the top of the screen and waits for `element` there.
+    ///
+    /// The shift's own controls sit above the delivery section, so a test that
+    /// reached a delivery card — or that tapped one XCUITest had to scroll into
+    /// view first — has to come back before it can tap `End Shift`. It swipes
+    /// unconditionally rather than checking first: a `List` reports a row it has
+    /// scrolled past as existing and hittable, and tapping that stale frame
+    /// lands on whatever is now in its place.
+    @MainActor
+    @discardableResult
+    private func scrollToTop(reaching element: XCUIElement, in app: XCUIApplication, swipes: Int = 6) -> Bool {
+        for _ in 0..<swipes {
+            app.swipeDown()
+        }
+        return element.waitForExistence(timeout: 5)
     }
 
     @MainActor
