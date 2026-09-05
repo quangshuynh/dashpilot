@@ -35,8 +35,9 @@ and one they cannot.
 - **"Active" says nothing about what the driver was doing.** It means a recorded delivery had not
   reached a terminal state. It is not driving, working, productive or billable time, and
   non-delivery time is not idle time.
-- **No per-delivery rate and no average wait.** The one delivery-derived rate is over the whole
-  shift's active time.
+- **No per-delivery rate.** The one delivery-derived rate is over the whole shift's active time.
+- **A delivery's recorded pickup wait is only as good as the tapping**, like every other interval. An
+  arrival marked late shortens it and one marked early lengthens it, and nothing detects either.
 - **A recorded delivery's timestamps cannot be edited, and a delivery cannot be deleted
   individually.** A mis-tapped lifecycle event stays as recorded, and only deleting the whole shift
   removes it. The pickup place is the one exception, because it is not an event: it can be added,
@@ -72,8 +73,30 @@ and one they cannot.
   new place to each delivery that used the old one.
 - **Unreferenced places are never collected.** A place whose deliveries have all been deleted stays
   in the local catalogue. It stops appearing in the recent list, and typing the name finds it again.
-- **Nothing is derived from a place yet.** No wait statistic, no visit count, no ranking and no
-  score — see below.
+- **No visit count, ranking or score.** A place's recorded pickup waits are summarised — see below —
+  and nothing else is derived from it.
+
+## Pickup wait
+
+- **Only two events are counted.** A wait is `pickedUpAt - arrivedAtPickupAt` and nothing else. A
+  delivery missing either end contributes nothing, so a place's history covers the pickups the driver
+  tapped through completely, not the times they went there.
+- **A delivery cancelled before pickup contributes nothing**, however long the driver stood there.
+  That is a deliberate rule, not an oversight: the app was never told the order was collected.
+- **A single recorded wait is not a typical wait**, and is presented as one observation. Two is the
+  threshold for offering a median, which is a wording decision, not evidence that two pickups predict
+  a third.
+- **The median describes the past only.** It is not a forecast, a confidence interval or an
+  estimate, and a place's next pickup is free to be nothing like its recorded ones.
+- **Nothing is trimmed.** A forty-minute wait with valid timestamps stays in the history and in the
+  median's input. No outlier rejection of any kind is applied.
+- **No merchant comparison.** Places are never ranked, scored, graded or coloured against each other,
+  and no screen lists them side by side.
+- **Waits are per place, not per hour or per day.** Nothing splits a place's history by time of day,
+  weekday or shift, so a place that is quick at lunch and slow at nine has one median covering both.
+- **No live use.** A running shift shows no historical wait, so nothing informs a decision at the
+  moment an offer arrives.
+- **Nothing links waits to earnings.** No figure divides one into the other.
 
 ## Earnings and metrics
 
@@ -102,10 +125,10 @@ and one they cannot.
 
 ## Product scope
 
-- **Little is built on the delivery records yet.** Delivery active time, the rate over it, and an
-  optional pickup place are the whole of it: no wait statistic per place, no merchant scoring, no
-  wait-time recommendation, no offer profitability, no per-delivery earnings, no aggregate across
-  shifts and no automatic detection.
+- **Little is built on the delivery records yet.** Delivery active time, the rate over it, an
+  optional pickup place and that place's recorded pickup waits are the whole of it: no merchant
+  scoring, no wait-time recommendation, no offer profitability, no per-delivery earnings, no
+  aggregate across shifts and no automatic detection.
 - **No recommendations, predictions or machine learning.** None is implemented, and none is claimed.
 - **No delivery-platform integration**, by design and permanently. See
   [Product overview](../product/overview.md#boundaries-the-project-will-not-cross).
@@ -116,8 +139,8 @@ and one they cannot.
   route when they appear, so opening a shift walks its route a second time. This is acceptable at
   current route sizes, and caching is a deliberate decision deferred until there is a measurement
   behind it.
-- **Test-only app code exists.** The debug-only seeded-history launch path is app code that exists
-  for tests. It is in-memory and DEBUG-gated, and it is one more launch path to keep honest.
+- **Test-only app code exists.** The debug-only seeded-history and seeded-pickup-history launch
+  paths are app code that exists for tests. Both are in-memory and DEBUG-gated, and each is one more launch path to keep honest.
 - **UI tests can fail environmentally.** XCUITest under parallel simulator load has been observed
   failing in the accessibility server rather than on an assertion. See
   [Testing](../development/testing.md#continuous-integration).

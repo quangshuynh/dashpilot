@@ -91,5 +91,5 @@ The full list, including the parts that are simply not built yet, is on
 !!! note "Documentation status"
 
     This site documents schema v6 and the shift, route, earnings, metrics, detail, delivery
-    lifecycle and pickup identity work completed so far. Every amount, coordinate, route and business
-    name in it is synthetic.
+    lifecycle, pickup identity and pickup wait work completed so far. Every amount, coordinate,
+    route and business name in it is synthetic.
