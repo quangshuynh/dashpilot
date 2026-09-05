@@ -221,6 +221,13 @@ private struct ElapsedTimeLabel: View {
 private struct CompletedShiftRow: View {
     let shift: Shift
 
+    /// Measured when the row appears rather than inside `body`.
+    ///
+    /// A shift's route can hold thousands of positions, and a view's body is
+    /// re-evaluated whenever the list redraws. Nothing is cached in the store —
+    /// the number is still derived from the route every time the row is built.
+    @State private var recordedDistance: RouteDistance?
+
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(shift.startedAt, format: .dateTime.weekday(.abbreviated).month().day())
@@ -228,9 +235,36 @@ private struct CompletedShiftRow: View {
             Text(detail)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
+            if let recordedMileage {
+                Text(recordedMileage)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
+        .task(id: shift.id) { recordedDistance = shift.recordedDistance() }
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("completedShiftRow")
+    }
+
+    /// What the route can honestly be said to show.
+    ///
+    /// The wording never claims to be every mile driven. Capture is
+    /// foreground-only and its gaps are excluded from the total, so "recorded"
+    /// is the strongest word available; "partial route" is added when the shift
+    /// is known to have stretches the route does not cover.
+    ///
+    /// A route with nothing measurable in it says so rather than showing
+    /// `0.0 mi`, which a driver would read as "you did not move" instead of "no
+    /// distance could be measured".
+    private var recordedMileage: String? {
+        guard let recordedDistance else { return nil }
+        guard recordedDistance.isMeasured else {
+            return recordedDistance.usableSampleCount == 0
+                ? "No route recorded"
+                : "Not enough route recorded to measure"
+        }
+        let miles = recordedDistance.formattedMiles()
+        return recordedDistance.isPartial ? "\(miles) recorded · partial route" : "\(miles) recorded"
     }
 
     private var detail: String {
