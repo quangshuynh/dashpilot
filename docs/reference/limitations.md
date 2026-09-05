@@ -29,14 +29,19 @@ and one they cannot.
   that says where it went or who it was for.
 - **No per-delivery earnings.** Gross earnings are one figure for the whole shift, and DashPilot has
   no source from which to split it between deliveries.
-- **Deliveries are not used in any rate.** The hourly rate still divides by the shift's whole
-  elapsed time; nothing derives active-versus-idle time, a per-delivery rate or an average wait.
+- **Delivery active time is only as good as the tapping.** It is the union of the intervals between
+  recorded events, so a delivery marked delivered twenty minutes late reads as twenty minutes longer,
+  and a delivery never recorded contributes nothing at all. Nothing detects or corrects either.
+- **"Active" says nothing about what the driver was doing.** It means a recorded delivery had not
+  reached a terminal state. It is not driving, working, productive or billable time, and
+  non-delivery time is not idle time.
+- **No per-delivery rate and no average wait.** The one delivery-derived rate is over the whole
+  shift's active time.
 - **A recorded delivery cannot be edited or deleted individually.** A mis-tapped event stays as
   recorded, and only deleting the whole shift removes it.
-- **Overlapping deliveries are not aggregated.** Deliveries worked at the same time are recorded
-  separately with their own durations, and nothing turns their overlapping spans into a single
-  "active time" figure. A 30-minute delivery and a 25-minute one overlapping by 20 minutes is not 55
-  minutes of work, and DashPilot does not claim it is.
+- **Overlapping deliveries are unioned, never summed.** A 30-minute delivery and a 25-minute one
+  overlapping by 20 minutes is 35 minutes of delivery active time. The per-delivery durations in the
+  shift's delivery list are still separate figures and are never added together.
 - **Nothing analyses stacking.** DashPilot records that two deliveries overlapped. It does not know
   they were offered together, does not group or pair them, and derives nothing from the fact that
   they overlapped.
@@ -50,17 +55,18 @@ and one they cannot.
 
 - **Earnings are typed by the driver.** Nothing is imported, and the app cannot know whether an
   amount includes tips, bonuses, promotions, adjustments or reimbursements.
-- **The hourly rate divides by elapsed time.** Recorded deliveries are not used in it, so for a
-  driver who idles a lot it understates how the driving itself performed, and the app cannot say by
-  how much.
+- **The per-shift-hour rate divides by elapsed time**, waiting included, and the per-active-delivery-hour
+  rate divides by unioned delivery time. Neither is a wage: the first ignores what the driver was
+  doing, the second measures only when deliveries were open, and both are gross.
 - **The per-recorded-mile rate is biased upward** by exactly the mileage capture missed, so it is
   not comparable to a per-mile figure from an app that records in the background.
-- **Both rates are gross.** Nothing subtracts fuel, wear, insurance or tax. Neither is a profit,
-  take-home or tax figure, and neither is a mileage deduction.
+- **Every rate is gross.** Nothing subtracts fuel, wear, insurance or tax. None is a profit,
+  take-home or tax figure, and none is a mileage deduction.
 - **USD only.** Nothing converts currencies or records which currency a shift was earned in.
 - **Nothing aggregates.** No weekly or all-time totals, no best or worst shift, no chart and no
   sorting. Figures are read one shift at a time.
-- **No live figures.** A running shift shows no mileage and no rate.
+- **No live figures.** A running shift shows no mileage, no rate and no active time. Active-time
+  figures are finalised only once a shift ends.
 
 ## Data and safety
 
@@ -72,8 +78,9 @@ and one they cannot.
 
 ## Product scope
 
-- **Nothing is built on the delivery records yet.** No restaurant scoring, no wait-time
-  recommendation, no offer profitability, no aggregate across shifts and no automatic detection.
+- **Little is built on the delivery records yet.** Delivery active time and the rate over it are
+  the whole of it: no restaurant scoring, no wait-time recommendation, no offer profitability, no
+  per-delivery earnings, no aggregate across shifts and no automatic detection.
 - **No recommendations, predictions or machine learning.** None is implemented, and none is claimed.
 - **No delivery-platform integration**, by design and permanently. See
   [Product overview](../product/overview.md#boundaries-the-project-will-not-cross).

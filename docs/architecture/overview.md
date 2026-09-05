@@ -99,12 +99,13 @@ does not know how a delivery advances.
 
 ## Nothing derived is stored
 
-Recorded mileage, both rates, a delivery's state, its two derived intervals and the wording that
-qualifies all of them are computed on demand from the shift's timestamps, its recorded amount, its
-retained route and its deliveries. A stored `hourlyRate`, a stored distance or a stored delivery
-state would be a second answer to a question the store can already answer: it would keep the old
-number after the calculation improved, and it would have to be rewritten every time the driver
-edited an amount or recorded an event.
+Recorded mileage, all three rates, a delivery's state, its two derived intervals, the shift's
+delivery active time and the wording that qualifies all of them are computed on demand from the
+shift's timestamps, its recorded amount, its retained route and its deliveries. A stored
+`hourlyRate`, a stored distance, a stored `activeDuration` or a stored delivery state would be a
+second answer to a question the store can already answer: it would keep the old number after the
+calculation improved, and it would have to be rewritten every time the driver edited an amount or
+recorded an event.
 
 If measuring a long route ever proves too slow to do on demand, caching is a deliberate change to
 make then, with a measurement behind it.

@@ -48,13 +48,15 @@ through a locale-aware input layer that reads what a decimal pad produces and re
 cannot read rather than reinterpreting it. Amounts are added, edited and removed from the shift's
 detail screen, never during a running shift.
 
-**Completed-shift metrics.** Gross earnings per elapsed shift hour and gross earnings per recorded
-mile, both derived from what is already stored. A rate that cannot be derived is never shown as
+**Completed-shift metrics.** Gross earnings per elapsed shift hour, per active delivery hour and per
+recorded mile, all derived from what is already stored, alongside the delivery active time and
+non-delivery time the second of them divides by. A rate that cannot be derived is never shown as
 zero.
 
 **Completed-shift detail and deletion.** Tapping a shift in history opens a screen for that shift
-alone: when it ran and for how long, the deliveries recorded during it, what it paid, what its route
-recorded, and both rates with an explanation for either one that is missing. A finished shift can be
+alone: when it ran and for how long, how much of it a delivery was active for, the deliveries
+recorded during it, what it paid, what its route recorded, and all three rates with an explanation
+for any that are missing. A finished shift can be
 deleted from there behind a confirmation that names what goes with it. Deleting a shift also deletes
 the route positions and the deliveries recorded during it. A running shift cannot be deleted, and
 deletion is not undoable.
@@ -67,13 +69,14 @@ database" action.
 ## Not implemented
 
 Expenses, fuel, taxes, mileage deductions, a tips-versus-base breakdown, per-delivery earnings,
-active-versus-idle time, restaurant or customer identity, wait-time analysis, offer profitability,
-automatic delivery detection, maps, route visualisation, weekly or all-time totals, export, App
-Intents, Live Activities and recommendations.
+restaurant or customer identity, wait-time analysis, offer profitability, automatic delivery
+detection, maps, route visualisation, weekly or all-time totals, export, App Intents, Live Activities
+and recommendations.
 
-Deliveries are recorded, but nothing is built on them yet: the app derives a pickup wait and a
-delivery duration for presentation and stops there. There is no restaurant rating, no average, no
-comparison between shifts and no prediction.
+Deliveries are recorded, and one figure is built on them: the shift time at least one delivery was
+active, with overlapping deliveries counted once, and gross earnings over it. Beyond that the app
+derives a pickup wait and a delivery duration for presentation and stops. There is no restaurant
+rating, no average, no comparison between shifts and no prediction.
 
 Nothing is aggregated across shifts, no route is drawn on a map, and no mileage or live rate is
 shown while a shift is still running. There is no undo for a deleted shift and no backup of any
@@ -103,11 +106,12 @@ the wording the app itself uses.
 
 !!! warning "The rates are gross, and each says what it divides by"
 
-    The hourly figure is gross earnings over the shift's whole elapsed time, waiting and idling
-    included. Recorded deliveries are not used in any rate: nothing subtracts the time between them,
-    so this is not an active or working hourly rate. The per-mile figure is gross earnings over *recorded*
-    miles, which are normally fewer than the miles driven, so the rate is normally higher than
-    earnings per mile driven. Neither subtracts expenses, fuel, wear or tax.
+    The per-shift-hour figure is gross earnings over the shift's whole elapsed time, waiting
+    included. The per-active-delivery-hour figure is gross earnings over the time a recorded delivery
+    was open, with deliveries worked at once counted once — it is not a wage, and it says nothing
+    about what the driver was doing in that time. The per-mile figure is gross earnings over
+    *recorded* miles, which are normally fewer than the miles driven, so the rate is normally higher
+    than earnings per mile driven. None of them subtracts expenses, fuel, wear or tax.
 
 !!! warning "Deliveries are what the driver tapped"
 

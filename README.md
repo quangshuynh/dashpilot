@@ -20,7 +20,7 @@
 ---
 
 DashPilot records what a shift actually did: when it ran, which deliveries the driver recorded
-inside it, how much of its route was captured, what they say it paid, and the two rates that follow
+inside it, how much of its route was captured, what they say it paid, and the three rates that follow
 from those facts. Everything stays on the device.
 
 It is a general delivery-driver tool. It has no integration with DoorDash or any other delivery
@@ -43,9 +43,12 @@ derived legitimately from device sensors and stored history is typed by the driv
   each of them, and a shift end refused while any delivery is running.
 - **Manual gross earnings**, optional, locale-aware, refused rather than reinterpreted when it
   cannot be read.
-- **Completed-shift metrics and detail**: gross earnings per shift hour and per recorded mile, with
-  the reason stated whenever a rate cannot be derived, its deliveries listed with their recorded
-  events, and a confirmed delete that removes the shift's route positions and deliveries with it.
+- **Delivery active time**: the union of a shift's delivery intervals, so deliveries worked at the
+  same time are counted once rather than summed, plus the non-delivery time left over.
+- **Completed-shift metrics and detail**: gross earnings per shift hour, per active delivery hour and
+  per recorded mile, with the reason stated whenever a rate cannot be derived, its deliveries listed
+  with their recorded events, and a confirmed delete that removes the shift's route positions and
+  deliveries with it.
 
 ## Technology
 
@@ -56,7 +59,8 @@ Versioned schema at v5 with lightweight migrations from v1, tested by opening st
 each older version. Domain calculations import neither SwiftUI nor SwiftData, so every rule is
 tested without a container or a rendered view. Money is `Decimal` throughout: no monetary value
 passes through binary floating point, in memory or in the store. Nothing derived is stored, so
-mileage and both rates are recomputed from the stored data every time they are shown.
+mileage, active time and all three rates are recomputed from the stored data every time they are
+shown.
 
 ## Privacy
 
@@ -114,16 +118,17 @@ The short version, with the full list in [`docs/reference/limitations.md`](docs/
   deduction figure.
 - **Gross earnings are what the driver typed.** Nothing is imported, no amount is a profit,
   take-home or taxable figure, and no amount recorded is a different state from `$0.00`.
-- **Both rates are gross.** The hourly rate divides by elapsed shift time, not working time; the
-  per-mile rate divides by recorded miles, which makes it normally higher than earnings per mile
-  driven.
-- **Deliveries are what the driver tapped.** Nothing is detected, imported or inferred, and no
-  amount is attributed to a delivery. Deliveries worked at the same time are kept as separate
-  records; their overlapping durations are never summed into "active time".
+- **All three rates are gross.** The per-shift-hour rate divides by elapsed time; the
+  per-active-delivery-hour rate divides by the time a recorded delivery was open, which is not a
+  measure of work and not a wage; the per-mile rate divides by recorded miles, which makes it
+  normally higher than earnings per mile driven.
+- **Deliveries are what the driver tapped.** Nothing is detected, imported or inferred, and no amount
+  is attributed to a delivery. Delivery active time is only as good as the tapping, overlapping
+  deliveries are unioned rather than summed, and non-delivery time is not idle time.
 - **No delivery-platform integration**, permanently and by design.
 - **Local only.** No export, no backup, no sync, and deleting a shift is permanent.
-- Not implemented yet: anything built on the delivery records (restaurant scoring, wait-time
-  analysis, offer profitability), active-versus-idle time, expenses, aggregates over a period, maps,
+- Not implemented yet: most things built on the delivery records (restaurant scoring, wait-time
+  analysis, offer profitability, per-delivery earnings), expenses, aggregates over a period, maps,
   App Intents, Live Activities and recommendations.
 
 ## License

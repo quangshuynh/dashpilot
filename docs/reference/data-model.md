@@ -28,6 +28,9 @@ Derived, never stored:
 | `numberedDeliveries` | The same list paired with the local `Delivery 1`, `Delivery 2` labels |
 | `numberedActiveDeliveries` | The unfinished ones, keeping the numbers they have everywhere else |
 | `deliverySummary` | A `DeliverySummary` counting completed, cancelled and in-progress |
+| `completedWindow` | `startedAt...endedAt` for a finished shift, `nil` while running or if the stored end precedes the start |
+| `deliveryActiveIntervals` | One `DeliveryActiveInterval` per delivery: `acceptedAt`, and `deliveredAt ?? cancelledAt` |
+| `deliveryActiveTime(...)` | A `DeliveryActiveTime` unioning those intervals within `completedWindow` |
 
 `end(at:)` rejects ending a shift twice or ending it before it started. `setGrossEarnings(_:)`
 rejects a negative amount and an amount on an unfinished shift. `clearGrossEarnings()` removes the
