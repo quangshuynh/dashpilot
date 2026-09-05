@@ -85,10 +85,18 @@ nonisolated struct RouteDistance: Equatable, Sendable {
     /// One decimal is what the measurement supports: positions carry error
     /// radii of up to 100 m and a shift's gaps are unmeasured, so a second
     /// decimal would be describing precision the number does not have.
-    func formattedMiles(locale: Locale = .autoupdatingCurrent) -> String {
+    ///
+    /// `width` exists for VoiceOver: `mi` reads well and hears badly, so a
+    /// spoken description asks for `.wide` and gets `"12.4 miles"` from the same
+    /// conversion and the same rounding rule. Nothing rewrites the abbreviated
+    /// string into words.
+    func formattedMiles(
+        width: Measurement<UnitLength>.FormatStyle.UnitWidth = .abbreviated,
+        locale: Locale = .autoupdatingCurrent
+    ) -> String {
         measurement.converted(to: .miles).formatted(
             .measurement(
-                width: .abbreviated,
+                width: width,
                 usage: .asProvided,
                 numberFormatStyle: .number.precision(.fractionLength(1))
             )
