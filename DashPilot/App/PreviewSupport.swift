@@ -56,9 +56,102 @@ enum PreviewSupport {
             context.insert(sample.attached(to: completed))
         }
 
+        // Two completed deliveries and one cancelled, so the detail screen shows
+        // a delivered lifecycle, a cancelled one, and both derived intervals.
+        // Every timestamp is an invented offset from the fixture's start.
+        for delivery in syntheticDeliveries(in: completed, from: completed.startedAt) {
+            context.insert(delivery)
+        }
+
         try? context.save()
 
         return container
+    }
+
+    /// A throwaway store holding a running shift with a delivery in progress.
+    ///
+    /// The delivery is at `pickedUp`, so the running shift's one primary action
+    /// is the last step of the lifecycle. That is the state a relaunch recovers
+    /// into, and it is what makes "the next action, not a second delivery"
+    /// assertable through the interface.
+    static func activeDeliveryContainer(
+        referenceDate: Date = Date(timeIntervalSince1970: 1_756_000_000)
+    ) -> ModelContainer {
+        // Previews cannot meaningfully recover from a container failure.
+        try! seededActiveDeliveryContainer(referenceDate: referenceDate)
+    }
+
+    /// The same fixture, built through a throwing call so a UI test launch can
+    /// report a store failure rather than trapping inside it.
+    static func seededActiveDeliveryContainer(
+        referenceDate: Date = Date(timeIntervalSince1970: 1_756_000_000)
+    ) throws -> ModelContainer {
+        let container = try ModelContainerFactory.makeInMemoryContainer()
+        let context = ModelContext(container)
+
+        let shift = Shift(startedAt: referenceDate.addingTimeInterval(-5400))
+        context.insert(shift)
+
+        // One delivery already completed in this shift, so the status line has a
+        // count to state alongside the delivery in progress.
+        let finished = Delivery(shift: shift, acceptedAt: referenceDate.addingTimeInterval(-5000))
+        try? finished.markArrivedAtPickup(at: referenceDate.addingTimeInterval(-4700))
+        try? finished.markPickedUp(at: referenceDate.addingTimeInterval(-4300))
+        try? finished.markDelivered(at: referenceDate.addingTimeInterval(-3800))
+        context.insert(finished)
+
+        let running = Delivery(shift: shift, acceptedAt: referenceDate.addingTimeInterval(-900))
+        try? running.markArrivedAtPickup(at: referenceDate.addingTimeInterval(-600))
+        try? running.markPickedUp(at: referenceDate.addingTimeInterval(-240))
+        context.insert(running)
+
+        try? context.save()
+
+        return container
+    }
+
+    /// Three made-up deliveries for one shift: two delivered and one cancelled
+    /// after the driver had already waited at the pickup.
+    ///
+    /// Offsets only. No restaurant, no customer and no address appears anywhere
+    /// in DashPilot, so there is none to invent here either.
+    private static func syntheticDeliveries(in shift: Shift, from start: Date) -> [Delivery] {
+        func delivery(
+            acceptedAfter: TimeInterval,
+            arrivedAfter: TimeInterval?,
+            pickedUpAfter: TimeInterval?,
+            deliveredAfter: TimeInterval?,
+            cancelledAfter: TimeInterval? = nil
+        ) -> Delivery {
+            let delivery = Delivery(shift: shift, acceptedAt: start.addingTimeInterval(acceptedAfter))
+            if let arrivedAfter {
+                try? delivery.markArrivedAtPickup(at: start.addingTimeInterval(arrivedAfter))
+            }
+            if let pickedUpAfter {
+                try? delivery.markPickedUp(at: start.addingTimeInterval(pickedUpAfter))
+            }
+            if let deliveredAfter {
+                try? delivery.markDelivered(at: start.addingTimeInterval(deliveredAfter))
+            }
+            if let cancelledAfter {
+                try? delivery.cancel(at: start.addingTimeInterval(cancelledAfter))
+            }
+            return delivery
+        }
+
+        return [
+            delivery(acceptedAfter: 300, arrivedAfter: 600, pickedUpAfter: 1_020, deliveredAfter: 1_800),
+            // Cancelled after a wait at the pickup: the arrival it did record is
+            // kept, and the intervals it cannot support are simply absent.
+            delivery(
+                acceptedAfter: 2_400,
+                arrivedAfter: 2_700,
+                pickedUpAfter: nil,
+                deliveredAfter: nil,
+                cancelledAfter: 3_600
+            ),
+            delivery(acceptedAfter: 4_200, arrivedAfter: 4_500, pickedUpAfter: 4_800, deliveredAfter: 5_700)
+        ]
     }
 
     /// The shapes of completed shift a detail screen has to handle.
@@ -163,6 +256,9 @@ enum PreviewSupport {
         if fixture == .withEarningsAndRoute {
             for sample in syntheticRoute(from: start) {
                 container.mainContext.insert(sample.attached(to: shift))
+            }
+            for delivery in syntheticDeliveries(in: shift, from: start) {
+                container.mainContext.insert(delivery)
             }
         }
         try? container.mainContext.save()
