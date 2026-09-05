@@ -87,6 +87,22 @@ nonisolated final class Shift {
         clampedInterval(from: startedAt, to: endedAt ?? referenceDate)
     }
 
+    /// The window a finished shift covers, or `nil` while it is still running.
+    ///
+    /// The one place the shift's own range is built, so a route measurement and
+    /// a delivery interval are checked against the same window. A running shift
+    /// deliberately has none: its window is still growing, and measuring against
+    /// "now" would report a gap for every red light.
+    ///
+    /// `nil` also for a stored shift whose end precedes its start, which
+    /// ``end(at:)`` refuses to create. A range cannot be built from those
+    /// timestamps at all, and trapping on a driver's device over an anomalous
+    /// row is not an acceptable way to find out about one.
+    var completedWindow: ClosedRange<Date>? {
+        guard let endedAt, endedAt >= startedAt else { return nil }
+        return startedAt...endedAt
+    }
+
     /// Marks the shift finished.
     ///
     /// - Throws: ``ShiftError/alreadyEnded`` if the shift is not running, or
@@ -124,10 +140,9 @@ extension Shift {
     ) -> RouteDistance {
         calculator.distance(
             of: routeSamples.map(\.routePoint),
-            // A finished shift has a window the route can be checked against. A
-            // running one does not: the route is still being recorded, and
-            // measuring it against "now" would report a gap for every red light.
-            covering: endedAt.map { startedAt...$0 }
+            // A finished shift has a window the route can be checked against; a
+            // running one does not. See ``completedWindow``.
+            covering: completedWindow
         )
     }
 }
