@@ -173,6 +173,101 @@ struct PickupPlacePersistenceTests {
         #expect(shared.lastUsedAt == stored[2].acceptedAt)
     }
 
+    // MARK: Derived pickup waits
+
+    /// A place's recorded waits are read back from its relationships, so what
+    /// they add up to must be identical either side of a reopen — and no
+    /// aggregate may appear in the store to make it so.
+    @Test("Pickup wait metrics after a reopen equal the metrics before it")
+    func waitMetricsSurviveAReopen() throws {
+        let (storeURL, cleanUp) = try makeStoreURL()
+        defer { cleanUp() }
+
+        let before: PickupWaitMetrics
+        do {
+            let context = ModelContext(try ModelContainerFactory.makeContainer(at: storeURL))
+            let shifts = ShiftService(context: context)
+            let deliveries = DeliveryService(context: context)
+            let places = PickupPlaceService(context: context)
+            try shifts.startShift(at: start)
+
+            // Waits of 6, 11 and 41 minutes at one place, plus one delivery that
+            // arrived there and cancelled without ever picking up.
+            for (step, wait) in [360.0, 660.0, 2_460.0].enumerated() {
+                let accepted = Double(step) * 3_600
+                let delivery = try deliveries.startDelivery(at: at(accepted))
+                try places.assignPlace(named: "Nowhere Noodles", to: delivery)
+                try deliveries.markArrivedAtPickup(delivery, at: at(accepted + 300))
+                try deliveries.markPickedUp(delivery, at: at(accepted + 300 + wait))
+                try deliveries.markDelivered(delivery, at: at(accepted + 900 + wait))
+            }
+
+            let abandoned = try deliveries.startDelivery(at: at(12_000))
+            try places.assignPlace(named: "nowhere noodles", to: abandoned)
+            try deliveries.markArrivedAtPickup(abandoned, at: at(12_300))
+            try deliveries.cancelDelivery(abandoned, at: at(14_100))
+
+            try shifts.endActiveShift(at: at(18_000))
+
+            let place = try #require(try context.fetch(FetchDescriptor<PickupPlace>()).first)
+            before = place.pickupWaitMetrics()
+            #expect(before.sampleCount == 3, "The cancelled delivery recorded no wait")
+            #expect(before.medianDuration == 660)
+        }
+
+        let context = ModelContext(try ModelContainerFactory.makeContainer(at: storeURL))
+        let place = try #require(try context.fetch(FetchDescriptor<PickupPlace>()).first)
+        let after = place.pickupWaitMetrics()
+
+        #expect(after == before, "Reopening the store changes nothing that is derived from it")
+        #expect(place.deliveries.count == 4, "All four deliveries still name the place")
+        #expect(after.sampleCount == 3)
+        #expect(after.medianDuration == 660)
+        #expect(after.longestDuration == 2_460, "The long wait is still on the record")
+        #expect(!context.hasChanges, "Reading a place's history writes nothing back")
+    }
+
+    @Test("Two places reopened from one store keep their own histories")
+    func twoPlacesKeepSeparateHistoriesAcrossAReopen() throws {
+        let (storeURL, cleanUp) = try makeStoreURL()
+        defer { cleanUp() }
+
+        do {
+            let context = ModelContext(try ModelContainerFactory.makeContainer(at: storeURL))
+            let shifts = ShiftService(context: context)
+            let deliveries = DeliveryService(context: context)
+            let places = PickupPlaceService(context: context)
+            try shifts.startShift(at: start)
+
+            for (step, wait) in [300.0, 900.0, 1_800.0].enumerated() {
+                let accepted = Double(step) * 3_600
+                let delivery = try deliveries.startDelivery(at: at(accepted))
+                try places.assignPlace(named: step == 2 ? "Example Diner" : "Nowhere Noodles", to: delivery)
+                try deliveries.markArrivedAtPickup(delivery, at: at(accepted + 120))
+                try deliveries.markPickedUp(delivery, at: at(accepted + 120 + wait))
+                try deliveries.markDelivered(delivery, at: at(accepted + 600 + wait))
+            }
+            try shifts.endActiveShift(at: at(18_000))
+        }
+
+        let context = ModelContext(try ModelContainerFactory.makeContainer(at: storeURL))
+        let stored = try context.fetch(FetchDescriptor<PickupPlace>()).sorted(by: PickupPlace.namedBefore)
+        let noodles = try #require(stored.first { $0.displayName == "Nowhere Noodles" })
+        let diner = try #require(stored.first { $0.displayName == "Example Diner" })
+
+        #expect(noodles.pickupWaitMetrics().sampleCount == 2)
+        #expect(noodles.pickupWaitMetrics().medianDuration == 600, "The midpoint of 5 and 15 minutes")
+        #expect(noodles.pickupWaitMetrics().availability == .available)
+
+        #expect(diner.pickupWaitMetrics().sampleCount == 1)
+        #expect(diner.pickupWaitMetrics().medianDuration == 1_800)
+        #expect(
+            diner.pickupWaitMetrics().availability == .insufficientHistory,
+            "One recorded pickup is a fact, not a typical wait"
+        )
+        #expect(diner.pickupWaitMetrics().typicalDuration == nil)
+    }
+
     // MARK: Migration
 
     @Test("A version 5 store opens under version 6 with everything it held and no invented places")

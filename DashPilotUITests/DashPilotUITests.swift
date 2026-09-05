@@ -10,6 +10,9 @@ final class DashPilotUITests: XCTestCase {
     /// Must match `LaunchArgument.seededActiveDelivery`, for the same reason.
     private static let seededActiveDeliveryArgument = "-dashpilot-seeded-active-delivery"
 
+    /// Must match `LaunchArgument.seededPickupHistory`, for the same reason.
+    private static let seededPickupHistoryArgument = "-dashpilot-seeded-pickup-history"
+
     override func setUpWithError() throws {
         continueAfterFailure = false
     }
@@ -52,6 +55,21 @@ final class DashPilotUITests: XCTestCase {
     private func launchWithActiveDelivery() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments.append(Self.seededActiveDeliveryArgument)
+        app.launch()
+        return app
+    }
+
+    /// Launches against a throwaway store holding one completed shift whose
+    /// deliveries give two pickup places different amounts of recorded history.
+    ///
+    /// The fixture's shift holds, in acceptance order: three deliveries from
+    /// `Nowhere Noodles` waiting 6, 11 and 41 minutes; one from `Example Diner`
+    /// waiting 20 minutes; one naming no place at all; and one that arrived at
+    /// `Nowhere Noodles` and cancelled without ever picking up.
+    @MainActor
+    private func launchWithPickupHistory() -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments.append(Self.seededPickupHistoryArgument)
         app.launch()
         return app
     }
@@ -899,6 +917,135 @@ final class DashPilotUITests: XCTestCase {
         )
     }
 
+    // MARK: Pickup wait history
+
+    /// A completed delivery states the wait it recorded, as a fact about that
+    /// delivery rather than about the place.
+    @MainActor
+    func testCompletedDeliveryShowsItsOwnPickupWait() throws {
+        let app = launchWithPickupHistory()
+        openFirstShift(in: app)
+
+        let first = deliveryRow(containing: "Delivery 1, delivered", in: app)
+        XCTAssertTrue(scrollTo(first, in: app))
+        XCTAssertTrue(
+            first.label.contains("Waited at pickup 6 minutes"),
+            "The delivery's own wait is derived from its two recorded ends: \(first.label)"
+        )
+        XCTAssertFalse(
+            first.label.lowercased().contains("typical"),
+            "One delivery's wait is not a claim about the place: \(first.label)"
+        )
+        XCTAssertFalse(first.label.contains("median"))
+    }
+
+    /// A place with several recorded waits shows the median, says it is the
+    /// median, and says how many pickups it came from.
+    @MainActor
+    func testPickupPlaceHistoryShowsAMedianAndItsSampleCount() throws {
+        let app = launchWithPickupHistory()
+        openFirstShift(in: app)
+        openPickupHistory(from: "Delivery 1, delivered", in: app)
+
+        let summary = app.descendants(matching: .any)["pickupPlaceHistorySummary"]
+        XCTAssertTrue(summary.waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            summary.label.contains("Typical recorded pickup wait, 11 minutes"),
+            "The middle of 6, 11 and 41 minutes: \(summary.label)"
+        )
+        XCTAssertTrue(
+            summary.label.contains("median of 3 recorded pickups"),
+            "The statistic and its sample count are spoken with the figure: \(summary.label)"
+        )
+        XCTAssertTrue(
+            summary.label.contains("longest 41 minutes"),
+            "A long wait is kept rather than trimmed away: \(summary.label)"
+        )
+
+        // The delivery that arrived and cancelled without picking up named this
+        // place too, and contributed nothing.
+        XCTAssertFalse(summary.label.contains("4 recorded pickups"), "Showed: \(summary.label)")
+
+        // Nothing on this screen ranks, grades or forecasts.
+        for overclaim in ["reliable", "accurate", "predict", "average", "score", "best", "fastest"] {
+            XCTAssertFalse(
+                summary.label.lowercased().contains(overclaim),
+                "The history must not claim \(overclaim): \(summary.label)"
+            )
+        }
+    }
+
+    /// A place with exactly one recorded wait says so, and refuses to call it
+    /// typical.
+    @MainActor
+    func testOneRecordedPickupIsNotPresentedAsATypicalWait() throws {
+        let app = launchWithPickupHistory()
+        openFirstShift(in: app)
+        openPickupHistory(from: "Delivery 5, delivered", in: app)
+
+        let summary = app.descendants(matching: .any)["pickupPlaceHistorySummary"]
+        XCTAssertTrue(summary.waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            summary.label.contains("1 recorded pickup, 20 minutes"),
+            "The one wait is a fact and is stated: \(summary.label)"
+        )
+        XCTAssertTrue(
+            summary.label.contains("Not enough history for a typical wait"),
+            "And its smallness is stated with it: \(summary.label)"
+        )
+        XCTAssertFalse(
+            summary.label.lowercased().contains("typical recorded pickup wait"),
+            "One observation is never offered as the place's typical wait: \(summary.label)"
+        )
+        XCTAssertFalse(summary.label.contains("Median"), "Showed: \(summary.label)")
+    }
+
+    /// Two places recorded on one shift keep entirely separate histories.
+    @MainActor
+    func testTwoPickupPlacesDoNotShareAHistory() throws {
+        let app = launchWithPickupHistory()
+        openFirstShift(in: app)
+
+        openPickupHistory(from: "Delivery 1, delivered", in: app)
+        let summary = app.descendants(matching: .any)["pickupPlaceHistorySummary"]
+        XCTAssertTrue(summary.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.navigationBars[Self.noodles].exists, "The sheet is titled by the place it describes")
+        XCTAssertTrue(summary.label.contains("3 recorded pickups"), "Showed: \(summary.label)")
+        closePickupHistory(in: app)
+
+        openPickupHistory(from: "Delivery 5, delivered", in: app)
+        XCTAssertTrue(summary.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.navigationBars[Self.diner].exists)
+        XCTAssertTrue(summary.label.contains("1 recorded pickup"), "Showed: \(summary.label)")
+        XCTAssertFalse(
+            summary.label.contains("11 minutes"),
+            "The other place's median must not leak into this one: \(summary.label)"
+        )
+    }
+
+    /// A delivery that names no place offers no history to open, rather than an
+    /// empty one.
+    @MainActor
+    func testDeliveryWithoutAPickupPlaceHasNoHistoryToOpen() throws {
+        let app = launchWithPickupHistory()
+        openFirstShift(in: app)
+
+        let unattributed = deliveryRow(containing: "Delivery 6, delivered", in: app)
+        XCTAssertTrue(scrollTo(unattributed, in: app))
+        XCTAssertFalse(
+            unattributed.label.contains("Picked up from"),
+            "It named no place: \(unattributed.label)"
+        )
+        XCTAssertTrue(
+            unattributed.label.contains("Waited at pickup"),
+            "Its own wait is still recorded: \(unattributed.label)"
+        )
+        XCTAssertNil(
+            pickupHistoryButton(near: unattributed, in: app),
+            "A delivery with no place has no place history, and is offered none"
+        )
+    }
+
     // MARK: Deletion
 
     /// Deletes a completed shift from its detail screen and returns to a history
@@ -1083,6 +1230,56 @@ final class DashPilotUITests: XCTestCase {
             app.swipeDown()
         }
         return element.waitForExistence(timeout: 5)
+    }
+
+    /// Opens the pickup-place history of the delivery whose row says `text`.
+    ///
+    /// Every delivery's history button shares one identifier, so the right one
+    /// is picked out by the place it names — read off the row's own label —
+    /// rather than by an index into a query over the whole screen.
+    @MainActor
+    private func openPickupHistory(from text: String, in app: XCUIApplication) {
+        let row = deliveryRow(containing: text, in: app)
+        XCTAssertTrue(scrollTo(row, in: app), "The delivery should be listed")
+        let button = pickupHistoryButton(near: row, in: app)
+        XCTAssertNotNil(button, "The delivery names a place, so its history is one tap away")
+        button?.tap()
+    }
+
+    /// The pickup-history button belonging to one delivery, or `nil` when that
+    /// delivery is offered none.
+    ///
+    /// Matched by the accessibility label, which names the place, because every
+    /// such button on the screen shares one identifier.
+    @MainActor
+    private func pickupHistoryButton(near row: XCUIElement, in app: XCUIApplication) -> XCUIElement? {
+        let place = [Self.noodles, Self.diner].first { row.label.contains("Picked up from \($0)") }
+        guard let place else { return nil }
+        let button = app.buttons
+            .matching(identifier: "shiftDetailPickupHistoryButton")
+            .matching(NSPredicate(format: "label CONTAINS %@", place))
+            .firstMatch
+        return button.exists ? button : nil
+    }
+
+    @MainActor
+    private func closePickupHistory(in app: XCUIApplication) {
+        let done = app.buttons["closePickupPlaceHistoryButton"]
+        XCTAssertTrue(done.waitForExistence(timeout: 5))
+        done.tap()
+        XCTAssertTrue(
+            waitForDisappearance(of: app.descendants(matching: .any)["pickupPlaceHistorySummary"]),
+            "The sheet closes back to the shift's delivery log"
+        )
+    }
+
+    @MainActor
+    private func waitForDisappearance(of element: XCUIElement) -> Bool {
+        let expectation = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == false"),
+            object: element
+        )
+        return XCTWaiter().wait(for: [expectation], timeout: 5) == .completed
     }
 
     @MainActor

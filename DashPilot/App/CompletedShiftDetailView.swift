@@ -200,10 +200,10 @@ struct CompletedShiftDetailView: View {
         identifier: String
     ) -> some View {
         LabeledContent(title) {
-            Text(Self.durationText(duration)).monospacedDigit()
+            Text(DurationText.short(duration)).monospacedDigit()
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(Self.durationText(duration, width: .wide)) \(spokenTitle)")
+        .accessibilityLabel("\(DurationText.spoken(duration)) \(spokenTitle)")
         .accessibilityIdentifier(identifier)
     }
 
@@ -520,23 +520,6 @@ struct CompletedShiftDetailView: View {
     private var metrics: ShiftMetrics? {
         recordedDistance.map { shift.metrics(for: $0) }
     }
-
-    /// A shift ended moments after it started should read in seconds rather than
-    /// as `0 min`.
-    ///
-    /// `width` exists for VoiceOver, for the reason ``RouteDistance`` takes one:
-    /// `hr` reads well and hears badly, so a spoken description asks for `.wide`
-    /// and gets "1 hour, 5 minutes" from the same units and the same rule.
-    /// Nothing rewrites the abbreviated string into words.
-    static func durationText(
-        _ duration: TimeInterval,
-        width: Duration.UnitsFormatStyle.UnitWidth = .abbreviated
-    ) -> String {
-        let units: Set<Duration.UnitsFormatStyle.Unit> = duration < 60
-            ? [.minutes, .seconds]
-            : [.hours, .minutes]
-        return Duration.seconds(duration).formatted(.units(allowed: units, width: width))
-    }
 }
 
 /// One delivery in a completed shift's history.
@@ -552,11 +535,16 @@ private struct DeliveryHistoryRow: View {
     /// they recorded — and where they notice a place tapped onto the wrong card.
     @State private var isEditingPickupPlace = false
 
+    /// The place's own recorded history, reached from the delivery that names
+    /// it. This is a review surface: it is offered on a finished shift and
+    /// nowhere on a running one.
+    @State private var isShowingPickupHistory = false
+
     private var delivery: Delivery { numbered.delivery }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            // The recorded facts, read as one element. The control below is
+            // The recorded facts, read as one element. The controls below sit
             // deliberately outside it: a button folded into a combined element
             // is not reachable by VoiceOver.
             VStack(alignment: .leading, spacing: 4) {
@@ -585,7 +573,7 @@ private struct DeliveryHistoryRow: View {
 
                 ForEach(intervals, id: \.label) { interval in
                     LabeledContent(interval.label) {
-                        Text(CompletedShiftDetailView.durationText(interval.duration))
+                        Text(DurationText.short(interval.duration))
                             .monospacedDigit()
                     }
                     .font(.footnote)
@@ -596,22 +584,44 @@ private struct DeliveryHistoryRow: View {
             .accessibilityLabel(accessibilityLabel)
             .accessibilityIdentifier("shiftDetailDeliveryRow")
 
-            Button {
-                isEditingPickupPlace = true
-            } label: {
-                Label(
-                    numbered.pickupPlaceActionTitle(hasPlace: delivery.pickupPlace != nil),
-                    systemImage: delivery.pickupPlace == nil ? "plus.circle" : "pencil"
-                )
-                .font(.footnote)
+            HStack(spacing: 16) {
+                Button {
+                    isEditingPickupPlace = true
+                } label: {
+                    Label(
+                        numbered.pickupPlaceActionTitle(hasPlace: delivery.pickupPlace != nil),
+                        systemImage: delivery.pickupPlace == nil ? "plus.circle" : "pencil"
+                    )
+                    .font(.footnote)
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel(numbered.spokenPickupPlaceLabel(hasPlace: delivery.pickupPlace != nil))
+                .accessibilityIdentifier("shiftDetailPickupPlaceButton")
+
+                // Only where there is a place to have a history. A delivery
+                // that names none has nothing to group by, and offering the
+                // control anyway would suggest the app knows where it was.
+                if let place = delivery.pickupPlace {
+                    Button {
+                        isShowingPickupHistory = true
+                    } label: {
+                        Label("Pickup History", systemImage: "clock.arrow.circlepath")
+                            .font(.footnote)
+                    }
+                    .buttonStyle(.borderless)
+                    .accessibilityLabel("Recorded pickup waits at \(place.displayName)")
+                    .accessibilityIdentifier("shiftDetailPickupHistoryButton")
+                }
             }
-            .buttonStyle(.borderless)
-            .accessibilityLabel(numbered.spokenPickupPlaceLabel(hasPlace: delivery.pickupPlace != nil))
-            .accessibilityIdentifier("shiftDetailPickupPlaceButton")
         }
         .padding(.vertical, 2)
         .sheet(isPresented: $isEditingPickupPlace) {
             PickupPlaceEditor(numbered: numbered)
+        }
+        .sheet(isPresented: $isShowingPickupHistory) {
+            if let place = delivery.pickupPlace {
+                PickupPlaceHistoryView(place: place)
+            }
         }
     }
 
@@ -658,7 +668,7 @@ private struct DeliveryHistoryRow: View {
             "\(event.label) at \(event.date.formatted(date: .omitted, time: .shortened))"
         }
         sentences += intervals.map { interval in
-            "\(interval.label) \(CompletedShiftDetailView.durationText(interval.duration))"
+            "\(interval.label) \(DurationText.spoken(interval.duration))"
         }
         return sentences.joined(separator: ". ")
     }

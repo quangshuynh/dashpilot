@@ -36,6 +36,16 @@ nonisolated enum LaunchArgument {
     /// in memory, so it can never touch a real store.
     static let seededActiveDelivery = "-dashpilot-seeded-active-delivery"
 
+    /// Runs against a throwaway store already holding one completed shift whose
+    /// deliveries give two pickup places different amounts of recorded history.
+    ///
+    /// The general seeded-history fixture is pinned by the journeys that assert
+    /// exact active-time and rate figures over its three deliveries, so it
+    /// cannot also be the place a median, a sample count and the
+    /// insufficient-history wording are reached from. Debug builds only, and in
+    /// memory, so it can never touch a real store.
+    static let seededPickupHistory = "-dashpilot-seeded-pickup-history"
+
     static func isPresent(_ argument: String, in processInfo: ProcessInfo = .processInfo) -> Bool {
         processInfo.arguments.contains(argument)
     }

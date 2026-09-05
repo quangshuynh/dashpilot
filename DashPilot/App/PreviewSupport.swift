@@ -136,6 +136,148 @@ enum PreviewSupport {
         return container
     }
 
+    // MARK: Pickup wait history
+
+    /// A throwaway store holding one completed shift whose deliveries give two
+    /// pickup places deliberately different amounts of history.
+    ///
+    /// The seeded history fixture cannot serve this: its three deliveries are
+    /// pinned by the active-time and rate journeys that assert exact figures
+    /// over them, and a place needs several recorded waits — plus one delivery
+    /// that recorded none — before the median, the sample count and the
+    /// insufficient-history wording are all reachable through the interface.
+    ///
+    /// Every timestamp is an invented offset. What the fixture is built to show:
+    ///
+    /// | Place | Deliveries | Recorded waits |
+    /// | --- | --- | --- |
+    /// | `Nowhere Noodles` | four | 6 min, 11 min, 41 min — median 11 min |
+    /// | `Example Diner` | one | 20 min — one sample, not a typical wait |
+    ///
+    /// The fourth Noodles delivery was cancelled after arriving and before any
+    /// pickup, so it contributes nothing; the last delivery names no place at
+    /// all, so it offers no history to open. The 41-minute wait is kept rather
+    /// than trimmed, which is the whole reason the median is the headline.
+    static func pickupHistoryContainer(
+        referenceDate: Date = Date(timeIntervalSince1970: 1_756_000_000)
+    ) -> ModelContainer {
+        // Previews cannot meaningfully recover from a container failure.
+        try! seededPickupHistoryContainer(referenceDate: referenceDate)
+    }
+
+    /// The same fixture, built through a throwing call so a UI test launch can
+    /// report a store failure rather than trapping inside it.
+    static func seededPickupHistoryContainer(
+        referenceDate: Date = Date(timeIntervalSince1970: 1_756_000_000)
+    ) throws -> ModelContainer {
+        let container = try ModelContainerFactory.makeInMemoryContainer()
+        let context = ModelContext(container)
+
+        let start = referenceDate.addingTimeInterval(-5 * 3600)
+        let shift = Shift(startedAt: start)
+        try? shift.end(at: start.addingTimeInterval(4 * 3600))
+        context.insert(shift)
+
+        let noodles = place(named: SyntheticPickupPlace.noodles, at: start, in: context)
+        let diner = place(named: SyntheticPickupPlace.diner, at: start.addingTimeInterval(60), in: context)
+
+        // accepted, arrived, picked up, delivered — offsets in seconds from the
+        // shift's start. The wait each one records is the gap between the second
+        // and third columns.
+        let waits: [(place: PickupPlace?, offsets: (TimeInterval, TimeInterval, TimeInterval?, TimeInterval?))] = [
+            (noodles, (300, 600, 960, 1_500)),       // 6 min
+            (noodles, (1_800, 2_100, 2_760, 3_300)), // 11 min
+            (noodles, (3_600, 3_900, 6_360, 7_200)), // 41 min, kept
+            (diner, (8_400, 8_700, 9_900, 10_500)),  // 20 min
+            (nil, (10_800, 11_100, 11_400, 12_000))  // 5 min, at no place
+        ]
+
+        for wait in waits {
+            let delivery = Delivery(shift: shift, acceptedAt: start.addingTimeInterval(wait.offsets.0))
+            try? delivery.markArrivedAtPickup(at: start.addingTimeInterval(wait.offsets.1))
+            if let pickedUp = wait.offsets.2 {
+                try? delivery.markPickedUp(at: start.addingTimeInterval(pickedUp))
+            }
+            if let delivered = wait.offsets.3 {
+                try? delivery.markDelivered(at: start.addingTimeInterval(delivered))
+            }
+            delivery.setPickupPlace(wait.place)
+            context.insert(delivery)
+        }
+
+        // Cancelled after arriving and before any pickup: it names the place and
+        // records an arrival, and still contributes no wait to it.
+        let abandoned = Delivery(shift: shift, acceptedAt: start.addingTimeInterval(7_500))
+        try? abandoned.markArrivedAtPickup(at: start.addingTimeInterval(7_800))
+        try? abandoned.cancel(at: start.addingTimeInterval(8_100))
+        abandoned.setPickupPlace(noodles)
+        context.insert(abandoned)
+
+        try? context.save()
+
+        return container
+    }
+
+    /// The shapes of pickup-wait history the sheet has to handle.
+    enum PickupHistoryFixture {
+        /// Enough recorded waits for a median, including one long one.
+        case severalRecordedWaits
+        /// Exactly one, which is a fact but not a typical wait.
+        case oneRecordedWait
+        /// A place every delivery reached without recording a pickup.
+        case noRecordedWaits
+    }
+
+    /// The pickup-place history sheet over a synthetic place.
+    @MainActor
+    static func pickupPlaceHistory(_ fixture: PickupHistoryFixture) -> some View {
+        let container = emptyContainer()
+        let context = container.mainContext
+        let start = Date(timeIntervalSince1970: 1_756_000_000)
+
+        let shift = Shift(startedAt: start)
+        try? shift.end(at: start.addingTimeInterval(4 * 3600))
+        context.insert(shift)
+
+        let subject = place(named: SyntheticPickupPlace.noodles, at: start, in: context)
+
+        // Arrival-to-pickup gaps, in seconds. `nil` is a delivery that arrived
+        // and never recorded a pickup, which records no wait.
+        let waits: [TimeInterval?] = switch fixture {
+        case .severalRecordedWaits: [360, 660, 2_460, 900]
+        case .oneRecordedWait: [1_200]
+        case .noRecordedWaits: [nil, nil]
+        }
+
+        for (index, wait) in waits.enumerated() {
+            let accepted = start.addingTimeInterval(Double(index) * 3_000 + 300)
+            let delivery = Delivery(shift: shift, acceptedAt: accepted)
+            try? delivery.markArrivedAtPickup(at: accepted.addingTimeInterval(300))
+            if let wait {
+                try? delivery.markPickedUp(at: accepted.addingTimeInterval(300 + wait))
+                try? delivery.markDelivered(at: accepted.addingTimeInterval(900 + wait))
+            } else {
+                try? delivery.cancel(at: accepted.addingTimeInterval(1_200))
+            }
+            delivery.setPickupPlace(subject)
+            context.insert(delivery)
+        }
+        try? context.save()
+
+        return PickupPlaceHistoryView(place: subject).modelContainer(container)
+    }
+
+    /// One synthetic place, inserted and returned.
+    ///
+    /// Force-unwrapped for the reason the containers above are: every name in
+    /// this file is an invented literal that validates, and a fixture cannot
+    /// meaningfully carry on without the place it is built around.
+    private static func place(named name: String, at date: Date, in context: ModelContext) -> PickupPlace {
+        let place = PickupPlace(name: try! PickupPlaceName(name), createdAt: date)
+        context.insert(place)
+        return place
+    }
+
     /// Invented pickup-place names, obviously fictional and used everywhere a
     /// fixture needs one.
     ///

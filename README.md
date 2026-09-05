@@ -130,9 +130,12 @@ The short version, with the full list in [`docs/reference/limitations.md`](docs/
   deliveries are unioned rather than summed, and non-delivery time is not idle time.
 - **No delivery-platform integration**, permanently and by design.
 - **Local only.** No export, no backup, no sync, and deleting a shift is permanent.
-- Not implemented yet: most things built on the delivery records (restaurant scoring, wait-time
-  analysis, offer profitability, per-delivery earnings), expenses, aggregates over a period, maps,
-  App Intents, Live Activities and recommendations.
+- **A pickup place's recorded waits are summarised, not predicted.** The median is shown beside the
+  number of pickups behind it, one recorded wait is never called typical, long waits are never
+  trimmed away, and nothing forecasts the next pickup or ranks one place against another.
+- Not implemented yet: most things built on the delivery records (merchant scoring, offer
+  profitability, per-delivery earnings), expenses, aggregates over a period, maps, App Intents,
+  Live Activities and recommendations.
 
 ## License
 

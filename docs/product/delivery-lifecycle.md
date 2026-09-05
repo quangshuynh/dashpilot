@@ -182,6 +182,10 @@ An interval with a missing end is left out rather than filled in with zero or wi
 times. A cancelled delivery therefore shows the arrival it recorded and no wait, because the wait
 never ended.
 
+`Waited at pickup` is a fact about **this delivery**, not a claim about the place. The same interval
+is what a pickup place's recorded history is built from, under the same inclusion rule — see
+[Pickup wait](pickup-wait.md).
+
 **Deliveries worked at the same time show overlapping times, and that is not a fault in the
 record.** Each delivery's intervals are its own, measured between its own timestamps, and nothing
 adds two of them together.
@@ -233,8 +237,9 @@ The rules, the normalisation policy and what a place deliberately does not hold 
 ## What is not built on this yet
 
 The lifecycle records events, derives two factual intervals per delivery, unions those intervals into
-a shift's delivery active time and the one rate over it, and lets a delivery name where it was picked
-up. Beyond that, nothing: no restaurant rating, no wait-time statistic per place, no
+a shift's delivery active time and the one rate over it, lets a delivery name where it was picked up,
+and summarises the waits recorded at each such place as a median with its sample count — see
+[Pickup wait](pickup-wait.md). Beyond that, nothing: no restaurant rating or ranking, no
 offer-profitability figure, no per-delivery earnings, no aggregate across shifts, no analysis of
 *why* deliveries overlapped, and no prediction of any kind.
 See [Limitations](../reference/limitations.md).
