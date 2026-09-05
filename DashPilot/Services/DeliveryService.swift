@@ -9,10 +9,14 @@ import SwiftData
 nonisolated enum DeliveryLifecycleError: Error {
     /// A delivery was requested while no shift was running.
     case noActiveShift
-    /// A delivery was already in progress when a new one was requested.
-    case deliveryAlreadyActive(state: DeliveryState)
-    /// A transition was requested while no delivery was in progress.
-    case noActiveDelivery
+    /// A transition was requested for a delivery that is not attached to a
+    /// shift that is still running.
+    ///
+    /// Unreachable through the ordinary API — a delivery is created on the
+    /// running shift, never moved to another, and a shift cannot end while one
+    /// of its deliveries is active — so this reports a store holding data the
+    /// app cannot produce rather than an ordinary refusal.
+    case deliveryNotOnARunningShift
     /// The delivery model rejected the transition.
     case invalidTransition(DeliveryError)
     /// The local store could not be read or written.
@@ -25,8 +29,7 @@ nonisolated extension DeliveryLifecycleError: Equatable {
     static func == (lhs: Self, rhs: Self) -> Bool {
         switch (lhs, rhs) {
         case (.noActiveShift, .noActiveShift): true
-        case let (.deliveryAlreadyActive(lhsState), .deliveryAlreadyActive(rhsState)): lhsState == rhsState
-        case (.noActiveDelivery, .noActiveDelivery): true
+        case (.deliveryNotOnARunningShift, .deliveryNotOnARunningShift): true
         case let (.invalidTransition(lhsError), .invalidTransition(rhsError)): lhsError == rhsError
         case (.storeUnavailable, .storeUnavailable): true
         default: false
@@ -39,10 +42,8 @@ nonisolated extension DeliveryLifecycleError: LocalizedError {
         switch self {
         case .noActiveShift:
             "Start a shift before recording a delivery."
-        case let .deliveryAlreadyActive(state):
-            "A delivery is already in progress (\(state.statusDescription.lowercased())). Complete or cancel it first."
-        case .noActiveDelivery:
-            "There is no delivery in progress."
+        case .deliveryNotOnARunningShift:
+            "That delivery belongs to a shift that has already ended, so it cannot be changed."
         case .invalidTransition(.alreadyFinished(.delivered)):
             "That delivery is already recorded as delivered."
         case .invalidTransition(.alreadyFinished(.cancelled)):
@@ -64,17 +65,29 @@ nonisolated extension DeliveryLifecycleError: LocalizedError {
 /// The delivery lifecycle: starting one, moving it through the events a driver
 /// can truthfully record, and ending it either delivered or cancelled.
 ///
+/// ## Several deliveries at once
+///
+/// A driver can be working more than one order at a time, so **any number of
+/// deliveries may be active**, and each one advances on its own. That is the
+/// whole reason every mutation here takes the delivery it applies to as a
+/// parameter: with two active, "the active delivery" is not a thing the service
+/// could resolve, and resolving one anyway — the newest, the oldest, the first
+/// row a fetch returned — would attach a driver's tap to a record they did not
+/// mean. There is no API here that guesses.
+///
 /// ## What it enforces
 ///
 /// - A delivery belongs to exactly one shift, and can only begin while that
 ///   shift is running.
-/// - **At most one delivery is active at a time.** The rule is checked against
-///   the store, not against a view's state, so no screen and no future caller
-///   can produce a second one.
+/// - A lifecycle event is applied to **exactly one delivery, named by the
+///   caller**, and never to another. Nothing is shared between concurrent
+///   deliveries: starting, advancing, finishing or cancelling one leaves every
+///   other one exactly as it was.
+/// - A delivery can only be advanced while the shift it belongs to is still
+///   running.
 /// - Transitions happen in lifecycle order, once each, and never after the
-///   delivery has finished. The service resolves the active delivery itself and
-///   asks the model to apply the event, so there is no API through which an
-///   out-of-order transition can be expressed.
+///   delivery has finished. Those rules live on ``Delivery`` itself, so they
+///   hold for every caller.
 ///
 /// ## Timestamps
 ///
@@ -85,13 +98,14 @@ nonisolated extension DeliveryLifecycleError: LocalizedError {
 /// must always be able to record what just happened, and a clamped event
 /// records a zero-length interval instead of a negative one.
 ///
-/// SwiftData is the only source of truth. Nothing here caches "a delivery is
-/// running", so a delivery left active when the app was terminated is simply
-/// still active when a new service reads the store.
+/// SwiftData is the only source of truth. Nothing here caches which deliveries
+/// are running, so deliveries left active when the app was terminated are
+/// simply still active — all of them, with their own timestamps — when a new
+/// service reads the store.
 ///
 /// `@MainActor` isolated, like ``ShiftService``: every operation runs to
-/// completion without suspending, so two callers cannot interleave the check
-/// for an active delivery with the insert that follows it.
+/// completion without suspending, so two callers cannot interleave a read with
+/// the write that follows it.
 @MainActor
 struct DeliveryService {
     private let context: ModelContext
@@ -100,62 +114,76 @@ struct DeliveryService {
         self.context = context
     }
 
-    /// The delivery currently in progress, or `nil` if none is.
+    /// Every delivery in the store that is neither delivered nor cancelled, in
+    /// deterministic order.
     ///
-    /// Active means neither delivered nor cancelled, read from the timestamps
-    /// themselves. The query is not scoped to the running shift on purpose: the
-    /// single-active-delivery rule is about the driver, and a delivery left
-    /// active on some other shift must block a new one rather than be hidden by
-    /// a narrower fetch.
+    /// Active is read from the timestamps themselves rather than from a stored
+    /// flag. More than one is expected: it is what stacked delivery work looks
+    /// like, and it is no longer treated as a damaged store.
+    ///
+    /// The result is ordered by ``Delivery/acceptedBefore(_:_:)`` rather than by
+    /// whatever order the fetch produced, so presentation and recovery see the
+    /// same sequence every time.
     ///
     /// - Throws: ``DeliveryLifecycleError/storeUnavailable(underlying:)`` if the store cannot be read.
-    func activeDelivery() throws -> Delivery? {
-        var descriptor = FetchDescriptor<Delivery>(
+    func activeDeliveries() throws -> [Delivery] {
+        let descriptor = FetchDescriptor<Delivery>(
             predicate: #Predicate { $0.deliveredAt == nil && $0.cancelledAt == nil },
-            sortBy: [SortDescriptor(\.acceptedAt, order: .reverse)]
+            sortBy: [SortDescriptor(\.acceptedAt)]
         )
-        // One more than the invariant permits, so a broken store is noticed
-        // instead of silently reduced to its first row.
-        descriptor.fetchLimit = 2
 
         let unfinished: [Delivery]
         do {
             unfinished = try context.fetch(descriptor)
         } catch {
-            AppLog.delivery.error("Failed to read the active delivery: \(error)")
+            AppLog.delivery.error("Failed to read active deliveries: \(error)")
             throw DeliveryLifecycleError.storeUnavailable(underlying: error)
         }
 
-        if unfinished.count > 1 {
-            // Deterministic and conservative: the most recently accepted one is
-            // treated as active, exactly as `ShiftService` treats an extra
-            // unfinished shift. Nothing is closed, cancelled or deleted to
-            // tidy the store up — the older row is a delivery the driver
-            // recorded, and repairing it by guessing an ending would fabricate
-            // the one thing this model exists to avoid. It keeps blocking a new
-            // delivery until the driver finishes it, which is visible rather
-            // than silent.
-            AppLog.delivery.fault("Store holds more than one unfinished delivery; treating the most recent as active")
+        let ordered = unfinished.sorted(by: Delivery.acceptedBefore)
+
+        // What *cannot* legitimately exist is an active delivery attached to a
+        // shift that has already ended, or to no shift at all: a delivery is
+        // created on the running shift, never reparented, and a shift cannot end
+        // while any of its deliveries are active. Such a row is reported and
+        // left alone — nothing is closed, cancelled, deleted or reparented to
+        // tidy it up, because every one of those would invent a fact about work
+        // the driver did.
+        let stranded = ordered.filter { $0.shift?.isActive != true }
+        if !stranded.isEmpty {
+            AppLog.delivery.fault(
+                "Store holds \(stranded.count, privacy: .public) active deliveries not attached to a running shift"
+            )
         }
-        return unfinished.first
+
+        return ordered
     }
 
-    /// Starts a delivery on the running shift.
+    /// The deliveries `shift` still has running, in the same deterministic order.
+    ///
+    /// This is the query the running-shift interface and relaunch recovery are
+    /// built from. It is a query, not a mutation seam: nothing is advanced,
+    /// finished or repaired by reading it.
+    ///
+    /// - Throws: ``DeliveryLifecycleError/storeUnavailable(underlying:)`` if the store cannot be read.
+    func activeDeliveries(for shift: Shift) throws -> [Delivery] {
+        let shiftID = shift.id
+        return try activeDeliveries().filter { $0.shift?.id == shiftID }
+    }
+
+    /// Starts a delivery on the running shift, alongside any already in progress.
+    ///
+    /// Nothing already recorded is touched. There is deliberately no maximum:
+    /// how many orders a driver is carrying is a fact about their work, not a
+    /// number this app is in a position to cap.
     ///
     /// - Throws: ``DeliveryLifecycleError/noActiveShift`` if no shift is
-    ///   running, ``DeliveryLifecycleError/deliveryAlreadyActive(state:)`` if one
-    ///   is already in progress, or
-    ///   ``DeliveryLifecycleError/storeUnavailable(underlying:)``.
+    ///   running, or ``DeliveryLifecycleError/storeUnavailable(underlying:)``.
     @discardableResult
     func startDelivery(at date: Date = .now) throws -> Delivery {
         guard let shift = try activeShift() else {
             AppLog.delivery.notice("Refused to start a delivery: no shift is running")
             throw DeliveryLifecycleError.noActiveShift
-        }
-
-        if let running = try activeDelivery() {
-            AppLog.delivery.notice("Refused to start a delivery: one is already in progress")
-            throw DeliveryLifecycleError.deliveryAlreadyActive(state: running.state)
         }
 
         // A delivery cannot have been accepted before the shift it belongs to
@@ -177,69 +205,71 @@ struct DeliveryService {
             throw DeliveryLifecycleError.storeUnavailable(underlying: error)
         }
 
-        AppLog.delivery.info("Delivery started")
+        // A count, which is structural. Not when it started, and not which one.
+        AppLog.delivery.info(
+            "Delivery started; \(shift.activeDeliveries.count, privacy: .public) now active on this shift"
+        )
         return delivery
     }
 
-    /// Records that the driver reached the pickup.
+    /// Records that the driver reached `delivery`'s pickup.
     @discardableResult
-    func markArrivedAtPickup(at date: Date = .now) throws -> Delivery {
-        try advance(to: .arrivedAtPickup, at: date) { delivery, eventDate in
+    func markArrivedAtPickup(_ delivery: Delivery, at date: Date = .now) throws -> Delivery {
+        try advance(delivery, to: .arrivedAtPickup, at: date) { delivery, eventDate in
             try delivery.markArrivedAtPickup(at: eventDate)
         }
     }
 
-    /// Records that the order is in the car.
+    /// Records that `delivery`'s order is in the car.
     @discardableResult
-    func markPickedUp(at date: Date = .now) throws -> Delivery {
-        try advance(to: .pickedUp, at: date) { delivery, eventDate in
+    func markPickedUp(_ delivery: Delivery, at date: Date = .now) throws -> Delivery {
+        try advance(delivery, to: .pickedUp, at: date) { delivery, eventDate in
             try delivery.markPickedUp(at: eventDate)
         }
     }
 
-    /// Records that the delivery was completed.
+    /// Records that `delivery` was completed.
     @discardableResult
-    func markDelivered(at date: Date = .now) throws -> Delivery {
-        try advance(to: .delivered, at: date) { delivery, eventDate in
+    func markDelivered(_ delivery: Delivery, at date: Date = .now) throws -> Delivery {
+        try advance(delivery, to: .delivered, at: date) { delivery, eventDate in
             try delivery.markDelivered(at: eventDate)
         }
     }
 
-    /// Records that the active delivery ended without being completed.
+    /// Records that `delivery` ended without being completed.
+    ///
+    /// One named delivery, never "the delivery in progress". With two orders in
+    /// the car, a cancel control that picked its own target would be the most
+    /// destructive guess in the app, and the mistake is not undoable.
     ///
     /// The delivery is kept. A cancelled delivery is history — the driver drove
     /// to a pickup and waited there — and deleting it would remove work that
     /// happened from the shift it happened in.
     @discardableResult
-    func cancelActiveDelivery(at date: Date = .now) throws -> Delivery {
-        try advance(to: .cancelled, at: date) { delivery, eventDate in
+    func cancelDelivery(_ delivery: Delivery, at date: Date = .now) throws -> Delivery {
+        try advance(delivery, to: .cancelled, at: date) { delivery, eventDate in
             try delivery.cancel(at: eventDate)
         }
     }
 
-    /// Applies one lifecycle event to the delivery in progress.
+    /// Applies one lifecycle event to one named delivery.
     ///
-    /// Resolving the delivery here rather than accepting one as a parameter is
-    /// what makes the single-active-delivery rule structural: there is no way
-    /// to address a finished delivery, or a second active one, through this API.
-    ///
-    /// - Throws: ``DeliveryLifecycleError/noActiveDelivery``,
+    /// - Throws: ``DeliveryLifecycleError/deliveryNotOnARunningShift``,
     ///   ``DeliveryLifecycleError/invalidTransition(_:)`` or
     ///   ``DeliveryLifecycleError/storeUnavailable(underlying:)``.
     private func advance(
+        _ delivery: Delivery,
         to recorded: DeliveryState,
         at date: Date,
         applying transition: (Delivery, Date) throws -> Void
     ) throws -> Delivery {
-        guard let delivery = try activeDelivery() else {
-            AppLog.delivery.notice("Refused a delivery transition: none is in progress")
-            throw DeliveryLifecycleError.noActiveDelivery
-        }
+        try validateShift(of: delivery)
 
         // The same rule `ShiftService` applies to a shift end: a clock that has
         // moved backwards must not stop a driver recording what just happened,
         // and a clamped event produces a zero-length interval rather than a
-        // negative one.
+        // negative one. It is read from *this* delivery's own last event, so a
+        // second delivery's timeline has no influence on it.
         let eventDate = max(date, delivery.lastEventAt)
         if eventDate != date {
             AppLog.delivery.warning("Delivery event preceded the previous one; clamped to the previous event")
@@ -262,10 +292,29 @@ struct DeliveryService {
             throw DeliveryLifecycleError.storeUnavailable(underlying: error)
         }
 
-        // Structural only: which event, never when it happened, where it
-        // happened or what it paid.
+        // Structural only: which event, never which delivery, when it happened,
+        // where it happened or what it paid.
         AppLog.delivery.info("Delivery advanced to \(recorded.rawValue, privacy: .public)")
         return delivery
+    }
+
+    /// Refuses to change a delivery that is not attached to a running shift.
+    ///
+    /// Through the ordinary API this cannot happen. It is checked anyway,
+    /// because a store that somehow holds an active delivery on a finished shift
+    /// — or on no shift at all — holds data the app cannot produce, and writing
+    /// further lifecycle events into it would turn a structural fault into a
+    /// longer and more confusing history. The row is left exactly as it is and
+    /// the fault is logged; nothing is reparented, closed or deleted.
+    private func validateShift(of delivery: Delivery) throws {
+        guard let shift = delivery.shift else {
+            AppLog.delivery.fault("Refused a transition: the delivery is attached to no shift")
+            throw DeliveryLifecycleError.deliveryNotOnARunningShift
+        }
+        guard shift.isActive else {
+            AppLog.delivery.fault("Refused a transition: the delivery's shift has already ended")
+            throw DeliveryLifecycleError.deliveryNotOnARunningShift
+        }
     }
 
     /// The running shift, read through ``ShiftService`` so there is one

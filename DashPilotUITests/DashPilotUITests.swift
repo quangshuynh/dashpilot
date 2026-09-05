@@ -37,13 +37,17 @@ final class DashPilotUITests: XCTestCase {
         return app
     }
 
-    /// Launches against a throwaway store holding a running shift whose delivery
-    /// is already in progress.
+    /// Launches against a throwaway store holding a running shift with two
+    /// deliveries already in progress, at different points in their lifecycles.
     ///
-    /// This is the state a relaunch recovers into. A UI test cannot terminate
-    /// and reopen the in-memory store the other journeys use, so seeding it at
-    /// launch is how the recovered interface is asserted end to end; that the
-    /// store itself recovers is proved in `DeliveryPersistenceTests`.
+    /// This is the state a relaunch recovers into for stacked work. A UI test
+    /// cannot terminate and reopen the in-memory store the other journeys use,
+    /// so seeding it at launch is how the recovered interface is asserted end to
+    /// end; that the store itself recovers every active delivery is proved in
+    /// `DeliveryPersistenceTests`.
+    ///
+    /// The fixture's shift holds `Delivery 1` delivered, `Delivery 2` accepted
+    /// and `Delivery 3` picked up.
     @MainActor
     private func launchWithActiveDelivery() -> XCUIApplication {
         let app = XCUIApplication()
@@ -335,8 +339,8 @@ final class DashPilotUITests: XCTestCase {
     /// Records one delivery from start to finish, one tap per event.
     ///
     /// The assertion that matters at every step is the button's spoken label:
-    /// the screen must offer exactly the next lifecycle action, named, and
-    /// never a second delivery while one is running.
+    /// the card must offer exactly the next lifecycle action, named, and named
+    /// for the delivery it belongs to.
     @MainActor
     func testRecordsADeliveryThroughItsLifecycle() throws {
         let app = launchWithEmptyStore()
@@ -345,34 +349,36 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertTrue(startShift.waitForExistence(timeout: 10))
         startShift.tap()
 
-        let delivery = app.buttons["deliveryLifecycleButton"]
-        XCTAssertTrue(scrollTo(delivery, in: app), "The running shift offers a delivery control")
-        XCTAssertEqual(delivery.label, "Start delivery")
+        let startDelivery = app.buttons["startDeliveryButton"]
+        XCTAssertTrue(scrollTo(startDelivery, in: app), "The running shift offers a delivery control")
+        XCTAssertEqual(startDelivery.label, "Start delivery")
         XCTAssertFalse(
             app.buttons["cancelDeliveryButton"].exists,
             "There is nothing to cancel before a delivery starts"
         )
 
-        // One primary action per state, in order, each naming its own event.
+        startDelivery.tap()
+
+        // One primary action per state, in order, each naming its own event and
+        // its own delivery.
+        let action = deliveryButton("deliveryActionButton", containing: "Delivery 1", in: app)
         for expected in ["Mark arrived at pickup", "Mark order picked up", "Mark delivery completed"] {
-            delivery.tap()
             XCTAssertTrue(
-                waitForLabel(delivery, toContain: expected),
-                "The control should advance to \(expected), showed: \(delivery.label)"
+                waitForLabel(action, toContain: expected),
+                "The control should offer \(expected), showed: \(action.label)"
             )
             XCTAssertTrue(
                 app.buttons["cancelDeliveryButton"].exists,
                 "A delivery in progress can be cancelled"
             )
+            action.tap()
         }
 
-        delivery.tap()
-
-        XCTAssertTrue(waitForLabel(delivery, toContain: "Start delivery"), "The delivery finished")
         let status = app.descendants(matching: .any)["deliveryStatus"]
         XCTAssertTrue(waitForLabel(status, toContain: "1 delivery completed"), "Status: \(status.label)")
         XCTAssertTrue(status.label.contains("No delivery in progress"))
         XCTAssertFalse(app.buttons["cancelDeliveryButton"].exists)
+        XCTAssertFalse(app.buttons["deliveryActionButton"].exists, "A finished delivery has no next step")
 
         // And the shift can now be ended, with the delivery recorded against it.
         app.buttons["endShiftButton"].tap()
@@ -384,41 +390,117 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertEqual(summary.label, "1 delivery completed")
     }
 
-    /// A delivery left in progress is picked up on the next launch, showing its
-    /// own next step rather than offering to start another one.
+    /// A second delivery starts while the first is still running, and the two
+    /// appear as two cards with their own controls.
     @MainActor
-    func testRecoversAnActiveDeliveryOnLaunch() throws {
+    func testStartsASecondDeliveryWhileTheFirstIsRunning() throws {
+        let app = launchWithEmptyStore()
+
+        let startShift = app.buttons["startShiftButton"]
+        XCTAssertTrue(startShift.waitForExistence(timeout: 10))
+        startShift.tap()
+
+        let startDelivery = app.buttons["startDeliveryButton"]
+        XCTAssertTrue(scrollTo(startDelivery, in: app))
+        startDelivery.tap()
+
+        let first = deliveryButton("deliveryActionButton", containing: "Delivery 1", in: app)
+        XCTAssertTrue(waitForLabel(first, toContain: "Mark arrived at pickup"))
+
+        // Starting another one is one tap, and it is still offered while the
+        // first is running rather than hidden behind anything.
+        XCTAssertTrue(startDelivery.exists, "Start Delivery stays available with a delivery in progress")
+        startDelivery.tap()
+
+        let second = deliveryButton("deliveryActionButton", containing: "Delivery 2", in: app)
+        XCTAssertTrue(second.waitForExistence(timeout: 5), "A second card appears for the second delivery")
+        XCTAssertEqual(
+            first.label,
+            "Delivery 1. Mark arrived at pickup",
+            "Starting another delivery does not move the first one along"
+        )
+        XCTAssertEqual(second.label, "Delivery 2. Mark arrived at pickup")
+
+        let status = app.descendants(matching: .any)["deliveryStatus"]
+        XCTAssertTrue(waitForLabel(status, toContain: "2 deliveries in progress"), "Status: \(status.label)")
+
+        // Advancing one leaves the other exactly where it was.
+        second.tap()
+        XCTAssertTrue(waitForLabel(second, toContain: "Delivery 2. Mark order picked up"))
+        XCTAssertEqual(first.label, "Delivery 1. Mark arrived at pickup", "Delivery 1 is untouched")
+    }
+
+    /// Two deliveries left in progress are both picked up on the next launch,
+    /// each showing its own next step.
+    @MainActor
+    func testRecoversEveryActiveDeliveryOnLaunch() throws {
         let app = launchWithActiveDelivery()
 
-        let delivery = app.buttons["deliveryLifecycleButton"]
-        XCTAssertTrue(scrollTo(delivery, in: app), "The recovered delivery has a control")
+        let accepted = deliveryButton("deliveryActionButton", containing: "Delivery 2", in: app)
+        let carrying = deliveryButton("deliveryActionButton", containing: "Delivery 3", in: app)
+        XCTAssertTrue(scrollTo(accepted, in: app), "The recovered deliveries have their own controls")
         XCTAssertEqual(
-            delivery.label,
-            "Mark delivery completed",
-            "The fixture's delivery was already picked up, so the next step is delivering it"
+            accepted.label,
+            "Delivery 2. Mark arrived at pickup",
+            "The fixture's second delivery was only accepted, so its next step is arriving"
+        )
+        XCTAssertEqual(
+            carrying.label,
+            "Delivery 3. Mark delivery completed",
+            "The third was already picked up, so its next step is delivering it"
+        )
+        XCTAssertEqual(
+            app.buttons.matching(identifier: "deliveryActionButton").count,
+            2,
+            "Two active deliveries, neither collapsed into the other nor duplicated"
         )
 
         let status = app.descendants(matching: .any)["deliveryStatus"]
-        XCTAssertTrue(status.label.contains("Heading to the customer"), "Status: \(status.label)")
+        XCTAssertTrue(status.label.contains("2 deliveries in progress"), "Status: \(status.label)")
         XCTAssertTrue(status.label.contains("1 delivery completed"), "The shift's earlier delivery is still counted")
     }
 
-    /// A shift cannot be ended while a delivery is in progress, and the refusal
-    /// says what to do about it.
+    /// Completing one of two deliveries leaves the other running.
     @MainActor
-    func testActiveDeliveryBlocksEndingTheShift() throws {
+    func testCompletingOneDeliveryLeavesTheOtherRunning() throws {
+        let app = launchWithActiveDelivery()
+
+        let accepted = deliveryButton("deliveryActionButton", containing: "Delivery 2", in: app)
+        let carrying = deliveryButton("deliveryActionButton", containing: "Delivery 3", in: app)
+        XCTAssertTrue(scrollTo(carrying, in: app))
+        carrying.tap()
+
+        XCTAssertTrue(
+            waitForCount(app.buttons.matching(identifier: "deliveryActionButton"), toEqual: 1),
+            "The delivered one leaves the list"
+        )
+        XCTAssertEqual(
+            accepted.label,
+            "Delivery 2. Mark arrived at pickup",
+            "The remaining delivery keeps its number and its own next step"
+        )
+
+        let status = app.descendants(matching: .any)["deliveryStatus"]
+        XCTAssertTrue(waitForLabel(status, toContain: "1 delivery in progress"), "Status: \(status.label)")
+        XCTAssertTrue(status.label.contains("2 deliveries completed"))
+    }
+
+    /// A shift cannot be ended while any delivery is in progress, the refusal
+    /// says how many, and it stays refused until the last one is resolved.
+    @MainActor
+    func testActiveDeliveriesBlockEndingTheShift() throws {
         let app = launchWithActiveDelivery()
 
         let endShift = app.buttons["endShiftButton"]
         XCTAssertTrue(endShift.waitForExistence(timeout: 10))
         endShift.tap()
 
-        let explanation = app.staticTexts.containing(
-            NSPredicate(format: "label CONTAINS %@", "delivery is still in progress")
+        let plural = app.staticTexts.containing(
+            NSPredicate(format: "label CONTAINS %@", "2 deliveries are still in progress")
         )
         XCTAssertTrue(
-            explanation.firstMatch.waitForExistence(timeout: 5),
-            "Ending is refused with a reason, not silently"
+            plural.firstMatch.waitForExistence(timeout: 5),
+            "Ending is refused with a reason that counts them, not silently"
         )
         app.buttons["OK"].tap()
 
@@ -426,24 +508,51 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertTrue(app.buttons["endShiftButton"].waitForExistence(timeout: 5), "The shift is still running")
         XCTAssertTrue(rows(in: app).count == 0, "No completed shift appeared in history")
 
-        // Resolving the delivery unblocks the end.
-        let delivery = app.buttons["deliveryLifecycleButton"]
-        XCTAssertTrue(scrollTo(delivery, in: app))
-        delivery.tap()
-        XCTAssertTrue(waitForLabel(delivery, toContain: "Start delivery"))
+        // Resolving one of the two is not enough.
+        let carrying = deliveryButton("deliveryActionButton", containing: "Delivery 3", in: app)
+        XCTAssertTrue(scrollTo(carrying, in: app))
+        carrying.tap()
+        XCTAssertTrue(waitForCount(app.buttons.matching(identifier: "deliveryActionButton"), toEqual: 1))
+
+        app.buttons["endShiftButton"].tap()
+        let singular = app.staticTexts.containing(
+            NSPredicate(format: "label CONTAINS %@", "A delivery is still in progress")
+        )
+        XCTAssertTrue(
+            singular.firstMatch.waitForExistence(timeout: 5),
+            "One remaining delivery still blocks the end, and the wording follows the count"
+        )
+        app.buttons["OK"].tap()
+
+        // Resolving the last one unblocks it.
+        let accepted = deliveryButton("deliveryActionButton", containing: "Delivery 2", in: app)
+        XCTAssertTrue(scrollTo(accepted, in: app))
+        accepted.tap()
+        XCTAssertTrue(waitForLabel(accepted, toContain: "Mark order picked up"))
+        accepted.tap()
+        XCTAssertTrue(waitForLabel(accepted, toContain: "Mark delivery completed"))
+        accepted.tap()
+
+        XCTAssertTrue(waitForCount(app.buttons.matching(identifier: "deliveryActionButton"), toEqual: 0))
         app.buttons["endShiftButton"].tap()
         XCTAssertTrue(rows(in: app).firstMatch.waitForExistence(timeout: 5), "The shift ends once nothing is running")
     }
 
-    /// A cancelled delivery stays in the shift as cancelled rather than being
-    /// deleted or counted as completed.
+    /// Cancelling names the delivery it will cancel, keeps it as history, and
+    /// leaves the other delivery alone.
     @MainActor
-    func testCancellingADeliveryKeepsItAsHistory() throws {
+    func testCancellingOneDeliveryKeepsItAsHistoryAndSparesTheOther() throws {
         let app = launchWithActiveDelivery()
 
-        let cancel = app.buttons["cancelDeliveryButton"]
+        let cancel = deliveryButton("cancelDeliveryButton", containing: "Delivery 2", in: app)
         XCTAssertTrue(scrollTo(cancel, in: app))
+        XCTAssertEqual(cancel.label, "Delivery 2. Cancel this delivery", "The control says which delivery it ends")
         cancel.tap()
+
+        // The confirmation names it too: with two in progress, "Cancel Delivery"
+        // alone would be ambiguous.
+        let title = app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "Cancel Delivery 2?"))
+        XCTAssertTrue(title.firstMatch.waitForExistence(timeout: 5), "The confirmation names the delivery")
 
         // `firstMatch` because SwiftUI mirrors the identifier onto the button's
         // own label element as well as the button.
@@ -455,14 +564,20 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertTrue(waitForLabel(status, toContain: "1 delivery cancelled"), "Status: \(status.label)")
         XCTAssertTrue(status.label.contains("1 delivery completed"), "The cancelled one is not counted as completed")
 
+        let carrying = deliveryButton("deliveryActionButton", containing: "Delivery 3", in: app)
+        XCTAssertTrue(carrying.exists, "The other delivery is untouched by the cancellation")
+        XCTAssertEqual(carrying.label, "Delivery 3. Mark delivery completed")
+        carrying.tap()
+
         app.buttons["endShiftButton"].tap()
         openFirstShift(in: app)
         let summary = app.descendants(matching: .any)["shiftDetailDeliverySummary"]
         XCTAssertTrue(scrollTo(summary, in: app))
-        XCTAssertEqual(summary.label, "1 delivery completed. 1 delivery cancelled")
+        XCTAssertEqual(summary.label, "2 deliveries completed. 1 delivery cancelled")
     }
 
-    /// A completed shift's detail lists what each delivery recorded.
+    /// A completed shift's detail lists what each delivery recorded, including
+    /// two whose lifecycles overlapped.
     @MainActor
     func testCompletedShiftDetailShowsDeliveryLifecycles() throws {
         let app = launchWithSeededHistory()
@@ -498,7 +613,8 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertFalse(label.contains("Waited at pickup"), "A wait with no end is not derived: \(label)")
         XCTAssertFalse(label.contains("Accepted to delivered"))
 
-        // And the third, so all three recorded deliveries are accounted for.
+        // And the third, accepted while the second was still open: overlapping
+        // deliveries stay separate rows rather than being merged or flagged.
         XCTAssertTrue(
             scrollTo(deliveryRow(containing: "Delivery 3, delivered", in: app), in: app),
             "Every recorded delivery is listed"
@@ -561,6 +677,19 @@ final class DashPilotUITests: XCTestCase {
     }
 
     // MARK: Helpers
+
+    /// One of the running shift's delivery controls, identified by which
+    /// delivery its label names rather than by where it sits in the list.
+    @MainActor
+    private func deliveryButton(
+        _ identifier: String,
+        containing text: String,
+        in app: XCUIApplication
+    ) -> XCUIElement {
+        app.buttons
+            .matching(NSPredicate(format: "identifier == %@ AND label CONTAINS %@", identifier, text))
+            .firstMatch
+    }
 
     /// One delivery row on the detail screen, identified by what it says.
     @MainActor
