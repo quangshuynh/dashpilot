@@ -85,6 +85,20 @@ nonisolated final class Delivery {
     /// cannot outlive its shift.
     private(set) var shift: Shift?
 
+    /// Where the driver said this order was collected from, or `nil` if they did
+    /// not say.
+    ///
+    /// Optional, and expected to be `nil` often: naming a pickup is a
+    /// convenience the driver may take at a kerb, never a step the lifecycle
+    /// waits for. Nothing in ``DeliveryService`` reads it, so every transition
+    /// works exactly the same on a delivery with no place named.
+    ///
+    /// A reference rather than a stored string, so two deliveries from the same
+    /// place point at the same row — see ``PickupPlace``. The delete rule is the
+    /// default `.nullify`: deleting this delivery, or the shift it belongs to,
+    /// leaves the place for every other delivery naming it.
+    private(set) var pickupPlace: PickupPlace?
+
     init(id: UUID = UUID(), shift: Shift, acceptedAt: Date) {
         self.id = id
         self.acceptedAt = acceptedAt
@@ -157,6 +171,23 @@ nonisolated final class Delivery {
     func cancel(at date: Date) throws {
         try validateTransition(at: date)
         cancelledAt = date
+    }
+
+    // MARK: Pickup identity
+
+    /// Names the place this order was collected from, or clears it with `nil`.
+    ///
+    /// Deliberately unconditional. Every other mutation on this model guards a
+    /// lifecycle invariant, and this one has none to guard: a pickup place is not
+    /// an event, it does not order against the timestamps, and correcting it a
+    /// week later changes no interval, no duration and no rate. A delivery whose
+    /// place was mistyped, or tapped on the wrong card, must be fixable without
+    /// deleting the work it records.
+    ///
+    /// Resolving a typed name to a place — and reusing an existing one rather
+    /// than creating a second — belongs to ``PickupPlaceService``, not here.
+    func setPickupPlace(_ place: PickupPlace?) {
+        pickupPlace = place
     }
 
     /// The two rules every transition shares: a finished delivery does not
