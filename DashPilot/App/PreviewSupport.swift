@@ -57,8 +57,9 @@ enum PreviewSupport {
         }
 
         // Two completed deliveries and one cancelled, so the detail screen shows
-        // a delivered lifecycle, a cancelled one, and both derived intervals.
-        // Every timestamp is an invented offset from the fixture's start.
+        // a delivered lifecycle, a cancelled one, both derived intervals, and a
+        // pair whose lifecycles overlap. Every timestamp is an invented offset
+        // from the fixture's start.
         for delivery in syntheticDeliveries(in: completed, from: completed.startedAt) {
             context.insert(delivery)
         }
@@ -68,12 +69,14 @@ enum PreviewSupport {
         return container
     }
 
-    /// A throwaway store holding a running shift with a delivery in progress.
+    /// A throwaway store holding a running shift with **two** deliveries in
+    /// progress at once, at different points in their lifecycles.
     ///
-    /// The delivery is at `pickedUp`, so the running shift's one primary action
-    /// is the last step of the lifecycle. That is the state a relaunch recovers
-    /// into, and it is what makes "the next action, not a second delivery"
-    /// assertable through the interface.
+    /// This is the state a relaunch recovers into for a driver working stacked
+    /// orders, and the shape that makes the interesting claims assertable
+    /// through the interface: two cards, each offering its own next step,
+    /// advancing one leaving the other alone, and a shift end refused while
+    /// either is unfinished.
     static func activeDeliveryContainer(
         referenceDate: Date = Date(timeIntervalSince1970: 1_756_000_000)
     ) -> ModelContainer {
@@ -83,6 +86,10 @@ enum PreviewSupport {
 
     /// The same fixture, built through a throwing call so a UI test launch can
     /// report a store failure rather than trapping inside it.
+    ///
+    /// The three deliveries are numbered by acceptance, so the shift holds
+    /// `Delivery 1` delivered, `Delivery 2` accepted and `Delivery 3` picked up.
+    /// Every timestamp is an invented offset from the fixture's reference date.
     static func seededActiveDeliveryContainer(
         referenceDate: Date = Date(timeIntervalSince1970: 1_756_000_000)
     ) throws -> ModelContainer {
@@ -93,17 +100,23 @@ enum PreviewSupport {
         context.insert(shift)
 
         // One delivery already completed in this shift, so the status line has a
-        // count to state alongside the delivery in progress.
+        // count to state alongside the two still running.
         let finished = Delivery(shift: shift, acceptedAt: referenceDate.addingTimeInterval(-5000))
         try? finished.markArrivedAtPickup(at: referenceDate.addingTimeInterval(-4700))
         try? finished.markPickedUp(at: referenceDate.addingTimeInterval(-4300))
         try? finished.markDelivered(at: referenceDate.addingTimeInterval(-3800))
         context.insert(finished)
 
-        let running = Delivery(shift: shift, acceptedAt: referenceDate.addingTimeInterval(-900))
-        try? running.markArrivedAtPickup(at: referenceDate.addingTimeInterval(-600))
-        try? running.markPickedUp(at: referenceDate.addingTimeInterval(-240))
-        context.insert(running)
+        // Accepted and no further: its next step is arriving at the pickup.
+        let accepted = Delivery(shift: shift, acceptedAt: referenceDate.addingTimeInterval(-1500))
+        context.insert(accepted)
+
+        // Accepted later but already in the car, which is exactly why the two
+        // cards cannot share one control: the later delivery is further along.
+        let carrying = Delivery(shift: shift, acceptedAt: referenceDate.addingTimeInterval(-900))
+        try? carrying.markArrivedAtPickup(at: referenceDate.addingTimeInterval(-600))
+        try? carrying.markPickedUp(at: referenceDate.addingTimeInterval(-240))
+        context.insert(carrying)
 
         try? context.save()
 
@@ -112,6 +125,10 @@ enum PreviewSupport {
 
     /// Three made-up deliveries for one shift: two delivered and one cancelled
     /// after the driver had already waited at the pickup.
+    ///
+    /// The second and third overlap — the driver accepted the third while the
+    /// second was still open — so the history screen has a stacked pair to
+    /// present, with each delivery's own intervals and no total across them.
     ///
     /// Offsets only. No restaurant, no customer and no address appears anywhere
     /// in DashPilot, so there is none to invent here either.
@@ -150,7 +167,9 @@ enum PreviewSupport {
                 deliveredAfter: nil,
                 cancelledAfter: 3_600
             ),
-            delivery(acceptedAfter: 4_200, arrivedAfter: 4_500, pickedUpAfter: 4_800, deliveredAfter: 5_700)
+            // Accepted while the one above was still open, and delivered after
+            // it was cancelled: two overlapping lifecycles, both valid.
+            delivery(acceptedAfter: 3_000, arrivedAfter: 3_300, pickedUpAfter: 3_900, deliveredAfter: 4_800)
         ]
     }
 

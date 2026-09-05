@@ -319,9 +319,14 @@ struct CompletedShiftDetailView: View {
     /// A cancelled delivery appears with the times that genuinely occurred. It
     /// is not hidden and not counted as completed — it is work the driver did
     /// that did not end in a delivery.
+    ///
+    /// Deliveries worked at the same time appear here with overlapping times,
+    /// which is what stacked work looks like rather than a fault in the record.
+    /// They are listed in the order they were accepted, and each one's intervals
+    /// are its own: nothing on this screen adds two overlapping deliveries
+    /// together.
     private var deliveriesSection: some View {
         Section {
-            let deliveries = shift.deliveriesInOrder
             let summary = shift.deliverySummary
 
             Text(summary.statement)
@@ -329,8 +334,11 @@ struct CompletedShiftDetailView: View {
                 .accessibilityLabel(summary.spokenStatement)
                 .accessibilityIdentifier("shiftDetailDeliverySummary")
 
-            ForEach(Array(deliveries.enumerated()), id: \.element.id) { index, delivery in
-                DeliveryHistoryRow(number: index + 1, delivery: delivery)
+            // Numbered by the shift rather than by position in this list, so a
+            // delivery is called the same thing here as it was on the running
+            // shift.
+            ForEach(shift.numberedDeliveries) { numbered in
+                DeliveryHistoryRow(numbered: numbered)
             }
         } header: {
             Text("Deliveries")
@@ -339,8 +347,9 @@ struct CompletedShiftDetailView: View {
                 """
                 Every time below was recorded because you tapped a control during the shift. \
                 DashPilot is not connected to any delivery platform and detects nothing on its own, \
-                so a delivery you did not record is not here. No amount is attributed to an \
-                individual delivery.
+                so a delivery you did not record is not here. Deliveries you worked at the same time \
+                overlap in this list, and their durations are not added together. No amount is \
+                attributed to an individual delivery.
                 """
             )
         }
@@ -426,13 +435,14 @@ struct CompletedShiftDetailView: View {
 /// exist. An interval with a missing end is left out rather than filled in with
 /// zero or with the shift's own times.
 private struct DeliveryHistoryRow: View {
-    let number: Int
-    let delivery: Delivery
+    let numbered: NumberedDelivery
+
+    private var delivery: Delivery { numbered.delivery }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Label(
-                "Delivery \(number) · \(delivery.state.historyDescription)",
+                "\(numbered.title) · \(delivery.state.historyDescription)",
                 systemImage: delivery.state.symbolName
             )
             .font(.subheadline.weight(.semibold))
@@ -493,7 +503,7 @@ private struct DeliveryHistoryRow: View {
     /// Sentences rather than a table, because a row read as a list of
     /// unattached times is unintelligible.
     private var accessibilityLabel: String {
-        var sentences = ["Delivery \(number), \(delivery.state.historyDescription.lowercased())"]
+        var sentences = ["\(numbered.title), \(delivery.state.historyDescription.lowercased())"]
         sentences += events.map { event in
             "\(event.label) at \(event.date.formatted(date: .omitted, time: .shortened))"
         }

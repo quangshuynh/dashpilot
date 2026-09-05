@@ -38,8 +38,9 @@ derived legitimately from device sensors and stored history is typed by the driv
 - **Recorded mileage** derived from the retained route, summing only what was captured continuously
   and excluding the distance across detected gaps.
 - **Delivery lifecycle** — accepted, arrived at pickup, picked up, delivered, or cancelled — with
-  one primary control per state, one active delivery at a time, transitions enforced against the
-  store, relaunch recovery, and a shift end refused while a delivery is running.
+  one primary control per delivery, **several deliveries recordable at once** for stacked orders,
+  every event targeted at one delivery, transitions enforced against the store, relaunch recovery for
+  each of them, and a shift end refused while any delivery is running.
 - **Manual gross earnings**, optional, locale-aware, refused rather than reinterpreted when it
   cannot be read.
 - **Completed-shift metrics and detail**: gross earnings per shift hour and per recorded mile, with
@@ -116,8 +117,9 @@ The short version, with the full list in [`docs/reference/limitations.md`](docs/
 - **Both rates are gross.** The hourly rate divides by elapsed shift time, not working time; the
   per-mile rate divides by recorded miles, which makes it normally higher than earnings per mile
   driven.
-- **Deliveries are what the driver tapped.** Nothing is detected, imported or inferred, no amount is
-  attributed to a delivery, and only one delivery can be recorded at a time.
+- **Deliveries are what the driver tapped.** Nothing is detected, imported or inferred, and no
+  amount is attributed to a delivery. Deliveries worked at the same time are kept as separate
+  records; their overlapping durations are never summed into "active time".
 - **No delivery-platform integration**, permanently and by design.
 - **Local only.** No export, no backup, no sync, and deleting a shift is permanent.
 - Not implemented yet: anything built on the delivery records (restaurant scoring, wait-time

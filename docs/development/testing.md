@@ -20,8 +20,8 @@ test cannot see, such as a screen that renders a sentence the model never claime
 | --- | --- |
 | Shift lifecycle, Shift service | Start, end, single-active-shift, clamped clocks, rollback, relaunch recovery |
 | Persistence, Route sample persistence, Shift earnings persistence | Store round trips and the v1, v2 and v3 migrations |
-| Delivery lifecycle, Delivery service | Every transition and refusal, the single-active-delivery rule, clamped clocks, the shift-end policy and cascade |
-| Delivery persistence | The v4 to v5 migration, and an active delivery recovered from a reopened store |
+| Delivery lifecycle, Delivery service | Every transition and refusal, concurrent deliveries and their isolation, deterministic ordering and numbering, clamped clocks, the shift-end policy and cascade |
+| Delivery persistence | The v4 to v5 migration, and several active deliveries recovered independently from a reopened store |
 | Delivery wording | The one action each state offers, its spoken label, and the delivery counts |
 | Location authorization state, Location authorization service | Condition precedence, accuracy independence, unrecognised values, request gating |
 | Route capture, Route sample filter | The capture invariant and every acceptance rule |

@@ -6,9 +6,19 @@ import Testing
 ///
 /// The wording lives in the domain rather than in a view so it can be asserted
 /// here: a driver hears the spoken form, and a label that does not name the
-/// event it records is unusable by voice.
+/// event it records — or the delivery it records it against — is unusable by
+/// voice.
+@MainActor
 @Suite("Delivery wording")
 struct DeliveryWordingTests {
+    private let start = Date(timeIntervalSince1970: 1_756_000_000)
+
+    /// A delivery attached to a shift, without a store: none of the wording
+    /// below needs one.
+    private func makeDelivery(acceptedAfter seconds: TimeInterval = 0) -> Delivery {
+        Delivery(shift: Shift(startedAt: start), acceptedAt: start.addingTimeInterval(seconds))
+    }
+
     // MARK: Next action
 
     @Test("Every active state offers exactly one next action")
@@ -127,5 +137,75 @@ struct DeliveryWordingTests {
         #expect(summary.inProgress == 3)
         #expect(summary.completed == 0)
         #expect(summary.cancelled == 0)
+    }
+
+    @Test("The running-shift headline counts what is being worked right now")
+    func statesHowManyAreInProgress() {
+        #expect(DeliverySummary(states: []).inProgressStatement == "No delivery in progress")
+        #expect(DeliverySummary(states: [.delivered]).inProgressStatement == "No delivery in progress")
+        #expect(DeliverySummary(states: [.accepted]).inProgressStatement == "1 delivery in progress")
+        #expect(
+            DeliverySummary(states: [.accepted, .pickedUp]).inProgressStatement == "2 deliveries in progress"
+        )
+        #expect(
+            DeliverySummary(states: [.delivered, .accepted, .pickedUp, .cancelled]).inProgressStatement
+                == "2 deliveries in progress",
+            "Only the unfinished ones are being worked"
+        )
+    }
+
+    // MARK: Numbering
+
+    @Test("Deliveries are numbered from one, in the order they were accepted")
+    func numbersDeliveriesFromOne() {
+        let early = makeDelivery(acceptedAfter: 300)
+        let middle = makeDelivery(acceptedAfter: 900)
+        let late = makeDelivery(acceptedAfter: 1_500)
+
+        let numbered = NumberedDelivery.numbering([late, early, middle])
+
+        #expect(numbered.map(\.number) == [1, 2, 3])
+        #expect(numbered.map(\.delivery.id) == [early.id, middle.id, late.id])
+        #expect(numbered.map(\.title) == ["Delivery 1", "Delivery 2", "Delivery 3"])
+        #expect(numbered.map(\.id) == [early.id, middle.id, late.id], "A card is identified by its delivery")
+    }
+
+    @Test("Numbering is repeatable whatever order the deliveries arrive in")
+    func numberingIsRepeatable() {
+        let first = makeDelivery(acceptedAfter: 300)
+        let second = makeDelivery(acceptedAfter: 900)
+
+        let forwards = NumberedDelivery.numbering([first, second])
+        let backwards = NumberedDelivery.numbering([second, first])
+
+        #expect(forwards.map(\.number) == backwards.map(\.number))
+        #expect(forwards.map(\.delivery.id) == backwards.map(\.delivery.id))
+    }
+
+    @Test("A numbered delivery names itself and its state, in print and aloud")
+    func numberedDeliveriesDescribeThemselves() throws {
+        let delivery = makeDelivery()
+        try delivery.markArrivedAtPickup(at: start.addingTimeInterval(300))
+        let numbered = NumberedDelivery(number: 2, delivery: delivery)
+
+        #expect(numbered.title == "Delivery 2")
+        #expect(numbered.statusTitle == "Delivery 2 · Waiting at the pickup")
+        #expect(numbered.spokenStatus == "Delivery 2, waiting at the pickup")
+    }
+
+    @Test("Every control names the delivery it acts on")
+    func controlsNameTheirDelivery() {
+        let numbered = NumberedDelivery(number: 3, delivery: makeDelivery())
+
+        #expect(numbered.spokenLabel(for: .arriveAtPickup) == "Delivery 3. Mark arrived at pickup")
+        #expect(numbered.spokenLabel(for: .pickUp) == "Delivery 3. Mark order picked up")
+        #expect(numbered.spokenLabel(for: .complete) == "Delivery 3. Mark delivery completed")
+        #expect(numbered.spokenCancelLabel == "Delivery 3. Cancel this delivery")
+
+        // With several cards on screen, a spoken label that does not name its
+        // delivery identifies its target by position alone.
+        for action in DeliveryAction.allCases {
+            #expect(numbered.spokenLabel(for: action).hasPrefix("Delivery 3."))
+        }
     }
 }

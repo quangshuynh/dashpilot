@@ -182,20 +182,44 @@ extension Shift {
 }
 
 extension Shift {
-    /// The delivery still in progress in this shift, if there is one.
+    /// The deliveries still in progress in this shift, in accepted order.
+    ///
+    /// A list rather than a single delivery, because a driver can be working
+    /// several orders at once. Each one owns its own state; there is no
+    /// aggregate "the delivery in progress" to read, and nothing here decides
+    /// which of them is the important one.
     ///
     /// Read from the store's own rows rather than from a flag: a shift's
-    /// deliveries are the authority on whether one is running, and the rule
-    /// that a shift cannot end while one is depends on that being true after a
-    /// relaunch as much as during a session.
-    var activeDelivery: Delivery? {
-        deliveries.first { $0.isActive }
+    /// deliveries are the authority on what is running, and the rule that a
+    /// shift cannot end while any of them are depends on that being true after
+    /// a relaunch as much as during a session.
+    var activeDeliveries: [Delivery] {
+        deliveriesInOrder.filter(\.isActive)
     }
 
-    /// This shift's deliveries in the order they were accepted, which is the
-    /// order they happened in.
+    /// This shift's deliveries in the order they were accepted.
+    ///
+    /// With stacked deliveries this is an ordering, not a sequence of events:
+    /// two deliveries can overlap completely, and the second one accepted may
+    /// well be the first one delivered.
     var deliveriesInOrder: [Delivery] {
-        deliveries.sorted { $0.acceptedAt < $1.acceptedAt }
+        deliveries.sorted(by: Delivery.acceptedBefore)
+    }
+
+    /// This shift's deliveries with the numbers the interface labels them with.
+    ///
+    /// Numbering runs over *every* delivery in the shift rather than only the
+    /// active ones, so a delivery keeps the same label from the moment it starts
+    /// until it appears in the shift's history — finishing one does not renumber
+    /// the others on screen.
+    var numberedDeliveries: [NumberedDelivery] {
+        NumberedDelivery.numbering(deliveries)
+    }
+
+    /// The active deliveries, carrying the same numbers they have everywhere
+    /// else in this shift.
+    var numberedActiveDeliveries: [NumberedDelivery] {
+        numberedDeliveries.filter(\.delivery.isActive)
     }
 
     /// How many deliveries this shift recorded, and how they ended.

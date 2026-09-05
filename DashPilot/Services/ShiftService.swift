@@ -13,8 +13,9 @@ nonisolated enum ShiftLifecycleError: Error {
     case noActiveShift
     /// Deletion was requested for a shift that has not finished.
     case cannotDeleteActiveShift
-    /// An end was requested while a delivery on that shift was still in progress.
-    case activeDeliveryInProgress
+    /// An end was requested while deliveries on that shift were still in
+    /// progress. Carries how many, because the refusal has to name them.
+    case activeDeliveriesInProgress(count: Int)
     /// The shift model rejected the transition.
     case invalidTransition(ShiftError)
     /// The local store could not be read or written.
@@ -29,7 +30,8 @@ nonisolated extension ShiftLifecycleError: Equatable {
         case let (.shiftAlreadyActive(lhsDate), .shiftAlreadyActive(rhsDate)): lhsDate == rhsDate
         case (.noActiveShift, .noActiveShift): true
         case (.cannotDeleteActiveShift, .cannotDeleteActiveShift): true
-        case (.activeDeliveryInProgress, .activeDeliveryInProgress): true
+        case let (.activeDeliveriesInProgress(lhsCount), .activeDeliveriesInProgress(rhsCount)):
+            lhsCount == rhsCount
         case let (.invalidTransition(lhsError), .invalidTransition(rhsError)): lhsError == rhsError
         case (.storeUnavailable, .storeUnavailable): true
         default: false
@@ -46,8 +48,13 @@ nonisolated extension ShiftLifecycleError: LocalizedError {
             "There is no shift in progress to end."
         case .cannotDeleteActiveShift:
             "A shift that is still in progress cannot be deleted. End it first."
-        case .activeDeliveryInProgress:
-            "A delivery is still in progress. Mark it delivered or cancel it before ending the shift."
+        case let .activeDeliveriesInProgress(count):
+            count == 1
+                ? "A delivery is still in progress. Mark it delivered or cancel it before ending the shift."
+                : """
+                \(count) deliveries are still in progress. Mark each one delivered or cancel it before \
+                ending the shift.
+                """
         case .invalidTransition(.shiftNotCompleted):
             "Earnings can be recorded once the shift has ended."
         case .invalidTransition(.negativeEarnings):
@@ -152,15 +159,21 @@ struct ShiftService {
         }
 
         // A shift cannot close over work that is still happening. The
-        // alternatives were both dishonest: marking the delivery delivered
-        // would record a completion the driver never made, and discarding it
-        // would erase a delivery they did make. So the end is refused, and the
-        // driver resolves the delivery — delivered or cancelled — first. The
-        // rule is checked against the shift's own persisted deliveries rather
-        // than against whichever button a screen happens to show.
-        if shift.activeDelivery != nil {
-            AppLog.shift.notice("Refused to end a shift: a delivery is still in progress")
-            throw ShiftLifecycleError.activeDeliveryInProgress
+        // alternatives were both dishonest: marking the deliveries delivered
+        // would record completions the driver never made, and discarding them
+        // would erase deliveries they did make. So the end is refused, and the
+        // driver resolves each one — delivered or cancelled — first. The rule is
+        // checked against the shift's own persisted deliveries rather than
+        // against whichever buttons a screen happens to show.
+        //
+        // Every unfinished delivery blocks, not just the first: with stacked
+        // orders, finishing one of three leaves two that still happened.
+        let unfinished = shift.activeDeliveries
+        if !unfinished.isEmpty {
+            AppLog.shift.notice(
+                "Refused to end a shift: \(unfinished.count, privacy: .public) deliveries still in progress"
+            )
+            throw ShiftLifecycleError.activeDeliveriesInProgress(count: unfinished.count)
         }
 
         // A driver must always be able to end a shift. If the device clock has
