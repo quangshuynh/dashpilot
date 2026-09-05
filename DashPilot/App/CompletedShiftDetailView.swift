@@ -200,10 +200,10 @@ struct CompletedShiftDetailView: View {
         identifier: String
     ) -> some View {
         LabeledContent(title) {
-            Text(Self.durationText(duration)).monospacedDigit()
+            Text(DurationText.short(duration)).monospacedDigit()
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(Self.durationText(duration, width: .wide)) \(spokenTitle)")
+        .accessibilityLabel("\(DurationText.spoken(duration)) \(spokenTitle)")
         .accessibilityIdentifier(identifier)
     }
 
@@ -521,22 +521,6 @@ struct CompletedShiftDetailView: View {
         recordedDistance.map { shift.metrics(for: $0) }
     }
 
-    /// A shift ended moments after it started should read in seconds rather than
-    /// as `0 min`.
-    ///
-    /// `width` exists for VoiceOver, for the reason ``RouteDistance`` takes one:
-    /// `hr` reads well and hears badly, so a spoken description asks for `.wide`
-    /// and gets "1 hour, 5 minutes" from the same units and the same rule.
-    /// Nothing rewrites the abbreviated string into words.
-    static func durationText(
-        _ duration: TimeInterval,
-        width: Duration.UnitsFormatStyle.UnitWidth = .abbreviated
-    ) -> String {
-        let units: Set<Duration.UnitsFormatStyle.Unit> = duration < 60
-            ? [.minutes, .seconds]
-            : [.hours, .minutes]
-        return Duration.seconds(duration).formatted(.units(allowed: units, width: width))
-    }
 }
 
 /// One delivery in a completed shift's history.
@@ -585,7 +569,7 @@ private struct DeliveryHistoryRow: View {
 
                 ForEach(intervals, id: \.label) { interval in
                     LabeledContent(interval.label) {
-                        Text(CompletedShiftDetailView.durationText(interval.duration))
+                        Text(DurationText.short(interval.duration))
                             .monospacedDigit()
                     }
                     .font(.footnote)
@@ -658,7 +642,7 @@ private struct DeliveryHistoryRow: View {
             "\(event.label) at \(event.date.formatted(date: .omitted, time: .shortened))"
         }
         sentences += intervals.map { interval in
-            "\(interval.label) \(CompletedShiftDetailView.durationText(interval.duration))"
+            "\(interval.label) \(DurationText.spoken(interval.duration))"
         }
         return sentences.joined(separator: ". ")
     }

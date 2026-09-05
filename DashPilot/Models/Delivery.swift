@@ -206,9 +206,16 @@ nonisolated final class Delivery {
     /// `nil` whenever either event is missing. A delivery cancelled before the
     /// driver arrived, or one still waiting, has no wait to report, and
     /// substituting "now" or zero would invent one.
+    ///
+    /// Also `nil` for a pickup recorded before the arrival it followed, which
+    /// the transitions make unreachable. Unlike ``completedDuration`` this one
+    /// is not clamped, because a pickup wait is an *observation*: it is counted
+    /// into a place's history, and a zero standing in for an impossible interval
+    /// would enter that history as a real wait of no length. Absence is the
+    /// honest answer, and ``PickupWaitSample`` excludes the same rows.
     var pickupWait: TimeInterval? {
-        guard let arrivedAtPickupAt, let pickedUpAt else { return nil }
-        return clamped(from: arrivedAtPickupAt, to: pickedUpAt)
+        guard let arrivedAtPickupAt, let pickedUpAt, pickedUpAt >= arrivedAtPickupAt else { return nil }
+        return pickedUpAt.timeIntervalSince(arrivedAtPickupAt)
     }
 
     /// How long the whole delivery took, from acceptance to completion.

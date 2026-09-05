@@ -357,7 +357,7 @@ private struct CompletedShiftRow: View {
             return started
         }
         let ended = endedAt.formatted(date: .omitted, time: .shortened)
-        return "\(started) – \(ended) · \(CompletedShiftDetailView.durationText(completedDuration))"
+        return "\(started) – \(ended) · \(DurationText.short(completedDuration))"
     }
 
     /// What VoiceOver says instead of the abbreviations.
@@ -372,7 +372,7 @@ private struct CompletedShiftRow: View {
             let started = shift.startedAt.formatted(date: .omitted, time: .shortened)
             let ended = endedAt.formatted(date: .omitted, time: .shortened)
             sentences.append("\(started) to \(ended)")
-            sentences.append(CompletedShiftDetailView.durationText(completedDuration))
+            sentences.append(DurationText.short(completedDuration))
         }
 
         if let earnings = shift.grossEarnings {
