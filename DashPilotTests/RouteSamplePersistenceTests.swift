@@ -17,13 +17,13 @@ struct RouteSamplePersistenceTests {
 
     // MARK: Schema
 
-    @Test("The current schema is version 3.0.0 and holds both entities")
+    @Test("The schema versions are ordered, and the current one holds both entities")
     func schemaVersion() {
+        // The current version and what it added are covered by
+        // `ShiftEarningsPersistenceTests`.
         #expect(DashPilotSchemaV3.versionIdentifier == Schema.Version(3, 0, 0))
         #expect(DashPilotSchemaV2.versionIdentifier == Schema.Version(2, 0, 0))
         #expect(DashPilotSchemaV1.versionIdentifier == Schema.Version(1, 0, 0))
-        #expect(DashPilotMigrationPlan.schemas.count == 3)
-        #expect(DashPilotMigrationPlan.stages.count == 2)
 
         let entities = Set(ModelContainerFactory.currentSchema.entities.map(\.name))
         #expect(entities.contains("Shift"))

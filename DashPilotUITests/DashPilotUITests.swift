@@ -61,6 +61,124 @@ final class DashPilotUITests: XCTestCase {
         )
     }
 
+    /// Records earnings on a finished shift, then changes the amount.
+    ///
+    /// The whole point of the flow is that it happens *after* driving, so the
+    /// journey ends a shift first and asserts that no earnings control existed
+    /// while it was running.
+    @MainActor
+    func testAddsAndEditsEarningsOnACompletedShift() throws {
+        let app = launchWithEmptyStore()
+        let row = completeAShift(in: app)
+
+        let addButton = app.buttons["editShiftEarningsButton"]
+        XCTAssertTrue(addButton.waitForExistence(timeout: 5))
+        XCTAssertEqual(addButton.label, "Add Earnings", "A shift with no amount offers to add one")
+
+        addButton.tap()
+        type("86.25", into: app)
+        app.buttons["saveEarningsButton"].tap()
+
+        XCTAssertTrue(
+            waitForRowLabel(row, toContain: "86.25"),
+            "The recorded amount should appear on the shift: \(row.label)"
+        )
+        XCTAssertEqual(app.buttons["editShiftEarningsButton"].label, "Edit Earnings")
+
+        // Editing replaces the amount rather than adding to it.
+        app.buttons["editShiftEarningsButton"].tap()
+        let field = app.textFields["earningsAmountField"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        XCTAssertEqual(field.value as? String, "86.25", "The editor opens on the stored amount")
+        clear(field, in: app)
+        type("104.10", into: app)
+        app.buttons["saveEarningsButton"].tap()
+
+        XCTAssertTrue(
+            waitForRowLabel(row, toContain: "104.10"),
+            "The edited amount should replace the previous one: \(row.label)"
+        )
+        XCTAssertFalse(row.label.contains("86.25"))
+    }
+
+    /// An amount that cannot be read is refused, and refusing it changes nothing.
+    @MainActor
+    func testInvalidEarningsAreNotSaved() throws {
+        let app = launchWithEmptyStore()
+        let row = completeAShift(in: app)
+
+        app.buttons["editShiftEarningsButton"].tap()
+        type("1.2.3", into: app)
+        app.buttons["saveEarningsButton"].tap()
+
+        let message = app.descendants(matching: .any)["earningsValidationMessage"]
+        XCTAssertTrue(message.waitForExistence(timeout: 5), "The driver should be told why it was refused")
+        XCTAssertTrue(
+            app.textFields["earningsAmountField"].exists,
+            "The editor stays open with what was typed rather than discarding it"
+        )
+
+        app.buttons["cancelEarningsButton"].tap()
+
+        XCTAssertTrue(app.buttons["editShiftEarningsButton"].waitForExistence(timeout: 5))
+        XCTAssertEqual(
+            app.buttons["editShiftEarningsButton"].label,
+            "Add Earnings",
+            "A refused amount leaves the shift with no earnings recorded"
+        )
+    }
+
+    // MARK: Helpers
+
+    /// Runs one shift start-to-finish and returns its row in history.
+    ///
+    /// Also asserts the safety rule the earnings flow depends on: nothing
+    /// offers earnings entry while a shift is running.
+    @MainActor
+    private func completeAShift(in app: XCUIApplication) -> XCUIElement {
+        let startButton = app.buttons["startShiftButton"]
+        XCTAssertTrue(startButton.waitForExistence(timeout: 10))
+        startButton.tap()
+
+        let endButton = app.buttons["endShiftButton"]
+        XCTAssertTrue(endButton.waitForExistence(timeout: 5))
+        XCTAssertFalse(
+            app.buttons["editShiftEarningsButton"].exists,
+            "Earnings entry must not be offered while the driver may be driving"
+        )
+        endButton.tap()
+
+        let row = app.descendants(matching: .any).matching(identifier: "completedShiftRow").firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        return row
+    }
+
+    @MainActor
+    private func type(_ text: String, into app: XCUIApplication) {
+        let field = app.textFields["earningsAmountField"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        field.tap()
+        field.typeText(text)
+    }
+
+    @MainActor
+    private func clear(_ field: XCUIElement, in app: XCUIApplication) {
+        field.tap()
+        let existing = (field.value as? String) ?? ""
+        field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: existing.count))
+    }
+
+    /// The row is one combined accessibility element, so what it displays is
+    /// read from its label rather than from separate text elements.
+    @MainActor
+    private func waitForRowLabel(_ row: XCUIElement, toContain text: String) -> Bool {
+        let expectation = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "label CONTAINS %@", text),
+            object: row
+        )
+        return XCTWaiter().wait(for: [expectation], timeout: 5) == .completed
+    }
+
     /// The authorization panel is on screen from launch, in whatever state the
     /// device is in.
     ///
