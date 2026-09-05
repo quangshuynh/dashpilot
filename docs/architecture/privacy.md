@@ -8,8 +8,9 @@ there is nothing to configure, disable or trust.
 - All data stays on device. There are no accounts, no sync, no analytics, no telemetry and no ads.
 - There is no third-party SDK of any kind, so nothing is collected on anyone else's behalf.
 - Recorded route samples never leave the device.
-- Precise coordinates, routes, earnings, delivery history and pickup-place names are treated as
-  sensitive: they are not logged, and they are never committed to the repository. For a driver who
+- Precise coordinates, routes, earnings, delivery history, pickup-place names and the waits recorded
+  at them are treated as sensitive: they are not logged, and they are never committed to the
+  repository. For a driver who
   works a small area, the places they pick up from are close to a description of where they are.
 - Pickup places are typed by the driver. There is no geocoding, no place search and no directory
   lookup, so no name here was obtained from, or sent to, anywhere off the device.
@@ -33,7 +34,7 @@ counts and errors. Coordinates, addresses and earnings amounts are never logged.
 | `earnings` | That an amount was added, updated or removed, or that a save failed | The amount |
 | `pickup-place` | That a place was assigned, changed, removed, reused or created; that a name was refused, by rule name; that a save failed | The name typed, and the normalised key derived from it |
 
-Three deliberate silences are worth stating.
+Four deliberate silences are worth stating.
 
 **Mileage is not logged at all.** The calculation reads coordinates and produces a trip metric, and
 neither belongs in a log. There is no failure it can report, because an unmeasurable route is a
@@ -42,6 +43,12 @@ normal result shown to the driver, so a log line would only record how far someb
 **Derived rates are not logged**, for the same reason. An hourly rate is an earnings figure and a
 per-mile rate is an earnings figure over a trip metric, and an unavailable rate is a normal result
 rather than a failure.
+
+**Pickup waits are not logged either** — not an individual wait, not a median, not a sample count and
+not when a sample was recorded. How long a named driver waits at a named place is work-performance
+data about a real person, and there is no failure to report: a place with too little history is a
+normal result the screen states in words. Deriving a place's history writes nothing and records
+nothing.
 
 **A deletion records nothing about the shift.** Not when it ran, not what it earned, not how far it
 went. A deletion is the last moment to start writing a driver's history into a log.

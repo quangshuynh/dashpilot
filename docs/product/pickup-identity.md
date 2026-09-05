@@ -188,10 +188,14 @@ Attributing a delivery to a place by its route, its timing or its resemblance to
 merchant's name into a driver's history on the app's authority rather than theirs, and no later
 screen could tell that apart from a place they named themselves.
 
-## What is not built on this yet
+## What is built on this
 
-Identity, and nothing derived from it. There is no average or median pickup wait, no fastest or
-slowest place, no merchant score, no offer recommendation and no aggregate of any kind — see
-[Limitations](../reference/limitations.md). The purpose of this work is a **trustworthy grouping
-key**; the statistics that could be built over it are only worth having if the key underneath them is
-one a driver can rely on.
+One thing: [pickup wait](pickup-wait.md). Because two spellings of a name resolve to one place, the
+waits recorded at it can be read together, and a place's history says how long its pickups have
+actually taken. That history is derived on demand and stored nowhere, so this model keeps no counter
+of any kind.
+
+Nothing else. There is no fastest or slowest place, no merchant score, no ranking, no offer
+recommendation and no aggregate across places — see [Limitations](../reference/limitations.md). The
+purpose of this work was a **trustworthy grouping key**; the statistics built over it are only worth
+having because the key underneath them is one a driver can rely on.

@@ -76,14 +76,16 @@ database" action.
 ## Not implemented
 
 Expenses, fuel, taxes, mileage deductions, a tips-versus-base breakdown, per-delivery earnings,
-customer identity, wait-time analysis per pickup place, merchant scoring, offer profitability,
-automatic delivery or pickup detection, geocoding, maps, route visualisation, weekly or all-time
-totals, export, App Intents, Live Activities and recommendations.
+customer identity, merchant scoring or ranking, offer profitability, automatic delivery or pickup
+detection, geocoding, maps, route visualisation, weekly or all-time totals, export, App Intents,
+Live Activities and recommendations.
 
-Deliveries are recorded, and one figure is built on them: the shift time at least one delivery was
-active, with overlapping deliveries counted once, and gross earnings over it. Beyond that the app
-derives a pickup wait and a delivery duration for presentation and stops. There is no restaurant
-rating, no average, no comparison between shifts and no prediction.
+Deliveries are recorded, and two things are built on them. One is the shift time at least one
+delivery was active, with overlapping deliveries counted once, and gross earnings over it. The other
+is a pickup place's recorded waits, summarised as a median beside the number of pickups behind it —
+see [Pickup wait](pickup-wait.md). Beyond that the app derives a delivery duration for presentation
+and stops. There is no restaurant rating, no ranking, no comparison between shifts and no
+prediction.
 
 Nothing is aggregated across shifts, no route is drawn on a map, and no mileage or live rate is
 shown while a shift is still running. There is no undo for a deleted shift and no backup of any
