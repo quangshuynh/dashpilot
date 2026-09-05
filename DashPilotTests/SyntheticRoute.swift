@@ -28,4 +28,32 @@ enum SyntheticRoute {
             horizontalAccuracy: horizontalAccuracy
         )
     }
+
+    /// A stored position `northMetres` north of the origin, recorded in
+    /// `captureSessionID`.
+    ///
+    /// `nil` for the session is how a position stored before schema v3 is
+    /// represented: continuity around it was never recorded.
+    static func point(
+        at timestamp: Date,
+        northMetres: Double = 0,
+        captureSessionID: UUID?
+    ) -> RoutePoint {
+        RoutePoint(
+            timestamp: timestamp,
+            latitude: originLatitude + northMetres / metresPerDegreeLatitude,
+            longitude: originLongitude,
+            captureSessionID: captureSessionID
+        )
+    }
+
+    /// Whether a measured distance matches what the offsets describe.
+    ///
+    /// Offsets are built from a rounded metres-per-degree constant and measured
+    /// on a spherical Earth, so the two differ by about a tenth of a percent.
+    /// The tolerance is wide enough to ignore that and far too narrow to hide a
+    /// segment counted twice, a gap measured across, or a missing leg.
+    static func isCloseEnough(_ measured: Double, to expected: Double, tolerance: Double = 0.003) -> Bool {
+        abs(measured - expected) <= max(1, abs(expected) * tolerance)
+    }
 }
