@@ -49,23 +49,41 @@ nonisolated struct RouteQuality: Equatable, Sendable {
         return "\(distance.formattedMiles(locale: locale)) recorded"
     }
 
-    /// The mileage as VoiceOver should hear it.
+    /// The mileage figure alone, as VoiceOver should hear it.
     ///
-    /// `mi` reads well and hears badly, and the fact that makes the figure
-    /// honest — that it is what was *recorded* — has to survive being spoken, so
-    /// partiality is a sentence here rather than the two-word marker the eye
-    /// gets.
-    func spokenMileageStatement(locale: Locale = .autoupdatingCurrent) -> String {
+    /// `mi` reads well and hears badly, so the unit is spelled out — from the
+    /// same conversion and rounding rule the visible string uses, rather than by
+    /// rewriting the abbreviation into words.
+    ///
+    /// Nothing is qualified here. A caller that shows the caveats separately —
+    /// the detail screen does — would otherwise hear each of them twice.
+    func spokenMileage(locale: Locale = .autoupdatingCurrent) -> String {
         guard distance.isMeasured else { return mileageStatement(locale: locale) }
-        var sentences = ["\(distance.formattedMiles(width: .wide, locale: locale)) recorded"]
-        if distance.isPartial { sentences.append(partialSentence) }
-        return sentences.joined(separator: ". ")
+        return "\(distance.formattedMiles(width: .wide, locale: locale)) recorded"
+    }
+
+    /// The mileage and what qualifies it, as VoiceOver should hear it.
+    ///
+    /// For a caller with room for one spoken phrase and no space for the
+    /// caveats: the fact that makes the figure honest has to survive being
+    /// spoken, so partiality becomes a sentence rather than the two-word marker
+    /// the eye gets.
+    func spokenMileageStatement(locale: Locale = .autoupdatingCurrent) -> String {
+        guard let partialExplanation else { return spokenMileage(locale: locale) }
+        return "\(spokenMileage(locale: locale)). \(partialExplanation)"
     }
 
     /// The two-word marker shown beside the mileage when the route is known to
     /// cover less than the shift, or `nil` when no gap was detected.
+    ///
+    /// Only a route that measured something can be partial. A shift with nothing
+    /// usable in its route counts the whole shift as uncovered, which makes
+    /// `RouteDistance.isPartial` true — but "No route recorded, partial route"
+    /// describes a route that is missing pieces, when what actually happened is
+    /// that there is no route at all. That shift gets
+    /// ``unmeasurableExplanation`` instead, which says the true thing.
     var partialMarker: String? {
-        distance.isPartial ? "partial route" : nil
+        isPartial ? "partial route" : nil
     }
 
     /// How many unbroken stretches of capture contributed distance, or `nil`
@@ -92,10 +110,13 @@ nonisolated struct RouteQuality: Equatable, Sendable {
     }
 
     /// The sentence that explains what a partial route means for the numbers
-    /// derived from it, or `nil` when no gap was detected.
+    /// derived from it, or `nil` when there is no measured route to qualify.
     var partialExplanation: String? {
-        distance.isPartial ? partialSentence : nil
+        isPartial ? partialSentence : nil
     }
+
+    /// Whether there is a measured route *and* it is known to be incomplete.
+    private var isPartial: Bool { distance.isMeasured && distance.isPartial }
 
     /// The sentence for a route stored before capture continuity was recorded,
     /// or `nil` for a route that carries its own.
