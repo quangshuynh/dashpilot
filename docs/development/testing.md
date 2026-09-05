@@ -24,7 +24,11 @@ test cannot see, such as a screen that renders a sentence the model never claime
 | Delivery persistence | The v4 to v5 migration, and several active deliveries recovered independently from a reopened store |
 | Pickup place name | The normalisation policy: what is folded, and what is conservatively left alone |
 | Pickup place service | Reuse of an equivalent name, the first-spelling-wins policy, assign, change, remove, recent ordering, and deletion sparing a shared place |
-| Pickup place persistence | The v5 to v6 migration, every earlier version reaching v6, and a shared place surviving a reopened store |
+| Pickup place persistence | The v5 to v6 migration, every earlier version reaching v6, a shared place surviving a reopened store, and a place's wait metrics being identical either side of a reopen |
+| Pickup wait samples | Which lifecycles yield a wait: both ends present and in order, and the cancelled-before-pickup and cancelled-after-pickup rules |
+| Pickup wait median | Zero, one, two, odd and even counts, unsorted input, repeats, an exact fractional midpoint, a long wait retained, and a hundred samples |
+| Pickup wait aggregation by place | Isolation between places, a place reused across shifts, deliveries excluded for naming no place or recording no pickup, and that nothing is written back |
+| Pickup wait history wording | What may be said at each sample count, and the words no history may use at any |
 | Delivery wording | The one action each state offers, its spoken label, and the delivery counts |
 | Location authorization state, Location authorization service | Condition precedence, accuracy independence, unrecognised values, request gating |
 | Route capture, Route sample filter | The capture invariant and every acceptance rule |
@@ -81,13 +85,14 @@ a period locale and a comma locale side by side.
 
 ## Launch arguments
 
-Debug builds accept three arguments, all used only by UI tests and screenshots:
+Debug builds accept four arguments, all used only by UI tests and screenshots:
 
 | Argument | Effect |
 | --- | --- |
 | `-dashpilot-in-memory-store` | Starts from a known empty state, so a journey never writes into the store a real driver's history would live in |
 | `-dashpilot-seeded-history` | Opens an in-memory store already holding synthetic history: one completed shift with an amount, a route recorded in two capture sessions and three deliveries (two delivered, one cancelled), and one shift with none of those |
 | `-dashpilot-seeded-active-delivery` | Opens an in-memory store holding a running shift whose delivery has already been picked up, which is the state a relaunch recovers into |
+| `-dashpilot-seeded-pickup-history` | Opens an in-memory store holding one completed shift whose deliveries give two pickup places deliberately different amounts of recorded history |
 
 A UI test cannot make a simulator record a route, so a measured, partial route and the
 per-recorded-mile rate over it would otherwise be unreachable end to end. Nor can it terminate and
@@ -97,16 +102,23 @@ launch instead; that the *store* recovers one is proved against a real reopened 
 amounts and offsets from a round-number origin, the same data `SyntheticRoute` builds for the unit
 tests.
 
+Pickup-wait history needs its own fixture rather than a fourth delivery on the general one: the
+seeded history's three deliveries are pinned by the journeys asserting exact active-time and rate
+figures over them. Its own shift gives one place three recorded waits including a long one, another
+place exactly one, a delivery that arrived and cancelled without picking up, and a delivery naming no
+place at all — so a median, a sample count, the insufficient-history wording and the absence of any
+history are all reachable end to end.
+
 The seeded paths are app code that exists only for tests. They are DEBUG-only and in-memory, and
-they are two more launch paths to keep honest.
+they are three more launch paths to keep honest.
 
 ## UI journeys
 
 The UI target covers a handful of paths: launching, starting and ending a shift, recording a
 delivery through its whole lifecycle, cancelling one, being refused a shift end while a delivery is
 running, recovering an already-running delivery at launch, opening a completed shift, adding and
-editing an amount, reading the detail screen's delivery, route and rate statements, and deleting a
-shift through its confirmation.
+editing an amount, reading the detail screen's delivery, route and rate statements, opening a pickup
+place's recorded wait history, and deleting a shift through its confirmation.
 
 The permission panel is asserted only to be on screen. Which state it displays depends on the
 device, and no test drives the system alert, because automating it would be brittle and would change

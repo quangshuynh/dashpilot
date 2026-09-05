@@ -103,6 +103,7 @@ nav:
       - Shift workflow: product/shift-workflow.md
       - Delivery lifecycle: product/delivery-lifecycle.md
       - Pickup identity: product/pickup-identity.md
+      - Pickup wait: product/pickup-wait.md
       - Recorded mileage: product/recorded-mileage.md
       - Earnings and metrics: product/earnings-and-metrics.md
   - Architecture:

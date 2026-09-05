@@ -70,7 +70,7 @@ Derived, never stored:
 | `state` | A `DeliveryState`, read from which timestamps exist. There is no stored state column |
 | `isActive` | Neither delivered nor cancelled |
 | `lastEventAt` | The most recent recorded event, which the next one may not precede |
-| `pickupWait` | `pickedUpAt - arrivedAtPickupAt`, or `nil` if either end is missing |
+| `pickupWait` | `pickedUpAt - arrivedAtPickupAt`, or `nil` if either end is missing or the pickup precedes the arrival |
 | `completedDuration` | `deliveredAt - acceptedAt`, or `nil` unless the delivery was delivered |
 | `acceptedBefore(_:_:)` | The total, repeatable order over deliveries: acceptance ascending, identity breaking a tie |
 
@@ -96,13 +96,18 @@ Derived, never stored:
 | Member | Meaning |
 | --- | --- |
 | `lastUsedAt` | The latest `acceptedAt` among the deliveries naming this place, or `nil` if none do |
+| `pickupWaitSamples` | Each referencing delivery's recorded wait, oldest first. Deliveries missing either end are skipped |
+| `pickupWaitMetrics(using:)` | A `PickupWaitMetrics`: sample count, median, shortest, longest and most recent. See [Pickup wait](../product/pickup-wait.md) |
 | `namedBefore(_:_:)` | The total, repeatable order over places: creation ascending, identity breaking a tie |
+
+No aggregate is stored. There is no `medianWait`, `averageWait` or `pickupCount` column, and adding
+one is what a test in `PickupWaitMetricsTests` exists to fail on.
 
 `normalizedName` is deliberately **not** a `.unique` attribute: a unique constraint in SwiftData
 resolves a collision by upserting, which would overwrite the row the reuse rule exists to preserve.
 Uniqueness is enforced in `PickupPlaceService` instead. **No counter, visit total, last-used date,
-wait statistic or score is stored on a place** — every such figure is derivable from its deliveries,
-and a stored copy could drift away from them. There is no address, coordinate, phone number, store
+median wait or score is stored on a place** — every such figure is derived from its deliveries when
+asked, and a stored copy could drift away from them. There is no address, coordinate, phone number, store
 number or platform identifier, and nothing here came from anywhere but the driver's keyboard. See
 [Pickup identity](../product/pickup-identity.md).
 

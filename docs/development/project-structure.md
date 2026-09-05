@@ -35,7 +35,9 @@ measurement out of view bodies.
 - A "Providing" protocol is a seam over a platform framework, and its Core Location implementation
   is the only file on that side allowed to import it.
 - Vocabulary the interface says out loud lives in a tested domain type (`RouteQuality`,
-  `ShiftRateUnavailability`, `DeliveryAction`, `DeliverySummary`), never as strings in a view.
+  `ShiftRateUnavailability`, `DeliveryAction`, `DeliverySummary`, `PickupWaitMetrics`), never as
+  strings in a view. `DurationText` holds the one rule for writing and speaking a duration, so the
+  shift, delivery and pickup-place surfaces cannot drift apart.
 
 ## Repository conventions
 
