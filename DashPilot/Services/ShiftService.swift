@@ -11,6 +11,8 @@ nonisolated enum ShiftLifecycleError: Error {
     case shiftAlreadyActive(startedAt: Date)
     /// An end was requested while no shift was running.
     case noActiveShift
+    /// Deletion was requested for a shift that has not finished.
+    case cannotDeleteActiveShift
     /// The shift model rejected the transition.
     case invalidTransition(ShiftError)
     /// The local store could not be read or written.
@@ -24,6 +26,7 @@ nonisolated extension ShiftLifecycleError: Equatable {
         switch (lhs, rhs) {
         case let (.shiftAlreadyActive(lhsDate), .shiftAlreadyActive(rhsDate)): lhsDate == rhsDate
         case (.noActiveShift, .noActiveShift): true
+        case (.cannotDeleteActiveShift, .cannotDeleteActiveShift): true
         case let (.invalidTransition(lhsError), .invalidTransition(rhsError)): lhsError == rhsError
         case (.storeUnavailable, .storeUnavailable): true
         default: false
@@ -38,6 +41,8 @@ nonisolated extension ShiftLifecycleError: LocalizedError {
             "A shift is already in progress. End it before starting another one."
         case .noActiveShift:
             "There is no shift in progress to end."
+        case .cannotDeleteActiveShift:
+            "A shift that is still in progress cannot be deleted. End it first."
         case .invalidTransition(.shiftNotCompleted):
             "Earnings can be recorded once the shift has ended."
         case .invalidTransition(.negativeEarnings):
@@ -169,6 +174,50 @@ struct ShiftService {
 
         AppLog.shift.info("Shift ended")
         return shift
+    }
+
+    // MARK: Deletion
+
+    /// Deletes a completed shift and everything recorded against it.
+    ///
+    /// Deletion lives here, beside the transitions, because the rule it has to
+    /// keep is a lifecycle rule: **a shift that is still running cannot be
+    /// deleted.** Deleting one would leave capture recording against a shift the
+    /// store no longer holds, and would take the driver's current work with it.
+    /// The rule is enforced against the model rather than by which button a
+    /// screen happens to show, so a wrong navigation state cannot destroy a
+    /// running shift.
+    ///
+    /// The shift's route samples go with it. That is the relationship's
+    /// `.cascade` delete rule doing its job rather than a loop here — a shift's
+    /// positions describe that shift and nothing else, and the orphans would be
+    /// exactly the sensitive rows the app promises to keep accountable to a
+    /// shift.
+    ///
+    /// - Throws: ``ShiftLifecycleError/cannotDeleteActiveShift`` if the shift has
+    ///   not finished, or ``ShiftLifecycleError/storeUnavailable(underlying:)``
+    ///   if the delete cannot be written.
+    func deleteCompletedShift(_ shift: Shift) throws {
+        guard !shift.isActive else {
+            AppLog.shift.notice("Refused to delete a shift: it is still running")
+            throw ShiftLifecycleError.cannotDeleteActiveShift
+        }
+
+        context.delete(shift)
+        do {
+            try context.save()
+        } catch {
+            // Puts the shift and its route back: a delete the store refused must
+            // not leave the interface showing a history the store still holds.
+            context.rollback()
+            AppLog.shift.error("Failed to delete a completed shift: \(error)")
+            throw ShiftLifecycleError.storeUnavailable(underlying: error)
+        }
+
+        // Structural only. Not when the shift ran, not what it earned, not how
+        // far it went — a deletion is the last moment to start writing a
+        // driver's history into the log.
+        AppLog.shift.info("Completed shift deleted with its route samples")
     }
 
     // MARK: Earnings
