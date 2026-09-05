@@ -25,7 +25,14 @@ struct DeliveryPersistenceTests {
 
     // MARK: Schema
 
-    @Test("Version 5 is current, and adds the delivery entity")
+    /// Stacked deliveries did not change the persisted shape.
+    ///
+    /// `Shift.deliveries` was already a to-many relationship in v5, so the store
+    /// could always hold several unfinished deliveries for one shift; what
+    /// changed is that the application no longer refuses to create them. A
+    /// migration would have had nothing to migrate, so there is no v6 — the
+    /// version count below is the assertion that none was added.
+    @Test("Version 5 is still current: allowing concurrent deliveries changed no persisted shape")
     func schemaVersion() throws {
         #expect(DashPilotSchemaV5.versionIdentifier == Schema.Version(5, 0, 0))
         #expect(DashPilotMigrationPlan.schemas.count == 5)
@@ -91,14 +98,14 @@ struct DeliveryPersistenceTests {
             let context = ModelContext(try ModelContainerFactory.makeContainer(at: storeURL))
             try ShiftService(context: context).startShift(at: start)
             let service = DeliveryService(context: context)
-            try service.startDelivery(at: at(300))
-            deliveryID = try service.markArrivedAtPickup(at: at(600)).id
+            let delivery = try service.startDelivery(at: at(300))
+            deliveryID = try service.markArrivedAtPickup(delivery, at: at(600)).id
         }
 
         // A new process, a new container, a new service.
         let context = ModelContext(try ModelContainerFactory.makeContainer(at: storeURL))
         let service = DeliveryService(context: context)
-        let recovered = try #require(try service.activeDelivery())
+        let recovered = try #require(try service.activeDeliveries().first)
 
         #expect(recovered.id == deliveryID, "The same delivery, not a replacement")
         #expect(recovered.state == .arrivedAtPickup, "The interface is told the next step is picking up")
@@ -106,14 +113,65 @@ struct DeliveryPersistenceTests {
         #expect(recovered.arrivedAtPickupAt == at(600))
         #expect(try context.fetch(FetchDescriptor<Delivery>()).count == 1, "No duplicate delivery is created")
 
-        // And it continues from where it was rather than starting again.
-        #expect(throws: DeliveryLifecycleError.deliveryAlreadyActive(state: .arrivedAtPickup)) {
-            try service.startDelivery(at: at(900))
-        }
-        try service.markPickedUp(at: at(900))
-        try service.markDelivered(at: at(1_500))
-        #expect(try service.activeDelivery() == nil)
+        // And it continues from where it was.
+        try service.markPickedUp(recovered, at: at(900))
+        try service.markDelivered(recovered, at: at(1_500))
+        #expect(try service.activeDeliveries().isEmpty)
         #expect(try context.fetch(FetchDescriptor<Delivery>()).count == 1)
+    }
+
+    @Test("Several deliveries left in progress all come back, independently")
+    func stackedActiveDeliveriesSurviveAReopen() throws {
+        let (storeURL, cleanUp) = try makeStoreURL()
+        defer { cleanUp() }
+        var expectedIDs: [UUID] = []
+
+        // A process carrying three orders at once, at three different points in
+        // their lifecycles, terminated mid-shift.
+        do {
+            let context = ModelContext(try ModelContainerFactory.makeContainer(at: storeURL))
+            try ShiftService(context: context).startShift(at: start)
+            let service = DeliveryService(context: context)
+            let first = try service.startDelivery(at: at(300))
+            let second = try service.startDelivery(at: at(600))
+            let third = try service.startDelivery(at: at(900))
+            try service.markArrivedAtPickup(second, at: at(1_200))
+            try service.markArrivedAtPickup(third, at: at(1_500))
+            try service.markPickedUp(third, at: at(1_800))
+            expectedIDs = [first.id, second.id, third.id]
+        }
+
+        let context = ModelContext(try ModelContainerFactory.makeContainer(at: storeURL))
+        let service = DeliveryService(context: context)
+        let shift = try #require(try ShiftService(context: context).activeShift())
+        let recovered = try service.activeDeliveries(for: shift)
+
+        #expect(recovered.map(\.id) == expectedIDs, "Every one of them, in the order they were accepted")
+        #expect(recovered.count == 3, "None is collapsed into another and none is chosen as authoritative")
+        #expect(
+            try context.fetch(FetchDescriptor<Delivery>()).count == 3,
+            "And none is duplicated by the reopen"
+        )
+        #expect(
+            recovered.map(\.state) == [.accepted, .arrivedAtPickup, .pickedUp],
+            "Each keeps the state its own timestamps describe"
+        )
+        #expect(
+            recovered.map(\.state.nextAction) == [.arriveAtPickup, .pickUp, .complete],
+            "So each is offered its own next step"
+        )
+        #expect(recovered.map(\.acceptedAt) == [at(300), at(600), at(900)], "Timestamps are untouched")
+        #expect(recovered[1].arrivedAtPickupAt == at(1_200))
+        #expect(recovered[2].pickedUpAt == at(1_800))
+        #expect(shift.numberedActiveDeliveries.map(\.number) == [1, 2, 3], "And they are numbered the same way")
+
+        // They continue independently from where they were, and the shift stays
+        // blocked until the last one is resolved.
+        try service.markDelivered(recovered[2], at: at(2_100))
+        #expect(recovered[0].state == .accepted)
+        #expect(throws: ShiftLifecycleError.activeDeliveriesInProgress(count: 2)) {
+            try ShiftService(context: context).endActiveShift(at: at(3_600))
+        }
     }
 
     @Test("A finished delivery does not come back as active after a reopen")
@@ -125,23 +183,60 @@ struct DeliveryPersistenceTests {
             let context = ModelContext(try ModelContainerFactory.makeContainer(at: storeURL))
             try ShiftService(context: context).startShift(at: start)
             let service = DeliveryService(context: context)
-            try service.startDelivery(at: at(300))
-            try service.markArrivedAtPickup(at: at(600))
-            try service.markPickedUp(at: at(900))
-            try service.markDelivered(at: at(1_200))
-            try service.startDelivery(at: at(1_500))
-            try service.cancelActiveDelivery(at: at(1_800))
+            // Worked as a stack: both accepted before either finished.
+            let first = try service.startDelivery(at: at(300))
+            let second = try service.startDelivery(at: at(600))
+            try service.markArrivedAtPickup(first, at: at(900))
+            try service.markPickedUp(first, at: at(1_020))
+            try service.markDelivered(first, at: at(1_200))
+            try service.cancelDelivery(second, at: at(1_800))
         }
 
         let context = ModelContext(try ModelContainerFactory.makeContainer(at: storeURL))
         let shift = try #require(try ShiftService(context: context).activeShift())
 
-        #expect(try DeliveryService(context: context).activeDelivery() == nil)
+        #expect(try DeliveryService(context: context).activeDeliveries().isEmpty)
         #expect(shift.deliveries.count == 2)
         #expect(shift.deliverySummary == DeliverySummary(completed: 1, cancelled: 1))
         // And the shift can now be ended, because nothing is in progress.
         try ShiftService(context: context).endActiveShift(at: at(3_600))
         #expect(shift.endedAt == at(3_600))
+    }
+
+    @Test("Overlapping deliveries stay separate records with their own intervals")
+    func overlappingDeliveriesRoundTripSeparately() throws {
+        let (storeURL, cleanUp) = try makeStoreURL()
+        defer { cleanUp() }
+
+        do {
+            let context = ModelContext(try ModelContainerFactory.makeContainer(at: storeURL))
+            let shifts = ShiftService(context: context)
+            try shifts.startShift(at: start)
+            let service = DeliveryService(context: context)
+            let first = try service.startDelivery(at: at(0))
+            let second = try service.startDelivery(at: at(600))
+            try service.markArrivedAtPickup(first, at: at(300))
+            try service.markPickedUp(first, at: at(900))
+            try service.markArrivedAtPickup(second, at: at(1_200))
+            try service.markPickedUp(second, at: at(1_500))
+            try service.markDelivered(first, at: at(1_800))
+            try service.markDelivered(second, at: at(2_100))
+            try shifts.endActiveShift(at: at(3_600))
+        }
+
+        let context = ModelContext(try ModelContainerFactory.makeContainer(at: storeURL))
+        let shift = try #require(try context.fetch(FetchDescriptor<Shift>()).first)
+        let stored = shift.deliveriesInOrder
+
+        #expect(stored.count == 2, "Two overlapping deliveries are two rows, never merged into one")
+        #expect(stored.map(\.completedDuration) == [1_800, 1_500], "Each keeps its own duration")
+        #expect(stored.map(\.pickupWait) == [600, 300], "And its own wait")
+        let firstDeliveredAt = try #require(stored.first?.deliveredAt)
+        #expect(
+            stored[1].acceptedAt < firstDeliveredAt,
+            "The second was accepted while the first was still open, and that is not a fault"
+        )
+        #expect(shift.numberedDeliveries.map(\.title) == ["Delivery 1", "Delivery 2"])
     }
 
     // MARK: Migration
@@ -243,12 +338,19 @@ struct DeliveryPersistenceTests {
         #expect(SyntheticRoute.isCloseEnough(distance.metres, to: 300), "measured \(distance.metres) m")
 
         let service = DeliveryService(context: context)
-        try service.startDelivery(at: at(300))
-        try service.markArrivedAtPickup(at: at(600))
-        try service.markPickedUp(at: at(900))
-        try service.markDelivered(at: at(1_200))
+        let first = try service.startDelivery(at: at(300))
+        let second = try service.startDelivery(at: at(600))
+        try service.markArrivedAtPickup(first, at: at(900))
+        try service.markPickedUp(first, at: at(1_020))
+        try service.markDelivered(first, at: at(1_200))
+        try service.markArrivedAtPickup(second, at: at(1_500))
+        try service.markPickedUp(second, at: at(1_800))
+        try service.markDelivered(second, at: at(2_100))
 
-        #expect(shift.deliverySummary == DeliverySummary(completed: 1, cancelled: 0))
+        #expect(
+            shift.deliverySummary == DeliverySummary(completed: 2, cancelled: 0),
+            "A migrated shift can hold stacked deliveries like any other"
+        )
     }
 
     @Test("Earlier migration paths still reach version 5", arguments: [1, 2, 3])
