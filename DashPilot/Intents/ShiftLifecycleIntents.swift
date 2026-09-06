@@ -14,7 +14,7 @@ import Foundation
 struct StartShiftIntent: AppIntent {
     static let title: LocalizedStringResource = "Start Shift"
 
-    static let description = IntentDescription(
+    static let description: IntentDescription? = IntentDescription(
         """
         Starts a shift and records its start time on this device. \
         DashPilot records your route only while the app is open, so a shift started this way \
@@ -47,7 +47,7 @@ struct StartShiftIntent: AppIntent {
 struct EndShiftIntent: AppIntent {
     static let title: LocalizedStringResource = "End Shift"
 
-    static let description = IntentDescription(
+    static let description: IntentDescription? = IntentDescription(
         """
         Ends the shift in progress and records its end time on this device. \
         A shift with deliveries still in progress is not ended.
