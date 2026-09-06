@@ -14,18 +14,19 @@ rather than a store reset.
 | 4.0.0 | Adds `Shift.grossEarningsAmount`, an optional `Decimal` holding manually entered earnings |
 | 5.0.0 | Adds the `Delivery` entity and a `Shift.deliveries` relationship |
 | 6.0.0 | Adds the `PickupPlace` entity and an optional `Delivery.pickupPlace` reference |
+| 7.0.0 | Adds `Delivery.grossEarningsAmount`, an optional `Decimal` holding manually entered per-delivery earnings |
 
-The current version is **v6**. Field-level detail is on [Data model](../reference/data-model.md).
+The current version is **v7**. Field-level detail is on [Data model](../reference/data-model.md).
 
-`DashPilotSchemaV1` through `DashPilotSchemaV5` hold frozen copies of their models rather than
+`DashPilotSchemaV1` through `DashPilotSchemaV6` hold frozen copies of their models rather than
 reusing the file-scope types, which have moved on. The plan then describes where a store is coming
 from as truthfully as where it is going, and the copies are never used at runtime outside
 migration.
 
-`DashPilotSchemaV5` was frozen in the interval that added v6: the file-scope `Delivery` gained a
-`pickupPlace` reference, so reusing it would have made v5 claim a shape no store on a device ever
-had. Each version gets its copies at the moment the next one moves the models on, exactly as v4 got
-its own when v5 added deliveries.
+`DashPilotSchemaV6` was frozen in the interval that added v7: the file-scope `Delivery` gained a
+recorded amount of its own, so reusing it would have made v6 claim a shape no store on a device ever
+had. Each version gets its copies at the moment the next one moves the models on, exactly as v5 got
+its own when v6 added pickup places.
 
 ## Every stage so far is lightweight, deliberately
 
@@ -88,6 +89,23 @@ That is partly a migration decision: a unique constraint would bind the store's 
 normalisation policy that is allowed to improve, and improving it would then become a schema change
 rather than a code change. See [Pickup identity](../product/pickup-identity.md#reuse-and-which-spelling-wins).
 
+### v6 to v7
+
+One new optional attribute on `Delivery`, the same shape as v3 to v4 one entity along. Every
+existing delivery migrates with no amount recorded, and every shift keeps the amount it already had.
+
+The temptation this stage refuses is the one thing it could plausibly have done. A v6 store often
+holds a completed shift with a recorded total *and* the deliveries performed during it, so a number
+and a set of rows to spread it over are both sitting right there. Spreading it — evenly, by
+duration, by pickup wait, by anything — would put a figure against each delivery that the driver
+never typed, and no later screen, calculation or export could tell it apart from one they did.
+
+The two amounts are **independent facts entered separately**, and neither is evidence for the other:
+deliveries go unrecorded, stacked orders are paid together, and adjustments post at shift level. A
+migrated delivery keeps `nil`, which the app reads as "not recorded" and never as `0.00`, and the
+interface offers to add an amount rather than showing one. See
+[Earnings and metrics](../product/earnings-and-metrics.md#per-delivery-gross-earnings).
+
 It becomes a custom stage the first time a version step actually has to transform something.
 
 ## Proving a migration rather than assuming it
@@ -105,6 +123,11 @@ That is how "a v1 store keeps its shifts" is proven. The suite covers each step:
   fabricated for any of them.
 - A v5 store's shifts, samples, sessions, amounts and every delivery timestamp survive, and no
   delivery is attributed to a pickup place that was never named.
+- A v6 store's shifts, samples, sessions, shift amounts, deliveries, pickup places and the
+  relationships between them survive — with the pickup waits and the delivery active time they
+  produce identical afterwards — and no delivery is given an amount. One case is built specifically
+  to make dividing a round shift total by four deliveries look reasonable, and asserts that it does
+  not happen.
 
 Each step is also walked from every earlier version, so a device that skipped several releases is
 covered by the same suite rather than by assumption.

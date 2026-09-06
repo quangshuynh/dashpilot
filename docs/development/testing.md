@@ -24,7 +24,12 @@ test cannot see, such as a screen that renders a sentence the model never claime
 | Delivery persistence | The v4 to v5 migration, and several active deliveries recovered independently from a reopened store |
 | Pickup place name | The normalisation policy: what is folded, and what is conservatively left alone |
 | Pickup place service | Reuse of an equivalent name, the first-spelling-wins policy, assign, change, remove, recent ordering, and deletion sparing a shared place |
-| Pickup place persistence | The v5 to v6 migration, every earlier version reaching v6, a shared place surviving a reopened store, a place's wait metrics being identical either side of a reopen, and a rename and a merge each surviving one |
+| Pickup place persistence | The v5 to v6 migration, a shared place surviving a reopened store, a place's wait metrics being identical either side of a reopen, and a rename and a merge each surviving one |
+| Delivery earnings, Delivery earnings service, Delivery earnings input | The terminal-only and non-negative rules, a cancelled delivery allowed an amount, missing distinct from zero, the shared parser reaching a delivery, and a refused save rolled back to what the store holds |
+| Delivery and shift earnings are independent | Neither amount moving when the other changes, delivery amounts allowed to fall short of or exceed the shift total, either allowed to exist alone, and recorded, missing and explicit zero staying three distinguishable states |
+| Stacked delivery earnings | Two overlapping deliveries holding independent amounts, editing or removing one leaving the other, and each rate dividing by its own duration only |
+| Gross per recorded delivery hour | A delivered delivery's own rate, zero earnings, missing earnings, a zero duration, a cancelled delivery, and rounding identical to the shift's hourly rates |
+| Delivery earnings persistence | The v6 to v7 migration, every earlier version reaching v7, a shift total never divided among its deliveries, and amounts surviving a reopened store including an explicit zero. The migration plan's version and stage counts are asserted here, once |
 | Pickup place rename | The normalisation it reuses, case-only and Unicode renames, empty and oversized input refused, a collision refused without moving a delivery, and identity, waits and recency all unchanged |
 | Pickup place merge | Deliveries moved, the destination unchanged, the source removed only after success, self-merge and stale models refused, empty, cancelled and active sources, and a refused save rolled back in full |
 | Pickup wait history after a merge, Recent places after a merge | Two histories becoming one, a recomputed median, exclusions still excluded, no duplicated sample, nothing written to the store, and recency following the reassigned deliveries |
@@ -112,6 +117,12 @@ place exactly one, a delivery that arrived and cancelled without picking up, and
 place at all — so a median, a sample count, the insufficient-history wording and the absence of any
 history are all reachable end to end.
 
+The general seeded history also gives two of its three deliveries an invented amount and leaves the
+third with none, so a recorded amount, a delivery with none, and a per-delivery hourly figure are all
+reachable without typing — and so is the claim that editing one delivery's amount leaves the other
+delivery and the shift total alone. The amounts deliberately do not add up to the shift's `$86.25`,
+because nothing reconciles them.
+
 The seeded paths are app code that exists only for tests. They are DEBUG-only and in-memory, and
 they are three more launch paths to keep honest.
 
@@ -120,9 +131,11 @@ they are three more launch paths to keep honest.
 The UI target covers a handful of paths: launching, starting and ending a shift, recording a
 delivery through its whole lifecycle, cancelling one, being refused a shift end while a delivery is
 running, recovering an already-running delivery at launch, opening a completed shift, adding and
-editing an amount, reading the detail screen's delivery, route and rate statements, opening a pickup
-place's recorded wait history, renaming a place and being refused a colliding rename, merging two
-places into one history, and deleting a shift through its confirmation.
+editing a shift's amount, adding, editing, cancelling an edit of and removing one delivery's amount,
+two stacked deliveries keeping independent amounts while the shift total stays untouched, reading the
+detail screen's delivery, route and rate statements, opening a pickup place's recorded wait history,
+renaming a place and being refused a colliding rename, merging two places into one history, and
+deleting a shift through its confirmation.
 
 The permission panel is asserted only to be on screen. Which state it displays depends on the
 device, and no test drives the system alert, because automating it would be brittle and would change
@@ -131,7 +144,9 @@ the permission state other tests run against.
 Two lessons are worth repeating when adding journeys:
 
 - A `List` only renders rows near the viewport, so anything below the fold does not exist until it
-  is scrolled to.
+  is scrolled to. This bites again whenever a section above grows: adding one sentence to the
+  earnings footer pushed the route section off the first screen and failed two journeys that had
+  been reading it without scrolling.
 - SwiftUI mirrors an `accessibilityIdentifier` onto a button's label element as well, so an alert
   button matches twice. Use `.firstMatch`.
 

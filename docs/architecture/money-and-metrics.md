@@ -91,12 +91,16 @@ A running shift has no window and no final figure. Active-time metrics describe 
 
 ### Nothing is persisted
 
-There is no schema change behind the metrics, and the current version is still v5. A stored
-`hourlyRate`, `earningsPerMile` or `activeDuration` would be a second answer to a question the store
-can already answer: it would keep the old number after the calculation improved, and it would have to
-be recomputed and rewritten every time a driver edited an amount or recorded a delivery.
-`ShiftMetrics` is built on demand from the shift's own timestamps, its recorded amount, its
-deliveries and its measured route, exactly like `RouteDistance` is.
+No rate has ever needed a schema change. A stored `hourlyRate`, `earningsPerMile` or
+`activeDuration` would be a second answer to a question the store can already answer: it would keep
+the old number after the calculation improved, and it would have to be recomputed and rewritten
+every time a driver edited an amount or recorded a delivery. `ShiftMetrics` is built on demand from
+the shift's own timestamps, its recorded amount, its deliveries and its measured route, exactly like
+`RouteDistance` is, and a delivery's own `grossPerDeliveryHour` is built the same way from its
+amount and its two timestamps.
+
+The store's versions record *facts a driver entered* — an amount on a shift (v4), an amount on a
+delivery (v7) — never a figure derived from them.
 
 ### Explicit unavailable states
 
@@ -133,6 +137,23 @@ that would read as a measurement.
 `ShiftRateUnavailability.explanation` gives each case one sentence, none of them implying zero, and
 the sentence for a missing amount asks for one ("Add what this shift paid to see this rate").
 
+### One delivery's own rate
+
+A delivered delivery that carries an amount also derives `grossPerDeliveryHour`: its amount over its
+own `acceptedAt` to `deliveredAt` interval. It has the same shape and the same discipline —
+`DeliveryEarningsRate` is `.available(Money)` or `.unavailable(DeliveryRateUnavailability)`, and its
+three reasons are `deliveryNotCompleted` (cancelled, or still running), `earningsNotRecorded` and
+`zeroDuration`.
+
+Cancelled and running share one reason deliberately. The rate needs a lifecycle that ran to
+*completion*, and measuring a cancelled delivery to its cancellation instead would put a figure in
+the same column as deliveries that finished, under a name — "cancelled hourly rate" — that describes
+nothing. A cancelled delivery may hold an amount, and showing that amount is the whole claim.
+
+**These figures are never aggregated.** Stacked lifecycles overlap, so summing or averaging them
+would produce a denominator that never existed. The figure that spans deliveries is the shift's
+delivery active time, which unions the intervals. Nothing in the app adds two of them together.
+
 ### Precision
 
 Money stays exact. The numerator is the `Decimal` the driver typed, division goes through
@@ -145,9 +166,14 @@ can be made exact afterwards. Each therefore crosses into `Decimal` exactly once
 a duration to the millisecond, a distance to a millionth of a mile, which is under two millimetres
 against positions carrying error radii of up to 100 m.
 
-Both hourly rates — over elapsed time and over delivery active time — divide through one shared
-helper, so they cannot drift apart in the last cent. A unioned active duration crosses the boundary
-by exactly the same rule an elapsed one does.
+Every hourly rate in the app — over a shift's elapsed time, over its delivery active time, and over
+one delivery's own lifecycle — divides through one shared function,
+`ShiftMetricsCalculator.grossPerHour(of:over:)`, so they cannot drift apart in the last cent. A
+unioned active duration and a single delivery's duration cross the boundary by exactly the same rule
+an elapsed one does. That function answers `nil`, never zero, for a duration that cannot be a
+denominator; naming what the absence *means* is the caller's job, because the same zero denominator
+is "this shift covered no time" in one place and "this delivery's lifecycle covered no time" in
+another.
 
 `Decimal(_: Double)` is deliberately not used. Scaling to an integer and dividing by a power of ten
 is an explicit rule stated in one place rather than a platform's conversion behaviour.
@@ -168,6 +194,13 @@ Each metric is one combined element with an explicit label, so a rate is heard a
 as "No gross earnings per recorded mile" followed by the reason. The active-hour rate spells out its
 denominator for the same reason: "$79.62 gross earnings per delivery active hour", never a spoken
 abbreviation.
+
+A per-delivery amount is spoken with the delivery it belongs to — "Gross earnings for Delivery 2,
+$14.75" — and so is its rate: "$35.40 gross earnings per recorded delivery hour, for Delivery 2". A
+log of finished deliveries puts several amounts on one screen, and a bare figure would identify its
+record by nothing but where it happened to sit. The controls are named the same way: "Add gross
+earnings for Delivery 2", "Edit gross earnings for Delivery 1", "Remove gross earnings from
+Delivery 3".
 
 The three durations on a completed shift are told apart in words rather than by position —
 "3 hours elapsed shift time", "1 hour, 5 minutes delivery active time", "1 hour, 55 minutes

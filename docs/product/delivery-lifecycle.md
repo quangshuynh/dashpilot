@@ -158,7 +158,8 @@ and says the delivery is kept as cancelled rather than deleted.
 
 Deliberately absent from the running shift itself: any field to type into. No customer, no address,
 no note and no amount is asked for at any point, so a lifecycle event is one tap that can be made
-while stopped. The card's one secondary control — `Add Pickup Place` — opens a
+while stopped. Recording what a delivery paid is offered only afterwards, from a completed shift's
+history, and the model refuses an amount on a delivery that is still in progress. The card's one secondary control — `Add Pickup Place` — opens a
 [sheet](pickup-identity.md#recording-one) rather than putting a keyboard beside the lifecycle
 buttons, and it can be answered in one tap from a recent place or ignored entirely.
 
@@ -169,7 +170,8 @@ button over the ones tapped many times a shift is how a shift gets ended by mist
 
 The shift's detail screen lists what each delivery recorded: its outcome, the
 [pickup place](pickup-identity.md) if one was named, the lifecycle events that happened with their
-times, and the two intervals both of whose ends exist. Deliveries appear in
+times, the two intervals both of whose ends exist, and the
+[amount](earnings-and-metrics.md#per-delivery-gross-earnings) if one was recorded. Deliveries appear in
 acceptance order, under the same numbers they had on the running shift. It sits below the earnings,
 route and performance sections, because it is the only one that grows with the shift.
 
@@ -211,6 +213,22 @@ neither is presented as work, driving or productive time. The full definitions, 
 earnings per active delivery hour derived from them, are on
 [Earnings and metrics](earnings-and-metrics.md#delivery-active-time).
 
+### Gross earnings
+
+Each finished delivery may carry one optional amount the driver typed for it, and a delivered one
+that carries an amount also shows `gross earnings ÷ its own accepted-to-delivered interval` — *gross
+per recorded delivery hour*. Both are absent when nothing was recorded, and neither is ever
+substituted with zero.
+
+That rate covers **one delivery's own lifecycle**. Because stacked lifecycles overlap, these figures
+are never summed, averaged or compared across a shift; the figure that spans deliveries is the
+shift's delivery active time above. A cancelled delivery may hold an amount and never gets an hourly
+figure — there is no cancelled hourly rate in DashPilot.
+
+The shift's own amount and a delivery's amount are **independent facts**. Nothing splits one into
+the other, adds one up from the other, or reports a difference between them as a problem. The full
+rules are on [Earnings and metrics](earnings-and-metrics.md#per-delivery-gross-earnings).
+
 ### Pickup place
 
 A delivery may optionally name the place it was collected from. It is typed by the driver, entirely
@@ -225,9 +243,12 @@ The rules, the normalisation policy and what a place deliberately does not hold 
 
 - **No customer, address or note.** DashPilot stores nothing that identifies who received an order,
   and a [pickup place](pickup-identity.md) is a name the driver typed rather than a located business.
-- **No per-delivery earnings.** A shift's gross earnings are one number the driver typed for the
-  whole shift, and DashPilot has no source from which to split it between deliveries. Inventing an
+- **No amount DashPilot worked out for itself.** A delivery holds an amount only if the driver typed
+  one against that delivery. A shift's gross earnings are a separate number they typed for the whole
+  shift, and DashPilot has no source from which to split it between deliveries — inventing an
   allocation would produce a per-delivery figure nobody recorded.
+- **No per-delivery mileage.** Route distance is measured for a shift, never assigned to one
+  delivery, so there is no per-delivery cost or gross-per-mile figure.
 - **No editing or deleting one delivery.** A recorded delivery is what happened. If mis-taps prove
   to be a real problem, correction is its own design decision rather than a general editing
   framework added speculatively.
@@ -237,17 +258,18 @@ The rules, the normalisation policy and what a place deliberately does not hold 
 ## What is not built on this yet
 
 The lifecycle records events, derives two factual intervals per delivery, unions those intervals into
-a shift's delivery active time and the one rate over it, lets a delivery name where it was picked up,
-and summarises the waits recorded at each such place as a median with its sample count — see
-[Pickup wait](pickup-wait.md). Beyond that, nothing: no restaurant rating or ranking, no
-offer-profitability figure, no per-delivery earnings, no aggregate across shifts, no analysis of
-*why* deliveries overlapped, and no prediction of any kind.
+a shift's delivery active time and the one rate over it, lets a delivery name where it was picked up
+and carry an amount the driver typed for it, and summarises the waits recorded at each such place as
+a median with its sample count — see [Pickup wait](pickup-wait.md). Beyond that, nothing: no
+restaurant rating or ranking, no merchant profitability, no offer-profitability figure, no
+per-delivery mileage, no aggregate across shifts, no analysis of *why* deliveries overlapped, and no
+prediction of any kind.
 See [Limitations](../reference/limitations.md).
 
 ## Schema
 
 The store has held `Delivery` as its own entity with a to-many `Shift.deliveries` relationship since
-[version 5](../architecture/migrations.md).
+[version 5](../architecture/migrations.md), and an optional per-delivery amount since version 7.
 
 Neither concurrent deliveries nor delivery active time changed that shape. Version 5 could always
 describe several unfinished deliveries for one shift — "at most one active delivery" was an
