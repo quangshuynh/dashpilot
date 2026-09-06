@@ -24,21 +24,50 @@ nonisolated enum MoneyInputError: Error, Equatable {
     case tooLarge
 }
 
-nonisolated extension MoneyInputError: LocalizedError {
-    var errorDescription: String? {
+/// What an amount is being typed for.
+///
+/// One parser, one set of rules, and two refusals that have to name the thing
+/// being entered: a driver typing what a tank of fuel cost should not be told
+/// that gross earnings cannot be negative, and an empty field means something
+/// different where the amount is optional than where it is the record itself.
+/// Everything else reads the same whatever is being typed.
+nonisolated enum MoneyInputSubject: Sendable {
+    /// An amount recorded against a shift or a delivery, which is optional and
+    /// may be removed entirely.
+    case grossEarnings
+    /// What a recorded expense cost. Required: an expense with no amount is not
+    /// a record of anything.
+    case expense
+}
+
+nonisolated extension MoneyInputError {
+    /// The rule this text broke, said in the terms of what was being typed.
+    func message(for subject: MoneyInputSubject) -> String {
         switch self {
         case .empty:
-            "Enter an amount, or cancel to leave no amount recorded."
+            switch subject {
+            case .grossEarnings: "Enter an amount, or cancel to leave no amount recorded."
+            case .expense: "Enter what this expense cost, for example 42.10."
+            }
         case .notANumber:
             "Enter an amount using numbers, for example 86.25."
         case .excessiveScale:
             "Enter an amount to the cent, for example 86.25."
         case .negative:
-            "Gross earnings cannot be negative."
+            switch subject {
+            case .grossEarnings: "Gross earnings cannot be negative."
+            case .expense: "An expense cannot be a negative amount. Enter what it cost."
+            }
         case .tooLarge:
             "That is larger than any single amount DashPilot records."
         }
     }
+}
+
+nonisolated extension MoneyInputError: LocalizedError {
+    /// The message for an amount recorded against a shift or a delivery, which
+    /// is what an unqualified `MoneyInputError` has always described.
+    var errorDescription: String? { message(for: .grossEarnings) }
 }
 
 /// Turns what a driver types into a ``Money``, and back again for editing.
