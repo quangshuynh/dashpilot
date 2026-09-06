@@ -1,81 +1,65 @@
 # AGENTS.md
 
-This file defines repository-wide engineering rules for automated coding agents working on DashPilot.
+Repository-wide engineering rules for DashPilot.
 
-Read this file before modifying the repository.
+Read `context.md` for the current implementation state, schema/export versions, active limitations, and verification baseline. Inspect the source before assuming context is current.
 
-Agent-specific workflow instructions may exist separately. `context.md`, when present, contains the current local project handoff.
+## Product
 
----
+DashPilot is a native, local-first iOS companion for delivery drivers. It records driver-entered and device-observed history and uses trustworthy historical data to support better delivery decisions.
 
-# Project
+It is not affiliated with DoorDash or another delivery platform.
 
-DashPilot is a native iOS companion for delivery drivers.
+Do not:
 
-It records and analyzes local driver history such as:
+* scrape or reverse-engineer delivery platforms
+* intercept private traffic
+* store platform credentials
+* automate offer acceptance/rejection
+* control another delivery app
+* claim official platform integration
 
-* shifts
-* delivery lifecycle events
-* route samples
-* recorded mileage
-* gross earnings
-* delivery active time
-* pickup places
-* recorded pickup waits
-* historical period metrics
+## Stack
 
-The long-term product direction is trustworthy, explainable decision support based on the driver's own recorded history.
-
-DashPilot is not an official client or integration for DoorDash or another delivery platform.
-
----
-
-# Stack
-
-Primary technologies:
+Prefer the existing first-party stack:
 
 * Swift
 * SwiftUI
 * SwiftData
 * Swift Testing
-* XCTest UI testing where justified
+* minimal XCTest UI tests
 * Core Location
-* MapKit where justified
-* Core Motion where justified
-* ActivityKit where justified
-* App Intents where justified
-* UserNotifications where justified
-* Charts where justified
+* MapKit, Core Motion, ActivityKit, App Intents, UserNotifications, Charts, and Core ML only where justified
 * OSLog
 
-Prefer first-party Apple frameworks.
+Do not add third-party runtime dependencies without a concrete need.
 
-Do not introduce third-party runtime dependencies without a concrete architectural need.
+Do not enable Swift 6 language mode or broadly change concurrency settings as incidental work.
 
----
+## Engineering priorities
 
-# Engineering priorities
-
-Optimize for:
+Prioritize:
 
 1. correctness
 2. explicit semantics
-3. preservation of user data
+3. user-data preservation
 4. privacy
 5. testability
 6. accessibility
 7. recoverability
 8. maintainability
-9. performance supported by evidence
+9. measured performance
 10. feature breadth
 
-Do not manufacture feature work merely to make the project look larger.
+Prefer a smaller defensible feature over a larger feature with ambiguous claims.
 
----
+Inspect existing conventions before adding abstractions.
 
-# Local-first
+Keep business logic out of SwiftUI when it can live in domain types, calculators, or focused services.
 
-DashPilot is local-first.
+Avoid duplicate implementations of the same rule.
+
+## Local-first and privacy
 
 Unless explicitly changed by a scoped feature:
 
@@ -84,548 +68,314 @@ Unless explicitly changed by a scoped feature:
 * no cloud persistence
 * no analytics
 * no telemetry
-* no advertising
-* no automatic upload
+* no ads
+* no automatic uploads
 * no required network service for core behavior
-
-Sensitive work history stays on device unless the user explicitly exports it.
-
----
-
-# Platform boundaries
-
-Do not:
-
-* scrape delivery platforms
-* reverse-engineer private delivery APIs
-* intercept private application traffic
-* store delivery-platform credentials
-* automate acceptance or rejection of offers
-* control another delivery application
-* claim official platform integration
-
-DashPilot should remain a general delivery-driver companion.
-
----
-
-# Privacy
 
 Treat as sensitive:
 
-* GPS coordinates
-* routes
+* coordinates and routes
 * addresses
-* pickup-place names
-* normalized pickup-place keys
-* earnings
-* exact work schedules
+* pickup-place names and normalized keys
+* earnings and expenses
+* work schedules
 * historical performance data
 
-Do not log sensitive values.
+Never log sensitive values.
 
-Logs should describe structural events only.
+Structural logs are acceptable.
 
-Use synthetic information in:
+Use synthetic data only in tests, fixtures, previews, screenshots, documentation, and examples.
 
-* tests
-* fixtures
-* previews
-* screenshots
-* documentation
-* examples
+Never commit real personal, customer, merchant, route, address, earnings, or expense data.
 
-Never commit real user, customer, merchant, route, earnings, or address data.
+## Driving safety
 
----
+Minimize interaction during active driving.
 
-# Driving safety
+Prefer passive collection, large controls, glanceable state, short lifecycle actions, voice interaction where appropriate, and post-delivery editing.
 
-DashPilot may be used during delivery work.
+Avoid workflows requiring substantial typing or sustained visual attention while driving.
 
-Active-driving workflows should minimize interaction.
+## Domain truth
 
-Prefer:
+Do not weaken domain semantics for presentation convenience.
 
-* passive collection
-* large controls
-* glanceable information
-* short explicit lifecycle actions
-* voice interaction where appropriate
-* post-delivery editing
+Preserve distinctions such as:
 
-Avoid requiring substantial typing or sustained visual attention during active work.
+* missing vs explicit zero
+* recorded vs total
+* partial vs complete
+* gross vs net/profit
+* historical observation vs prediction
 
----
+Do not fabricate unavailable values.
 
-# Domain truth over presentation convenience
+Do not silently substitute estimates.
 
-The domain model defines what a fact means.
+## Money
 
-Do not weaken semantics to make UI implementation easier.
+Use the existing Decimal-backed `Money` representation and `MoneyInput` rules.
 
-Presentation should expose uncertainty or missing coverage when it materially changes interpretation.
+Never use `Double` or `Float` as authoritative money.
 
-Do not replace:
+Missing money and explicit zero are different facts.
 
-* missing with zero
-* partial with complete
-* recorded with total
-* gross with profit
-* historical association with prediction
+Do not introduce parallel parsing or rounding policies.
 
----
+## Earnings
 
-# Derived state
-
-Prefer deriving values from authoritative facts.
-
-Do not persist a value merely because the UI displays it.
-
-Persist only when:
-
-* it is an authoritative user/device fact, or
-* recomputation has been demonstrated to be inappropriate and invalidation semantics are defined
-
-Avoid duplicated persisted state that can disagree.
-
----
-
-# Money
-
-Use the existing Decimal-backed `Money` representation.
-
-Do not use `Double` or `Float` as authoritative monetary storage.
-
-Missing money and explicit zero are distinct.
-
-Never silently replace missing money with zero.
-
-Use existing input and rounding policies.
-
-Do not create parallel money parsing rules for individual features.
-
----
-
-# Earnings
-
-Shift gross earnings and delivery gross earnings are independent recorded facts.
-
-Never:
-
-* infer one from the other
-* allocate shift earnings among deliveries
-* require them to reconcile
-* label their difference as missing earnings
-* automatically modify one when the other changes
-
-Period headline gross earnings use shift-level gross earnings under the current domain model.
-
-Delivery-level amounts remain separately recorded facts.
-
----
-
-# Delivery lifecycle
-
-Delivery state is derived from lifecycle timestamps.
-
-Preserve lifecycle invariants.
-
-Do not persist redundant state if existing timestamps already establish it.
-
-Stacked deliveries are supported.
-
-Multiple deliveries may overlap.
-
-Do not assume individual delivery durations can be summed to obtain shift active time.
-
----
-
-# Time
-
-Shift elapsed time and delivery active time are different metrics.
-
-Delivery active time unions overlapping delivery intervals within a shift.
-
-Non-delivery time must not be mislabeled as idle time.
-
-Do not invent interpretations that the recorded lifecycle does not support.
-
----
-
-# Pickup identity
-
-Pickup-place matching is intentionally conservative.
-
-Reuse the existing pickup-name normalization policy.
-
-Do not add:
-
-* fuzzy matching
-* automatic duplicate detection
-* automatic merges
-* aliases
-
-without an explicit feature requiring them.
-
-Incorrectly merging different places is worse than preserving a duplicate.
-
-Rename and merge operations must preserve delivery history according to existing domain rules.
-
----
-
-# Pickup waits
-
-Recorded pickup wait is based on valid recorded lifecycle timestamps.
-
-Missing or malformed endpoints do not produce zero or estimated waits.
-
-Use individual qualifying samples for aggregate medians.
-
-Do not aggregate medians as a substitute for aggregating the underlying samples.
-
-Long but valid samples remain factual observations unless an explicit statistical policy says otherwise.
-
----
-
-# Location
-
-Location history is sensitive.
-
-Respect the existing authorization and tracking architecture.
-
-Do not add stronger authorization, background tracking, or new location entitlements casually.
-
-Recorded mileage is mileage supported by accepted route samples.
-
-It is not necessarily total driven mileage.
-
-Preserve:
-
-* capture sessions
-* continuity boundaries
-* gap semantics
-* partial-route semantics
-* route filtering
-
-Do not bridge missing capture periods with invented distance.
-
----
-
-# Historical periods
-
-Historical summaries operate on completed shifts.
-
-Running shifts are excluded.
-
-A completed shift belongs to the reporting period containing its `startedAt`.
-
-Do not split overnight shifts across reporting periods under the current model.
-
-Use `Calendar` for calendar boundaries.
-
-Do not assume a day is always 86,400 seconds.
-
-Reporting intervals use half-open semantics.
-
----
-
-# Aggregate coverage
-
-Coverage is part of a metric.
-
-If only some records contribute, preserve that information.
-
-Missing records must not silently contribute zero.
-
-Explicit zero is a recorded value and therefore counts as coverage.
-
-Rates requiring two facts must use records where both facts are available.
-
-Do not combine a numerator from one population with a denominator from another.
-
----
-
-# Aggregate rates
-
-Calculate aggregate rates from aggregate numerators and denominators over the same contributing subset.
-
-Do not average already-derived per-record rates unless that is explicitly the intended statistic.
-
-For example:
-
-Correct:
-
-`sum(earnings) / sum(hours)`
-
-Incorrect for a period-wide earnings rate:
-
-`mean(eachShift.earningsPerHour)`
-
-Reuse existing calculator definitions.
-
----
-
-# SwiftData
-
-Treat persistence changes as compatibility work.
-
-Before changing stored shape:
-
-* inspect the current schema
-* inspect frozen historical schemas
-* determine whether the new value truly needs persistence
-* preserve previous schemas
-* add the smallest valid migration
-* test migration using real historical shape
-
-Never rewrite frozen historical schemas to match current models.
-
-Do not use destructive reset as normal migration behavior.
-
----
-
-# Rollback behavior
-
-Do not assume SwiftData rollback makes every already-held model object immediately reflect restored relationship state.
-
-When correctness depends on persisted rollback, verify through a fresh context where necessary.
-
-Distinguish:
-
-* authoritative store correctness
-* transient state of cached model objects
-
-Document framework limitations rather than pretending they do not exist.
-
----
-
-# Export
-
-Export is an external contract, separate from persistence.
-
-Use export-specific value types rather than serializing SwiftData models directly.
-
-Preserve:
-
-* missing values
-* Decimal money
-* shift/delivery earnings separation
-* route quality
-* recorded-mileage wording
-* coverage information where supported
-
-Standard export must not include raw GPS coordinates or normalized pickup-place keys.
-
-CSV must correctly handle:
-
-* commas
-* quotes
-* line breaks
-* Unicode
-* spreadsheet formula injection
-
-Export is explicit and user initiated.
-
----
-
-# Architecture
-
-Prefer:
-
-* pure domain calculators
-* value types for derived results
-* small services with clear ownership
-* dependency injection at framework boundaries
-* SwiftUI views that present rather than define domain rules
-* one authoritative implementation for each calculation
-
-Avoid:
-
-* business logic duplicated across views
-* global mutable state without necessity
-* broad generic frameworks created for one use
-* speculative abstractions
-* hidden fallback behavior
-
-Follow existing repository conventions before introducing a new pattern.
-
----
-
-# Concurrency
-
-Do not change Swift language mode or concurrency settings casually.
-
-The project may use explicit `nonisolated` where domain/value semantics need to remain independent of main-actor isolation.
-
-Treat a move to stricter Swift concurrency or Swift 6 language mode as a deliberate hardening task.
-
-Do not scatter annotations solely to silence diagnostics without understanding isolation.
-
----
-
-# Errors
-
-Prefer explicit failure over silent corruption or data loss.
+Shift gross earnings and delivery gross earnings are independent facts.
 
 Do not:
 
-* silently reset persistent stores
-* silently discard records
-* silently substitute fabricated values
-* expose sensitive implementation details in user-facing errors
+* infer one from the other
+* allocate shift earnings across deliveries
+* require reconciliation
+* label their difference as missing/unallocated earnings
+* automatically modify one when the other changes
 
-Errors should be testable and understandable.
+Use the current domain definition for period headline earnings.
 
----
+## Delivery and time semantics
 
-# Accessibility
+Delivery state is derived from lifecycle timestamps.
 
-Accessibility is required for user-visible features.
+Stacked deliveries are supported, so delivery intervals may overlap.
 
-Interactive controls should identify their subject.
+Shift delivery-active time uses the union of qualifying delivery intervals within that shift.
 
-Metrics should expose relevant meaning and coverage to assistive technologies.
+Do not sum overlapping delivery durations to obtain shift active time.
 
-Do not rely exclusively on visual layout to communicate:
+Do not call non-delivery time idle time.
 
-* operation direction
-* missing coverage
-* metric units
-* delivery identity
+## Pickup places and waits
 
-Use reasonable interaction target sizes.
+Reuse the existing pickup-name normalization policy.
 
----
+Matching is intentionally conservative. Do not add fuzzy matching, automatic merging, aliases, or duplicate detection without explicit scope.
 
-# Tests
+A recorded pickup wait is derived from valid lifecycle endpoints.
 
-Use deterministic tests for domain behavior.
+Missing/malformed endpoints do not become zero or estimates.
 
-Prefer Swift Testing for domain and persistence behavior.
+Aggregate medians use qualifying individual samples, not medians of already-aggregated groups.
 
-Use XCTest UI tests for important user journeys.
+## Location and mileage
 
-Tests should cover meaningful:
+Location history is sensitive.
 
-* invariants
-* boundaries
-* missing-data semantics
-* failure paths
-* persistence/reopen behavior
-* migrations
-* accessibility behavior
-* regressions
+Respect the existing authorization and tracking architecture. Do not add stronger authorization or background modes incidentally.
 
-Do not duplicate all domain cases in UI tests.
+Recorded mileage means distance supported by accepted route samples. It is not necessarily total driven mileage.
 
-Do not weaken tests simply to make a feature pass.
+Preserve existing filtering, capture-session continuity, gap, partial-route, and legacy-continuity semantics.
 
-Use synthetic fixtures.
+Do not bridge capture gaps with invented distance.
 
----
+## Historical periods and aggregation
 
-# Build and warnings
+Historical summaries use completed shifts. Running shifts are excluded.
 
-New source warnings are not acceptable interval output.
+A shift belongs to the reporting period containing its `startedAt`. Do not split overnight shifts under the current model.
 
-Distinguish project warnings from SDK/toolchain informational notes.
+Use `Calendar` for calendar boundaries, not fixed-second assumptions.
 
-Perform clean builds when validating substantial changes.
+Periods use half-open intervals internally.
 
----
+Missing-data coverage is part of a metric.
 
-# Documentation
+Explicit zero counts as recorded coverage. Missing does not.
 
-Documentation must describe implemented behavior accurately.
+Rates requiring multiple facts must use the same paired contributing subset.
+
+Period rates generally use:
+
+`sum(numerator) / sum(denominator)`
+
+over that subset.
+
+Do not average already-derived rates unless that is explicitly the intended statistic.
+
+Aggregate medians from underlying samples, not smaller-period medians.
+
+## Persistence
+
+Treat SwiftData changes as compatibility work.
+
+Before changing stored shape:
+
+1. inspect the current schema and frozen historical schemas
+2. determine whether persistence is necessary
+3. prefer derived values when appropriate
+4. preserve frozen schemas
+5. add the smallest valid migration
+6. add migration tests that prove relevant historical data survives
+
+Never rewrite a frozen historical schema to match current code.
+
+Do not use destructive store reset as normal migration behavior.
+
+Be careful with `ModelContext.rollback()`: authoritative store state and already-held model relationship caches may differ after rollback. Verify persisted rollback through a fresh context when necessary.
+
+## Derived data
+
+Prefer recomputing values that are reliably derived from authoritative records.
+
+Do not persist aggregates solely for UI convenience or speculative performance.
+
+Introduce caching/persistence only when profiling establishes a need and invalidation semantics are clear.
+
+## Export
+
+Export is an external contract separate from the SwiftData schema.
+
+Use export-specific value types rather than serializing SwiftData models directly.
+
+Preserve domain semantics in exported data, including missing values, Decimal money, earnings separation, route quality, recorded-mileage wording, and coverage where supported.
+
+Standard export must not expose raw GPS coordinates or normalized pickup-place keys.
+
+CSV must correctly handle quoting, line breaks, Unicode, and spreadsheet formula injection.
+
+Export remains explicit and user initiated.
+
+Evaluate export-format compatibility deliberately whenever the external contract changes.
+
+## Claims and documentation
+
+Do not claim:
+
+* guaranteed increased earnings
+* guaranteed profitability
+* tax compliance or tax accuracy
+* complete driven mileage when capture can be partial
+* guaranteed continuous tracking
+* official platform integration
+* predictive intelligence that does not exist
+* AI/ML merely because statistics are used
+
+Prefer precise terms such as:
+
+* recorded mileage
+* recorded pickup wait
+* gross earnings
+* recorded expenses
+* delivery active time
+* historical performance
+* partial route
+
+Keep README concise and documentation accurate.
 
 Update relevant docs when behavior or limitations change.
 
-Do not claim planned features as implemented.
-
-Keep README concise.
-
-Correct nearby objectively stale documentation when discovered, but do not turn scoped engineering work into unrelated documentation cleanup.
+Correct nearby objectively stale documentation when discovered, but do not expand scoped work into unrelated cleanup.
 
 Do not use em dashes in repository-facing prose.
 
----
+## Accessibility
 
-# Scope
+Accessibility is part of feature completion.
 
-Keep changes bounded to the requested task.
+Controls should identify their subject.
 
-Do not opportunistically implement unrelated roadmap features.
+Metrics should communicate units, meaning, and important coverage to assistive technologies rather than relying only on nearby visual captions.
 
-When another issue is discovered:
+Use appropriate interaction targets.
 
-* fix it if required for correctness of the current task
-* otherwise document it for later
+## Testing
 
-Avoid large refactors unless the current task genuinely requires them.
+Use deterministic tests for new domain semantics.
 
----
+Prefer Swift Testing for domain/persistence behavior and focused XCTest UI tests for important user journeys.
 
-# Git safety
+Test meaningful:
 
-Use conventional branch and commit naming consistent with the repository.
+* invariants
+* boundaries
+* missing-data behavior
+* failure paths
+* persistence/reopen behavior
+* migrations when applicable
+* regression-sensitive semantics
 
-Before committing:
+Do not duplicate every domain edge case in UI tests.
 
-* inspect `git status`
-* inspect staged changes
-* verify generated artifacts are not staged
+Do not weaken tests merely to make new functionality pass.
 
-Do not commit:
+Use synthetic fixtures.
+
+## Validation
+
+For substantial feature intervals, unless explicitly scoped otherwise:
+
+* run the full domain test suite
+* run the full UI suite
+* perform a clean build
+* resolve new source warnings
+* run `mkdocs build --strict`
+* verify README links when relevant
+* update affected documentation
+
+Distinguish project warnings from SDK/toolchain informational notes.
+
+## Scope discipline
+
+Keep work bounded to the requested interval.
+
+Do not opportunistically begin adjacent roadmap features.
+
+Fix discovered issues during the interval only when required for current correctness or when they are tiny, objectively safe corrections. Otherwise record them in `context.md`.
+
+Do not perform broad refactors without a demonstrated need.
+
+## Git safety
+
+Use repository branch and conventional commit conventions.
+
+Before committing, inspect `git status` and staged changes.
+
+Never commit generated or local artifacts such as:
 
 * DerivedData
 * `.xcresult`
 * generated documentation sites
-* temporary export files
+* temporary exports
 * secrets
-* local handoff files
+* `context.md`
 * unrelated IDE artifacts
 
-Do not automatically:
+Agents may create/switch local branches and create coherent local commits when authorized by their agent-specific instructions.
 
-* push
-* force push
-* merge
-* create pull requests
-* tag
-* release
-* modify remotes
+Never automatically push, force push, merge, open a PR, tag, release, or modify remotes unless explicitly authorized.
 
-unless explicitly authorized.
+## Context handoff
 
----
+`context.md` is the concise current-state handoff and must remain ignored.
 
-# Local context
+At the end of a development interval, update it by replacing stale information rather than appending an interval diary.
 
-When `context.md` exists, it is the current local handoff.
-
-Read it before substantial work.
-
-It may contain:
+Keep:
 
 * current schema/export versions
 * implemented capabilities
 * important current semantics
-* known limitations
-* verification baseline
-* recommended next work
+* active limitations
+* latest verification baseline
+* recommended next interval
 
-Source code remains authoritative if context and implementation disagree.
+Remove:
 
-Update local context according to the active agent's workflow instructions.
+* resolved limitations
+* obsolete recommendations
+* superseded test counts
+* lengthy historical narratives
+* rules already defined here
 
-Do not commit `context.md`.
+Source code is authoritative if `context.md` is stale.
 
----
+## Final principle
 
-# Final engineering principle
+Make DashPilot's claims increasingly difficult for an experienced iOS engineer to dismiss.
 
-DashPilot should become more useful by making trustworthy recorded facts easier to understand and act on.
-
-Do not gain apparent sophistication by weakening semantics.
-
-A smaller feature with explicit assumptions, strong tests, honest coverage, and recoverable persistence is preferable to a larger feature whose claims cannot be defended.
+Correctness, explicit semantics, privacy, recoverability, accessibility, testing, and honest limitations matter more than feature count.
