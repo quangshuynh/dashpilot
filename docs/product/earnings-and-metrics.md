@@ -261,7 +261,9 @@ arithmetic, are under [Money and metrics](../architecture/money-and-metrics.md).
 - A per-delivery amount is not a share of the shift's amount, and the two are never reconciled.
 - A per-delivery hourly figure is about one delivery's own lifecycle, and is never added to another
   delivery's or compared with the shift's rates as though they measured the same thing.
-- Nothing is aggregated. There is no weekly or all-time rate, no best or worst shift, no per-place
-  earnings and no chart. Rates are read one shift, or one delivery, at a time.
+- The rates on this page are read one shift, or one delivery, at a time. Day and week totals are a
+  separate calculation with its own coverage rules — see [Period summaries](period-summaries.md) —
+  and even there nothing averages one shift's rate against another's, ranks shifts, compares periods
+  or charts anything.
 - Amounts are held in a single fixed currency (`USD`). Nothing converts between currencies or
   records which currency a shift was earned in.

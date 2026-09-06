@@ -55,13 +55,17 @@ derived legitimately from device sensors and stored history is typed by the driv
   per recorded mile, with the reason stated whenever a rate cannot be derived, its deliveries listed
   with their recorded events and any amount recorded against them, and a confirmed delete that
   removes the shift's route positions and deliveries with it.
+- **Day and week summaries with explicit data coverage**: calendar periods built by `Calendar` rather
+  than by fixed 24-hour arithmetic, completed shifts only, every figure shown with the shifts behind
+  it, missing values excluded rather than counted as zero, and each rate divided over the one subset
+  of shifts carrying both halves of it.
 
 ## Technology
 
 Swift, SwiftUI, SwiftData, Core Location, OSLog, Swift Testing and XCUITest. **No third-party
 runtime dependencies.**
 
-Versioned schema at v6 with lightweight migrations from v1, tested by opening stores written under
+Versioned schema at v7 with lightweight migrations from v1, tested by opening stores written under
 each older version. Domain calculations import neither SwiftUI nor SwiftData, so every rule is
 tested without a container or a rendered view. Money is `Decimal` throughout: no monetary value
 passes through binary floating point, in memory or in the store. Nothing derived is stored, so
@@ -140,8 +144,13 @@ The short version, with the full list in [`docs/reference/limitations.md`](docs/
 - **Places are never merged automatically.** Two spellings of one business stay two places, with two
   separate wait histories, until the driver merges them deliberately. There is no similarity
   matching, and a merge cannot be undone.
+- **A period summary reports what was recorded, not what happened.** Day and week totals cover
+  completed shifts only, count a shift whole on the period it started in, exclude missing values
+  rather than reading them as zero, and state the shifts behind every figure. Each rate divides
+  aggregate by aggregate over one paired subset of shifts — never an average of the shifts' own
+  rates — and nothing forecasts, compares periods or ranks days.
 - Not implemented yet: most things built on the delivery records (merchant scoring, merchant
-  profitability, offer profitability, per-delivery mileage), expenses, aggregates over a period,
+  profitability, offer profitability, per-delivery mileage), expenses, aggregates longer than a week,
   maps, App Intents, Live Activities and recommendations.
 
 ## License

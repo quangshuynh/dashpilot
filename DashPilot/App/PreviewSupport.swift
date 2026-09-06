@@ -141,6 +141,170 @@ enum PreviewSupport {
         return container
     }
 
+    // MARK: Period summaries
+
+    /// A throwaway store holding a week of synthetic completed shifts, built
+    /// around **today** rather than a fixed instant.
+    ///
+    /// Every other fixture in this file is pinned to one epoch date, which is
+    /// what makes them repeatable. A period summary cannot be: the screen shows
+    /// the day and week the driver is actually in, so a fixture anchored to 2025
+    /// would open on an empty period and prove nothing. The offsets below are
+    /// still fixed — only their anchor moves.
+    ///
+    /// What the fixture is built to show:
+    ///
+    /// | Shift | When | Amount | Route | Deliveries |
+    /// | --- | --- | --- | --- | --- |
+    /// | 1 | today, 3 hours | `$86.25` | measured, partial | 3 delivered, 1 cancelled |
+    /// | 2 | today, 2 hours | none | none recorded | none |
+    /// | 3 | earlier this week, 5 hours | `$120.00` | measured, partial | 2 delivered |
+    ///
+    /// Both measured routes are partial, and that is not an accident of the
+    /// fixture: a short synthetic route inside a multi-hour shift leaves the rest
+    /// of the shift unaccounted for, which is exactly what foreground-only
+    /// capture does to a real one.
+    ///
+    /// So the day shows an amount over **1 of 2** shifts and the week over
+    /// **2 of 3** — coverage that is visibly incomplete, which is the state the
+    /// screen exists to report honestly. The recorded waits are 6, 11 and 41
+    /// minutes today and 8 and 20 more across the week, so the median is 11
+    /// minutes either way while the sample count changes.
+    static func periodSummaryContainer(now: Date = .now) -> ModelContainer {
+        // Previews cannot meaningfully recover from a container failure.
+        try! seededPeriodSummaryContainer(now: now)
+    }
+
+    /// The same fixture, built through a throwing call so a UI test launch can
+    /// report a store failure rather than trapping inside it.
+    static func seededPeriodSummaryContainer(
+        now: Date = .now,
+        calendar: Calendar = .autoupdatingCurrent
+    ) throws -> ModelContainer {
+        let container = try ModelContainerFactory.makeInMemoryContainer()
+        let context = ModelContext(container)
+
+        let today = calendar.startOfDay(for: now)
+
+        // A day in this week that is not today, so the day and the week views
+        // genuinely differ. Which day that is depends on the driver's own first
+        // weekday, so it is derived rather than assumed.
+        let otherDay = otherDayThisWeek(from: today, now: now, calendar: calendar)
+
+        // Today, three hours, with an amount and a partial route.
+        let first = shift(startingAt: today.addingTimeInterval(9 * 3600), hours: 3, in: context)
+        try? first.setGrossEarnings(Money(minorUnits: 8625))
+        for sample in syntheticRoute(from: first.startedAt) {
+            context.insert(sample.attached(to: first))
+        }
+        seedDeliveries(
+            in: first,
+            waitsInMinutes: [6, 11, 41],
+            cancelling: true,
+            placeNames: [SyntheticPickupPlace.noodles, SyntheticPickupPlace.diner],
+            context: context
+        )
+
+        // Today, two hours, with neither an amount nor a route: the shift that
+        // makes every coverage figure on the screen incomplete.
+        _ = shift(startingAt: today.addingTimeInterval(14 * 3600), hours: 2, in: context)
+
+        // Earlier this week, five hours, with an amount and a route of its own.
+        let third = shift(startingAt: otherDay.addingTimeInterval(10 * 3600), hours: 5, in: context)
+        try? third.setGrossEarnings(Money(minorUnits: 12_000))
+        for sample in syntheticRoute(from: third.startedAt, sessions: 1) {
+            context.insert(sample.attached(to: third))
+        }
+        // The same two invented places again, so the period counts places rather
+        // than deliveries: five deliveries here name two places between them.
+        seedDeliveries(
+            in: third,
+            waitsInMinutes: [8, 20],
+            cancelling: false,
+            placeNames: [SyntheticPickupPlace.noodles],
+            context: context
+        )
+
+        try? context.save()
+
+        return container
+    }
+
+    /// The start of a day in the same week as `today` that is not `today`.
+    ///
+    /// Falls back to `today` only if the calendar cannot describe the week at
+    /// all, which would make the fixture's day and week views identical rather
+    /// than wrong.
+    private static func otherDayThisWeek(from today: Date, now: Date, calendar: Calendar) -> Date {
+        guard let week = ReportingPeriod(unit: .week, containing: now, calendar: calendar) else { return today }
+        let weekStart = calendar.startOfDay(for: week.start)
+        guard weekStart == today else { return weekStart }
+        // Today is the first day of the week, so the second day is the one that
+        // is still in this week and is not today.
+        return calendar.date(byAdding: .day, value: 1, to: weekStart) ?? today
+    }
+
+    /// One completed synthetic shift, inserted and returned.
+    private static func shift(startingAt start: Date, hours: Double, in context: ModelContext) -> Shift {
+        let shift = Shift(startedAt: start)
+        try? shift.end(at: start.addingTimeInterval(hours * 3600))
+        context.insert(shift)
+        return shift
+    }
+
+    /// Deliveries for a period fixture: one delivered per recorded wait, plus an
+    /// optional cancellation that never reached a pickup.
+    ///
+    /// The cancelled one is what keeps the delivery counts from collapsing into
+    /// a single figure on screen, and it deliberately contributes no wait: the
+    /// app was never told the order was collected.
+    private static func seedDeliveries(
+        in shift: Shift,
+        waitsInMinutes waits: [Double],
+        cancelling: Bool,
+        placeNames: [String] = [],
+        context: ModelContext
+    ) {
+        let start = shift.startedAt
+        var offset: TimeInterval = 300
+
+        let places = placeNames.compactMap { name -> PickupPlace? in
+            guard let name = try? PickupPlaceName(name) else { return nil }
+            let place = PickupPlace(name: name, createdAt: start)
+            context.insert(place)
+            return place
+        }
+
+        for (index, wait) in waits.enumerated() {
+            let accepted = start.addingTimeInterval(offset)
+            let delivery = Delivery(shift: shift, acceptedAt: accepted)
+            try? delivery.markArrivedAtPickup(at: accepted.addingTimeInterval(180))
+            try? delivery.markPickedUp(at: accepted.addingTimeInterval(180 + wait * 60))
+            try? delivery.markDelivered(at: accepted.addingTimeInterval(600 + wait * 60))
+            if !places.isEmpty {
+                delivery.setPickupPlace(places[index % places.count])
+            }
+            context.insert(delivery)
+
+            // Two of them carry an invented amount and the rest carry none, so
+            // the delivery subtotal on screen is visibly short of its deliveries.
+            if index == 0 {
+                try? delivery.setGrossEarnings(Money(minorUnits: 1475))
+            } else if index == 1 {
+                try? delivery.setGrossEarnings(Money(minorUnits: 950))
+            }
+
+            offset += 900 + wait * 60
+        }
+
+        guard cancelling else { return }
+        let accepted = start.addingTimeInterval(offset)
+        let cancelled = Delivery(shift: shift, acceptedAt: accepted)
+        try? cancelled.markArrivedAtPickup(at: accepted.addingTimeInterval(180))
+        try? cancelled.cancel(at: accepted.addingTimeInterval(900))
+        context.insert(cancelled)
+    }
+
     // MARK: Pickup wait history
 
     /// A throwaway store holding one completed shift whose deliveries give two
@@ -400,12 +564,18 @@ enum PreviewSupport {
         case withoutEarningsOrRoute
     }
 
-    /// A short made-up route: two capture sessions with a gap between them.
+    /// A short made-up route: by default two capture sessions with a gap
+    /// between them.
     ///
     /// The origin is a round number in open country chosen for arithmetic, not a
     /// place anyone has driven, and every position is an explicit offset north
     /// of it. No preview contains a real coordinate.
-    private static func syntheticRoute(from start: Date) -> [PreviewRouteSample] {
+    ///
+    /// `sessions: 1` produces one unbroken stretch instead, so a fixture can
+    /// hold a route with no detected gap beside one that has them — which is
+    /// what lets a period summary show a partial count that is neither none nor
+    /// all of its shifts.
+    private static func syntheticRoute(from start: Date, sessions: Int = 2) -> [PreviewRouteSample] {
         let firstSession = UUID()
         let secondSession = UUID()
         let metresPerDegreeLatitude = 111_320.0
@@ -419,9 +589,12 @@ enum PreviewSupport {
             )
         }
 
-        return (0..<12).map { step in
+        let first = (0..<12).map { step in
             sample(secondsIn: Double(step) * 20, northMetres: Double(step) * 400, session: firstSession)
-        } + (0..<8).map { step in
+        }
+        guard sessions > 1 else { return first }
+
+        return first + (0..<8).map { step in
             // Half an hour later and further along: the driver had DashPilot in
             // the background in between, and that distance is not recorded.
             sample(

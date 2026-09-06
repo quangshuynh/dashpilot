@@ -140,10 +140,36 @@ and one they cannot.
 - **Every rate is gross.** Nothing subtracts fuel, wear, insurance or tax. None is a profit,
   take-home or tax figure, and none is a mileage deduction.
 - **USD only.** Nothing converts currencies or records which currency a shift was earned in.
-- **Nothing aggregates.** No weekly or all-time totals, no best or worst shift, no chart and no
-  sorting. Figures are read one shift at a time.
+- **Aggregates cover a day or a week only.** No month, no year, no all-time total, no best or worst
+  shift, no comparison between periods, no chart and no sorting. See
+  [Period summaries](../product/period-summaries.md).
 - **No live figures.** A running shift shows no mileage, no rate and no active time. Active-time
   figures are finalised only once a shift ends.
+
+## Period summaries
+
+- **Day and week only.** No month, quarter, year or all-time period, and no custom date range.
+- **A shift is assigned by where it started**, whole. A shift running past midnight counts entirely
+  in the day it began, so a driver who works overnight will see their nights land on the day they
+  clocked on rather than split across two.
+- **A period total is a subtotal of the shifts that answered.** Shifts with no amount recorded are
+  excluded and counted, never read as `$0.00`, so a period figure is a floor in the same way recorded
+  mileage is.
+- **Rates cover only the shifts carrying both halves of them.** A shift with an amount but no
+  measurable route contributes to neither side of the per-mile rate, so the three rates on one screen
+  routinely rest on different subsets — each states its own.
+- **Recorded mileage across a period is a floor with no upper bound**, exactly as it is for one
+  shift, and partial routes are counted in it. The count of partial routes is reported; how much
+  distance they missed is not, because nothing can say.
+- **Delivery active time is summed per shift, never unioned across shifts.** Two shifts that overlap
+  in clock time — which the app cannot produce, but a store could hold — would be counted twice.
+- **No comparison, trend, projection or goal.** Nothing extrapolates a partial week, compares one
+  period to another, or ranks days.
+- **No merchant analysis.** The distinct pickup-place count is a count; no earnings, wait or score is
+  grouped by place.
+- **Aggregates are recomputed on every view.** A period's routes are measured when it is selected, so
+  a week of long routes is measured again each time the driver switches to it. Acceptable at current
+  route sizes; caching is deferred until there is a measurement behind it.
 
 ## Data and safety
 
@@ -156,10 +182,10 @@ and one they cannot.
 ## Product scope
 
 - **Little is built on the delivery records yet.** Delivery active time, the rate over it, an
-  optional pickup place, that place's recorded pickup waits and an optional manually entered amount
-  per delivery are the whole of it: no merchant scoring, no merchant profitability, no earnings per
-  pickup place, no wait-time recommendation, no offer profitability, no tips-versus-base breakdown,
-  no aggregate across shifts and no automatic detection.
+  optional pickup place, that place's recorded pickup waits, an optional manually entered amount per
+  delivery and the day and week summaries over all of it are the whole of it: no merchant scoring, no
+  merchant profitability, no earnings per pickup place, no wait-time recommendation, no offer
+  profitability, no tips-versus-base breakdown and no automatic detection.
 - **No recommendations, predictions or machine learning.** None is implemented, and none is claimed.
 - **No delivery-platform integration**, by design and permanently. See
   [Product overview](../product/overview.md#boundaries-the-project-will-not-cross).
