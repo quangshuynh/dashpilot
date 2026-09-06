@@ -56,6 +56,10 @@ nonisolated extension DeliveryLifecycleError: LocalizedError {
             "Record \(missing.historyDescription.lowercased()) first."
         case .invalidTransition(.timestampPrecedesLastEvent):
             "That would record a delivery event before one that already happened."
+        case .invalidTransition(.deliveryNotFinished):
+            "Earnings can be recorded once the delivery has been delivered or cancelled."
+        case .invalidTransition(.negativeEarnings):
+            "Gross earnings cannot be negative."
         case .storeUnavailable:
             "DashPilot could not save to its local data store, so the delivery was not changed."
         }
@@ -88,6 +92,10 @@ nonisolated extension DeliveryLifecycleError: LocalizedError {
 /// - Transitions happen in lifecycle order, once each, and never after the
 ///   delivery has finished. Those rules live on ``Delivery`` itself, so they
 ///   hold for every caller.
+/// - An amount may only be recorded against a **finished** delivery, and only
+///   ever the amount the driver typed for that one delivery. Nothing here reads
+///   the shift's own recorded amount, and no total is ever divided among
+///   deliveries — see ``setGrossEarnings(_:on:)``.
 ///
 /// ## Timestamps
 ///
@@ -110,8 +118,24 @@ nonisolated extension DeliveryLifecycleError: LocalizedError {
 struct DeliveryService {
     private let context: ModelContext
 
-    init(context: ModelContext) {
+    /// How a change is handed to the store.
+    ///
+    /// `ModelContext.save()` everywhere in the app, and injectable for the one
+    /// reason ``PickupPlaceService``'s is: every write here claims that a
+    /// refused save leaves the model exactly as the store has it, and a claim
+    /// about a refused save is untestable while the save can only succeed. A
+    /// test substitutes a commit that throws; the rollback it triggers is the
+    /// real ``ModelContext/rollback()``, so what the test asserts is the store's
+    /// own behaviour rather than a stand-in for it.
+    ///
+    /// Deliberately a closure and not a protocol: one function, one call site
+    /// per operation, no second conformance to write and nothing for the app to
+    /// configure.
+    private let commit: (ModelContext) throws -> Void
+
+    init(context: ModelContext, commit: @escaping (ModelContext) throws -> Void = { try $0.save() }) {
         self.context = context
+        self.commit = commit
     }
 
     /// Every delivery in the store that is neither delivered nor cancelled, in
@@ -197,7 +221,7 @@ struct DeliveryService {
         let delivery = Delivery(shift: shift, acceptedAt: acceptedAt)
         context.insert(delivery)
         do {
-            try context.save()
+            try commit(context)
         } catch {
             // Leave nothing half-started in memory that the store does not hold.
             context.rollback()
@@ -283,7 +307,7 @@ struct DeliveryService {
         }
 
         do {
-            try context.save()
+            try commit(context)
         } catch {
             // Discards the pending timestamp: the model must not claim an event
             // the store does not record.
@@ -296,6 +320,79 @@ struct DeliveryService {
         // where it happened or what it paid.
         AppLog.delivery.info("Delivery advanced to \(recorded.rawValue, privacy: .public)")
         return delivery
+    }
+
+    // MARK: Earnings
+
+    /// Records what one finished delivery paid, replacing any amount already
+    /// stored against it.
+    ///
+    /// The model enforces the invariants (finished only, never negative); this
+    /// adds the store write and the same rollback rule the lifecycle transitions
+    /// use, so an amount can never be showing in the interface while the store
+    /// holds something else.
+    ///
+    /// **This is the one delivery mutation that does not require a running
+    /// shift**, and the exception is deliberate rather than an oversight.
+    /// Recording an amount is a review action performed afterwards, from a
+    /// completed shift's history, precisely so that nobody is asked to type a
+    /// figure while they may be driving. A lifecycle event on a finished shift
+    /// would be rewriting what happened; an amount on a finished delivery is the
+    /// driver telling the app something it never had.
+    ///
+    /// Nothing here reads or writes the shift's own recorded amount. The two are
+    /// independent facts, and no total is checked, reconciled or adjusted — see
+    /// ``Delivery/setGrossEarnings(_:)``.
+    ///
+    /// - Throws: ``DeliveryLifecycleError/invalidTransition(_:)`` if the delivery
+    ///   or the amount is not one earnings can be recorded against, or
+    ///   ``DeliveryLifecycleError/storeUnavailable(underlying:)`` if the write
+    ///   fails.
+    func setGrossEarnings(_ earnings: Money, on delivery: Delivery) throws {
+        // Read before the write, so the log can say what happened without ever
+        // holding the amount that happened to it.
+        let isFirstAmount = delivery.grossEarnings == nil
+
+        do {
+            try delivery.setGrossEarnings(earnings)
+        } catch let error as DeliveryError {
+            AppLog.earnings.notice(
+                "Delivery rejected recorded earnings: \(String(describing: error), privacy: .public)"
+            )
+            throw DeliveryLifecycleError.invalidTransition(error)
+        }
+
+        try saveEarnings(describing: isFirstAmount ? "add" : "update")
+        AppLog.earnings.info("Delivery earnings \(isFirstAmount ? "recorded" : "updated", privacy: .public)")
+    }
+
+    /// Removes a delivery's recorded earnings, returning it to having none.
+    ///
+    /// Distinct from recording zero: afterwards the delivery is one with no
+    /// amount entered, which is what it was before the driver typed one.
+    ///
+    /// - Throws: ``DeliveryLifecycleError/storeUnavailable(underlying:)`` if the write fails.
+    func clearGrossEarnings(on delivery: Delivery) throws {
+        delivery.clearGrossEarnings()
+        try saveEarnings(describing: "remove")
+        AppLog.earnings.info("Delivery earnings removed")
+    }
+
+    /// Saves an earnings change, and rolls back if the store refuses.
+    ///
+    /// `operation` is a fixed word naming what was attempted, typed as a
+    /// `StaticString` so an amount cannot become the value. It is written to the
+    /// log; the amount never is.
+    private func saveEarnings(describing operation: StaticString) throws {
+        do {
+            try commit(context)
+        } catch {
+            // The pending amount is discarded: the interface must not show a
+            // figure the store does not hold.
+            context.rollback()
+            AppLog.earnings.error("Failed to \(operation, privacy: .public) delivery earnings: \(error)")
+            throw DeliveryLifecycleError.storeUnavailable(underlying: error)
+        }
     }
 
     /// Refuses to change a delivery that is not attached to a running shift.

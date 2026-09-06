@@ -240,7 +240,8 @@ struct CompletedShiftDetailView: View {
                 What this shift paid, as you choose to record it. DashPilot is not connected to any \
                 delivery platform, so nothing is imported. A shift with no amount recorded is not the \
                 same as one that paid \(Money.zero.formatted(locale: locale)) — removing an amount is \
-                offered inside the editor.
+                offered inside the editor. Amounts you record against individual deliveries are \
+                separate, and this figure is never worked out from them.
                 """
             )
         }
@@ -401,10 +402,17 @@ struct CompletedShiftDetailView: View {
 
     /// What this shift recorded delivery by delivery.
     ///
-    /// A list and two derived intervals, not an analysis. Nothing here rates a
-    /// restaurant, scores a shift, averages a wait or compares one delivery to
+    /// A list, two derived intervals and — where the driver recorded one — an
+    /// amount with the one rate it supports. Not an analysis. Nothing here rates
+    /// a restaurant, scores a shift, averages a wait or compares one delivery to
     /// another: those need data DashPilot does not have, and a number presented
     /// beside a name is read as a judgement of it.
+    ///
+    /// Nothing is totalled either. A per-delivery amount is not summed, checked
+    /// against the shift's own amount or shown as a shortfall against it: some
+    /// deliveries go unrecorded, stacked orders may be paid together, and
+    /// adjustments post at shift level, so a difference between the two is
+    /// ordinary rather than a discrepancy to flag.
     ///
     /// A cancelled delivery appears with the times that genuinely occurred. It
     /// is not hidden and not counted as completed — it is work the driver did
@@ -440,8 +448,9 @@ struct CompletedShiftDetailView: View {
                 DashPilot is not connected to any delivery platform and detects nothing on its own, \
                 so a delivery you did not record is not here. Deliveries you worked at the same time \
                 overlap in this list, and their durations are never added together — the shift's \
-                delivery active time counts shared minutes once. No amount is attributed to an \
-                individual delivery.
+                delivery active time counts shared minutes once, and a per-delivery hourly figure \
+                covers only that delivery's own lifecycle. Any amount here is one you recorded \
+                against that delivery; nothing is taken from, or added to, the shift's own amount.
                 """
             )
         }
@@ -469,10 +478,15 @@ struct CompletedShiftDetailView: View {
     /// and a count is a fact about the shift rather than a location.
     private var deletionWarning: String {
         let sampleCount = shift.routeSamples.count
+        // One phrase for both amounts: deleting a shift takes the figure
+        // recorded on the shift itself *and* every figure recorded against one
+        // of its deliveries, and a warning that named only the first would
+        // understate what is about to be lost.
+        let amounts = "every amount recorded on it and on its deliveries"
         let deleted = switch sampleCount {
-        case 0: "the amount recorded on it. It recorded no route positions"
-        case 1: "the 1 route position recorded during it, and the amount recorded on it"
-        default: "the \(sampleCount) route positions recorded during it, and the amount recorded on it"
+        case 0: "\(amounts). It recorded no route positions"
+        case 1: "the 1 route position recorded during it, and \(amounts)"
+        default: "the \(sampleCount) route positions recorded during it, and \(amounts)"
         }
         return "Deleting this shift also deletes \(deleted). This cannot be undone."
     }
@@ -530,6 +544,8 @@ struct CompletedShiftDetailView: View {
 private struct DeliveryHistoryRow: View {
     let numbered: NumberedDelivery
 
+    @Environment(\.locale) private var locale
+
     /// Naming a pickup is offered here as well as on the running shift, because
     /// this is where a driver sitting still afterwards actually reviews what
     /// they recorded — and where they notice a place tapped onto the wrong card.
@@ -539,6 +555,10 @@ private struct DeliveryHistoryRow: View {
     /// it. This is a review surface: it is offered on a finished shift and
     /// nowhere on a running one.
     @State private var isShowingPickupHistory = false
+
+    /// The amount this delivery paid, edited in its own sheet for the reason the
+    /// shift's is: typing belongs after the driving, not during it.
+    @State private var isEditingEarnings = false
 
     private var delivery: Delivery { numbered.delivery }
 
@@ -579,6 +599,29 @@ private struct DeliveryHistoryRow: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                 }
+
+                // Absent when none was recorded, like the pickup place above
+                // it. A "no amount recorded" line on every delivery would be
+                // noise on the ordinary case, and the control below already
+                // says whether there is one to add or to change.
+                if let earnings = delivery.grossEarnings {
+                    LabeledContent("Gross earnings") {
+                        Text(earnings.formatted(locale: locale))
+                            .monospacedDigit()
+                    }
+                    .font(.footnote)
+
+                    // Only for a delivery that was actually delivered, and only
+                    // over its own lifecycle. Never summed with another row's.
+                    if let rate = delivery.grossPerDeliveryHour.amount {
+                        LabeledContent("Per delivery hour") {
+                            Text(rate.formatted(locale: locale))
+                                .monospacedDigit()
+                        }
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    }
+                }
             }
             .accessibilityElement(children: .combine)
             .accessibilityLabel(accessibilityLabel)
@@ -612,6 +655,27 @@ private struct DeliveryHistoryRow: View {
                     .accessibilityLabel("Recorded pickup waits at \(place.displayName)")
                     .accessibilityIdentifier("shiftDetailPickupHistoryButton")
                 }
+
+                // Offered only for a finished delivery, which every delivery on
+                // a completed shift is — a shift cannot end while one is still
+                // running. Checked anyway, because a screen that merely never
+                // presents a control is not the rule; the model's is.
+                if delivery.state.isFinished {
+                    Button {
+                        isEditingEarnings = true
+                    } label: {
+                        Label(
+                            numbered.earningsActionTitle(hasEarnings: delivery.grossEarnings != nil),
+                            systemImage: delivery.grossEarnings == nil ? "plus.circle" : "pencil"
+                        )
+                        .font(.footnote)
+                    }
+                    .buttonStyle(.borderless)
+                    .accessibilityLabel(
+                        numbered.spokenEarningsLabel(hasEarnings: delivery.grossEarnings != nil)
+                    )
+                    .accessibilityIdentifier("shiftDetailDeliveryEarningsButton")
+                }
             }
         }
         .padding(.vertical, 2)
@@ -622,6 +686,9 @@ private struct DeliveryHistoryRow: View {
             if let place = delivery.pickupPlace {
                 PickupPlaceHistoryView(place: place)
             }
+        }
+        .sheet(isPresented: $isEditingEarnings) {
+            DeliveryEarningsEditor(numbered: numbered)
         }
     }
 
@@ -669,6 +736,15 @@ private struct DeliveryHistoryRow: View {
         }
         sentences += intervals.map { interval in
             "\(interval.label) \(DurationText.spoken(interval.duration))"
+        }
+        // The amount is named with its delivery rather than read out as a bare
+        // figure, and the rate names its denominator in full — "per hour" alone
+        // would be heard as a wage.
+        if let earnings = delivery.grossEarnings {
+            sentences.append(numbered.spokenEarnings(earnings.formatted(locale: locale)))
+            if let rate = delivery.grossPerDeliveryHour.amount {
+                sentences.append(numbered.spokenDeliveryHourRate(rate.formatted(locale: locale)))
+            }
         }
         return sentences.joined(separator: ". ")
     }

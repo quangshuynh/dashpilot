@@ -116,9 +116,11 @@ nonisolated struct ShiftMetricsCalculator: Equatable, Sendable {
     /// Summing their durations instead would let the denominator exceed the
     /// shift and would drive the rate down precisely when a driver stacked well.
     ///
-    /// Still gross, and still one amount recorded for the whole shift: no
-    /// earnings are attributed to an individual delivery anywhere in DashPilot.
-    /// The three absent cases are kept apart for the reason every other pair is
+    /// Still gross, and the numerator is still the one amount recorded for the
+    /// **whole shift**. It is never a total of the amounts a driver recorded
+    /// against individual deliveries: those are a separate, optional fact, and
+    /// adding them up here would silently read every delivery with no amount as
+    /// one that paid nothing. The three absent cases are kept apart for the reason every other pair is
     /// — a shift with no deliveries, one whose deliveries describe no usable
     /// interval, and one whose deliveries genuinely covered no time are three
     /// different facts, and none of them is a rate of zero.
@@ -142,24 +144,48 @@ nonisolated struct ShiftMetricsCalculator: Equatable, Sendable {
     /// An amount divided by a duration expressed in hours, or `reason` when the
     /// duration cannot be a denominator.
     ///
-    /// Shared by both hourly rates so there is one crossing into decimal
-    /// seconds, one conversion to hours and one rounding scale between them. A
-    /// second copy would be free to drift, and two hourly figures on the same
-    /// screen disagreeing in the last cent is exactly the kind of difference
-    /// nobody would think to look for.
+    /// The arithmetic itself lives in ``grossPerHour(of:over:)``; this wraps it
+    /// in the vocabulary a shift's rates are read in.
     private func rate(
         of grossEarnings: Money,
         overHoursIn duration: TimeInterval,
         otherwise reason: ShiftRateUnavailability
     ) -> ShiftRate {
-        guard
-            let seconds = Self.decimal(duration, scale: Self.durationScale),
-            seconds > 0,
-            let rate = grossEarnings.divided(by: seconds / Self.secondsPerHour, scale: Self.rateScale)
-        else {
+        guard let rate = Self.grossPerHour(of: grossEarnings, over: duration) else {
             return .unavailable(reason)
         }
         return .available(rate)
+    }
+
+    /// **The** definition of gross earnings per hour in DashPilot, whatever the
+    /// hours are hours of.
+    ///
+    /// Both of this type's hourly rates go through it, and so does the
+    /// per-delivery rate in ``DeliveryEarningsRate``. A second copy would be
+    /// free to drift, and two hourly figures on the same screen disagreeing in
+    /// the last cent is exactly the kind of difference nobody would think to
+    /// look for.
+    ///
+    /// It answers `nil` — never zero — for a duration that cannot be a
+    /// denominator: one that is not a finite measurement, and one of no length.
+    /// What that absence *means* is the caller's to name, which is why the
+    /// reason is not decided here: the same zero denominator is "this shift
+    /// covered no time" in one place and "this delivery's lifecycle covered no
+    /// time" in another.
+    ///
+    /// - Parameters:
+    ///   - grossEarnings: the exact amount the driver typed. It stays a
+    ///     `Decimal` throughout; only the denominator crosses from binary
+    ///     measurement into decimal arithmetic, once, here.
+    ///   - duration: the span to divide by, in seconds.
+    static func grossPerHour(of grossEarnings: Money, over duration: TimeInterval) -> Money? {
+        guard
+            let seconds = decimal(duration, scale: durationScale),
+            seconds > 0
+        else {
+            return nil
+        }
+        return grossEarnings.divided(by: seconds / secondsPerHour, scale: rateScale)
     }
 
     /// Gross earnings per mile the route **recorded**.

@@ -46,13 +46,15 @@ derived legitimately from device sensors and stored history is typed by the driv
   lookup and no platform involved. A place can be renamed, and one place explicitly merged into
   another, without moving a delivery or a recorded time.
 - **Manual gross earnings**, optional, locale-aware, refused rather than reinterpreted when it
-  cannot be read.
+  cannot be read — one amount for a shift, and optionally one for each finished delivery. The two are
+  independent facts: no shift total is ever split between deliveries, added up from them or
+  reconciled against them.
 - **Delivery active time**: the union of a shift's delivery intervals, so deliveries worked at the
   same time are counted once rather than summed, plus the non-delivery time left over.
 - **Completed-shift metrics and detail**: gross earnings per shift hour, per active delivery hour and
   per recorded mile, with the reason stated whenever a rate cannot be derived, its deliveries listed
-  with their recorded events, and a confirmed delete that removes the shift's route positions and
-  deliveries with it.
+  with their recorded events and any amount recorded against them, and a confirmed delete that
+  removes the shift's route positions and deliveries with it.
 
 ## Technology
 
@@ -126,9 +128,10 @@ The short version, with the full list in [`docs/reference/limitations.md`](docs/
   per-active-delivery-hour rate divides by the time a recorded delivery was open, which is not a
   measure of work and not a wage; the per-mile rate divides by recorded miles, which makes it
   normally higher than earnings per mile driven.
-- **Deliveries are what the driver tapped.** Nothing is detected, imported or inferred, and no amount
-  is attributed to a delivery. Delivery active time is only as good as the tapping, overlapping
-  deliveries are unioned rather than summed, and non-delivery time is not idle time.
+- **Deliveries are what the driver tapped.** Nothing is detected, imported or inferred, and an
+  amount on a delivery is there only because the driver typed it for that delivery. Delivery active
+  time is only as good as the tapping, overlapping deliveries are unioned rather than summed, their
+  hourly figures are never added together, and non-delivery time is not idle time.
 - **No delivery-platform integration**, permanently and by design.
 - **Local only.** No export, no backup, no sync, and deleting a shift is permanent.
 - **A pickup place's recorded waits are summarised, not predicted.** The median is shown beside the
@@ -137,9 +140,9 @@ The short version, with the full list in [`docs/reference/limitations.md`](docs/
 - **Places are never merged automatically.** Two spellings of one business stay two places, with two
   separate wait histories, until the driver merges them deliberately. There is no similarity
   matching, and a merge cannot be undone.
-- Not implemented yet: most things built on the delivery records (merchant scoring, offer
-  profitability, per-delivery earnings), expenses, aggregates over a period, maps, App Intents,
-  Live Activities and recommendations.
+- Not implemented yet: most things built on the delivery records (merchant scoring, merchant
+  profitability, offer profitability, per-delivery mileage), expenses, aggregates over a period,
+  maps, App Intents, Live Activities and recommendations.
 
 ## License
 
