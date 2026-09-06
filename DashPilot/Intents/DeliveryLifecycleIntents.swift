@@ -9,7 +9,7 @@ import Foundation
 struct StartDeliveryIntent: AppIntent {
     static let title: LocalizedStringResource = "Start Delivery"
 
-    static let description = IntentDescription(
+    static let description: IntentDescription? = IntentDescription(
         """
         Records that you accepted a delivery on the shift in progress. \
         Deliveries already in progress are not changed.
@@ -42,7 +42,7 @@ struct StartDeliveryIntent: AppIntent {
 struct RecordDeliveryProgressIntent: AppIntent {
     static let title: LocalizedStringResource = "Record Delivery Progress"
 
-    static let description = IntentDescription(
+    static let description: IntentDescription? = IntentDescription(
         """
         Records the next step of the delivery in progress: arrived at the pickup, picked up, \
         then delivered. If more than one delivery is in progress, nothing is recorded, \
