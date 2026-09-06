@@ -27,15 +27,28 @@ and one they cannot.
   not recorded is not in the app, and an event recorded late is recorded late.
 - **No customer or address.** A delivery holds timestamps, its shift and an optional pickup place,
   and nothing that says where it went or who it was for.
-- **No per-delivery earnings.** Gross earnings are one figure for the whole shift, and DashPilot has
-  no source from which to split it between deliveries.
+- **Per-delivery earnings are entirely manual, and often absent.** A delivery holds an amount only
+  because the driver typed one against it, after the delivery finished. DashPilot never splits a
+  shift total between deliveries, never adds a shift total up from them, and never reads a missing
+  amount as zero.
+- **The shift total and the delivery amounts are not reconciled.** They may differ in either
+  direction — unrecorded deliveries, stacked orders paid together, shift-level adjustments — and the
+  app reports no shortfall, warning or error about the difference. It also offers no screen that
+  compares them.
 - **Delivery active time is only as good as the tapping.** It is the union of the intervals between
   recorded events, so a delivery marked delivered twenty minutes late reads as twenty minutes longer,
   and a delivery never recorded contributes nothing at all. Nothing detects or corrects either.
 - **"Active" says nothing about what the driver was doing.** It means a recorded delivery had not
   reached a terminal state. It is not driving, working, productive or billable time, and
   non-delivery time is not idle time.
-- **No per-delivery rate.** The one delivery-derived rate is over the whole shift's active time.
+- **The one per-delivery rate is gross per recorded delivery hour**, over that delivery's own
+  accepted-to-delivered interval. It is not a wage, it exists only for a delivered delivery with a
+  recorded amount, and because stacked lifecycles overlap it is never summed, averaged or ranked
+  across a shift.
+- **No per-delivery mileage, and so no per-delivery cost.** Route distance is measured for a shift
+  and never assigned to an individual delivery.
+- **No cancelled hourly rate.** A cancelled delivery may hold an amount, and showing that amount is
+  all DashPilot claims about it.
 - **A delivery's recorded pickup wait is only as good as the tapping**, like every other interval. An
   arrival marked late shortens it and one marked early lengthens it, and nothing detects either.
 - **A recorded delivery's timestamps cannot be edited, and a delivery cannot be deleted
@@ -143,9 +156,10 @@ and one they cannot.
 ## Product scope
 
 - **Little is built on the delivery records yet.** Delivery active time, the rate over it, an
-  optional pickup place and that place's recorded pickup waits are the whole of it: no merchant
-  scoring, no wait-time recommendation, no offer profitability, no per-delivery earnings, no
-  aggregate across shifts and no automatic detection.
+  optional pickup place, that place's recorded pickup waits and an optional manually entered amount
+  per delivery are the whole of it: no merchant scoring, no merchant profitability, no earnings per
+  pickup place, no wait-time recommendation, no offer profitability, no tips-versus-base breakdown,
+  no aggregate across shifts and no automatic detection.
 - **No recommendations, predictions or machine learning.** None is implemented, and none is claimed.
 - **No delivery-platform integration**, by design and permanently. See
   [Product overview](../product/overview.md#boundaries-the-project-will-not-cross).

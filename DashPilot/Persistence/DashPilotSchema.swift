@@ -355,11 +355,155 @@ enum DashPilotSchemaV5: VersionedSchema {
 /// afterwards could tell an inferred place from one they typed. Existing
 /// deliveries migrate with no pickup place, which is the truthful value.
 ///
-/// This version reuses the file-scope models rather than freezing copies,
-/// because it *is* the current shape. It gets frozen copies of its own the first
-/// time v7 moves them on, exactly as v5 did here.
+/// All four models are frozen copies, for the same reason the earlier versions
+/// freeze theirs: the file-scope `Delivery` has since gained a recorded amount
+/// of its own, and reusing it here would make v6 claim a shape no store on a
+/// device ever had.
 enum DashPilotSchemaV6: VersionedSchema {
     static var versionIdentifier: Schema.Version { Schema.Version(6, 0, 0) }
+
+    static var models: [any PersistentModel.Type] {
+        [Shift.self, RouteSample.self, Delivery.self, PickupPlace.self]
+    }
+
+    /// The v6 shift, unchanged from v5.
+    @Model
+    nonisolated final class Shift {
+        @Attribute(.unique) private(set) var id: UUID
+        private(set) var startedAt: Date
+        private(set) var endedAt: Date?
+
+        @Relationship(deleteRule: .cascade, inverse: \RouteSample.shift)
+        private(set) var routeSamples: [RouteSample] = []
+
+        @Relationship(deleteRule: .cascade, inverse: \Delivery.shift)
+        private(set) var deliveries: [Delivery] = []
+
+        private(set) var grossEarningsAmount: Decimal?
+
+        init(
+            id: UUID = UUID(),
+            startedAt: Date,
+            endedAt: Date? = nil,
+            grossEarningsAmount: Decimal? = nil
+        ) {
+            self.id = id
+            self.startedAt = startedAt
+            self.endedAt = endedAt
+            self.grossEarningsAmount = grossEarningsAmount
+        }
+    }
+
+    /// The v6 route sample, unchanged from v3.
+    @Model
+    nonisolated final class RouteSample {
+        private(set) var timestamp: Date
+        private(set) var latitude: Double
+        private(set) var longitude: Double
+        private(set) var horizontalAccuracy: Double
+        private(set) var captureSessionID: UUID?
+        private(set) var shift: Shift?
+
+        init(
+            shift: Shift,
+            timestamp: Date,
+            latitude: Double,
+            longitude: Double,
+            horizontalAccuracy: Double,
+            captureSessionID: UUID?
+        ) {
+            self.timestamp = timestamp
+            self.latitude = latitude
+            self.longitude = longitude
+            self.horizontalAccuracy = horizontalAccuracy
+            self.captureSessionID = captureSessionID
+            self.shift = shift
+        }
+    }
+
+    /// The v6 delivery: the v5 lifecycle plus an optional pickup place, and
+    /// nothing recorded about what the delivery itself paid.
+    @Model
+    nonisolated final class Delivery {
+        @Attribute(.unique) private(set) var id: UUID
+        private(set) var acceptedAt: Date
+        private(set) var arrivedAtPickupAt: Date?
+        private(set) var pickedUpAt: Date?
+        private(set) var deliveredAt: Date?
+        private(set) var cancelledAt: Date?
+        private(set) var shift: Shift?
+        private(set) var pickupPlace: PickupPlace?
+
+        init(
+            id: UUID = UUID(),
+            shift: Shift,
+            acceptedAt: Date,
+            arrivedAtPickupAt: Date? = nil,
+            pickedUpAt: Date? = nil,
+            deliveredAt: Date? = nil,
+            cancelledAt: Date? = nil,
+            pickupPlace: PickupPlace? = nil
+        ) {
+            self.id = id
+            self.acceptedAt = acceptedAt
+            self.arrivedAtPickupAt = arrivedAtPickupAt
+            self.pickedUpAt = pickedUpAt
+            self.deliveredAt = deliveredAt
+            self.cancelledAt = cancelledAt
+            self.shift = shift
+            self.pickupPlace = pickupPlace
+        }
+    }
+
+    /// The v6 pickup place: the spelling the driver chose and the key it is
+    /// matched by.
+    ///
+    /// Takes both forms of the name as plain strings rather than a
+    /// `PickupPlaceName`. The frozen models describe storage and hold no
+    /// behaviour, and normalisation is a rule that is allowed to improve — a
+    /// frozen copy that called into it would describe the store as today's rule
+    /// would write it rather than as an older build actually did.
+    @Model
+    nonisolated final class PickupPlace {
+        @Attribute(.unique) private(set) var id: UUID
+        private(set) var displayName: String
+        private(set) var normalizedName: String
+        private(set) var createdAt: Date
+
+        @Relationship(deleteRule: .nullify, inverse: \Delivery.pickupPlace)
+        private(set) var deliveries: [Delivery] = []
+
+        init(id: UUID = UUID(), displayName: String, normalizedName: String, createdAt: Date) {
+            self.id = id
+            self.displayName = displayName
+            self.normalizedName = normalizedName
+            self.createdAt = createdAt
+        }
+    }
+}
+
+/// Version 7 of the persisted schema: a delivery can record what it paid.
+///
+/// `Delivery` gains one optional attribute, `grossEarningsAmount`, a `Decimal`
+/// holding gross earnings the driver typed for that delivery. The shape of the
+/// change is exactly v3 → v4, one entity along: an optional amount on a record
+/// that previously had none.
+///
+/// **Nothing is backfilled, and one particular thing is deliberately not
+/// derived.** A v6 store may hold a shift with a recorded amount and several
+/// deliveries; dividing that amount among them — evenly, by duration, by
+/// distance or by anything else — would write figures into a driver's history
+/// that they never typed and that nothing afterwards could tell from figures
+/// they did. The shift amount and a delivery amount are two independent facts
+/// the driver enters separately, and DashPilot never manufactures one from the
+/// other. Every migrated delivery keeps `nil`, which the app reads as "not
+/// recorded" and never as `0.00`.
+///
+/// This version reuses the file-scope models rather than freezing copies,
+/// because it *is* the current shape. It gets frozen copies of its own the first
+/// time v8 moves them on, exactly as v6 did here.
+enum DashPilotSchemaV7: VersionedSchema {
+    static var versionIdentifier: Schema.Version { Schema.Version(7, 0, 0) }
 
     static var models: [any PersistentModel.Type] {
         [Shift.self, RouteSample.self, Delivery.self, PickupPlace.self]
@@ -379,11 +523,12 @@ enum DashPilotMigrationPlan: SchemaMigrationPlan {
             DashPilotSchemaV3.self,
             DashPilotSchemaV4.self,
             DashPilotSchemaV5.self,
-            DashPilotSchemaV6.self
+            DashPilotSchemaV6.self,
+            DashPilotSchemaV7.self
         ]
     }
 
-    static var stages: [MigrationStage] { [v1ToV2, v2ToV3, v3ToV4, v4ToV5, v5ToV6] }
+    static var stages: [MigrationStage] { [v1ToV2, v2ToV3, v3ToV4, v4ToV5, v5ToV6, v6ToV7] }
 
     /// V1 → V2 is lightweight.
     ///
@@ -460,5 +605,27 @@ enum DashPilotMigrationPlan: SchemaMigrationPlan {
     static let v5ToV6 = MigrationStage.lightweight(
         fromVersion: DashPilotSchemaV5.self,
         toVersion: DashPilotSchemaV6.self
+    )
+
+    /// V6 → V7 is lightweight.
+    ///
+    /// One new optional attribute on an existing entity, which SwiftData can add
+    /// without being told how. Every existing delivery migrates with no amount
+    /// recorded against it.
+    ///
+    /// The temptation this stage refuses is the one thing it could plausibly do:
+    /// a v6 store often holds a completed shift with a recorded amount *and* the
+    /// deliveries performed during it, so a total and a set of rows to spread it
+    /// over are both sitting right there. Spreading it — evenly, by duration, by
+    /// pickup wait, by anything — would put a figure against each delivery that
+    /// the driver never typed, and no later screen, export or calculation could
+    /// tell it from one they did. The two amounts are independent facts entered
+    /// separately, and neither is evidence for the other: deliveries go
+    /// unrecorded, stacked orders are paid together, and adjustments post at
+    /// shift level. Every migrated delivery keeps `nil`, which the app reads as
+    /// "not recorded" and never as `0.00`.
+    static let v6ToV7 = MigrationStage.lightweight(
+        fromVersion: DashPilotSchemaV6.self,
+        toVersion: DashPilotSchemaV7.self
     )
 }

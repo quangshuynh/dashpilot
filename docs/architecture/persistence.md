@@ -49,6 +49,10 @@ since v5. A shift's route and its deliveries describe that shift and nothing els
 shift takes both with it. The orphans would otherwise be exactly the sensitive rows the app promises
 to keep accountable to a shift.
 
+A delivery's own optional amount, added in v7, is an attribute rather than a relationship, so it
+goes with the delivery under the same cascade — which is why the delete confirmation names every
+amount recorded on a shift *and* on its deliveries.
+
 `Delivery.pickupPlace`, added in v6, deliberately does **not** cascade, in either direction. A pickup
 place is shared between deliveries and between shifts, so deleting a delivery — or the shift that
 cascades to it — must leave the place standing for everything else that still names it, and deleting

@@ -140,9 +140,15 @@ final class DashPilotUITests: XCTestCase {
         history.element(boundBy: 0).tap()
         XCTAssertTrue(earnings.waitForExistence(timeout: 5))
         XCTAssertTrue(earnings.label.contains("$86.25"), "Detail shows the tapped shift's amount: \(earnings.label)")
+
+        // Scrolled to rather than assumed on screen: this shift records
+        // deliveries, so the route section sits below a taller shift section
+        // than the empty one above did.
+        let mileage = app.descendants(matching: .any)["shiftDetailRecordedMileage"]
+        XCTAssertTrue(scrollTo(mileage, in: app))
         XCTAssertTrue(
-            app.descendants(matching: .any)["shiftDetailRecordedMileage"].label.contains("miles recorded"),
-            "Detail shows the tapped shift's own measured route"
+            mileage.label.contains("miles recorded"),
+            "Detail shows the tapped shift's own measured route: \(mileage.label)"
         )
     }
 
@@ -289,7 +295,7 @@ final class DashPilotUITests: XCTestCase {
         row.tap()
 
         let mileage = app.descendants(matching: .any)["shiftDetailRecordedMileage"]
-        XCTAssertTrue(mileage.waitForExistence(timeout: 5))
+        XCTAssertTrue(scrollTo(mileage, in: app), "The route section should be reachable")
         XCTAssertTrue(
             mileage.label.contains("Partial route"),
             "Detail states partiality in plain language: \(mileage.label)"
@@ -737,6 +743,200 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertTrue(
             scrollTo(deliveryRow(containing: "Delivery 3, delivered", in: app), in: app),
             "Every recorded delivery is listed"
+        )
+    }
+
+    // MARK: Delivery earnings, from detail
+
+    /// Records an amount against one finished delivery, then changes it.
+    ///
+    /// The whole point of the flow is that it happens *after* the driving, so
+    /// the journey drives a delivery to completion first and asserts that the
+    /// running shift offered no earnings control at any point.
+    @MainActor
+    func testAddsAndEditsDeliveryEarningsFromDetail() throws {
+        let app = launchWithEmptyStore()
+        completeAShiftWithADelivery(in: app)
+        openFirstShift(in: app)
+
+        let row = deliveryRow(containing: "Delivery 1, delivered", in: app)
+        XCTAssertTrue(scrollTo(row, in: app))
+        XCTAssertFalse(row.label.contains("Gross earnings"), "Nothing is recorded until the driver records it")
+
+        let addButton = app.buttons["shiftDetailDeliveryEarningsButton"].firstMatch
+        XCTAssertEqual(
+            addButton.label,
+            "Add gross earnings for Delivery 1",
+            "The control names the delivery it acts on"
+        )
+        addButton.tap()
+
+        typeDeliveryAmount("14.75", in: app)
+        app.buttons["saveDeliveryEarningsButton"].tap()
+
+        XCTAssertTrue(
+            waitForLabel(row, toContain: "Gross earnings for Delivery 1, $14.75"),
+            "The amount is spoken with its delivery: \(row.label)"
+        )
+        XCTAssertEqual(
+            app.buttons["shiftDetailDeliveryEarningsButton"].firstMatch.label,
+            "Edit gross earnings for Delivery 1"
+        )
+
+        // Editing replaces the amount rather than adding to it.
+        app.buttons["shiftDetailDeliveryEarningsButton"].firstMatch.tap()
+        let field = app.textFields["deliveryEarningsAmountField"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        XCTAssertEqual(field.value as? String, "14.75", "The editor opens on the stored amount")
+        clear(field, in: app)
+        field.typeText("9.50")
+        app.buttons["saveDeliveryEarningsButton"].tap()
+
+        XCTAssertTrue(waitForLabel(row, toContain: "$9.50"), "The edited amount replaces the previous one")
+        XCTAssertFalse(row.label.contains("$14.75"))
+    }
+
+    /// Cancelling an edit writes nothing, leaving the amount as it was.
+    @MainActor
+    func testCancellingADeliveryEarningsEditKeepsTheAmount() throws {
+        let app = launchWithEmptyStore()
+        completeAShiftWithADelivery(in: app)
+        openFirstShift(in: app)
+
+        let row = deliveryRow(containing: "Delivery 1, delivered", in: app)
+        XCTAssertTrue(scrollTo(row, in: app))
+        app.buttons["shiftDetailDeliveryEarningsButton"].firstMatch.tap()
+        typeDeliveryAmount("14.75", in: app)
+        app.buttons["saveDeliveryEarningsButton"].tap()
+        XCTAssertTrue(waitForLabel(row, toContain: "$14.75"))
+
+        app.buttons["shiftDetailDeliveryEarningsButton"].firstMatch.tap()
+        let field = app.textFields["deliveryEarningsAmountField"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        clear(field, in: app)
+        field.typeText("99.99")
+        app.buttons["cancelDeliveryEarningsButton"].tap()
+
+        XCTAssertTrue(waitForLabel(row, toContain: "$14.75"), "Cancel writes nothing: \(row.label)")
+        XCTAssertFalse(row.label.contains("99.99"))
+    }
+
+    /// Removing an amount returns the delivery to having none, which is not a
+    /// recorded zero.
+    @MainActor
+    func testRemovesDeliveryEarnings() throws {
+        let app = launchWithEmptyStore()
+        completeAShiftWithADelivery(in: app)
+        openFirstShift(in: app)
+
+        let row = deliveryRow(containing: "Delivery 1, delivered", in: app)
+        XCTAssertTrue(scrollTo(row, in: app))
+        app.buttons["shiftDetailDeliveryEarningsButton"].firstMatch.tap()
+        typeDeliveryAmount("14.75", in: app)
+        app.buttons["saveDeliveryEarningsButton"].tap()
+        XCTAssertTrue(waitForLabel(row, toContain: "$14.75"))
+
+        app.buttons["shiftDetailDeliveryEarningsButton"].firstMatch.tap()
+        let remove = app.buttons["removeDeliveryEarningsButton"].firstMatch
+        XCTAssertTrue(remove.waitForExistence(timeout: 5))
+        XCTAssertEqual(remove.label, "Remove gross earnings from Delivery 1")
+        remove.tap()
+
+        XCTAssertTrue(
+            app.buttons["shiftDetailDeliveryEarningsButton"].firstMatch.waitForExistence(timeout: 5)
+        )
+        XCTAssertEqual(
+            app.buttons["shiftDetailDeliveryEarningsButton"].firstMatch.label,
+            "Add gross earnings for Delivery 1",
+            "The delivery is back to having no amount recorded"
+        )
+        XCTAssertFalse(row.label.contains("Gross earnings"), "Removed is not $0.00: \(row.label)")
+    }
+
+    /// Two deliveries the driver worked at the same time hold their own amounts,
+    /// and editing one leaves the other exactly as it was.
+    @MainActor
+    func testStackedDeliveriesKeepIndependentAmounts() throws {
+        let app = launchWithSeededHistory()
+        openFirstShift(in: app)
+
+        // The fixture's first and third deliveries carry amounts and its second
+        // carries none; the second and third overlap.
+        let first = deliveryRow(containing: "Delivery 1, delivered", in: app)
+        XCTAssertTrue(scrollTo(first, in: app))
+        XCTAssertTrue(
+            first.label.contains("Gross earnings for Delivery 1, $14.75"),
+            "Showed: \(first.label)"
+        )
+        XCTAssertTrue(
+            first.label.contains("$35.40 gross earnings per recorded delivery hour"),
+            "The rate names its denominator in full: \(first.label)"
+        )
+
+        let second = deliveryRow(containing: "Delivery 2, cancelled", in: app)
+        XCTAssertTrue(scrollTo(second, in: app))
+        XCTAssertFalse(
+            second.label.contains("Gross earnings"),
+            "A delivery with no amount recorded shows none: \(second.label)"
+        )
+
+        let third = deliveryRow(containing: "Delivery 3, delivered", in: app)
+        XCTAssertTrue(scrollTo(third, in: app))
+        XCTAssertTrue(third.label.contains("Gross earnings for Delivery 3, $9.50"), "Showed: \(third.label)")
+
+        // Editing the third leaves the first alone.
+        let editThird = app.buttons
+            .matching(identifier: "shiftDetailDeliveryEarningsButton")
+            .matching(NSPredicate(format: "label CONTAINS %@", "Delivery 3"))
+            .firstMatch
+        XCTAssertTrue(editThird.exists)
+        editThird.tap()
+
+        let field = app.textFields["deliveryEarningsAmountField"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        clear(field, in: app)
+        field.typeText("20.00")
+        app.buttons["saveDeliveryEarningsButton"].tap()
+
+        XCTAssertTrue(waitForLabel(third, toContain: "$20.00"), "Showed: \(third.label)")
+        XCTAssertTrue(scrollTo(first, in: app))
+        XCTAssertTrue(
+            first.label.contains("$14.75"),
+            "One delivery's amount is its own, however far the lifecycles overlap: \(first.label)"
+        )
+    }
+
+    /// Editing a delivery's amount does not touch what the shift recorded.
+    @MainActor
+    func testEditingADeliveryAmountLeavesTheShiftTotalUnchanged() throws {
+        let app = launchWithSeededHistory()
+        openFirstShift(in: app)
+
+        let shiftEarnings = app.descendants(matching: .any)["shiftDetailEarnings"]
+        XCTAssertTrue(shiftEarnings.waitForExistence(timeout: 10))
+        XCTAssertTrue(shiftEarnings.label.contains("86.25"), "The fixture's shift total: \(shiftEarnings.label)")
+
+        let row = deliveryRow(containing: "Delivery 1, delivered", in: app)
+        XCTAssertTrue(scrollTo(row, in: app))
+        app.buttons
+            .matching(identifier: "shiftDetailDeliveryEarningsButton")
+            .matching(NSPredicate(format: "label CONTAINS %@", "Delivery 1"))
+            .firstMatch
+            .tap()
+
+        let field = app.textFields["deliveryEarningsAmountField"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        clear(field, in: app)
+        field.typeText("50.00")
+        app.buttons["saveDeliveryEarningsButton"].tap()
+
+        XCTAssertTrue(waitForLabel(row, toContain: "$50.00"))
+
+        // Back up to the shift's own figure, which nothing recalculated.
+        XCTAssertTrue(scrollToTop(reaching: shiftEarnings, in: app))
+        XCTAssertTrue(
+            shiftEarnings.label.contains("86.25"),
+            "A delivery amount never adds up to, or corrects, the shift total: \(shiftEarnings.label)"
         )
     }
 
@@ -1435,6 +1635,43 @@ final class DashPilotUITests: XCTestCase {
     private func goBack(in app: XCUIApplication) {
         app.navigationBars.buttons.element(boundBy: 0).tap()
         XCTAssertTrue(app.navigationBars["DashPilot"].waitForExistence(timeout: 5))
+    }
+
+    /// Runs one shift with one delivery taken start to finish.
+    ///
+    /// Also asserts the safety rule the delivery earnings flow depends on:
+    /// nothing offers earnings entry for a delivery while the shift is running.
+    @MainActor
+    private func completeAShiftWithADelivery(in app: XCUIApplication) {
+        startShiftAndDelivery(in: app)
+
+        let action = deliveryButton("deliveryActionButton", containing: "Delivery 1", in: app)
+        for expected in ["Mark arrived at pickup", "Mark order picked up", "Mark delivery completed"] {
+            XCTAssertTrue(waitForLabel(action, toContain: expected), "Showed: \(action.label)")
+            XCTAssertFalse(
+                app.buttons["shiftDetailDeliveryEarningsButton"].exists,
+                "Earnings entry must not be offered while the driver may be driving"
+            )
+            action.tap()
+        }
+
+        let endButton = app.buttons["endShiftButton"]
+        XCTAssertTrue(scrollToTop(reaching: endButton, in: app))
+        XCTAssertFalse(
+            app.buttons["shiftDetailDeliveryEarningsButton"].exists,
+            "Not even once the delivery has finished, while the shift is still running"
+        )
+        endButton.tap()
+
+        XCTAssertTrue(rows(in: app).firstMatch.waitForExistence(timeout: 5))
+    }
+
+    @MainActor
+    private func typeDeliveryAmount(_ text: String, in app: XCUIApplication) {
+        let field = app.textFields["deliveryEarningsAmountField"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        field.tap()
+        field.typeText(text)
     }
 
     @MainActor

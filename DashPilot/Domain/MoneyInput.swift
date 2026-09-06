@@ -16,8 +16,9 @@ nonisolated enum MoneyInputError: Error, Equatable {
     /// More fraction digits than the currency has. Reported rather than rounded
     /// away, so the stored amount is never something the driver did not type.
     case excessiveScale
-    /// A negative amount. Gross earnings are what a shift paid; a shift that
-    /// cost the driver money is an expense, which this app does not record yet.
+    /// A negative amount. Gross earnings are what a shift or a delivery paid;
+    /// work that cost the driver money is an expense, which this app does not
+    /// record yet.
     case negative
     /// Beyond ``MoneyInput/maximumAmount``.
     case tooLarge
@@ -27,7 +28,7 @@ nonisolated extension MoneyInputError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .empty:
-            "Enter an amount, or cancel to leave this shift without earnings."
+            "Enter an amount, or cancel to leave no amount recorded."
         case .notANumber:
             "Enter an amount using numbers, for example 86.25."
         case .excessiveScale:
@@ -35,12 +36,17 @@ nonisolated extension MoneyInputError: LocalizedError {
         case .negative:
             "Gross earnings cannot be negative."
         case .tooLarge:
-            "That is larger than DashPilot records for a single shift."
+            "That is larger than any single amount DashPilot records."
         }
     }
 }
 
 /// Turns what a driver types into a ``Money``, and back again for editing.
+///
+/// The one parser behind every amount a driver types, on a shift and on a
+/// delivery alike. Both editors read their text through it, so the locale rules,
+/// the scale rule and the refusals below are the same wherever an amount is
+/// entered.
 ///
 /// This is the locale-aware layer `Money(exact:)` deliberately is not.
 /// `Money(exact:)` reads one canonical form for fixtures and stored values; a
@@ -58,14 +64,19 @@ nonisolated extension MoneyInputError: LocalizedError {
 /// would become `12` and `"1.2.3"` would become `1.2`; every candidate is
 /// therefore validated in full before any number is built from it.
 nonisolated struct MoneyInput {
-    /// The largest amount that can be recorded for one shift.
+    /// The largest amount that can be recorded in one entry.
     ///
     /// This is a guard against pathological input — a pasted page of digits, a
     /// stuck key — and not a judgement about what a driver can earn. `Decimal`
-    /// holds 38 significant digits, so without a bound a shift could store an
+    /// holds 38 significant digits, so without a bound the store could hold an
     /// amount no arithmetic or formatting in the app is meaningful for. A
-    /// million is five orders of magnitude above a delivery shift and is
-    /// checked in exactly one place so it can be raised if it is ever wrong.
+    /// million is five orders of magnitude above a delivery shift, and further
+    /// still above one delivery, and it is checked in exactly one place so it
+    /// can be raised if it is ever wrong.
+    ///
+    /// One bound for both subjects, deliberately. A tighter per-delivery limit
+    /// would be a judgement about what a single order can pay, which is not a
+    /// judgement this app is in a position to make.
     static let maximumAmount = Decimal(1_000_000)
 
     /// Fraction digits accepted, matching ``Money/displayScale``.
