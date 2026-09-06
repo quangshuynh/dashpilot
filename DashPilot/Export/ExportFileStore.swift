@@ -52,11 +52,19 @@ nonisolated extension ExportedFile {
 ///
 /// ## File names
 ///
-/// `DashPilot-Shift-2026-09-05.json`, `DashPilot-Week-2026-08-31.csv`. ASCII
-/// letters, digits and hyphens only, so the name survives every filesystem,
-/// mail client and cloud drive it may pass through. The date is the day the
-/// records are *about*, in the driver's own calendar, because that is what they
-/// will look for later — not the instant the file was written.
+/// `DashPilot-Shift-2026-09-05.json`, `DashPilot-Week-2026-08-31.csv`,
+/// `DashPilot-Month-2026-09.json`, `DashPilot-Range-2026-09-01-to-2026-09-07.json`.
+/// ASCII letters, digits and hyphens only, so the name survives every
+/// filesystem, mail client and cloud drive it may pass through. The dates are
+/// machine-written — `yyyy-MM-dd`, never a locale-formatted one with slashes in
+/// it — and they are the days the records are *about*, in the driver's own
+/// calendar, because that is what they will look for later rather than the
+/// instant the file was written.
+///
+/// A custom range names **both** of its days, and names the last day the driver
+/// selected rather than the exclusive end: a file called `…-to-2026-09-08` for a
+/// range chosen as *September 1 through 7* would be a name that contradicts the
+/// screen it came from.
 ///
 /// **No pickup place, no merchant and no amount appears in a file name.** A
 /// name is the part of an export that shows up in a share sheet, a notification
@@ -167,7 +175,7 @@ nonisolated extension ExportFileStore {
         date: Date,
         calendar: Calendar = .autoupdatingCurrent
     ) -> String {
-        "DashPilot-\(scopeWord(scope))-\(dayString(date, calendar: calendar)).\(format.fileExtension)"
+        "DashPilot-\(scopeWord(scope))-\(datePart(for: scope, date: date, calendar: calendar)).\(format.fileExtension)"
     }
 
     /// The one word in the middle of a file name. Capitalised literals rather
@@ -179,22 +187,51 @@ nonisolated extension ExportFileStore {
             switch period.unit {
             case .day: "Day"
             case .week: "Week"
+            case .month: "Month"
+            case .custom: "Range"
             }
         case .allHistory: "History"
+        }
+    }
+
+    /// The date part of a file name.
+    ///
+    /// A month is named by its month rather than by its first day: `2026-09`
+    /// reads as *September* and sorts beside every other month, where
+    /// `2026-09-01` reads as a single day. A custom range names both of the days
+    /// the driver chose. Everything else names the one day it is about.
+    private static func datePart(for scope: ExportScope, date: Date, calendar: Calendar) -> String {
+        guard case let .period(period) = scope else { return dayString(date, calendar: calendar) }
+        switch period.unit {
+        case .day, .week:
+            return dayString(date, calendar: calendar)
+        case .month:
+            return string(period.start, format: "yyyy-MM", calendar: calendar)
+        case .custom:
+            // The last instant *inside* the range, so the name ends on the day
+            // the driver selected rather than on the exclusive boundary after it.
+            return "\(dayString(period.start, calendar: calendar))-to-\(dayString(period.lastInstant, calendar: calendar))"
         }
     }
 
     /// `2026-09-05`, in the driver's own calendar so the day in the name is the
     /// day they worked.
     private static func dayString(_ date: Date, calendar: Calendar) -> String {
+        string(date, format: "yyyy-MM-dd", calendar: calendar)
+    }
+
+    /// A machine-written date in the driver's own time zone.
+    ///
+    /// Fixed format, fixed locale: a file name is not a display string, and a
+    /// device set to a non-Gregorian calendar or a locale that writes dates with
+    /// slashes in them must still produce a name that sorts, parses and is legal
+    /// on every filesystem.
+    private static func string(_ date: Date, format: String, calendar: Calendar) -> String {
         let formatter = DateFormatter()
-        // Fixed format, fixed locale: a file name is not a display string, and
-        // a device set to a non-Gregorian calendar must still produce a name
-        // that sorts and parses.
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.calendar = Calendar(identifier: .gregorian)
         formatter.timeZone = calendar.timeZone
-        formatter.dateFormat = "yyyy-MM-dd"
+        formatter.dateFormat = format
         return formatter.string(from: date)
     }
 }

@@ -16,9 +16,34 @@ import Foundation
 /// when the meaning of an existing field changes or a field is removed. Adding
 /// a field is additive and does not bump it: a reader that ignores unknown keys
 /// keeps working.
+///
+/// ## Version history
+///
+/// ### 2 — month and custom reporting periods
+///
+/// Two changes, both of which a version-1 reader can be broken by, which is why
+/// this is a bump rather than an addition:
+///
+/// - **`scope.kind` gained the values `month` and `custom`.** Version 1
+///   documented a closed set — `shift`, `day`, `week`, `allHistory` — and a
+///   reader that switched exhaustively over those four now meets a fifth or a
+///   sixth. The field's *type* did not change, but the set of things it can say
+///   did, and a scope a reader cannot name is a file it cannot interpret.
+/// - **`scope.periodEnd` was renamed to `scope.periodEndExclusive`.** A removed
+///   key, and deliberate. The instant was always exclusive, and with only whole
+///   calendar days and weeks in the format that was easy to overlook; with a
+///   range the driver chose by two inclusive dates it is not. Someone selecting
+///   *September 1 through 7* now gets a file saying the range ends at
+///   `2026-09-08T00:00:00Z`, and the key has to say why.
+///
+/// ### 1 — the first export format
+///
+/// Shift, day, week and all-history scopes, in JSON and CSV.
 nonisolated enum ExportFormat {
     /// The current format version, written into every export.
-    static let version = 1
+    ///
+    /// Not the store's schema version, which is unrelated and currently 7.
+    static let version = 2
 
     /// What produced the file. A product name and nothing more — no build, no
     /// device, no identifier of any kind.
@@ -69,13 +94,13 @@ nonisolated enum ExportFileFormat: String, CaseIterable, Sendable, Hashable, Ide
         switch self {
         case .json:
             """
-            The complete record: every shift, every delivery recorded during it, and — for a day or a \
-            week — the summary with the counts each figure was worked out from.
+            The complete record: every shift, every delivery recorded during it, and — for a day, \
+            week, month or range — the summary with the counts each figure was worked out from.
             """
         case .csv:
             """
             One row per recorded delivery, with its shift's own figures repeated on it, for opening in \
-            a spreadsheet. A day or week summary is not included: each of its figures is paired with \
+            a spreadsheet. The period summary is not included: each of its figures is paired with \
             the number of shifts behind it, and a single flat table cannot keep that pairing. Export \
             JSON for the summary.
             """
