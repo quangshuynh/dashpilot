@@ -134,7 +134,11 @@ nonisolated struct ExportFileStore {
     /// numbered suffix is added rather than the existing file replaced, because
     /// this code must never be the reason something on a driver's device is
     /// destroyed.
-    private func availableURL(for fileName: String) -> URL {
+    ///
+    /// Internal rather than private so the rule can be asserted directly. The
+    /// path it guards is unreachable through ``write(_:named:format:shiftCount:)``
+    /// in an ordinary run, which is exactly why it needs a test of its own.
+    func availableURL(for fileName: String) -> URL {
         let candidate = directory.appendingPathComponent(fileName, isDirectory: false)
         guard fileManager.fileExists(atPath: candidate.path(percentEncoded: false)) else { return candidate }
 
