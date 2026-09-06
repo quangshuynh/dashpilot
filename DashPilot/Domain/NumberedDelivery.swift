@@ -45,7 +45,13 @@ nonisolated struct NumberedDelivery: Identifiable {
     }
 
     /// What this delivery is called on screen.
-    var title: String { "Delivery \(number)" }
+    var title: String { Self.title(number: number) }
+
+    /// The same name built from a number alone, for a caller that has the
+    /// number but not the record — a spoken confirmation, for instance. One
+    /// definition, so the voice surface and the screen cannot drift into
+    /// calling the same delivery two things.
+    static func title(number: Int) -> String { "Delivery \(number)" }
 
     /// The card's heading: which delivery, and what it is doing.
     var statusTitle: String { "\(title) · \(delivery.state.statusDescription)" }
