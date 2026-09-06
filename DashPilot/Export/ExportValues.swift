@@ -18,15 +18,22 @@ import Foundation
 /// No currency symbol, no grouping separator and no locale. Which currency the
 /// amounts are in is stated once per shift, as ``Money/displayCurrencyCode``.
 nonisolated struct ExportAmount: Equatable, Sendable, Codable {
+    /// The amount **as the file states it**, already at ``Money/displayScale``.
+    ///
+    /// Rounded on the way in rather than on the way out, so this value and
+    /// ``string`` cannot disagree and a file read back gives exactly what was
+    /// written. For a recorded amount the rounding changes nothing — the input
+    /// layer rejects anything finer than a cent — and for a derived rate it is
+    /// the same rounding the screen applies.
     let money: Money
 
     init(_ money: Money) {
-        self.money = money
+        self.money = money.rounded(scale: Money.displayScale)
     }
 
     /// The canonical string, e.g. `"86.25"`, `"0.00"`.
     var string: String {
-        money.rounded(scale: Money.displayScale).amount.formatted(
+        money.amount.formatted(
             .number
                 .precision(.fractionLength(Money.displayScale))
                 .grouping(.never)

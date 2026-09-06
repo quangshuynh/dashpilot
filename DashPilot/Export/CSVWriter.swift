@@ -50,7 +50,14 @@ nonisolated struct CSVWriter: Equatable, Sendable {
     /// Excel strips a leading tab or carriage return and then reads whatever
     /// followed it, so a cell beginning `\t=` is a formula with one character of
     /// disguise.
-    private static let formulaLeaders: Set<Character> = ["=", "+", "-", "@", "\t", "\r"]
+    /// Compared as Unicode scalars rather than as `Character`s, because Swift
+    /// treats `\r\n` as **one** grapheme cluster: a field beginning with a
+    /// Windows line break has a first `Character` equal to neither `"\r"` nor
+    /// `"\n"`, and a rule written in `Character`s silently misses it.
+    private static let formulaLeaders: Set<Unicode.Scalar> = ["=", "+", "-", "@", "\t", "\r"]
+
+    /// The scalars that force a field to be quoted, for the same reason.
+    private static let quotingTriggers: Set<Unicode.Scalar> = [",", "\"", "\r", "\n"]
 
     /// What is put in front of a field that would otherwise be read as a
     /// formula.
@@ -99,13 +106,13 @@ nonisolated struct CSVWriter: Equatable, Sendable {
     /// word — so the rule costs nothing on generated fields and cannot be
     /// forgotten on the one field that is user text.
     static func formulaSafe(_ value: String) -> String {
-        guard let first = value.first, formulaLeaders.contains(first) else { return value }
+        guard let first = value.unicodeScalars.first, formulaLeaders.contains(first) else { return value }
         return formulaGuard + value
     }
 
     private static func needsQuoting(_ value: String, wasGuarded: Bool) -> Bool {
         if wasGuarded { return true }
-        if value.contains(where: { $0 == "," || $0 == "\"" || $0 == "\r" || $0 == "\n" }) { return true }
+        if value.unicodeScalars.contains(where: quotingTriggers.contains) { return true }
         // Leading or trailing whitespace survives only inside quotes; a reader
         // that trims unquoted fields would otherwise change the name.
         if value.first?.isWhitespace == true || value.last?.isWhitespace == true { return true }
