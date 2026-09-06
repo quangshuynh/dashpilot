@@ -2039,7 +2039,18 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertTrue(day.contains("2 shifts"), "Today holds two of the three: \(day)")
 
         app.buttons["dismissExportButton"].tap()
-        XCTAssertTrue(app.segmentedControls["periodUnitPicker"].waitForExistence(timeout: 5))
+        // The export control is at the bottom of the list, so dismissing leaves
+        // the screen scrolled past the picker at the top of it.
+        let picker = app.segmentedControls["periodUnitPicker"]
+        XCTAssertTrue(scrollToTop(reaching: picker, in: app), "The summary is back")
+
+        selectPeriod("Week", in: app)
+        openExport("exportPeriodButton", in: app)
+        let week = exportFileName(in: app)
+
+        XCTAssertTrue(week.contains("DashPilot-Week-"), "\(week)")
+        XCTAssertTrue(week.contains("3 shifts"), "The week holds one more than today: \(week)")
+        XCTAssertNotEqual(day, week, "Each period exports its own records")
     }
 
     /// A period with nothing recorded in it offers no export at all, rather than
