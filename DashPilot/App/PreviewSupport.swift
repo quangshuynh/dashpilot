@@ -760,6 +760,18 @@ enum PreviewSupport {
         return ShiftExportSheet(scope: scope).modelContainer(container)
     }
 
+    /// The custom range selector, opened on this week's dates.
+    ///
+    /// No store: the sheet chooses dates and nothing else. What the chosen range
+    /// then holds is ``PeriodSummaryView``'s question.
+    @MainActor
+    static func customRangeSheet() -> some View {
+        let now = Date.now
+        let calendar = Calendar.autoupdatingCurrent
+        let start = ReportingPeriod(unit: .week, containing: now, calendar: calendar)?.start ?? now
+        return CustomRangeSheet(start: start, end: now, latestSelectableDay: now) { _, _ in }
+    }
+
     /// The pickup-place editor over a synthetic delivery.
     ///
     /// The store is seeded with a second delivery that already names a place, so
