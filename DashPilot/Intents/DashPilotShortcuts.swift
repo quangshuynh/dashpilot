@@ -21,7 +21,11 @@ import AppIntents
 ///
 /// No intent takes a parameter, so no phrase, suggestion or shortcut tile ever
 /// holds an amount, a place or a position.
-struct DashPilotShortcuts: AppShortcutsProvider {
+/// `nonisolated` deliberately: the system reads this list off the main thread,
+/// and the project's default main-actor isolation would otherwise make a
+/// background read of `appShortcuts` an isolation violation rather than a
+/// property access. Nothing here touches the store or the interface.
+nonisolated struct DashPilotShortcuts: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {
         AppShortcut(
             intent: StartShiftIntent(),
