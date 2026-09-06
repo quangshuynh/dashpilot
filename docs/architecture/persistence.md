@@ -38,7 +38,7 @@ events it summarises. Nothing identifying a restaurant, a customer or an address
 amount is attributed to a delivery.
 
 `Expense` stores when a cost was incurred, its amount, its category and an optional short note.
-It has **no relationship to anything** — see below.
+It has **no relationship to anything**. See below.
 
 `RouteSample` stores a timestamp, a latitude, a longitude, a horizontal accuracy and the capture
 session it was recorded in, and nothing else. `CLLocation` also reports speed, course, altitude and
@@ -95,19 +95,19 @@ else.
 other. That is the modelling decision behind the feature rather than a simplification: a tank of fuel
 is burned across several shifts, a set of tyres across thousands of miles, and attaching a cost to
 whichever shift happened to be running when it was typed would record an attribution the driver never
-made — the same fabrication the app refuses when it declines to divide a shift's amount among its
-deliveries.
+made. It is the same fabrication the app refuses when it declines to divide a shift's amount among
+its deliveries.
 
 Membership is by date. A period contains an expense if its `occurredAt` falls in the period, by the
 same half-open rule that puts a shift in one. Two consequences follow directly from the shape: there
-is no shift-level or delivery-level cost, and deleting a shift cascades to nothing — an expense has
-no relationship to be cascaded along, and the cost happened whether or not the shift's record is
+is no shift-level or delivery-level cost, and deleting a shift cascades to nothing, because an
+expense has no relationship to be cascaded along, and the cost happened whether or not the shift's record is
 still there.
 
 The amount is a `Decimal` for the reason a shift's is, and it is **required**: an expense with no
 amount is not a record of anything. A recorded `0.00` is still a recorded amount. The category is
 stored as a plain string rather than as the enum, so a stored word a build cannot name reads as
-`other` rather than failing a fetch — the same reason `PickupPlace` stores plain strings.
+`other` rather than failing a fetch, which is the same reason `PickupPlace` stores plain strings.
 
 ## Delivery state is not a column
 

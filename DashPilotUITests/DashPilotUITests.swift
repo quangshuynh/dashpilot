@@ -2327,6 +2327,12 @@ final class DashPilotUITests: XCTestCase {
         field.typeText(amount)
 
         app.buttons["saveExpenseButton"].tap()
+        // The list is behind a sheet until the save dismisses it, and a tap
+        // synthesised during that animation lands on nothing.
+        XCTAssertTrue(
+            app.buttons["saveExpenseButton"].waitForNonExistence(timeout: 5),
+            "The editor closes once the expense is recorded"
+        )
     }
 
     /// Record a cost, and find it in the list with what was entered.
@@ -2391,6 +2397,7 @@ final class DashPilotUITests: XCTestCase {
         clear(field, in: app)
         field.typeText("50.00")
         app.buttons["saveExpenseButton"].tap()
+        XCTAssertTrue(app.buttons["saveExpenseButton"].waitForNonExistence(timeout: 5))
 
         XCTAssertTrue(waitForLabel(row, toContain: "$50.00"), "The correction is what the list shows")
 

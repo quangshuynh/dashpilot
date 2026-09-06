@@ -139,8 +139,8 @@ and one they cannot.
   not comparable to a per-mile figure from an app that records in the background.
 - **Every rate is gross.** Nothing subtracts fuel, wear, insurance or tax. None is a profit,
   take-home or tax figure, and none is a mileage deduction. Recorded expenses are a separate record
-  and are subtracted in exactly one place — a period's net after recorded expenses, which is also
-  not profit.
+  and are subtracted in exactly one place, a period's net after recorded expenses, which is also not
+  profit.
 - **USD only.** Nothing converts currencies or records which currency a shift was earned in.
 - **Aggregates cover a day, a week, a calendar month or a chosen date range.** No quarter, no year,
   no all-time total, no best or worst shift, no comparison between periods, no chart and no sorting.
@@ -195,7 +195,7 @@ and one they cannot.
 - **No tax treatment of any kind**: no deduction, no mileage allowance, no depreciation and no
   classification of a cost as claimable.
 - **Expenses are not in the CSV export.** Its rows are deliveries, and an expense belongs to a date
-  rather than to one, so it has no row there — the same deliberate refusal the period summary gets.
+  rather than to one, so it has no row there, the same deliberate refusal the period summary gets.
 - **A note is capped at 120 characters** and is exported as the driver wrote it.
 
 ## Data and safety

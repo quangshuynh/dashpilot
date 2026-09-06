@@ -126,10 +126,12 @@ struct RootView: View {
                     NavigationLink {
                         ExpenseListView()
                     } label: {
-                        Label("Expenses", systemImage: "creditcard")
-                            // Both, so the control says what it opens rather
-                            // than relying on an icon being understood.
-                            .labelStyle(.titleAndIcon)
+                        // The word, not a glyph. A `Label` here renders as its
+                        // icon alone in the navigation bar, and a credit-card
+                        // symbol in a corner does not say "the costs you
+                        // recorded" to anyone who has not already found the
+                        // screen once.
+                        Text("Expenses")
                     }
                     .accessibilityLabel("Recorded expenses")
                     .accessibilityIdentifier("expensesLink")

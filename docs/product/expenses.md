@@ -72,8 +72,8 @@ Five, and no more:
 | Other | Everything else. Claims nothing about what the money was for. |
 
 The set is closed on purpose. Custom categories would need naming,
-normalisation, renaming and merging — the apparatus pickup identity needs — and
-would turn a four-tap record into a filing exercise.
+normalisation, renaming and merging, the apparatus that pickup identity needs, and would turn a
+four-tap record into a filing exercise.
 
 A stored category a build cannot recognise reads as **other**. That is reachable
 only by running an older build against a store a newer one wrote; the amount, the
@@ -98,8 +98,8 @@ driver typed and nothing else, so the total is a floor in exactly the way
 recorded mileage is a floor on the miles driven.
 
 There is **no coverage pair** on an expense total, and its absence is deliberate.
-A coverage pair needs a denominator — the records that *could* have contributed —
-and expenses have none: nothing on the device knows how many costs a driver
+A coverage pair needs a denominator, the records that *could* have contributed, and expenses have
+none: nothing on the device knows how many costs a driver
 incurred and did not enter. Writing "3 of 3 expenses" would state a completeness
 the app cannot observe. A count of what was entered is the whole of what can
 honestly be said.
@@ -176,7 +176,7 @@ none inside a delivery.
 - **Editing replaces every fact at once**, so a refused edit leaves the record
   exactly as it was.
 - **Deleting removes only that record.** Nothing else in the app changes, and
-  deleting a *shift* never deletes an expense — the two are unrelated rows.
+  deleting a *shift* never deletes an expense: the two are unrelated rows.
 - **A date cannot be in the future.** An expense is something that already
   happened, and a mistyped year would silently drop the record out of every
   period the driver looks at.
@@ -195,7 +195,7 @@ expense total by category and the net after it.
 Export a period to see costs alongside work.
 
 **CSV carries none either.** Its rows are deliveries, and an expense belongs to a
-date rather than to a delivery, so it has no row in that table — and DashPilot
+date rather than to a delivery, so it has no row in that table, and DashPilot
 will not invent one. The format picker says so before the file is written.
 
 The export **format version did not change**: the additions are new keys beside
@@ -208,8 +208,8 @@ ignores unknown keys is unaffected. See
 An expense is as sensitive as the rest of a driver's history, and a note is free
 text they typed.
 
-- Nothing is logged but the **category** of a change and whether a note exists —
-  never the amount, never the date money was spent, and never a word of a note.
+- Nothing is logged but the **category** of a change and whether a note exists. Never the amount,
+  never the date money was spent, and never a word of a note.
 - Expenses stay on the device. They leave only through an export the driver
   started and shared.
 - Nothing is uploaded, and there is no network access anywhere in DashPilot.

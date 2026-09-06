@@ -73,8 +73,8 @@ with the reason any of them could not be derived.
   was not open, and DashPilot says so instead of guessing across it.
 - No claim that recorded mileage equals the miles driven, and no tax or deduction figure.
 - No profit, take-home or net earnings. Gross earnings are one number the driver typed, and the one
-  place a cost is subtracted — a period's *net after recorded expenses* — is one recorded subtotal
-  less another rather than a profit figure.
+  place a cost is subtracted, a period's *net after recorded expenses*, is one recorded subtotal less
+  another rather than a profit figure.
 - No estimated costs. An expense exists because the driver entered it; nothing is derived from
   mileage, hours or a vehicle model, and no expense is attributed to a shift or a delivery.
 - No automatic delivery detection. Every delivery event is one the driver recorded.
