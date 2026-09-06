@@ -76,18 +76,26 @@ deleted from there behind a confirmation that names what goes with it. Deleting 
 the route positions and the deliveries recorded during it. A running shift cannot be deleted, and
 deletion is not undoable.
 
-**Persistence.** Schema v7, with lightweight migrations from every earlier version, covered by tests
+**Recorded expenses.** The driver can record what the work cost: an amount, a date and time, one of
+five conservative categories — fuel, parking and tolls, maintenance, supplies, other — and an
+optional short note. An expense belongs to a **date rather than to a shift**, so nothing attributes a
+cost to work the driver did not attribute it to and nothing divides one across shifts, deliveries or
+miles. A period summary reports what was recorded, its split by category, and *net after recorded
+expenses*, which is one recorded subtotal less another and is never called profit. See
+[Recorded expenses](expenses.md).
+
+**Persistence.** Schema v8, with lightweight migrations from every earlier version, covered by tests
 that open stores written under each older version. A store that fails to open is surfaced as a
 visible state rather than a crash, and the failure screen deliberately offers no "reset the
 database" action.
 
 ## Not implemented
 
-Expenses, fuel, taxes, mileage deductions, a tips-versus-base breakdown, per-delivery mileage,
-customer identity, merchant scoring, ranking or profitability, offer profitability, automatic
-delivery or pickup detection, geocoding, maps, route visualisation, quarterly, yearly or all-time
-totals, comparison or trend between periods, importing an exported file, backup, sync, App Intents,
-Live Activities and recommendations.
+Taxes and mileage deductions, estimated or recurring costs, receipts, a tips-versus-base breakdown,
+per-delivery mileage, customer identity, merchant scoring, ranking or profitability, offer
+profitability, automatic delivery or pickup detection, geocoding, maps, route visualisation,
+quarterly, yearly or all-time totals, comparison or trend between periods, importing an exported
+file, backup, sync, App Intents, Live Activities and recommendations.
 
 Deliveries are recorded, and three things are built on them. One is the shift time at least one
 delivery was active, with overlapping deliveries counted once, and gross earnings over it. Another
@@ -97,7 +105,10 @@ delivery, and the single hourly figure over that delivery's own lifecycle. Beyon
 derives a delivery duration for presentation and stops. There is no restaurant rating, no ranking,
 no earnings grouped by place, no comparison between shifts and no prediction.
 
-Nothing is aggregated across shifts, no route is drawn on a map, and no mileage or live rate is
+Shifts are aggregated over a day, a week, a calendar month or a chosen date range, and no further —
+see [Period summaries](period-summaries.md) — and a period, a shift or the whole history can be
+written to a JSON or CSV file the driver shares themselves, see
+[History export](history-export.md). No route is drawn on a map, and no mileage or live rate is
 shown while a shift is still running. There is no undo for a deleted shift and no backup of any
 kind.
 

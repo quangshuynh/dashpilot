@@ -1,7 +1,7 @@
 # Data model
 
-Four persisted entities, and a small set of value types derived from them. Current schema
-version: **v7**.
+Five persisted entities, and a small set of value types derived from them. Current schema
+version: **v8**.
 
 ## `Shift`
 
@@ -137,6 +137,36 @@ A delivery is independent of every other delivery: it derives its state from its
 alone, so several can be active at once with overlapping lifecycles, and nothing here records a
 relationship between them. See [Delivery lifecycle](../product/delivery-lifecycle.md).
 
+## `Expense`
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `id` | `UUID` | Unique attribute |
+| `occurredAt` | `Date` | When the cost was incurred, as the driver recorded it, never when the row was typed. This is what period membership is decided by |
+| `amountValue` | `Decimal` | Private. **Required**: an expense with no amount is not a record of anything. Never negative; a recorded `0.00` is a recorded amount |
+| `categoryRawValue` | `String` | Private. `ExpenseCategory`'s raw value. A stored word this build cannot name reads as `other` |
+| `note` | `String?` | The driver's own short reminder, trimmed, up to 120 characters. `nil` when they wrote none |
+
+Derived, never stored:
+
+| Member | Meaning |
+| --- | --- |
+| `amount` | The stored decimal as a `Money` |
+| `category` | The stored word as an `ExpenseCategory`, through `ExpenseCategory.stored(_:)` |
+| `expenseRecord` | An `ExpenseRecord` for aggregation: date, amount and category, and deliberately not the note |
+| `recordedBefore(_:_:)` | The total, repeatable order over expenses: most recent first, identity breaking a tie |
+
+`init(...)` and `update(...)` reject a negative amount and a note over the length limit, and
+`update(...)` validates every value before writing any of them, so a refused edit leaves the record
+exactly as it was.
+
+**There is no relationship to `Shift` and none to `Delivery`, and that is the substantive decision
+in this entity.** An expense carries the moment it happened; a period contains it if that moment
+falls inside the period, by the same rule that puts a shift in a period. Attaching a cost to
+whichever shift happened to be running when it was typed would record an attribution the driver
+never made. Deleting a shift therefore removes no expense, and no cost is ever divided across
+shifts, deliveries, days or miles. See [Recorded expenses](../product/expenses.md).
+
 ## Schema versions
 
 | Version | Change |
@@ -148,6 +178,7 @@ relationship between them. See [Delivery lifecycle](../product/delivery-lifecycl
 | 5.0.0 | Adds `Delivery` and `Shift.deliveries` |
 | 6.0.0 | Adds `PickupPlace` and `Delivery.pickupPlace` |
 | 7.0.0 | Adds `Delivery.grossEarningsAmount` |
+| 8.0.0 | Adds `Expense`. No existing entity changes, and no relationship is added |
 
 Every step so far is a lightweight stage, and none backfills a value. See
 [Migrations](../architecture/migrations.md).
@@ -183,6 +214,13 @@ none either — it is unioned from timestamps already stored, every time it is s
 | `PickupPlaceName` | The normalisation policy: a display spelling and the key identity is decided by |
 | `PickupPlaceNameError`, `PickupPlaceError` | Refused pickup names, rename collisions, refused merges and failed pickup writes, and why |
 | `PickupPlaceIdentity` | A place's id and spelling as a `Sendable` value, so a rename collision can name what it collided with without a thrown error holding a model |
+| `ExpenseCategory` | The five conservative categories, their wording, and how a stored word is read back |
+| `ExpenseNote` | The optional note's rule: trimmed, absent when empty, bounded in length |
+| `ExpenseRecord` | One recorded cost reduced to date, amount and category, for aggregation without a store |
+| `ExpenseTotalsCalculator` | The one definition of a recorded-expense total, its categories, and the net after it |
+| `PeriodExpenseTotals`, `ExpenseCategoryTotal` | A period's recorded costs, the count behind them, and their split by category |
+| `PeriodNetAfterExpenses` | Recorded gross earnings less recorded expenses, with the counts behind both halves, and the rules for when there is no figure |
+| `ExpenseError`, `ExpenseNoteError`, `ExpenseRecordingError` | Refused expense values and failed expense writes, and why |
 
 ## What is not in the store
 
@@ -192,6 +230,8 @@ numbering the interface shows for concurrent deliveries — it is counted from t
 timestamps rather than stored beside them. A pickup place's recency is derived from the deliveries
 that reference it, for the same reason. A delivery's gross per recorded delivery hour is derived from
 its own amount and its own two timestamps, every time it is shown, and is never added to another
-delivery's. The store holds timestamps, positions, the optional amounts a driver typed against a
-shift and against individual deliveries, and the names they typed — and nothing that could disagree
-with them.
+delivery's. A period's recorded expense total, its split by category and the net
+after it are derived from the expense rows the same way, and no cost per hour, per mile or per
+delivery exists at all. The store holds timestamps, positions, the optional amounts a driver typed
+against a shift and against individual deliveries, the costs they entered, and the names and notes
+they typed — and nothing that could disagree with them.
