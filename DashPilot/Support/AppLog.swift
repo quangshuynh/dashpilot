@@ -22,9 +22,11 @@ nonisolated enum AppLog {
     /// the app is allowed to do, never where the device is.
     static let location = Logger(subsystem: subsystem, category: "location")
 
-    /// Manually recorded shift earnings: that an amount was added, changed or
-    /// removed, and that a save failed. Never an amount — what a driver earned
-    /// is exactly the kind of value this project keeps out of the logs.
+    /// Manually recorded earnings, on a shift and on an individual delivery:
+    /// that an amount was added, changed or removed, and that a save failed.
+    /// Never an amount, and never the difference between two of them — what a
+    /// driver earned is exactly the kind of value this project keeps out of the
+    /// logs.
     static let earnings = Logger(subsystem: subsystem, category: "earnings")
 
     /// Delivery lifecycle transitions and the rules that reject them. Records

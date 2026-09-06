@@ -69,6 +69,11 @@ enum PreviewSupport {
         // local place looks like in history.
         attachPickupPlaces(to: deliveries, in: context, at: completed.startedAt)
 
+        // Two of the three carry an invented amount and one carries none, so
+        // the three states a delivery can be in — recorded, not recorded, and
+        // recorded on a delivery that overlapped another — are all on screen.
+        attachDeliveryEarnings(to: deliveries)
+
         try? context.save()
 
         return container
@@ -313,6 +318,27 @@ enum PreviewSupport {
         if deliveries.indices.contains(2) { deliveries[2].setPickupPlace(shared) }
     }
 
+    /// Invented per-delivery amounts for the seeded history.
+    ///
+    /// The first delivery ran 25 minutes for `$14.75` and the third 30 minutes
+    /// for `$9.50`, which are `$35.40` and `$19.00` per recorded delivery hour.
+    /// The cancelled one in between is left with **no** amount rather than with
+    /// zero: a delivery nobody recorded a figure for and one recorded as paying
+    /// nothing are different states, and a fixture that showed only one of them
+    /// would let the difference go untested on screen.
+    ///
+    /// Nothing here relates to the shift's own `$86.25`. The two figures are
+    /// independent by design, they deliberately do not add up, and no screen
+    /// reconciles them.
+    private static func attachDeliveryEarnings(to deliveries: [Delivery]) {
+        if deliveries.indices.contains(0) {
+            try? deliveries[0].setGrossEarnings(Money(minorUnits: 1475))
+        }
+        if deliveries.indices.contains(2) {
+            try? deliveries[2].setGrossEarnings(Money(minorUnits: 950))
+        }
+    }
+
     /// Three made-up deliveries for one shift: two delivered and one cancelled
     /// after the driver had already waited at the pickup.
     ///
@@ -472,6 +498,7 @@ enum PreviewSupport {
                 container.mainContext.insert(delivery)
             }
             attachPickupPlaces(to: deliveries, in: container.mainContext, at: start)
+            attachDeliveryEarnings(to: deliveries)
         }
         try? container.mainContext.save()
 
@@ -493,6 +520,34 @@ enum PreviewSupport {
         container.mainContext.insert(shift)
 
         return ShiftEarningsEditor(shift: shift).modelContainer(container)
+    }
+
+    /// The delivery earnings editor over a synthetic delivered delivery.
+    ///
+    /// The delivery is finished, because a delivery still in progress is one the
+    /// editor is never presented for and the model refuses an amount on.
+    @MainActor
+    static func deliveryEarningsEditor(withRecordedEarnings: Bool) -> some View {
+        let container = emptyContainer()
+        let context = container.mainContext
+        let start = Date(timeIntervalSince1970: 1_756_000_000)
+
+        let shift = Shift(startedAt: start)
+        try? shift.end(at: start.addingTimeInterval(4 * 3600))
+        context.insert(shift)
+
+        let delivery = Delivery(shift: shift, acceptedAt: start.addingTimeInterval(300))
+        try? delivery.markArrivedAtPickup(at: start.addingTimeInterval(600))
+        try? delivery.markPickedUp(at: start.addingTimeInterval(1_020))
+        try? delivery.markDelivered(at: start.addingTimeInterval(1_800))
+        context.insert(delivery)
+
+        if withRecordedEarnings {
+            try? delivery.setGrossEarnings(Money(minorUnits: 1475))
+        }
+
+        return DeliveryEarningsEditor(numbered: NumberedDelivery(number: 1, delivery: delivery))
+            .modelContainer(container)
     }
 
     /// The pickup-place editor over a synthetic delivery.
