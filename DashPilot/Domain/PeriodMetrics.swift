@@ -381,6 +381,8 @@ nonisolated extension PeriodMetrics {
         switch period.unit {
         case .day: "No completed shifts recorded on this day."
         case .week: "No completed shifts recorded this week."
+        case .month: "No completed shifts recorded this month."
+        case .custom: "No completed shifts recorded in this range."
         }
     }
 
