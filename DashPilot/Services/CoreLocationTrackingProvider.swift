@@ -27,17 +27,39 @@ final class CoreLocationTrackingProvider: NSObject, LocationTrackingProviding {
         manager = CLLocationManager()
         super.init()
         manager.delegate = self
-        // Best available accuracy: the point of capture is to describe where a
-        // vehicle went, and a coarser setting would spend the same battery on a
-        // route the acceptance policy would then reject.
+        Self.configure(manager)
+    }
+
+    /// The manager settings foreground route capture depends on.
+    ///
+    /// Separated from `init` so the policy can be asserted directly: every one
+    /// of these is invisible from outside this type, and each is a choice with
+    /// a consequence for what a shift records.
+    ///
+    /// - `desiredAccuracy`: best available. The point of capture is to describe
+    ///   where a vehicle went, and a coarser setting would spend the same
+    ///   battery on a route the acceptance policy would then reject.
+    /// - `activityType`: tells Core Location the motion to expect, so it can
+    ///   tune its own filtering for vehicle movement.
+    /// - `distanceFilter`: none. Quality is judged in one place, by
+    ///   ``RouteSampleFilter``, and splitting that decision between Core
+    ///   Location and the app would make the retained route depend on two
+    ///   policies.
+    /// - `pausesLocationUpdatesAutomatically`: **off, and this is the one that
+    ///   matters on a real shift.** Left at its default, iOS pauses updates
+    ///   once it decides the device has stopped moving, which on a delivery
+    ///   shift is a driver waiting at a pickup, and it does not resume them on
+    ///   its own. DashPilot declares no background location mode, so
+    ///   there is nothing for the system to wake, and the app would go on
+    ///   showing "Location tracking active" while recording nothing for the
+    ///   rest of the shift. Capture is stopped deliberately when the app leaves
+    ///   the foreground, so nothing here keeps the hardware running behind the
+    ///   driver's back.
+    static func configure(_ manager: CLLocationManager) {
         manager.desiredAccuracy = kCLLocationAccuracyBest
-        // Tells Core Location the motion to expect. It uses this to tune its
-        // own filtering for vehicle movement.
         manager.activityType = .automotiveNavigation
-        // No distance filter: quality is judged in one place, by
-        // `RouteSampleFilter`, and splitting that decision between Core Location
-        // and the app would make the retained route depend on two policies.
         manager.distanceFilter = kCLDistanceFilterNone
+        manager.pausesLocationUpdatesAutomatically = false
     }
 
     func startUpdates() {
