@@ -63,6 +63,17 @@ struct RootView: View {
                 }
 
                 Section {
+                    // The entry point to everything that spans shifts, at the
+                    // head of history rather than buried inside one shift: a
+                    // summary of a day or a week is not a property of any single
+                    // shift in it.
+                    NavigationLink {
+                        PeriodSummaryView()
+                    } label: {
+                        Label("Day and Week Summaries", systemImage: "calendar")
+                    }
+                    .accessibilityIdentifier("periodSummaryLink")
+
                     ForEach(completedShifts) { shift in
                         // The whole row is one destination: a finished shift is
                         // a thing to open, not a row with controls scattered

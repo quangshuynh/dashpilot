@@ -23,6 +23,9 @@ struct DashPilotApp: App {
             if LaunchArgument.isPresent(LaunchArgument.seededActiveDelivery) {
                 return try PreviewSupport.seededActiveDeliveryContainer()
             }
+            if LaunchArgument.isPresent(LaunchArgument.seededPeriodSummary) {
+                return try PreviewSupport.seededPeriodSummaryContainer()
+            }
             if LaunchArgument.isPresent(LaunchArgument.seededPickupHistory) {
                 return try PreviewSupport.seededPickupHistoryContainer()
             }

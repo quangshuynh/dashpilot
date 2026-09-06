@@ -46,6 +46,16 @@ nonisolated enum LaunchArgument {
     /// memory, so it can never touch a real store.
     static let seededPickupHistory = "-dashpilot-seeded-pickup-history"
 
+    /// Runs against a throwaway store already holding a week of synthetic
+    /// completed shifts, anchored to today.
+    ///
+    /// The period summary shows the day and week the driver is actually in, so
+    /// the epoch-pinned fixtures above would open it on an empty period. This
+    /// one keeps its offsets fixed and moves only its anchor, which is what lets
+    /// a journey assert a subtotal and its coverage end to end. Debug builds
+    /// only, and in memory, so it can never touch a real store.
+    static let seededPeriodSummary = "-dashpilot-seeded-period-summary"
+
     static func isPresent(_ argument: String, in processInfo: ProcessInfo = .processInfo) -> Bool {
         processInfo.arguments.contains(argument)
     }

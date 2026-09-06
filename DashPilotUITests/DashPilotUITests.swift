@@ -13,6 +13,9 @@ final class DashPilotUITests: XCTestCase {
     /// Must match `LaunchArgument.seededPickupHistory`, for the same reason.
     private static let seededPickupHistoryArgument = "-dashpilot-seeded-pickup-history"
 
+    /// Must match `LaunchArgument.seededPeriodSummary`, for the same reason.
+    private static let seededPeriodSummaryArgument = "-dashpilot-seeded-period-summary"
+
     override func setUpWithError() throws {
         continueAfterFailure = false
     }
@@ -1708,6 +1711,227 @@ final class DashPilotUITests: XCTestCase {
             object: query
         )
         return XCTWaiter().wait(for: [expectation], timeout: 5) == .completed
+    }
+
+    // MARK: Period summaries
+
+    /// Launches against a throwaway store holding a week of synthetic completed
+    /// shifts, anchored to today.
+    ///
+    /// The period screen shows the day and week the driver is actually in, so
+    /// the epoch-pinned fixtures the other journeys use would open it on an
+    /// empty period. The fixture holds, by the rules of the driver's own
+    /// calendar:
+    ///
+    /// - **today**: a three-hour shift paying `$86.25` with a partial route,
+    ///   three delivered and one cancelled delivery, and recorded waits of 6, 11
+    ///   and 41 minutes; and a two-hour shift with no amount and no route.
+    /// - **earlier this week**: a five-hour shift paying `$120.00` with a
+    ///   partial route and two more deliveries, waiting 8 and 20 minutes.
+    @MainActor
+    private func launchWithPeriodSummary() -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments.append(Self.seededPeriodSummaryArgument)
+        app.launch()
+        return app
+    }
+
+    @MainActor
+    private func openPeriodSummary(in app: XCUIApplication) {
+        let link = app.buttons["periodSummaryLink"]
+        XCTAssertTrue(link.waitForExistence(timeout: 10), "History offers a way into the summaries")
+        link.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["periodTitle"].waitForExistence(timeout: 10))
+    }
+
+    @MainActor
+    private func selectPeriod(_ title: String, in app: XCUIApplication) {
+        let picker = app.segmentedControls["periodUnitPicker"]
+        XCTAssertTrue(picker.waitForExistence(timeout: 5))
+        picker.buttons[title].tap()
+    }
+
+    /// The week's earnings are the sum of the amounts recorded on its shifts,
+    /// and the screen says how many shifts that was.
+    @MainActor
+    func testWeekSummaryShowsRecordedEarningsAndTheirCoverage() throws {
+        let app = launchWithPeriodSummary()
+        openPeriodSummary(in: app)
+        selectPeriod("Week", in: app)
+
+        let earnings = app.descendants(matching: .any)["periodEarnings"]
+        XCTAssertTrue(earnings.waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            waitForLabel(earnings, toContain: "$206.25"),
+            "The week totals the two recorded amounts: \(earnings.label)"
+        )
+        XCTAssertTrue(
+            earnings.label.contains("2 of 3 completed shifts"),
+            "And says how many shifts answered: \(earnings.label)"
+        )
+    }
+
+    /// The subtotal is never presented as though every shift had answered.
+    @MainActor
+    func testPartialEarningsCoverageIsStatedRatherThanImplied() throws {
+        let app = launchWithPeriodSummary()
+        openPeriodSummary(in: app)
+
+        let earnings = app.descendants(matching: .any)["periodEarnings"]
+        XCTAssertTrue(earnings.waitForExistence(timeout: 5))
+        XCTAssertTrue(waitForLabel(earnings, toContain: "$86.25"))
+        XCTAssertTrue(
+            earnings.label.contains("1 of 2 completed shifts"),
+            "The day's third shift has no amount, and the screen says so: \(earnings.label)"
+        )
+        XCTAssertTrue(
+            earnings.label.contains("Recorded gross earnings"),
+            "A subtotal is called recorded, never the day's earnings: \(earnings.label)"
+        )
+    }
+
+    /// A period's mileage is a floor, and the partial routes behind it stay
+    /// visible rather than being averaged into a clean-looking total.
+    @MainActor
+    func testPeriodMileageSurfacesPartialRouteCoverage() throws {
+        let app = launchWithPeriodSummary()
+        openPeriodSummary(in: app)
+
+        let mileage = app.descendants(matching: .any)["periodMileage"]
+        XCTAssertTrue(scrollTo(mileage, in: app))
+        XCTAssertTrue(
+            mileage.label.contains("Recorded mileage"),
+            "Mileage is recorded, not driven: \(mileage.label)"
+        )
+        XCTAssertTrue(
+            mileage.label.contains("1 of 2 completed shifts"),
+            "The shift with no route is counted, not treated as zero miles: \(mileage.label)"
+        )
+        XCTAssertTrue(
+            mileage.label.contains("partial route capture"),
+            "And the partial route behind the figure is stated: \(mileage.label)"
+        )
+        XCTAssertFalse(
+            mileage.label.lowercased().contains("driven"),
+            "The figure itself must not claim miles driven: \(mileage.label)"
+        )
+    }
+
+    /// The rate divides one paired subset of shifts, and says which.
+    @MainActor
+    func testPeriodPerMileRateStatesThePairedSubsetItUsed() throws {
+        let app = launchWithPeriodSummary()
+        openPeriodSummary(in: app)
+
+        let rate = app.descendants(matching: .any)["periodPerMileRate"]
+        XCTAssertTrue(scrollTo(rate, in: app))
+        XCTAssertTrue(
+            rate.label.contains("gross earnings per recorded mile"),
+            "The rate names what it divides: \(rate.label)"
+        )
+        XCTAssertTrue(
+            rate.label.contains("1 of 2 shifts with both earnings and a measurable route"),
+            "Only the shift carrying both halves is behind it: \(rate.label)"
+        )
+    }
+
+    /// The median is the middle of the individual pickups recorded in the
+    /// period, shown with the number of them behind it.
+    @MainActor
+    func testWeeklyPickupWaitShowsMedianAndSampleCount() throws {
+        let app = launchWithPeriodSummary()
+        openPeriodSummary(in: app)
+        selectPeriod("Week", in: app)
+
+        let wait = app.descendants(matching: .any)["periodPickupWait"]
+        XCTAssertTrue(scrollTo(wait, in: app))
+        XCTAssertTrue(
+            waitForLabel(wait, toContain: "Median recorded pickup wait"),
+            "Showed: \(wait.label)"
+        )
+        XCTAssertTrue(
+            wait.label.contains("5 recorded pickups"),
+            "The week's five recorded waits are the median's basis: \(wait.label)"
+        )
+        XCTAssertFalse(
+            wait.label.lowercased().contains("typical"),
+            "A period median is not offered as a typical wait: \(wait.label)"
+        )
+    }
+
+    /// A period nobody drove in shows a sentence, not a grid of zeroes.
+    @MainActor
+    func testEmptyPeriodShowsARealEmptyState() throws {
+        let app = launchWithPeriodSummary()
+        openPeriodSummary(in: app)
+        selectPeriod("Week", in: app)
+
+        app.buttons["periodPreviousButton"].tap()
+
+        let empty = app.descendants(matching: .any)["periodEmptyState"]
+        XCTAssertTrue(empty.waitForExistence(timeout: 5))
+        XCTAssertEqual(empty.label, "No completed shifts recorded this week.")
+        XCTAssertFalse(
+            app.descendants(matching: .any)["periodEarnings"].exists,
+            "An empty week shows no earnings figure at all, not $0.00"
+        )
+        XCTAssertFalse(app.descendants(matching: .any)["periodMileage"].exists)
+    }
+
+    /// Switching the unit changes which shifts are counted.
+    @MainActor
+    func testSwitchingBetweenDayAndWeekChangesTheShiftsCounted() throws {
+        let app = launchWithPeriodSummary()
+        openPeriodSummary(in: app)
+
+        let shiftCount = app.descendants(matching: .any)["periodShiftCount"]
+        XCTAssertTrue(shiftCount.waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            waitForLabel(shiftCount, toContain: "2 completed shifts"),
+            "Today holds two of the fixture's shifts: \(shiftCount.label)"
+        )
+
+        selectPeriod("Week", in: app)
+        XCTAssertTrue(
+            waitForLabel(shiftCount, toContain: "3 completed shifts"),
+            "The week holds the third as well: \(shiftCount.label)"
+        )
+
+        selectPeriod("Day", in: app)
+        XCTAssertTrue(
+            waitForLabel(shiftCount, toContain: "2 completed shifts"),
+            "And switching back counts the day again: \(shiftCount.label)"
+        )
+    }
+
+    /// The amounts recorded against individual deliveries appear as their own
+    /// labelled subtotal, and never as the period's earnings.
+    @MainActor
+    func testDeliveryAmountsAreShownSeparatelyFromTheShiftTotal() throws {
+        let app = launchWithPeriodSummary()
+        openPeriodSummary(in: app)
+
+        let subtotal = app.descendants(matching: .any)["periodDeliveryEarnings"]
+        XCTAssertTrue(scrollTo(subtotal, in: app))
+        XCTAssertTrue(
+            subtotal.label.contains("$24.25"),
+            "The two delivery amounts, added: \(subtotal.label)"
+        )
+        XCTAssertTrue(
+            subtotal.label.contains("2 of 4 deliveries"),
+            "Stated across the deliveries that answered: \(subtotal.label)"
+        )
+        XCTAssertTrue(
+            subtotal.label.contains("separate record"),
+            "And named as a separate record from the shift amounts: \(subtotal.label)"
+        )
+
+        let earnings = app.descendants(matching: .any)["periodEarnings"]
+        XCTAssertTrue(scrollToTop(reaching: earnings, in: app))
+        XCTAssertTrue(
+            earnings.label.contains("$86.25"),
+            "The headline stays the shift amount: \(earnings.label)"
+        )
     }
 
     /// The authorization panel is on screen from launch, in whatever state the
