@@ -32,7 +32,7 @@ counts and errors. Coordinates, addresses and earnings amounts are never logged.
 | `location` | Authorization transitions, Location Services availability, accuracy changes, unrecognised platform values | Any position, because this layer never reads one |
 | `route-capture` | Capture started or stopped, why it could not start, how many samples were retained and persisted, and the *name* of the rule that rejected a candidate | Latitude, longitude, address or route geometry |
 | `earnings` | That an amount was added, updated or removed, or that a save failed | The amount |
-| `pickup-place` | That a place was assigned, changed, removed, reused or created; that a name was refused, by rule name; that a save failed | The name typed, and the normalised key derived from it |
+| `pickup-place` | That a place was assigned, changed, removed, reused, created, renamed or merged; that a name, rename or merge was refused, by rule; that a save failed | The name typed, the normalised key derived from it, and how many deliveries a merge moved |
 
 Four deliberate silences are worth stating.
 

@@ -69,8 +69,24 @@ and one they cannot.
 - **The normalisation key is persisted.** If a future OS changes how case folding behaves, a name
   typed afterwards could fail to match a place stored before it, producing a duplicate. Nothing
   re-keys the catalogue.
-- **The first spelling is permanent.** A place cannot be renamed. Correcting a typo means assigning a
-  new place to each delivery that used the old one.
+- **Correcting a place is manual and explicit.** A place can be renamed, and one place can be merged
+  into another, from the place's own history screen. Neither happens automatically: there is no
+  similarity matching, no edit distance, no duplicate suggestion and no background scan, so two
+  spellings of one business stay two places — with two separate wait histories — until the driver
+  merges them.
+- **A merge cannot be undone, and leaves no trace.** The source place is removed, no alias or
+  redirect is kept, and nothing records that it ever existed. Its deliveries and their recorded times
+  survive under the destination; the name does not. Merging the wrong pair means re-creating a place
+  and reassigning each delivery to it by hand.
+- **A rename leaves no alias either.** The old spelling stops matching, so typing it afterwards
+  creates a new place rather than finding the renamed one.
+- **A failed save leaves the store correct and the screen possibly stale.** A rename or merge the
+  store refuses is rolled back in full, and nothing is half-applied. But SwiftData does not reliably
+  restore the relationship arrays cached on objects a screen is already holding, so a sheet left open
+  after such a failure may show a figure the store does not agree with until it is reopened.
+- **A place nothing references cannot be renamed or merged away.** Both controls are reached from a
+  delivery that names the place, so a place whose deliveries were all deleted can still be chosen as
+  a merge destination but cannot itself be corrected or removed.
 - **Unreferenced places are never collected.** A place whose deliveries have all been deleted stays
   in the local catalogue. It stops appearing in the recent list, and typing the name finds it again.
 - **No visit count, ranking or score.** A place's recorded pickup waits are summarised — see below —
@@ -90,8 +106,9 @@ and one they cannot.
   estimate, and a place's next pickup is free to be nothing like its recorded ones.
 - **Nothing is trimmed.** A forty-minute wait with valid timestamps stays in the history and in the
   median's input. No outlier rejection of any kind is applied.
-- **No merchant comparison.** Places are never ranked, scored, graded or coloured against each other,
-  and no screen lists them side by side.
+- **No merchant comparison.** Places are never ranked, scored, graded or coloured against each other.
+  The one screen that lists places is the merge destination picker, which is alphabetical and shows
+  no figures.
 - **Waits are per place, not per hour or per day.** Nothing splits a place's history by time of day,
   weekday or shift, so a place that is quick at lunch and slow at nine has one median covering both.
 - **No live use.** A running shift shows no historical wait, so nothing informs a decision at the

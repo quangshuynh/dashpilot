@@ -79,9 +79,12 @@ back. So the rule errs toward keeping names apart.
 When a typed name normalises to a place already in the catalogue, that place is **reused**; no second
 row is created. When it does not, a new local place is created.
 
-**The first accepted spelling wins and is never rewritten.** A later `mcdonalds` joins the existing
-place without renaming it. Restyling a name a driver has been reading all week is a surprise, and
-choosing which of two spellings is "better" is not a judgement this app can make.
+**The first accepted spelling wins and is never rewritten by matching.** A later `mcdonalds` joins
+the existing place without renaming it. Restyling a name a driver has been reading all week is a
+surprise, and choosing which of two spellings is "better" is not a judgement this app can make.
+
+The driver may say otherwise. That is [renaming](#correcting-a-place), a deliberate act on one named
+place, and it is the only thing that changes a spelling.
 
 Uniqueness is enforced in `PickupPlaceService` rather than by a unique constraint on the model. A
 unique attribute in SwiftData resolves a collision by *upserting* — overwriting the row this rule
@@ -125,8 +128,115 @@ to fix it without deleting the work the delivery records.
 
 This is deliberately unlike every lifecycle mutation beside it. A pickup place is not an event: it
 orders against no timestamp and changes no interval, duration or rate, so nothing about correcting it
-can make the historical record less true. **Lifecycle timestamps remain uneditable**, and this
-interval did not change that.
+can make the historical record less true. **Lifecycle timestamps remain uneditable.**
+
+The same principle governs [renaming and merging a place](#correcting-a-place), which are safe on a
+place attached to a delivery that is still running for exactly the same reason.
+
+## Correcting a place
+
+A place typed once is a place typed for good, until the driver corrects it. Two operations do that,
+they are different intentions, and **both are explicit**.
+
+### Rename
+
+Renaming changes a place's spelling and, with it, the key the catalogue is matched by. The two are
+written together: a place spelled one way and found by another would create a second row the next
+time its new spelling was typed, which is the exact failure renaming exists to fix.
+
+Nothing else moves. The place keeps its identity and the date it was first named, every delivery
+stays attached to it, no lifecycle timestamp is touched, and its recorded waits — their count, their
+median, the shortest and the longest — are the same waits afterwards. Only identity text changes.
+
+Afterwards the new spelling is authoritative: typing it again finds this place, and typing the old
+one does not. **A rename leaves no alias behind**, and nothing records that the place was ever called
+something else.
+
+The name goes through the same `PickupPlaceName` as naming a place for the first time — the same
+whitespace collapse, the same length limit, the same normalisation. There is no second policy.
+
+### Rename collisions are refused, never merged
+
+If the new name normalises to a key another place already holds, the rename is **refused and nothing
+is written**. The message names the place it collided with and says that merging is what would put
+the two together.
+
+Quietly folding one place into the other would be a merge, and a merge removes a place. A driver
+fixing a typo has not asked for that.
+
+### Merge
+
+Merging moves **every delivery** recorded under one place onto another, and then removes the place
+left empty.
+
+| | Source | Destination |
+| --- | --- | --- |
+| Its deliveries | Move to the destination | Stay where they are |
+| Its name and key | Removed with it | Kept, unchanged |
+| Its identity and creation date | Removed with it | Kept, unchanged |
+
+**The destination wins entirely.** Names are never combined, no alias is kept and no record of the
+merge is written anywhere. The source contributes its delivery relationships and nothing else; what
+survives is one of the two places the driver already had, chosen by them.
+
+No delivery is deleted. Every reassigned delivery keeps its acceptance, arrival, pickup, delivery
+and cancellation times exactly as they were, so its recorded wait is the same interval it always was.
+
+Afterwards the destination's pickup-wait history is the two histories read together, and its position
+in the recent list is the most recent use among all the deliveries it now holds. Neither is written
+by the merge: both are [derived from the relationship](pickup-wait.md), so combining the deliveries
+combines the figures on its own.
+
+A merge is refused when the two places are the same place, and when either is no longer a row the
+store holds. Both refusals happen before anything is changed.
+
+### One operation, or none
+
+The reassignment and the deletion are committed **together**. If the store refuses the save,
+everything rolls back: both places, every delivery where it started. There is no state in which the
+deliveries have moved and the source is still standing beside the destination.
+
+### The interface
+
+Both controls live on a place's own history screen, reached from a delivery in a completed shift's
+log — not on the delivery rows, where a control acts on that one delivery's record.
+
+| Control | What it opens |
+| --- | --- |
+| `Rename` | A sheet with the current spelling prefilled. Nothing is written until Save; Cancel leaves the name as it was |
+| `Merge` | A list of every other place, alphabetically, then a confirmation naming both places and the direction |
+
+The confirmation is explicit about direction and about what happens:
+
+> **Merge "Example Diner" into "Nowhere Noodles"?**
+> All deliveries recorded under Example Diner will move to Nowhere Noodles, keeping their recorded
+> times. Example Diner will then be removed. This cannot be undone.
+
+Destinations are listed by **display name, alphabetically**, with the order the catalogue was built
+in breaking a tie. Alphabetical rather than recent-first on purpose: a driver merging already has one
+particular name in mind, and a list that reorders itself as work is recorded makes it harder to find.
+There is no suggested candidate and no relevance ranking. A new place cannot be created from the
+merge screen — merging into a name that does not exist yet is a rename, and is offered as one.
+
+`Merge` is disabled, with a footer saying why, when the catalogue holds only this place.
+
+VoiceOver names the place on every control — `Rename pickup place, Example Diner` — and speaks each
+destination as the whole operation, `Merge Example Diner into Nowhere Noodles`, so the direction
+cannot be heard as symmetric.
+
+!!! warning "Nothing merges automatically"
+
+    There is no similarity matching, no edit distance, no "did you mean", no background scan for
+    near-duplicates and no rule beyond the exact normalised-key reuse described above. `Nowhere
+    Noodle` and `Nowhere Noodles` stay two places until a driver deliberately merges them. A
+    duplicate is a nuisance they can see; a merge they did not ask for is a distinction the app
+    cannot give back.
+
+### Schema
+
+Neither operation changes the store's shape. The schema stays at **version 6**: no aliases, no merge
+history, no redirect identifiers and no tombstones. Rename mutates two attributes on one row; merge
+mutates relationships and deletes a row. Both are behaviour, not structure.
 
 ## On a completed shift
 
@@ -171,8 +281,9 @@ description of where that driver is, so they are treated the same way coordinate
 
 - They stay on the device. There is no network code, no lookup, no sync and no export.
 - **They are never logged.** The `pickup-place` log category records that a place was assigned,
-  changed, removed, reused or created — never the spelling typed, and never the normalised key
-  derived from it.
+  changed, removed, reused, created, renamed or merged, and which rule refused an operation — never
+  the spelling typed, never the normalised key derived from it, and never how many deliveries a
+  merge moved.
 - Every name in this repository — tests, previews, fixtures, screenshots and this page — is invented.
   No real business is named anywhere.
 

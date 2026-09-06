@@ -55,6 +55,26 @@ refuses a timestamp earlier than the last recorded event. If one ever existed in
 is **excluded**, not clamped to zero and not repaired. A zero standing in for an impossible interval
 would enter a place's history as a real wait of no length.
 
+## Renaming and merging a place
+
+Both figure here because a place's history is derived from its deliveries and stored nowhere.
+
+- **Renaming a place changes nothing.** The sample count, the median, the shortest and longest waits
+  and the most recent sample are all what they were. Only the name above them changes.
+- **Merging one place into another combines their histories**, because the merged deliveries now
+  reference one place and the figures are recomputed from that relationship. Nothing is added up, no
+  stored total is adjusted and no sample is counted twice — a wait belongs to the delivery that
+  recorded it, and each delivery still has exactly one.
+
+A wait excluded before a merge is excluded after it, by the same rule. See
+[Correcting a place](pickup-identity.md#correcting-a-place).
+
+!!! info "Two spellings split a history until you merge them"
+
+    A place typed two ways is two places, so its waits sit in two histories with two medians.
+    DashPilot does not detect that and will not merge them on its own. The correction is explicit and
+    lives on the place's own screen.
+
 ## What a place's history says
 
 For each pickup place, derived from the deliveries that reference it:
