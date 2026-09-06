@@ -124,6 +124,16 @@ The alternatives were all dishonest. Marking them delivered would record complet
 never made; discarding them would erase deliveries they did make. Nothing is auto-completed,
 auto-cancelled or deleted.
 
+## By voice
+
+Starting a delivery, and recording its next event, can also be asked for without the screen. The
+event recorded is whichever one `nextAction` says comes next, and the confirmation names it.
+
+**A spoken step is recorded only while exactly one delivery is in progress.** With two, the request
+names neither, so nothing is recorded and the refusal says how many are running and where to record
+it. `Start Delivery` is unaffected: it creates a delivery rather than naming one. See
+[Voice and system actions](voice-actions.md).
+
 ## Relaunch recovery
 
 The store is the only place delivery state lives, so recovery is not a code path. **Every** delivery

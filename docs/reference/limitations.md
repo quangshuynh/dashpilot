@@ -20,6 +20,24 @@ and one they cannot.
   timestamps and they are always reported as partial.
 - **Nothing is drawn.** There is no map and no route visualisation.
 
+## Voice and system actions
+
+- **Four actions only.** Start a shift, end a shift, start a delivery, record that delivery's next
+  event. Nothing else DashPilot does is reachable without the screen.
+- **A spoken delivery step needs exactly one delivery in progress.** With two or more, nothing is
+  recorded and the refusal names the count. This is a refusal, not a gap: a sentence names no
+  particular order, and guessing one would write an event into a delivery the driver did not mean.
+- **A shift started by voice records no route until the app is opened**, because capture is
+  foreground-only. The shift's own times are recorded exactly as they would be from the screen.
+- **No cancellation, no amount, no cost, no pickup name and nothing about location** can be asked for
+  by voice. Every one of them either cannot be undone or would have to be dictated.
+- **Nothing is read back.** No summary, rate or total is spoken; a confirmation states only what was
+  just recorded.
+- **No performed intent is donated to the system**, so nothing suggests these actions at a time of
+  day. App Shortcuts are the only discovery.
+- **No Live Activity, widget, control, watch app or notification.** The intents are the whole
+  off-screen surface.
+
 ## Deliveries
 
 - **Nothing is detected.** Every delivery timestamp exists because the driver tapped a control.

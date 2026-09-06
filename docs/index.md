@@ -49,8 +49,8 @@ with the reason any of them could not be derived.
 
 ## Engineering characteristics
 
-- **First-party frameworks only.** SwiftUI, SwiftData, Core Location, OSLog, Swift Testing and
-  XCUITest. There are no third-party runtime dependencies.
+- **First-party frameworks only.** SwiftUI, SwiftData, Core Location, App Intents, OSLog, Swift
+  Testing and XCUITest. There are no third-party runtime dependencies.
 - **Versioned persistence.** The schema has been versioned since v1 and carries a migration plan
   exercised by tests that open stores written under every older version. See
   [Migrations](architecture/migrations.md).
