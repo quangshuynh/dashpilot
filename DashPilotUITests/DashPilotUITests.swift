@@ -586,6 +586,52 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertTrue(status.label.contains("1 delivery completed"), "The shift's earlier delivery is still counted")
     }
 
+    /// A shift and every delivery on it survive the driver leaving the app and
+    /// coming back, which is what a shift spent answering messages and reading
+    /// maps actually looks like.
+    ///
+    /// The interface is rebuilt from the store on return rather than from view
+    /// state, so nothing here should have to be restored by hand. Route capture
+    /// pauses and resumes across the same transition; that half is asserted in
+    /// `RealWorldRecoveryTests`, because a UI test cannot make the simulator
+    /// produce positions.
+    @MainActor
+    func testStackedWorkSurvivesLeavingAndReturningToTheApp() throws {
+        let app = launchWithActiveDelivery()
+
+        let accepted = deliveryButton("deliveryActionButton", containing: "Delivery 2", in: app)
+        XCTAssertTrue(scrollTo(accepted, in: app))
+
+        XCUIDevice.shared.press(.home)
+        app.activate()
+
+        XCTAssertTrue(
+            app.buttons["endShiftButton"].waitForExistence(timeout: 10),
+            "The shift is still running; nothing about returning to the app ends one"
+        )
+        let carrying = deliveryButton("deliveryActionButton", containing: "Delivery 3", in: app)
+        XCTAssertTrue(scrollTo(accepted, in: app), "Both deliveries are still on screen")
+        XCTAssertEqual(accepted.label, "Delivery 2. Mark arrived at pickup")
+        XCTAssertEqual(carrying.label, "Delivery 3. Mark delivery completed")
+        XCTAssertEqual(
+            app.buttons.matching(identifier: "deliveryActionButton").count,
+            2,
+            "Neither delivery was duplicated by the return, and neither was dropped"
+        )
+
+        // And the driver can still see whether the route is being recorded.
+        XCTAssertTrue(app.descendants(matching: .any)["routeCaptureStatus"].exists)
+
+        // The recovered card is a control over the real record, not a redrawn
+        // placeholder: advancing it moves that delivery and leaves the other.
+        carrying.tap()
+        XCTAssertTrue(
+            waitForCount(app.buttons.matching(identifier: "deliveryActionButton"), toEqual: 1),
+            "The delivered one leaves the list"
+        )
+        XCTAssertEqual(accepted.label, "Delivery 2. Mark arrived at pickup")
+    }
+
     /// Completing one of two deliveries leaves the other running.
     @MainActor
     func testCompletingOneDeliveryLeavesTheOtherRunning() throws {
@@ -2197,6 +2243,33 @@ final class DashPilotUITests: XCTestCase {
 
         app.buttons["periodPreviousButton"].tap()
         XCTAssertTrue(next.isEnabled, "Once in the past, the way back to now is open")
+    }
+
+    /// Leaving the app and coming back keeps the period the driver had chosen.
+    ///
+    /// The summary re-reads the clock on returning to the foreground, so that a
+    /// screen opened before midnight does not go on calling yesterday `Today`.
+    /// That re-read must move the *naming* only: the period being read stays the
+    /// one the driver stepped to, and its figures do not change underneath them.
+    @MainActor
+    func testSummarySurvivesLeavingAndReturningToTheApp() throws {
+        let app = launchWithPeriodSummary()
+        openPeriodSummary(in: app)
+        selectPeriod("Month", in: app)
+
+        app.buttons["periodPreviousButton"].tap()
+        let chosen = periodTitle(in: app)
+
+        XCUIDevice.shared.press(.home)
+        app.activate()
+
+        let title = app.descendants(matching: .any)["periodTitle"]
+        XCTAssertTrue(title.waitForExistence(timeout: 10), "The summary is still the screen on show")
+        XCTAssertEqual(periodTitle(in: app), chosen, "The month the driver stepped to is still selected")
+        XCTAssertTrue(
+            app.buttons["periodNextButton"].isEnabled,
+            "And the way back to the current month is still open"
+        )
     }
 
     /// Choosing Custom and applying a range summarises the dates it covers.
