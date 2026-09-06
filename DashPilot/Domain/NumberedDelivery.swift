@@ -84,4 +84,44 @@ nonisolated struct NumberedDelivery: Identifiable {
     func spokenPickupPlaceLabel(hasPlace: Bool) -> String {
         hasPlace ? "Change pickup place for \(title)" : "Add pickup place for \(title)"
     }
+
+    /// What the earnings control prints, which depends only on whether an amount
+    /// is already recorded.
+    func earningsActionTitle(hasEarnings: Bool) -> String {
+        hasEarnings ? "Edit Earnings" : "Add Earnings"
+    }
+
+    /// What VoiceOver hears for that control, named for its delivery like every
+    /// other one.
+    ///
+    /// A log of finished deliveries puts several of these on one screen, and
+    /// "Add Earnings" alone would identify its target by nothing but where it
+    /// happens to sit — which is exactly the mistake that puts an amount against
+    /// the wrong order.
+    func spokenEarningsLabel(hasEarnings: Bool) -> String {
+        hasEarnings ? "Edit gross earnings for \(title)" : "Add gross earnings for \(title)"
+    }
+
+    /// What VoiceOver hears for the control that deletes the amount. `from`
+    /// rather than `for`, because it takes something away.
+    var spokenRemoveEarningsLabel: String { "Remove gross earnings from \(title)" }
+
+    /// A recorded amount spoken with the delivery it belongs to.
+    ///
+    /// A bare `$14.75` in a list of deliveries says which figure but not whose,
+    /// and the whole risk this project designs against is a monetary figure read
+    /// against the wrong record.
+    func spokenEarnings(_ formattedAmount: String) -> String {
+        "Gross earnings for \(title), \(formattedAmount)"
+    }
+
+    /// The delivery's own hourly figure, spoken with the delivery it belongs to
+    /// and with the denominator named in full.
+    ///
+    /// "Per hour" alone would be heard as a wage. The phrase says *recorded
+    /// delivery hour* everywhere, printed and spoken, because the denominator is
+    /// one delivery's own elapsed lifecycle and nothing else.
+    func spokenDeliveryHourRate(_ formattedAmount: String) -> String {
+        "\(formattedAmount) gross earnings per recorded delivery hour, for \(title)"
+    }
 }
