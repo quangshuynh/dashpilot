@@ -2112,6 +2112,196 @@ final class DashPilotUITests: XCTestCase {
         )
     }
 
+    // MARK: Month and chosen ranges
+
+    /// The number a period's summary reports, or `nil` if it is showing an
+    /// empty state instead.
+    @MainActor
+    private func shiftCount(in app: XCUIApplication) -> Int? {
+        let element = app.descendants(matching: .any)["periodShiftCount"]
+        guard element.waitForExistence(timeout: 10) else { return nil }
+        // The spoken label is "4 completed shifts".
+        return Int(element.label.prefix(while: \.isNumber))
+    }
+
+    @MainActor
+    private func periodTitle(in app: XCUIApplication) -> String {
+        app.descendants(matching: .any)["periodTitle"].label
+    }
+
+    /// A month holds at least everything its weeks and days do.
+    ///
+    /// Counted rather than asserted against a literal: the fixture is anchored
+    /// to whenever the test runs, so which of its shifts share a month with
+    /// today depends on the date. The relationship between the three is what
+    /// this journey is about, and that holds on every date.
+    @MainActor
+    func testMonthSummaryIncludesTheWholeWeekAndMore() throws {
+        let app = launchWithPeriodSummary()
+        openPeriodSummary(in: app)
+
+        selectPeriod("Day", in: app)
+        let day = try XCTUnwrap(shiftCount(in: app), "Today holds completed shifts")
+
+        selectPeriod("Week", in: app)
+        let week = try XCTUnwrap(shiftCount(in: app), "So does this week")
+
+        selectPeriod("Month", in: app)
+        let month = try XCTUnwrap(shiftCount(in: app), "And so does this month")
+
+        XCTAssertLessThanOrEqual(day, week, "A week holds at least its days")
+        XCTAssertLessThanOrEqual(week, month, "A month holds at least the part of the week inside it")
+        XCTAssertGreaterThanOrEqual(month, 2, "The fixture's shifts are all in the month it is anchored to")
+    }
+
+    /// Stepping back from the current month changes which records are included.
+    /// The fixture only holds recent shifts, so the month before it is empty —
+    /// and says so, rather than showing a grid of zeroes.
+    @MainActor
+    func testPreviousMonthChangesTheRecordsIncluded() throws {
+        let app = launchWithPeriodSummary()
+        openPeriodSummary(in: app)
+        selectPeriod("Month", in: app)
+
+        let current = periodTitle(in: app)
+        XCTAssertNotNil(shiftCount(in: app), "This month holds the fixture's shifts")
+
+        let previous = app.buttons["periodPreviousButton"]
+        XCTAssertTrue(previous.waitForExistence(timeout: 5))
+        // Two steps back, so the month before is empty whichever day of the
+        // month the test runs on.
+        previous.tap()
+        previous.tap()
+
+        let empty = app.descendants(matching: .any)["periodEmptyState"]
+        XCTAssertTrue(empty.waitForExistence(timeout: 5), "An earlier month holds nothing")
+        XCTAssertTrue(
+            empty.label.contains("month"),
+            "The empty state names the period it is about: \(empty.label)"
+        )
+        XCTAssertNotEqual(periodTitle(in: app), current, "And the title moved with it")
+        XCTAssertFalse(app.buttons["exportPeriodButton"].exists, "An empty month offers no export")
+    }
+
+    /// The existing rule, applied to months: nothing is offered beyond the
+    /// period the driver is in.
+    @MainActor
+    func testCurrentMonthCannotStepForward() throws {
+        let app = launchWithPeriodSummary()
+        openPeriodSummary(in: app)
+        selectPeriod("Month", in: app)
+
+        let next = app.buttons["periodNextButton"]
+        XCTAssertTrue(next.waitForExistence(timeout: 5))
+        XCTAssertFalse(next.isEnabled, "A future month holds no records and is not offered")
+
+        app.buttons["periodPreviousButton"].tap()
+        XCTAssertTrue(next.isEnabled, "Once in the past, the way back to now is open")
+    }
+
+    /// Choosing Custom and applying a range summarises the dates it covers.
+    @MainActor
+    func testCustomRangeSummarisesTheChosenDates() throws {
+        let app = launchWithPeriodSummary()
+        openPeriodSummary(in: app)
+        selectPeriod("Custom", in: app)
+
+        // No stepping for a chosen range: there is no neighbouring range to
+        // step to, so the chevrons are replaced by the way back to the picker.
+        XCTAssertFalse(app.buttons["periodPreviousButton"].exists)
+        XCTAssertFalse(app.buttons["periodNextButton"].exists)
+
+        let choose = app.buttons["periodCustomRangeButton"]
+        XCTAssertTrue(choose.waitForExistence(timeout: 5), "A range is chosen, not stepped to")
+        choose.tap()
+
+        let summary = app.descendants(matching: .any)["customRangeSummary"]
+        XCTAssertTrue(summary.waitForExistence(timeout: 5), "The sheet says what the dates select")
+        XCTAssertTrue(
+            summary.label.contains("Custom reporting range"),
+            "And says what kind of thing it is: \(summary.label)"
+        )
+
+        app.buttons["customRangeApplyButton"].tap()
+
+        XCTAssertNotNil(shiftCount(in: app), "The applied range holds the fixture's recent shifts")
+        XCTAssertTrue(
+            periodTitle(in: app).contains("selected day"),
+            "The chosen range says how many days it covers: \(periodTitle(in: app))"
+        )
+    }
+
+    /// Cancel is not a quiet Apply. The period on screen is the one that was
+    /// there before the sheet opened.
+    @MainActor
+    func testCancellingTheRangePickerChangesNothing() throws {
+        let app = launchWithPeriodSummary()
+        openPeriodSummary(in: app)
+        selectPeriod("Custom", in: app)
+
+        let before = periodTitle(in: app)
+        let count = shiftCount(in: app)
+
+        let choose = app.buttons["periodCustomRangeButton"]
+        XCTAssertTrue(choose.waitForExistence(timeout: 5))
+        choose.tap()
+        XCTAssertTrue(app.buttons["customRangeCancelButton"].waitForExistence(timeout: 5))
+        app.buttons["customRangeCancelButton"].tap()
+
+        XCTAssertTrue(choose.waitForExistence(timeout: 5), "Back on the summary")
+        XCTAssertEqual(periodTitle(in: app), before, "Cancel left the range exactly as it was")
+        XCTAssertEqual(shiftCount(in: app), count)
+    }
+
+    /// The chosen range survives a trip through the other period lengths, so a
+    /// driver can compare it against a week without choosing it again.
+    @MainActor
+    func testTheChosenRangeSurvivesSwitchingAway() throws {
+        let app = launchWithPeriodSummary()
+        openPeriodSummary(in: app)
+        selectPeriod("Custom", in: app)
+
+        let chosen = periodTitle(in: app)
+        XCTAssertFalse(chosen.isEmpty)
+
+        selectPeriod("Week", in: app)
+        selectPeriod("Month", in: app)
+        selectPeriod("Custom", in: app)
+
+        XCTAssertEqual(periodTitle(in: app), chosen, "The range came back as it was left")
+    }
+
+    /// Exporting a month names the month it covers.
+    @MainActor
+    func testExportMonthOpensTheExportFlow() throws {
+        let app = launchWithPeriodSummary()
+        openPeriodSummary(in: app)
+        selectPeriod("Month", in: app)
+
+        openExport("exportPeriodButton", in: app)
+
+        let name = exportFileName(in: app)
+        XCTAssertTrue(name.contains("DashPilot-Month-"), "The file names the month it covers: \(name)")
+        XCTAssertTrue(app.buttons["shareExportButton"].exists, "And it is offered to the share sheet")
+        XCTAssertFalse(app.descendants(matching: .any)["exportFailureMessage"].exists)
+    }
+
+    /// Exporting a chosen range names both of the days the driver selected.
+    @MainActor
+    func testExportCustomRangeOpensTheExportFlow() throws {
+        let app = launchWithPeriodSummary()
+        openPeriodSummary(in: app)
+        selectPeriod("Custom", in: app)
+
+        openExport("exportPeriodButton", in: app)
+
+        let name = exportFileName(in: app)
+        XCTAssertTrue(name.contains("DashPilot-Range-"), "The file names the range it covers: \(name)")
+        XCTAssertTrue(name.contains("-to-"), "Both selected days are in the name: \(name)")
+        XCTAssertTrue(app.buttons["shareExportButton"].exists)
+        XCTAssertFalse(app.descendants(matching: .any)["exportFailureMessage"].exists)
+    }
+
     @MainActor
     func testShowsLocationAuthorizationState() throws {
         let app = launchWithEmptyStore()
