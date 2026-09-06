@@ -723,6 +723,43 @@ enum PreviewSupport {
             .modelContainer(container)
     }
 
+    // MARK: Export
+
+    /// The scopes the export sheet has to present.
+    enum ExportFixture {
+        /// One completed shift, with an amount, a route and its deliveries.
+        case singleShift
+        /// The week the synthetic period fixture covers.
+        case week
+    }
+
+    /// The export sheet over a synthetic store.
+    ///
+    /// The file it writes goes into the app's temporary export directory like
+    /// any other, and holds only invented amounts, offsets and place names.
+    @MainActor
+    static func exportSheet(_ fixture: ExportFixture) -> some View {
+        let container = periodSummaryContainer()
+        let scope: ExportScope
+
+        switch fixture {
+        case .singleShift:
+            let descriptor = FetchDescriptor<Shift>(
+                predicate: #Predicate { $0.endedAt != nil },
+                sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
+            )
+            let shift = (try? container.mainContext.fetch(descriptor))?.first
+            // A fixture with no shift cannot demonstrate the sheet, but it can
+            // still show the refusal, which is a state worth seeing.
+            scope = .shift(shift?.id ?? UUID())
+        case .week:
+            scope = ReportingPeriod(unit: .week, containing: .now)
+                .map(ExportScope.period) ?? .allHistory
+        }
+
+        return ShiftExportSheet(scope: scope).modelContainer(container)
+    }
+
     /// The pickup-place editor over a synthetic delivery.
     ///
     /// The store is seeded with a second delivery that already names a place, so

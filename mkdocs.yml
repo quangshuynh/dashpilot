@@ -107,6 +107,7 @@ nav:
       - Recorded mileage: product/recorded-mileage.md
       - Earnings and metrics: product/earnings-and-metrics.md
       - Period summaries: product/period-summaries.md
+      - History export: product/history-export.md
   - Architecture:
       - Overview: architecture/overview.md
       - Persistence: architecture/persistence.md

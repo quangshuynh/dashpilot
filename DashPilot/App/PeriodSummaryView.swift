@@ -46,6 +46,10 @@ struct PeriodSummaryView: View {
     /// The measured routes, and the selection they were measured for.
     @State private var measurement: RouteMeasurement?
 
+    /// Exporting the selected period. The sheet writes the file when it opens,
+    /// so this stays false until the driver asks.
+    @State private var isExporting = false
+
     private let calculator = PeriodMetricsCalculator()
 
     var body: some View {
@@ -62,6 +66,11 @@ struct PeriodSummaryView: View {
                     earningsSection(metrics)
                     drivingSection(metrics)
                     deliveriesSection(metrics)
+                    // Only for a period that holds something. A period with no
+                    // completed shift has nothing to export, and an export
+                    // control over an empty state is an offer the app would
+                    // have to refuse.
+                    exportSection
                 }
             } else {
                 Section {
@@ -73,6 +82,14 @@ struct PeriodSummaryView: View {
         .navigationTitle("Summary")
         .navigationBarTitleDisplayMode(.inline)
         .task(id: measurementToken) { measureRoutes() }
+        // On the list rather than on the section that presents it: the sections
+        // are rebuilt whenever the routes are re-measured, and a sheet attached
+        // to one that briefly disappears goes with it.
+        .sheet(isPresented: $isExporting) {
+            if let period {
+                ShiftExportSheet(scope: .period(period))
+            }
+        }
     }
 
     // MARK: Period selection
@@ -340,6 +357,39 @@ struct PeriodSummaryView: View {
                 between the two is not a shortfall.
                 """
             )
+        }
+    }
+
+    /// Taking this day or week somewhere else.
+    ///
+    /// Last, under the figures it exports, and it names the period rather than
+    /// saying "Export": the screen has a Day and a Week to choose between, and a
+    /// control that does not say which one it means is a control that exports
+    /// the wrong thing.
+    @ViewBuilder
+    private var exportSection: some View {
+        if let period {
+            let scope = ExportScope.period(period)
+            Section {
+                Button {
+                    isExporting = true
+                } label: {
+                    Label(scope.actionTitle, systemImage: "square.and.arrow.up")
+                }
+                .accessibilityLabel(scope.spokenActionLabel)
+                .accessibilityIdentifier("exportPeriodButton")
+            } header: {
+                Text("Export")
+            } footer: {
+                Text(
+                    """
+                    Writes the completed shifts of this \(unit.stepNoun), their deliveries, and this \
+                    summary — each figure with the count of shifts it was worked out from — as a file \
+                    on this device. The counts are in the JSON export; the CSV is the flat list of \
+                    shifts and deliveries. Recorded positions are not included.
+                    """
+                )
+            }
         }
     }
 

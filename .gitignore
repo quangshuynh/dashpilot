@@ -77,3 +77,7 @@ site/
 
 # Xcode derived data, when building from the command line into the working tree
 DerivedData/
+
+# Xcode test result bundles, which CI writes into the working tree and uploads
+# as build artifacts. They are large, binary and regenerated on every run.
+*.xcresult/
