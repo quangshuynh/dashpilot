@@ -349,6 +349,12 @@ and never described as complete, final or projected. There is **no forecasting**
 kind: nothing extrapolates a partial week to its end, and no figure is a target,
 a pace or a comparison against another period.
 
+Which period is the current one is read when the screen opens and again whenever the app
+returns to the foreground, so a summary opened before midnight and returned to after one
+does not go on calling yesterday `Today`, or refuse to step forward to the day that has
+begun. The re-read moves the **naming** only: the period on screen stays the one the
+driver stepped to, and its figures do not change underneath them.
+
 ## What is deliberately absent
 
 - **No charts.** Figures are read as text.

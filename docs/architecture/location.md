@@ -140,6 +140,15 @@ resuming capture if the shift is still running and location is still usable.
 The route therefore has a gap whenever DashPilot is not in front. iOS guarantees no background
 execution, the app claims none, and the running shift says plainly when capture is paused.
 
+The one pause the app does **not** accept is the system's own. `CLLocationManager` pauses updates by
+default once iOS decides a device has stopped moving, which on a delivery shift is a driver waiting
+at a pickup, and it does not resume them by itself. With no background location mode there is
+nothing for the system to wake, so the rest of the shift would go unrecorded while the screen still
+said tracking. `CoreLocationTrackingProvider.configure(_:)` therefore sets
+`pausesLocationUpdatesAutomatically` to `false`, alongside best accuracy, the automotive activity
+type and no distance filter. Capture is still stopped deliberately whenever the app leaves the
+foreground, so nothing keeps the hardware running behind the driver's back.
+
 ### The acceptance policy
 
 Core Location hands back whatever the hardware produced: cached fixes from minutes ago, positions
