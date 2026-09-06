@@ -42,11 +42,15 @@ nonisolated final class PickupPlace {
 
     /// The spelling shown to the driver.
     ///
-    /// The **first** accepted spelling wins and is never rewritten: a later
-    /// `mcdonalds` reuses this place without changing what it is called. Silently
-    /// restyling a name a driver has been reading all week is a surprise, and
-    /// picking the "better" of two spellings is not a judgement this app is in a
-    /// position to make.
+    /// The **first** accepted spelling wins and is never rewritten *by matching*:
+    /// a later `mcdonalds` reuses this place without changing what it is called.
+    /// Silently restyling a name a driver has been reading all week is a
+    /// surprise, and picking the "better" of two spellings is not a judgement
+    /// this app is in a position to make.
+    ///
+    /// The driver may say otherwise, which is what ``rename(to:)`` is. That is a
+    /// deliberate correction rather than a side effect of typing, and it is the
+    /// only thing that rewrites this.
     private(set) var displayName: String
 
     /// The key deliveries are matched by, from ``PickupPlaceName``.
@@ -87,6 +91,29 @@ nonisolated final class PickupPlace {
         normalizedName = name.key
         self.createdAt = createdAt
     }
+
+    /// Replaces both forms of this place's name with a new one.
+    ///
+    /// The two are written together on purpose. A display name and the key it is
+    /// matched by are one fact in two shapes, and updating either alone would
+    /// leave a place that is spelled one way and found by another — the next
+    /// delivery typed under the new spelling would create a second row beside
+    /// this one, which is the exact failure renaming exists to fix.
+    ///
+    /// Everything else is left alone: the same ``id``, the same ``createdAt``
+    /// and the same ``deliveries``. A rename changes what a place is *called*,
+    /// never which work was done there, so no delivery moves, no lifecycle
+    /// timestamp is touched and no recorded wait changes.
+    ///
+    /// This is where the first-accepted-spelling-wins rule ends. That rule
+    /// governs *matching* — a later `mcdonalds` still joins this place without
+    /// restyling it — and this method is the driver deliberately saying
+    /// otherwise. Whether the new key collides with another place is not decided
+    /// here: see ``PickupPlaceService/rename(_:to:)``.
+    func rename(to name: PickupPlaceName) {
+        displayName = name.display
+        normalizedName = name.key
+    }
 }
 
 extension PickupPlace {
@@ -99,6 +126,26 @@ extension PickupPlace {
     static func namedBefore(_ lhs: PickupPlace, _ rhs: PickupPlace) -> Bool {
         if lhs.createdAt != rhs.createdAt { return lhs.createdAt < rhs.createdAt }
         return lhs.id.uuidString < rhs.id.uuidString
+    }
+
+    /// Alphabetical order for a list a driver reads: display name first, with
+    /// the catalogue's own order breaking a tie.
+    ///
+    /// `localizedStandardCompare` is the comparison the Finder and every other
+    /// list of names on the platform uses, so `example diner` sorts beside
+    /// `Example Diner` rather than after every capitalised name, and digits in a
+    /// name sort numerically. It is a **presentation** order and never an
+    /// identity rule — two names that sort adjacently are still two places.
+    ///
+    /// Total and repeatable, for the reason ``namedBefore(_:_:)`` is: a list the
+    /// driver is choosing a merge destination from must not reorder itself
+    /// between two reads.
+    static func displayedBefore(_ lhs: PickupPlace, _ rhs: PickupPlace) -> Bool {
+        switch lhs.displayName.localizedStandardCompare(rhs.displayName) {
+        case .orderedAscending: true
+        case .orderedDescending: false
+        case .orderedSame: namedBefore(lhs, rhs)
+        }
     }
 
     /// The most recent acceptance among the deliveries naming this place, or

@@ -268,6 +268,104 @@ struct PickupPlacePersistenceTests {
         #expect(diner.pickupWaitMetrics().typicalDuration == nil)
     }
 
+    // MARK: Correction
+
+    @Test("A renamed place is still one place, under its new name, after a reopen")
+    func renameSurvivesAReopen() throws {
+        let (storeURL, cleanUp) = try makeStoreURL()
+        defer { cleanUp() }
+        var placeID = UUID()
+
+        do {
+            let context = ModelContext(try ModelContainerFactory.makeContainer(at: storeURL))
+            let deliveries = DeliveryService(context: context)
+            let places = PickupPlaceService(context: context)
+            try ShiftService(context: context).startShift(at: start)
+
+            let delivery = try deliveries.startDelivery(at: at(300))
+            let place = try places.assignPlace(named: "Nowhere Noodle", to: delivery, at: at(300))
+            try deliveries.markArrivedAtPickup(delivery, at: at(420))
+            try deliveries.markPickedUp(delivery, at: at(780))
+            try deliveries.markDelivered(delivery, at: at(1_200))
+
+            try places.rename(place, to: "Nowhere Noodles")
+            placeID = place.id
+        }
+
+        let context = ModelContext(try ModelContainerFactory.makeContainer(at: storeURL))
+        let stored = try context.fetch(FetchDescriptor<PickupPlace>())
+
+        #expect(stored.count == 1, "A rename corrected a row rather than leaving two behind")
+        let place = try #require(stored.first)
+        #expect(place.id == placeID, "The same row, not a replacement")
+        #expect(place.displayName == "Nowhere Noodles")
+        #expect(place.deliveries.count == 1)
+        #expect(place.pickupWaitMetrics().sampleCount == 1)
+        #expect(place.pickupWaitMetrics().medianDuration == 360, "The six-minute wait recorded before the rename")
+
+        // The persisted key moved with the spelling, so the new name is what
+        // finds this place in a later process.
+        let resolved = try PickupPlaceService(context: context).resolvePlace(named: "nowhere noodles", at: at(3_600))
+        #expect(resolved.id == placeID)
+        #expect(try context.fetch(FetchDescriptor<PickupPlace>()).count == 1)
+    }
+
+    @Test("A reopened store holds only the destination, with both places' deliveries")
+    func mergeSurvivesAReopen() throws {
+        let (storeURL, cleanUp) = try makeStoreURL()
+        defer { cleanUp() }
+        var destinationID = UUID()
+        var sourceID = UUID()
+
+        do {
+            let context = ModelContext(try ModelContainerFactory.makeContainer(at: storeURL))
+            let shifts = ShiftService(context: context)
+            let deliveries = DeliveryService(context: context)
+            let places = PickupPlaceService(context: context)
+            try shifts.startShift(at: start)
+
+            // Waits of 5, 15 and 30 minutes: the first two at the destination,
+            // the third at the place merged into it.
+            for (step, wait) in [300.0, 900.0, 1_800.0].enumerated() {
+                let accepted = Double(step) * 3_600
+                let delivery = try deliveries.startDelivery(at: at(accepted))
+                try places.assignPlace(named: step == 2 ? "Example Diner" : "Nowhere Noodles", to: delivery)
+                try deliveries.markArrivedAtPickup(delivery, at: at(accepted + 120))
+                try deliveries.markPickedUp(delivery, at: at(accepted + 120 + wait))
+                try deliveries.markDelivered(delivery, at: at(accepted + 600 + wait))
+            }
+            try shifts.endActiveShift(at: at(18_000))
+
+            let stored = try context.fetch(FetchDescriptor<PickupPlace>())
+            let destination = try #require(stored.first { $0.displayName == "Nowhere Noodles" })
+            let source = try #require(stored.first { $0.displayName == "Example Diner" })
+            destinationID = destination.id
+            sourceID = source.id
+
+            try places.merge(source, into: destination)
+        }
+
+        let context = ModelContext(try ModelContainerFactory.makeContainer(at: storeURL))
+        let stored = try context.fetch(FetchDescriptor<PickupPlace>())
+
+        #expect(stored.map(\.id) == [destinationID], "The source is gone from the store, not just from a relationship")
+        #expect(!stored.contains { $0.id == sourceID })
+
+        let destination = try #require(stored.first)
+        #expect(destination.displayName == "Nowhere Noodles", "The destination's own spelling survived")
+        #expect(destination.deliveries.count == 3)
+        #expect(try context.fetch(FetchDescriptor<Delivery>()).count == 3, "No delivery was deleted with the place")
+        #expect(try context.fetch(FetchDescriptor<Delivery>()).allSatisfy { $0.pickupPlace?.id == destinationID })
+
+        // 5, 15 and 30 minutes, recomputed from the relationship rather than
+        // read from anything the merge wrote.
+        let metrics = destination.pickupWaitMetrics()
+        #expect(metrics.sampleCount == 3)
+        #expect(metrics.medianDuration == 900)
+        #expect(metrics.shortestDuration == 300)
+        #expect(metrics.longestDuration == 1_800)
+    }
+
     // MARK: Migration
 
     @Test("A version 5 store opens under version 6 with everything it held and no invented places")
