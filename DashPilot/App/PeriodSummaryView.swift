@@ -39,6 +39,16 @@ struct PeriodSummaryView: View {
     @Query(filter: #Predicate<Shift> { $0.endedAt != nil }, sort: \Shift.startedAt, order: .reverse)
     private var completedShifts: [Shift]
 
+    /// Every recorded expense. Selected into the period by its **own** date, by
+    /// the same half-open rule a shift is selected by — an expense belongs to no
+    /// shift, so nothing here reads one through the work.
+    ///
+    /// Unfiltered by the query for the reason the shifts are: the calculator
+    /// applies the membership rule, and reading them all costs nothing to
+    /// measure.
+    @Query(sort: \Expense.occurredAt, order: .reverse)
+    private var recordedExpenses: [Expense]
+
     @State private var unit: ReportingPeriodUnit = .day
 
     /// A moment inside the selected calendar period. Stepping moves this to the
@@ -92,15 +102,25 @@ struct PeriodSummaryView: View {
             } else if let metrics {
                 if metrics.isEmpty {
                     emptySection(metrics)
+                    // A period with no completed shift can still hold recorded
+                    // costs: a driver can buy fuel on a day off. Dropping the
+                    // section here would hide a record they entered behind a
+                    // sentence about shifts.
+                    if metrics.expenses.hasRecords {
+                        expensesSection(metrics)
+                    }
                 } else {
                     summarySection(metrics)
                     earningsSection(metrics)
+                    expensesSection(metrics)
                     drivingSection(metrics)
                     deliveriesSection(metrics)
-                    // Only for a period that holds something. A period with no
-                    // completed shift has nothing to export, and an export
-                    // control over an empty state is an offer the app would
-                    // have to refuse.
+                }
+                // Only for a period that holds something. A period with neither
+                // a completed shift nor an expense has nothing to export, and an
+                // export control over an empty state is an offer the app would
+                // have to refuse.
+                if metrics.hasAnyRecords {
                     exportSection
                 }
             } else {
@@ -335,6 +355,90 @@ struct PeriodSummaryView: View {
         }
     }
 
+    /// What the driver recorded the period cost, and what their recorded
+    /// earnings come to after it.
+    ///
+    /// Shown even when nothing was recorded, and that is the point: a period
+    /// with no expense in it says so in words, so a driver reading a gross
+    /// figure can see that DashPilot is not quietly holding costs back — and so
+    /// the absence of a net figure has a reason on screen beside it.
+    private func expensesSection(_ metrics: PeriodMetrics) -> some View {
+        Section {
+            if let statement = metrics.expenseStatement(locale: locale) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(statement)
+                        .font(.headline)
+                        .monospacedDigit()
+                    Text(metrics.expenseBasisStatement)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel(metrics.spokenExpenseStatement(locale: locale))
+                .accessibilityIdentifier("periodExpenses")
+            } else {
+                Text("No expenses recorded")
+                    .foregroundStyle(.secondary)
+                    .accessibilityLabel(metrics.spokenExpenseStatement(locale: locale))
+                    .accessibilityIdentifier("periodExpenses")
+            }
+
+            // Only the categories with a record in them. A category listed at
+            // $0.00 would say the driver recorded that it cost nothing.
+            ForEach(metrics.expenses.categoryTotals) { total in
+                LabeledContent(total.category.title) {
+                    Text(total.total.formatted(locale: locale)).monospacedDigit()
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel(metrics.categoryStatement(total, locale: locale))
+                .accessibilityIdentifier("periodExpenseCategory")
+            }
+
+            netRow(metrics)
+        } header: {
+            Text("Expenses")
+        } footer: {
+            Text(
+                """
+                Expenses are what you entered, on the dates you gave them. They are not attached to a \
+                shift or a delivery, nothing is divided across your work, and DashPilot records no \
+                purchase and estimates no cost of its own — so anything you did not enter is missing \
+                here rather than counted as nothing. \(metrics.netTitle) is those recorded costs \
+                taken off your recorded gross earnings. It is not profit and it is not a tax figure.
+                """
+            )
+        }
+    }
+
+    /// The net figure, or the sentence saying which half of it the period's
+    /// records do not have.
+    ///
+    /// The caution line is not optional and is not a footnote: both halves are
+    /// subtotals of what the driver entered, so the difference is an upper bound
+    /// on what they actually netted, and the figure is meaningless without that.
+    private func netRow(_ metrics: PeriodMetrics) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            LabeledContent(metrics.netTitle) {
+                if let statement = metrics.netStatement(locale: locale) {
+                    Text(statement).monospacedDigit()
+                } else {
+                    Text("Not available").foregroundStyle(.secondary)
+                }
+            }
+            Text(
+                metrics.netAfterRecordedExpenses.isAvailable
+                    ? "\(metrics.netBasisStatement). \(metrics.netCautionStatement)"
+                    : metrics.netUnavailableExplanation
+            )
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(metrics.spokenNetStatement(locale: locale))
+        .accessibilityIdentifier("periodNetAfterExpenses")
+    }
+
     private func drivingSection(_ metrics: PeriodMetrics) -> some View {
         Section {
             VStack(alignment: .leading, spacing: 4) {
@@ -465,10 +569,11 @@ struct PeriodSummaryView: View {
             } footer: {
                 Text(
                     """
-                    Writes the completed shifts of this \(unit.stepNoun), their deliveries, and this \
-                    summary — each figure with the count of shifts it was worked out from — as a file \
-                    on this device. The counts are in the JSON export; the CSV is the flat list of \
-                    shifts and deliveries. Recorded positions are not included.
+                    Writes the completed shifts of this \(unit.stepNoun), their deliveries, the \
+                    expenses you recorded in it, and this summary — each figure with the count of \
+                    records it was worked out from — as a file on this device. The counts and the \
+                    expenses are in the JSON export; the CSV is the flat list of shifts and \
+                    deliveries. Recorded positions are not included.
                     """
                 )
             }
@@ -635,7 +740,15 @@ struct PeriodSummaryView: View {
         let records = shiftsInPeriod.map { shift in
             shift.periodRecord(for: measurement.distances[shift.id] ?? .none)
         }
-        return calculator.metrics(of: records, in: period)
+        return calculator.metrics(
+            of: records,
+            // Every recorded expense, selected into the period by the calculator
+            // on its own date. Nothing is measured for them, so they are not
+            // part of the measurement token: adding one updates the figures on
+            // the next body without a re-measure.
+            expenses: recordedExpenses.map(\.expenseRecord),
+            in: period
+        )
     }
 
     /// Identifies the measurement the screen currently needs: which shifts, in
