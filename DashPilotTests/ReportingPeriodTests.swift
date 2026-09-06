@@ -275,6 +275,47 @@ struct ReportingPeriodTests {
         #expect(range.contains("14") && range.contains("20"), "A week's range names both ends: \(range)")
         #expect(period.spokenTitle(asOf: now, calendar: calendar).contains(range))
     }
+
+    /// The one dependency these strings must not have on the machine running
+    /// them.
+    ///
+    /// A period's boundaries are instants its own calendar computed, and the
+    /// last one is 23:59:59 on its last day. Read back in a time zone further
+    /// east, that instant is already the following day, so wording left on the
+    /// ambient zone names a date the period does not contain: a September month
+    /// ends on 1 October, and a one-day range becomes a pair. A test pinning
+    /// only the zone the machine is already in cannot see that, which is why
+    /// several zones either side of any plausible one are checked here.
+    @Test("Dates are written in the period's own time zone, not the machine's")
+    func datesAreWrittenInThePeriodsOwnTimeZone() throws {
+        let locale = Locale(identifier: "en_US")
+
+        for zone in ["Pacific/Kiritimati", "Asia/Tokyo", "Europe/London", "America/New_York", "Pacific/Midway"] {
+            let calendar = try calendar(timeZone: zone)
+            let now = try date(2026, 6, 17, 14, 0, in: calendar)
+            let later = try date(2026, 9, 14, 12, 0, in: calendar)
+
+            let weekDates = try week(now, in: calendar).rangeStatement(calendar: calendar, locale: locale)
+            #expect(weekDates.hasPrefix("Jun 14"), "A week starts on its own first day in \(zone): \(weekDates)")
+            #expect(weekDates.hasSuffix("20, 2026"), "…and ends on its own last day: \(weekDates)")
+            #expect(!weekDates.contains("21"), "…never the boundary after it: \(weekDates)")
+
+            let month = try #require(ReportingPeriod(unit: .month, containing: now, calendar: calendar))
+            let monthDates = month.rangeStatement(calendar: calendar, locale: locale)
+            #expect(monthDates.hasPrefix("Jun 1"), "A month starts on its own first day in \(zone): \(monthDates)")
+            #expect(monthDates.hasSuffix("30, 2026"), "…and ends on its own last day: \(monthDates)")
+            #expect(!monthDates.contains("Jul"), "…never in the month after it: \(monthDates)")
+            #expect(month.title(asOf: later, calendar: calendar, locale: locale) == "June 2026")
+
+            let oneDay = try #require(ReportingPeriod(from: now, through: now, calendar: calendar))
+                .title(asOf: now, calendar: calendar, locale: locale)
+            #expect(oneDay.hasPrefix("Jun 17"), "A one-day range is one date in \(zone): \(oneDay)")
+            #expect(!oneDay.contains("18"), "…never a pair: \(oneDay)")
+
+            let dayTitle = try day(now, in: calendar).title(asOf: later, calendar: calendar, locale: locale)
+            #expect(dayTitle == "Wed, Jun 17", "A day is named for its own date in \(zone): \(dayTitle)")
+        }
+    }
 }
 
 /// The two counts that keep an aggregate from being read as a total.
