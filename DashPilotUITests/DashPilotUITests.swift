@@ -1046,6 +1046,145 @@ final class DashPilotUITests: XCTestCase {
         )
     }
 
+    // MARK: Correcting a pickup place
+
+    /// A misspelled place can be renamed, and the rename changes only its name.
+    @MainActor
+    func testRenamesAPickupPlaceFromItsHistory() throws {
+        let app = launchWithPickupHistory()
+        openFirstShift(in: app)
+        openPickupHistory(from: "Delivery 1, delivered", in: app)
+
+        let summary = app.descendants(matching: .any)["pickupPlaceHistorySummary"]
+        XCTAssertTrue(summary.waitForExistence(timeout: 5))
+        let before = summary.label
+
+        let rename = app.buttons["renamePickupPlaceButton"]
+        XCTAssertTrue(scrollTo(rename, in: app), "Managing the place is offered on the place's own screen")
+        XCTAssertEqual(rename.label, "Rename pickup place, \(Self.noodles)", "The control names its place")
+        rename.tap()
+
+        let field = app.textFields["pickupPlaceRenameField"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        XCTAssertEqual(field.value as? String, Self.noodles, "The sheet opens on the recorded spelling")
+        clear(field, in: app)
+        field.typeText(Self.renamedNoodles)
+        app.buttons["savePickupPlaceRenameButton"].tap()
+
+        XCTAssertTrue(
+            app.navigationBars[Self.renamedNoodles].waitForExistence(timeout: 5),
+            "The history is now titled by the new name"
+        )
+        XCTAssertEqual(summary.label, before, "And says exactly what it said before: a rename moves no wait")
+
+        closePickupHistory(in: app)
+        let row = deliveryRow(containing: "Delivery 1, delivered", in: app)
+        XCTAssertTrue(waitForLabel(row, toContain: "Picked up from \(Self.renamedNoodles)"))
+        XCTAssertTrue(row.label.contains("Waited at pickup 6 minutes"), "Its own record is untouched: \(row.label)")
+    }
+
+    /// Renaming onto a name another place already uses is refused, and the
+    /// refusal points at merging instead.
+    @MainActor
+    func testRenamingOntoAnExistingPlaceIsRefusedAndOffersMerge() throws {
+        let app = launchWithPickupHistory()
+        openFirstShift(in: app)
+        openPickupHistory(from: "Delivery 1, delivered", in: app)
+
+        let rename = app.buttons["renamePickupPlaceButton"]
+        XCTAssertTrue(scrollTo(rename, in: app))
+        rename.tap()
+
+        let field = app.textFields["pickupPlaceRenameField"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        clear(field, in: app)
+        field.typeText(Self.diner)
+        app.buttons["savePickupPlaceRenameButton"].tap()
+
+        // A `Label` mirrors its identifier onto both the icon and the text, so
+        // the text element is asked for by name rather than by `descendants`.
+        let message = app.staticTexts.matching(identifier: "pickupPlaceRenameMessage").firstMatch
+        XCTAssertTrue(message.waitForExistence(timeout: 5), "The rename is refused rather than silently merged")
+        XCTAssertTrue(message.label.contains(Self.diner), "It names what it collided with: \(message.label)")
+        XCTAssertTrue(
+            message.label.lowercased().contains("merge"),
+            "And offers the deliberate operation that would combine them: \(message.label)"
+        )
+        XCTAssertTrue(field.exists, "The sheet stays open with what was typed")
+
+        app.buttons["cancelPickupPlaceRenameButton"].tap()
+        XCTAssertTrue(
+            app.navigationBars[Self.noodles].waitForExistence(timeout: 5),
+            "And the place still has the name it had"
+        )
+    }
+
+    /// Two places a driver meant as one are merged, deliberately, and their
+    /// recorded waits are then read together.
+    @MainActor
+    func testMergesTwoPickupPlacesIntoOneHistory() throws {
+        let app = launchWithPickupHistory()
+        openFirstShift(in: app)
+        openPickupHistory(from: "Delivery 5, delivered", in: app)
+
+        let summary = app.descendants(matching: .any)["pickupPlaceHistorySummary"]
+        XCTAssertTrue(summary.waitForExistence(timeout: 5))
+        XCTAssertTrue(summary.label.contains("1 recorded pickup"), "Showed: \(summary.label)")
+
+        let merge = app.buttons["mergePickupPlaceButton"]
+        XCTAssertTrue(scrollTo(merge, in: app))
+        XCTAssertEqual(merge.label, "Merge pickup place, \(Self.diner)")
+        merge.tap()
+
+        // The destination control speaks the direction in full, so the merge
+        // cannot be read as symmetric.
+        let destination = app.buttons
+            .matching(identifier: "pickupPlaceMergeDestinationButton")
+            .matching(NSPredicate(format: "label == %@", "Merge \(Self.diner) into \(Self.noodles)"))
+            .firstMatch
+        XCTAssertTrue(destination.waitForExistence(timeout: 5))
+        destination.tap()
+
+        let confirmation = app.alerts.firstMatch
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 5))
+        let spoken = confirmation.label + " " + confirmation.staticTexts.allElementsBoundByIndex.map(\.label).joined(separator: " ")
+        XCTAssertTrue(spoken.contains(Self.diner) && spoken.contains(Self.noodles), "Showed: \(spoken)")
+        XCTAssertTrue(spoken.contains("will move to"), "The deliveries move: \(spoken)")
+        XCTAssertFalse(
+            spoken.lowercased().contains("deliveries will be deleted"),
+            "Nothing recorded is destroyed: \(spoken)"
+        )
+        confirmation.buttons.matching(identifier: "confirmPickupPlaceMergeButton").firstMatch.tap()
+
+        // The merged-away place is gone, so its history closes with it.
+        XCTAssertTrue(waitForDisappearance(of: summary), "The source no longer exists to be shown")
+
+        let moved = deliveryRow(containing: "Delivery 5, delivered", in: app)
+        XCTAssertTrue(waitForLabel(moved, toContain: "Picked up from \(Self.noodles)"))
+        XCTAssertTrue(moved.label.contains("Waited at pickup 20 minutes"), "Keeping its own record: \(moved.label)")
+
+        // Read from the delivery that moved: its history button now names the
+        // surviving place, and opens the combined history.
+        openPickupHistory(from: "Delivery 5, delivered", in: app)
+        XCTAssertTrue(summary.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.navigationBars[Self.noodles].exists, "Under the destination's name")
+        XCTAssertTrue(
+            summary.label.contains("median of 4 recorded pickups"),
+            "Three waits plus the one that moved: \(summary.label)"
+        )
+        // 6, 11, 20 and 41 minutes: the midpoint of the middle two, rounded for
+        // the screen. Neither place said this before the merge.
+        XCTAssertTrue(
+            summary.label.contains("Typical recorded pickup wait, 16 minutes"),
+            "Recomputed from the deliveries rather than from a stored figure: \(summary.label)"
+        )
+        XCTAssertTrue(
+            summary.label.contains("Shortest recorded wait 6 minutes")
+                && summary.label.contains("longest 41 minutes"),
+            "The spread spans both places' waits: \(summary.label)"
+        )
+    }
+
     // MARK: Deletion
 
     /// Deletes a completed shift from its detail screen and returns to a history
@@ -1108,6 +1247,9 @@ final class DashPilotUITests: XCTestCase {
     /// No real business is named anywhere in this repository.
     private static let noodles = "Nowhere Noodles"
     private static let diner = "Example Diner"
+
+    /// What the rename journey renames `noodles` to. Invented, like the rest.
+    private static let renamedNoodles = "Nowhere Noodle Bar"
 
     /// Starts a shift and one delivery on it, which is the state three of the
     /// pickup journeys begin from.

@@ -34,7 +34,7 @@ counts and errors. Coordinates, addresses and earnings amounts are never logged.
 | `earnings` | That an amount was added, updated or removed, or that a save failed | The amount |
 | `pickup-place` | That a place was assigned, changed, removed, reused, created, renamed or merged; that a name, rename or merge was refused, by rule; that a save failed | The name typed, the normalised key derived from it, and how many deliveries a merge moved |
 
-Four deliberate silences are worth stating.
+Five deliberate silences are worth stating.
 
 **Mileage is not logged at all.** The calculation reads coordinates and produces a trip metric, and
 neither belongs in a log. There is no failure it can report, because an unmeasurable route is a
@@ -52,6 +52,10 @@ nothing.
 
 **A deletion records nothing about the shift.** Not when it ran, not what it earned, not how far it
 went. A deletion is the last moment to start writing a driver's history into a log.
+
+**A merge records nothing about what it moved.** The log says two pickup places were merged, and not
+which two or how many deliveries changed hands. A count of a driver's pickups at one place is work
+history, which is the thing this category exists to keep out.
 
 The word naming an earnings or pickup-place operation is a `StaticString` chosen in code, so it
 cannot accidentally become the value; where a pickup log line has two forms, they are two literals
