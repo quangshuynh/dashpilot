@@ -59,6 +59,9 @@ derived legitimately from device sensors and stored history is typed by the driv
   than by fixed 24-hour arithmetic, completed shifts only, every figure shown with the shifts behind
   it, missing values excluded rather than counted as zero, and each rate divided over the one subset
   of shifts carrying both halves of it.
+- **Portable JSON and CSV history export** of one shift, a day, a week or all completed shifts,
+  written locally and offered to the system share sheet, with a format version of its own, coverage
+  counts preserved, spreadsheet formula injection guarded against, and no raw coordinates.
 
 ## Technology
 
@@ -116,8 +119,9 @@ Start with [`docs/index.md`](docs/index.md), or go straight to
 [delivery lifecycle](docs/product/delivery-lifecycle.md),
 [architecture](docs/architecture/overview.md),
 [building](docs/development/building.md),
-[testing](docs/development/testing.md) or the
-[data model](docs/reference/data-model.md).
+[testing](docs/development/testing.md), the
+[data model](docs/reference/data-model.md) or
+[history export](docs/product/history-export.md).
 
 ## Limitations
 
@@ -137,7 +141,9 @@ The short version, with the full list in [`docs/reference/limitations.md`](docs/
   time is only as good as the tapping, overlapping deliveries are unioned rather than summed, their
   hourly figures are never added together, and non-delivery time is not idle time.
 - **No delivery-platform integration**, permanently and by design.
-- **Local only.** No export, no backup, no sync, and deleting a shift is permanent.
+- **Local only.** No backup, no sync, no import, and deleting a shift is permanent. Export writes a
+  file on the device and hands it to the share sheet; where it goes after that is the driver's
+  choice, and the file is not a tax statement or a platform record.
 - **A pickup place's recorded waits are summarised, not predicted.** The median is shown beside the
   number of pickups behind it, one recorded wait is never called typical, long waits are never
   trimmed away, and nothing forecasts the next pickup or ranks one place against another.
@@ -151,7 +157,7 @@ The short version, with the full list in [`docs/reference/limitations.md`](docs/
   rates — and nothing forecasts, compares periods or ranks days.
 - Not implemented yet: most things built on the delivery records (merchant scoring, merchant
   profitability, offer profitability, per-delivery mileage), expenses, aggregates longer than a week,
-  maps, App Intents, Live Activities and recommendations.
+  maps, App Intents, Live Activities, recommendations, and importing an exported file back.
 
 ## License
 

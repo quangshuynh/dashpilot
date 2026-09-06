@@ -4,6 +4,7 @@
 DashPilot/
   App/            SwiftUI entry point, root screen, delivery controls, editors, shift detail, failure state, preview fixtures
   Domain/         Framework-independent value types and calculations
+  Export/         The external file contract: export records, encoders, file writing
   Models/         SwiftData @Model types
   Persistence/    Versioned schema, migration plan, container construction
   Services/       Application services that own state transitions, and platform adapters
@@ -21,12 +22,19 @@ docs/             This documentation site
 | Is a calculation or a value type with no framework imports | `Domain/` |
 | Is persisted | `Models/`, and add a schema version |
 | Owns a state transition or talks to a platform framework | `Services/` |
+| Is part of the exported file contract | `Export/` |
 | Is a screen or part of one | `App/` |
 | Is logging, a launch argument or similar plumbing | `Support/` |
 
 Domain types must not import SwiftUI or SwiftData. That is what makes every calculation testable
 without a container or a rendered view, and it is the constraint that keeps wording, filtering and
 measurement out of view bodies.
+
+`Export/` is a layer rather than a folder of helpers, and it has one rule of its own: **no SwiftData
+model is ever encoded.** A file a driver keeps must not be tied to the store's shape, so the records,
+the encoders and the CSV writer are plain values, and exactly one type — `ShiftExportService` —
+fetches, measures and adapts models into them. `ExportDocumentEncoder` never touches a context, and
+no view builds a CSV string. See [History export](../product/history-export.md).
 
 ## Naming and conventions
 

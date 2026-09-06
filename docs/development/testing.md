@@ -46,6 +46,12 @@ test cannot see, such as a screen that renders a sentence the model never claime
 | Delivery active time, Delivery active time of a shift | The interval union — overlap, nesting, chains, touching, shared starts and ends, zero length, malformed, unfinished, unsorted, a thousand at a time — order independence over every permutation, clipping to the shift window, and cancelled deliveries counting until cancellation |
 | Route quality wording, Unavailable rate explanations | The exact sentences the interface is allowed to say |
 | Completed shift deletion | Cascade, refusal for a running shift, and that a refused delete changes nothing |
+| Shift export records | A completed shift's facts mapped, a running shift refused, missing amounts still missing and explicit zero still zero, shift and delivery earnings independent with no reconciliation field in the file, lifecycle timestamps and cancellations preserved, a pickup place only where recorded, the wait matching the domain, active time unioned rather than summed, and every route state kept apart |
+| Shift export JSON | The format version and its distinctness from the schema version, sorted keys giving identical bytes, explicit nulls, decimal-string money round-tripping exactly for the amounts a double loses, ISO 8601 timestamps, Unicode names, and a whole document decoded back unchanged. Period summaries keep every paired coverage count, including a rate no shift could contribute to |
+| Shift export CSV | One row per delivery and a row for a shift with none, empty cells for missing values, an explicit zero written, route partiality as its own columns, and the period summary deliberately absent. Parsed by an independent RFC 4180 reader, so a round trip through the writer cannot prove itself |
+| CSV field quoting, CSV spreadsheet safety, CSV records | Commas, quotes, CRLF, edge whitespace and Unicode; the formula guard for `=`, `+`, `-`, `@`, tab and CR, asserted both in the file and after a parser strips the quotes; and that nothing DashPilot generates is altered by it |
+| Shift export service | Every scope, an overnight shift counted once, empty scopes and running shifts refused, file names and their absence of content, exports replacing rather than accumulating, an existing file never overwritten, a write failure surfaced, and errors that name no path |
+| Shift export privacy | No coordinate in either format, the route reduced to a measurement and its coverage, no normalised pickup key, no catalogue bookkeeping and no store internals |
 
 Running one suite:
 
@@ -134,8 +140,15 @@ running, recovering an already-running delivery at launch, opening a completed s
 editing a shift's amount, adding, editing, cancelling an edit of and removing one delivery's amount,
 two stacked deliveries keeping independent amounts while the shift total stays untouched, reading the
 detail screen's delivery, route and rate statements, opening a pickup place's recorded wait history,
-renaming a place and being refused a colliding rename, merging two places into one history, and
-deleting a shift through its confirmation.
+renaming a place and being refused a colliding rename, merging two places into one history,
+exporting a shift as JSON and as CSV, exporting a selected day and week, an empty period offering no
+export, exporting all history, a running shift offering none, and deleting a shift through its
+confirmation.
+
+The share sheet itself is never opened. `ShareLink` presents a system surface XCUITest cannot inspect
+reliably, and what the export journeys are for is proving DashPilot wrote a file and offered it — not
+that iOS can share one. The file's name and the count of shifts in it are read off the sheet
+instead.
 
 The permission panel is asserted only to be on screen. Which state it displays depends on the
 device, and no test drives the system alert, because automating it would be brittle and would change
@@ -149,6 +162,9 @@ Two lessons are worth repeating when adding journeys:
   been reading it without scrolling.
 - SwiftUI mirrors an `accessibilityIdentifier` onto a button's label element as well, so an alert
   button matches twice. Use `.firstMatch`.
+- A `.sheet` attached to a conditionally rendered section goes away with the section. The period
+  summary rebuilds its sections whenever it re-measures routes, which dismissed the export sheet
+  before it had written anything; the modifier belongs on the `List`.
 
 ## Continuous integration
 
