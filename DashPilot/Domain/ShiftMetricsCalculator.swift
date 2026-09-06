@@ -116,9 +116,11 @@ nonisolated struct ShiftMetricsCalculator: Equatable, Sendable {
     /// Summing their durations instead would let the denominator exceed the
     /// shift and would drive the rate down precisely when a driver stacked well.
     ///
-    /// Still gross, and still one amount recorded for the whole shift: no
-    /// earnings are attributed to an individual delivery anywhere in DashPilot.
-    /// The three absent cases are kept apart for the reason every other pair is
+    /// Still gross, and the numerator is still the one amount recorded for the
+    /// **whole shift**. It is never a total of the amounts a driver recorded
+    /// against individual deliveries: those are a separate, optional fact, and
+    /// adding them up here would silently read every delivery with no amount as
+    /// one that paid nothing. The three absent cases are kept apart for the reason every other pair is
     /// — a shift with no deliveries, one whose deliveries describe no usable
     /// interval, and one whose deliveries genuinely covered no time are three
     /// different facts, and none of them is a rate of zero.
