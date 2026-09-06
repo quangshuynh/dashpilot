@@ -1,7 +1,7 @@
 # Data model
 
 Four persisted entities, and a small set of value types derived from them. Current schema
-version: **v6**.
+version: **v7**.
 
 ## `Shift`
 
@@ -62,6 +62,7 @@ none are kept, because nothing implemented reads them.
 | `cancelledAt` | `Date?` | Terminal. Set without erasing the events that preceded it |
 | `shift` | `Shift?` | Optional only because SwiftData models the inverse that way. The initializer requires a shift |
 | `pickupPlace` | `PickupPlace?` | Optional and often absent. A reference, so two deliveries from one place share a row. Nullify on delete |
+| `grossEarningsAmount` | `Decimal?` | Private. What this one delivery paid, as the driver typed it. `nil` means no amount recorded, which is not zero. Unrelated to `Shift.grossEarningsAmount` |
 
 Derived, never stored:
 
@@ -72,14 +73,23 @@ Derived, never stored:
 | `lastEventAt` | The most recent recorded event, which the next one may not precede |
 | `pickupWait` | `pickedUpAt - arrivedAtPickupAt`, or `nil` if either end is missing or the pickup precedes the arrival |
 | `completedDuration` | `deliveredAt - acceptedAt`, or `nil` unless the delivery was delivered |
+| `grossEarnings` | The stored decimal as a `Money`, or `nil` |
+| `grossPerDeliveryHour` | A `DeliveryEarningsRate`: the amount over this delivery's own `completedDuration`, or the reason there is none |
 | `acceptedBefore(_:_:)` | The total, repeatable order over deliveries: acceptance ascending, identity breaking a tie |
 
 `markArrivedAtPickup(at:)`, `markPickedUp(at:)` and `markDelivered(at:)` refuse a skipped step, a
 repeated event, a transition after a terminal state, and a timestamp earlier than the last recorded
-event. `cancel(at:)` is allowed from every active state. `setPickupPlace(_:)` is deliberately
+event. `cancel(at:)` is allowed from every active state. `setGrossEarnings(_:)` rejects a negative
+amount and an amount on a delivery that is still in progress; a cancelled delivery may carry one, and
+is never forced to zero. `clearGrossEarnings()` removes the amount, which is a distinct operation
+from recording zero. `setPickupPlace(_:)` is deliberately
 unconditional: a pickup place is not an event, so correcting one changes no interval and is allowed
-on a finished delivery. Nothing identifying a customer or an address is stored, and no amount is
-attributed to a delivery.
+on a finished delivery. Nothing identifying a customer or an address is stored.
+
+The amount is a **second independent fact**, not a share of anything. It is what the driver typed
+against this one delivery; it is never derived from `Shift.grossEarningsAmount`, never checked
+against it, and no total is ever divided among a shift's deliveries. See
+[Earnings and metrics](../product/earnings-and-metrics.md).
 
 ## `PickupPlace`
 
@@ -137,6 +147,7 @@ relationship between them. See [Delivery lifecycle](../product/delivery-lifecycl
 | 4.0.0 | Adds `Shift.grossEarningsAmount` |
 | 5.0.0 | Adds `Delivery` and `Shift.deliveries` |
 | 6.0.0 | Adds `PickupPlace` and `Delivery.pickupPlace` |
+| 7.0.0 | Adds `Delivery.grossEarningsAmount` |
 
 Every step so far is a lightweight stage, and none backfills a value. See
 [Migrations](../architecture/migrations.md).
@@ -161,7 +172,8 @@ none either — it is unioned from timestamps already stored, every time it is s
 | `RouteQuality` | The tested vocabulary describing a measured route |
 | `GeographicDistance` | One haversine implementation, shared by capture and measurement |
 | `ShiftMetrics`, `ShiftMetricsCalculator` | Both derived rates and their precision rules |
-| `ShiftRate`, `ShiftRateUnavailability` | An available rate, or the reason there is none |
+| `ShiftRate`, `ShiftRateUnavailability` | An available shift rate, or the reason there is none |
+| `DeliveryEarningsRate`, `DeliveryRateUnavailability` | One delivery's gross per recorded delivery hour, or the reason there is none |
 | `LocationAuthorization` and its enums | Permission facts, condition precedence and recovery |
 | `ShiftLifecycleError` | Refused start, end and delete transitions |
 | `DeliveryState`, `DeliveryAction` | The five lifecycle states, the one action each offers next, and the wording |
@@ -178,5 +190,8 @@ Durations, distances, rates, route quality wording and capture state are all com
 needed. A delivery's state is derived the same way, and so is the `Delivery 1` / `Delivery 2`
 numbering the interface shows for concurrent deliveries — it is counted from the acceptance
 timestamps rather than stored beside them. A pickup place's recency is derived from the deliveries
-that reference it, for the same reason. The store holds timestamps, positions, one optional amount
-and the names a driver typed, and nothing that could disagree with them.
+that reference it, for the same reason. A delivery's gross per recorded delivery hour is derived from
+its own amount and its own two timestamps, every time it is shown, and is never added to another
+delivery's. The store holds timestamps, positions, the optional amounts a driver typed against a
+shift and against individual deliveries, and the names they typed — and nothing that could disagree
+with them.

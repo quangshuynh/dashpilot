@@ -1,11 +1,11 @@
 # Earnings and metrics
 
 A completed shift may hold one optional gross earnings amount, and from it DashPilot derives three
-rates. It also derives two durations from the deliveries recorded during the shift. Everything on
-this page is arithmetic over data the driver already has: nothing is imported, predicted or
-estimated.
+rates. Each finished delivery may hold an optional amount of its own, and from that one more. It
+also derives two durations from the deliveries recorded during the shift. Everything on this page is
+arithmetic over data the driver already has: nothing is imported, predicted or estimated.
 
-## Gross earnings
+## Gross earnings on a shift
 
 The amount on a shift is the figure the driver chose to associate with it, and nothing more.
 DashPilot holds no delivery-platform account and imports nothing, so it cannot know whether the
@@ -22,6 +22,71 @@ decimal places, a currency symbol or grouping separators, and all of those are r
 cannot be read is refused with the reason rather than reinterpreted, and more than two fraction
 digits is refused rather than rounded, because rounding at the point of entry would store a number
 the driver did not type.
+
+## Per-delivery gross earnings
+
+A finished delivery may also hold **one optional amount of its own**, entered the same way and
+meaning the same thing: gross, manually recorded, and associated with that delivery because the
+driver said so. It is not profit, net earnings, a wage, taxable income or a payout any platform
+confirmed.
+
+Recording one is optional and it is never required to finish a delivery. A delivery marked delivered
+with no amount is a complete, valid record.
+
+### It may be entered once the delivery is over
+
+The control appears on a finished delivery in a completed shift's history, and nowhere else. There
+is deliberately no monetary text field on a running shift's delivery card: entering an amount is a
+task for when the driver has stopped, and the model refuses an amount on a delivery that is still in
+progress, so the rule holds however the app is driven.
+
+A **cancelled** delivery may carry an amount. Compensation for a cancelled order is real money, and
+refusing to record it would push the driver into attributing it somewhere it did not happen. Nothing
+requires a cancelled delivery to be zero.
+
+### The shift's amount and a delivery's amount are independent
+
+**Neither is authoritative for the other, and neither is derived from the other.** DashPilot does
+not:
+
+- change the shift amount when a delivery amount changes, or the other way round;
+- create a delivery amount from a shift total, or add a shift total up from its deliveries;
+- divide a shift total among the deliveries recorded in it;
+- require the delivery amounts to sum to the shift amount;
+- show a warning, a shortfall or an error merely because they differ.
+
+They differ for ordinary reasons: some deliveries were never recorded, stacked orders may be paid
+together by a platform, adjustments post at shift level, bonuses and incentives may not map to one
+delivery, and a driver may simply choose not to record each one. A difference is not a discrepancy,
+and nothing in the app presents it as one.
+
+### Missing is not zero
+
+The three states stay distinguishable, for every delivery, forever:
+
+| State | Meaning |
+| --- | --- |
+| An amount | The driver recorded what this delivery paid |
+| No amount | The driver has not recorded what this delivery paid |
+| `$0.00` | The driver recorded that this delivery paid nothing |
+
+Nothing reads a missing amount as zero — not the interface, not a migration, and not any figure
+derived later. Should anything ever total these amounts, it must say what it counted, in the shape
+*"$12.00 recorded across 2 of 3 deliveries"*, rather than presenting a sum as though every delivery
+had answered.
+
+### What is deliberately absent
+
+- **No per-delivery mileage, and no per-delivery cost.** DashPilot does not assign route distance to
+  an individual delivery and does not divide a shift's mileage among its deliveries, so there is no
+  gross-per-mile figure for one delivery.
+- **No merchant profitability, ranking or earnings-per-pickup.** A pickup place's history stays what
+  it is — recorded waits — and no amount enters it. Grouping earnings by place needs careful
+  missing-data semantics that have not been worked out, and a figure printed beside a business's
+  name reads as a judgement of it.
+- **No tips or base-pay breakdown.** One amount per delivery, because one amount is what the driver
+  can state without guessing.
+- **No reconciliation screen**, for the reasons above.
 
 ## Delivery active time
 
@@ -73,7 +138,7 @@ Both durations are shown only for **completed** shifts, and only when the shift 
 interval that can be measured. A shift with no deliveries recorded shows neither, because "no
 deliveries were recorded" is not the same statement as "no time was spent on deliveries".
 
-## The three rates
+## The shift's three rates
 
 | Metric | Definition | Shown as |
 | --- | --- | --- |
@@ -108,13 +173,43 @@ deliveries add less to the denominator than two consecutive ones would.
 !!! warning "It is still gross earnings"
 
     It is **not** an active wage, a true hourly rate, a working hourly rate or a net one. The
-    numerator is the one amount the driver typed for the whole shift, with nothing subtracted, and no
-    amount is attributed to an individual delivery anywhere in DashPilot. The denominator measures
-    when deliveries were open, not what the driver was doing.
+    numerator is the one amount the driver typed for the whole shift, with nothing subtracted — never
+    a total of the amounts recorded against individual deliveries, which are a separate fact. The
+    denominator measures when deliveries were open, not what the driver was doing.
 
     It depends entirely on manually recorded lifecycle events. A driver who forgets to mark a
     delivery delivered until much later has a longer active time and a lower rate; one who records
     nothing has no rate at all.
+
+### One rate per delivery
+
+Where a delivered delivery carries an amount, its row shows one more figure:
+
+`gross earnings ÷ (deliveredAt − acceptedAt)`, in hours — **gross per recorded delivery hour**.
+
+The denominator is that one delivery's own elapsed lifecycle and nothing else. It is not an hourly
+wage, an active shift rate or a driving rate, and it says nothing about what the driver was doing
+while the delivery was open.
+
+!!! warning "These figures are never added up"
+
+    Delivery lifecycles **overlap**. Two deliveries carried at once are two records of the same
+    minutes, so a 30-minute delivery and another 30-minute delivery are not an hour of the driver's
+    evening — they may be forty minutes of it. A per-delivery rate is therefore a fact about one
+    delivery, and DashPilot never sums, averages or ranks these figures across a shift. The one
+    figure that spans deliveries is the shift's delivery active time, which unions their intervals
+    rather than adding their durations.
+
+It is absent, with the reason stated, for a delivery with no amount recorded, for a delivery that
+covered no measurable time, and for one that was **not delivered**:
+
+- A **cancelled** delivery has no completion to measure to. Its recorded amount is shown, and that
+  is the whole of what DashPilot claims about it — there is no such thing as a cancelled hourly rate
+  here.
+- A delivery still in progress has no finished lifecycle either.
+
+There is deliberately no gross-per-pickup-wait figure. It would present waiting as the cost of a
+delivery, which is neither what the wait measures nor something the app can support.
 
 ### The per-mile rate divides by recorded mileage
 
@@ -134,7 +229,9 @@ detail screen states the reason:
 | Reason | The fact it states |
 | --- | --- |
 | Shift not completed | The shift is still running; finalised rates describe finished shifts |
-| No earnings recorded | No amount has been entered. This is not an amount of zero |
+| No earnings recorded | No amount has been entered, on the shift or on the delivery. This is not an amount of zero |
+| Delivery not completed | The delivery was cancelled, or is still running, so there is no accepted-to-delivered interval to divide by |
+| Zero delivery duration | A delivery was accepted and delivered in the same moment |
 | No elapsed time | The shift covers no measurable time, including one clamped to zero by a backwards device clock |
 | No deliveries recorded | No delivery was recorded during the shift. This is not a delivery active time of zero |
 | Delivery active time not measurable | Deliveries exist, but none describes a usable interval within the shift |
@@ -161,7 +258,10 @@ arithmetic, are under [Money and metrics](../architecture/money-and-metrics.md).
 - Neither is a tax figure, and the per-mile rate is not a mileage deduction.
 - Delivery active time is not a measure of work, effort or productivity, and non-delivery time is
   not a measure of idleness. Both are read entirely from lifecycle events the driver tapped.
-- Nothing is aggregated. There is no weekly or all-time rate, no best or worst shift and no chart.
-  Rates are read one shift at a time.
+- A per-delivery amount is not a share of the shift's amount, and the two are never reconciled.
+- A per-delivery hourly figure is about one delivery's own lifecycle, and is never added to another
+  delivery's or compared with the shift's rates as though they measured the same thing.
+- Nothing is aggregated. There is no weekly or all-time rate, no best or worst shift, no per-place
+  earnings and no chart. Rates are read one shift, or one delivery, at a time.
 - Amounts are held in a single fixed currency (`USD`). Nothing converts between currencies or
   records which currency a shift was earned in.

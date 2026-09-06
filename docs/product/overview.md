@@ -54,6 +54,14 @@ through a locale-aware input layer that reads what a decimal pad produces and re
 cannot read rather than reinterpreting it. Amounts are added, edited and removed from the shift's
 detail screen, never during a running shift.
 
+**Manual per-delivery gross earnings.** A finished delivery can store one optional amount of its
+own, through the same input layer and from the same completed-shift screen. It is an independent
+fact: DashPilot never splits the shift's amount between deliveries, never adds one up from them, and
+never treats a difference between the two as an error. A delivered delivery with an amount also
+shows gross per recorded delivery hour, over its own accepted-to-delivered interval — a figure that
+is never summed across deliveries, because stacked lifecycles overlap. See
+[Earnings and metrics](earnings-and-metrics.md#per-delivery-gross-earnings).
+
 **Completed-shift metrics.** Gross earnings per elapsed shift hour, per active delivery hour and per
 recorded mile, all derived from what is already stored, alongside the delivery active time and
 non-delivery time the second of them divides by. A rate that cannot be derived is never shown as
@@ -61,31 +69,32 @@ zero.
 
 **Completed-shift detail and deletion.** Tapping a shift in history opens a screen for that shift
 alone: when it ran and for how long, how much of it a delivery was active for, the deliveries
-recorded during it and where each was picked up from, what it paid, what its route recorded, and all
-three rates with an explanation
+recorded during it, where each was picked up from and what each paid if the driver said, what the
+shift paid, what its route recorded, and all three rates with an explanation
 for any that are missing. A finished shift can be
 deleted from there behind a confirmation that names what goes with it. Deleting a shift also deletes
 the route positions and the deliveries recorded during it. A running shift cannot be deleted, and
 deletion is not undoable.
 
-**Persistence.** Schema v6, with lightweight migrations from every earlier version, covered by tests
+**Persistence.** Schema v7, with lightweight migrations from every earlier version, covered by tests
 that open stores written under each older version. A store that fails to open is surfaced as a
 visible state rather than a crash, and the failure screen deliberately offers no "reset the
 database" action.
 
 ## Not implemented
 
-Expenses, fuel, taxes, mileage deductions, a tips-versus-base breakdown, per-delivery earnings,
-customer identity, merchant scoring or ranking, offer profitability, automatic delivery or pickup
-detection, geocoding, maps, route visualisation, weekly or all-time totals, export, App Intents,
-Live Activities and recommendations.
+Expenses, fuel, taxes, mileage deductions, a tips-versus-base breakdown, per-delivery mileage,
+customer identity, merchant scoring, ranking or profitability, offer profitability, automatic
+delivery or pickup detection, geocoding, maps, route visualisation, weekly or all-time totals,
+export, App Intents, Live Activities and recommendations.
 
-Deliveries are recorded, and two things are built on them. One is the shift time at least one
-delivery was active, with overlapping deliveries counted once, and gross earnings over it. The other
+Deliveries are recorded, and three things are built on them. One is the shift time at least one
+delivery was active, with overlapping deliveries counted once, and gross earnings over it. Another
 is a pickup place's recorded waits, summarised as a median beside the number of pickups behind it —
-see [Pickup wait](pickup-wait.md). Beyond that the app derives a delivery duration for presentation
-and stops. There is no restaurant rating, no ranking, no comparison between shifts and no
-prediction.
+see [Pickup wait](pickup-wait.md). The third is an optional amount the driver types against one
+delivery, and the single hourly figure over that delivery's own lifecycle. Beyond that the app
+derives a delivery duration for presentation and stops. There is no restaurant rating, no ranking,
+no earnings grouped by place, no comparison between shifts and no prediction.
 
 Nothing is aggregated across shifts, no route is drawn on a map, and no mileage or live rate is
 shown while a shift is still running. There is no undo for a deleted shift and no backup of any
@@ -127,8 +136,9 @@ the wording the app itself uses.
     DashPilot cannot see another delivery application, so it cannot know that an order was offered,
     that a restaurant handed it over, or that a customer received it. Every delivery timestamp
     exists because the driver recorded it, which means a delivery they did not record is not in the
-    app and a wait they recorded late reads as shorter than it was. No amount is attributed to an
-    individual delivery, and no restaurant, customer or address is stored at all.
+    app and a wait they recorded late reads as shorter than it was. An amount against a delivery is
+    there only because the driver typed it for that delivery, and no restaurant, customer or address
+    is stored at all.
 
 !!! warning "Route capture is foreground only"
 
