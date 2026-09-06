@@ -26,7 +26,7 @@ device.
 
 ## What is stored
 
-Three entities. Their fields are listed under [Data model](../reference/data-model.md).
+Five entities. Their fields are listed under [Data model](../reference/data-model.md).
 
 `Shift` holds a start timestamp, an optional end timestamp and an optional gross earnings amount.
 Everything else about a shift, including its duration, its distance and its rates, is derived when
@@ -36,6 +36,9 @@ it is asked for.
 timestamps exist rather than stored beside them, so nothing in the store can disagree with the
 events it summarises. Nothing identifying a restaurant, a customer or an address is stored, and no
 amount is attributed to a delivery.
+
+`Expense` stores when a cost was incurred, its amount, its category and an optional short note.
+It has **no relationship to anything**. See below.
 
 `RouteSample` stores a timestamp, a latitude, a longitude, a horizontal accuracy and the capture
 session it was recorded in, and nothing else. `CLLocation` also reports speed, course, altitude and
@@ -85,6 +88,26 @@ an amount the app would refuse to display: earnings can be recorded only on a **
 and never **negative**. `ShiftService` adds the store write and the same rollback rule the lifecycle
 transitions use, so an amount can never be showing in the interface while the store holds something
 else.
+
+## An expense is stored unattached
+
+`Expense` has no `shift` and no `delivery`, and nothing anywhere in the store relates one to the
+other. That is the modelling decision behind the feature rather than a simplification: a tank of fuel
+is burned across several shifts, a set of tyres across thousands of miles, and attaching a cost to
+whichever shift happened to be running when it was typed would record an attribution the driver never
+made. It is the same fabrication the app refuses when it declines to divide a shift's amount among
+its deliveries.
+
+Membership is by date. A period contains an expense if its `occurredAt` falls in the period, by the
+same half-open rule that puts a shift in one. Two consequences follow directly from the shape: there
+is no shift-level or delivery-level cost, and deleting a shift cascades to nothing, because an
+expense has no relationship to be cascaded along, and the cost happened whether or not the shift's record is
+still there.
+
+The amount is a `Decimal` for the reason a shift's is, and it is **required**: an expense with no
+amount is not a record of anything. A recorded `0.00` is still a recorded amount. The category is
+stored as a plain string rather than as the enum, so a stored word a build cannot name reads as
+`other` rather than failing a fetch, which is the same reason `PickupPlace` stores plain strings.
 
 ## Delivery state is not a column
 

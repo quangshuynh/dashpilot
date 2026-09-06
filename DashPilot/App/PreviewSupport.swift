@@ -170,6 +170,19 @@ enum PreviewSupport {
     /// screen exists to report honestly. The recorded waits are 6, 11 and 41
     /// minutes today and 8 and 20 more across the week, so the median is 11
     /// minutes either way while the sample count changes.
+    ///
+    /// Three invented expenses sit alongside, dated rather than attached to any
+    /// of those shifts:
+    ///
+    /// | Expense | When | Category |
+    /// | --- | --- | --- |
+    /// | `$42.10` | today | fuel |
+    /// | `$6.50` | today | parking and tolls |
+    /// | `$89.99` | earlier this week | maintenance |
+    ///
+    /// The day therefore records `$48.60` of costs against `$86.25` of gross
+    /// earnings — `$37.65` net after recorded expenses — and the week `$138.59`
+    /// against `$206.25`, leaving `$67.66`.
     static func periodSummaryContainer(now: Date = .now) -> ModelContainer {
         // Previews cannot meaningfully recover from a container failure.
         try! seededPeriodSummaryContainer(now: now)
@@ -225,9 +238,52 @@ enum PreviewSupport {
             context: context
         )
 
+        // Three invented costs, dated rather than attached to any of the shifts
+        // above: two today and one earlier in the week, in three categories.
+        //
+        // The figures are chosen so the day and the week say different things
+        // and neither is a round number that could be mistaken for a
+        // placeholder. Today: $42.10 + $6.50 = $48.60 recorded, against $86.25
+        // of recorded gross earnings, so the net after recorded expenses is
+        // $37.65. The week adds $89.99, so $138.59 against $206.25 leaves
+        // $67.66.
+        seedExpenses(
+            [
+                (
+                    today.addingTimeInterval(8 * 3600 + 1_800),
+                    Money(minorUnits: 4_210),
+                    .fuel,
+                    "Half tank before the lunch rush"
+                ),
+                (today.addingTimeInterval(12 * 3600), Money(minorUnits: 650), .parkingAndTolls, ""),
+                (otherDay.addingTimeInterval(9 * 3600), Money(minorUnits: 8_999), .maintenance, "Oil change")
+            ],
+            in: context
+        )
+
         try? context.save()
 
         return container
+    }
+
+    /// Inserts synthetic expenses.
+    ///
+    /// Every amount, date and note here is invented. An expense carries no shift
+    /// and no delivery, which is why this takes none: the fixture dates them and
+    /// nothing else relates them to the work above.
+    private static func seedExpenses(
+        _ expenses: [(Date, Money, ExpenseCategory, String)],
+        in context: ModelContext
+    ) {
+        for (occurredAt, amount, category, note) in expenses {
+            guard let expense = try? Expense(
+                occurredAt: occurredAt,
+                amount: amount,
+                category: category,
+                noteText: note
+            ) else { continue }
+            context.insert(expense)
+        }
     }
 
     /// The start of a day in the same week as `today` that is not `today`.
@@ -693,6 +749,23 @@ enum PreviewSupport {
         container.mainContext.insert(shift)
 
         return ShiftEarningsEditor(shift: shift).modelContainer(container)
+    }
+
+    /// The expense editor, empty or over one synthetic recorded cost.
+    @MainActor
+    static func expenseEditor(editingExisting: Bool) -> some View {
+        let container = emptyContainer()
+        let expense = try? Expense(
+            occurredAt: Date(timeIntervalSince1970: 1_756_000_000),
+            amount: Money(minorUnits: 4_210),
+            category: .fuel,
+            noteText: "Half tank before the lunch rush"
+        )
+        if editingExisting, let expense {
+            container.mainContext.insert(expense)
+        }
+
+        return ExpenseEditor(expense: editingExisting ? expense : nil).modelContainer(container)
     }
 
     /// The delivery earnings editor over a synthetic delivered delivery.

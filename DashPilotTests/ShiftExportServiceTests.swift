@@ -333,7 +333,8 @@ struct ShiftExportServiceTests {
             fileName: "DashPilot-Week-2026-06-14.json",
             format: .json,
             byteCount: 4_096,
-            shiftCount: 3
+            shiftCount: 3,
+            expenseCount: 0
         )
 
         #expect(file.sizeStatement(locale: Locale(identifier: "en_US")).hasPrefix("3 shifts · "))
@@ -343,7 +344,8 @@ struct ShiftExportServiceTests {
                 fileName: file.fileName,
                 format: .json,
                 byteCount: 1_024,
-                shiftCount: 1
+                shiftCount: 1,
+                expenseCount: 0
             )
             .sizeStatement(locale: Locale(identifier: "en_US"))
             .hasPrefix("1 shift · ")

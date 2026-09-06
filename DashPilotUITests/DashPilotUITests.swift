@@ -2302,6 +2302,205 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertFalse(app.descendants(matching: .any)["exportFailureMessage"].exists)
     }
 
+    // MARK: Expenses
+
+    /// Opens the expense list from the root screen.
+    @MainActor
+    private func openExpenses(in app: XCUIApplication) {
+        // In the navigation bar, so it is reachable wherever the list has been
+        // scrolled to and costs the shift history no room.
+        let link = app.buttons["expensesLink"].firstMatch
+        XCTAssertTrue(link.waitForExistence(timeout: 10), "The root screen offers a way into recorded expenses")
+        link.tap()
+        XCTAssertTrue(app.buttons["addExpenseButton"].waitForExistence(timeout: 10))
+    }
+
+    /// Records one expense through the editor, leaving the category and date at
+    /// their defaults.
+    @MainActor
+    private func recordExpense(_ amount: String, in app: XCUIApplication) {
+        app.buttons["addExpenseButton"].tap()
+
+        let field = app.textFields["expenseAmountField"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        field.tap()
+        field.typeText(amount)
+
+        app.buttons["saveExpenseButton"].tap()
+        // The list is behind a sheet until the save dismisses it, and a tap
+        // synthesised during that animation lands on nothing.
+        XCTAssertTrue(
+            app.buttons["saveExpenseButton"].waitForNonExistence(timeout: 5),
+            "The editor closes once the expense is recorded"
+        )
+    }
+
+    /// Record a cost, and find it in the list with what was entered.
+    @MainActor
+    func testRecordsAnExpense() throws {
+        let app = launchWithEmptyStore()
+        openExpenses(in: app)
+
+        XCTAssertTrue(app.descendants(matching: .any)["expensesEmptyState"].exists)
+
+        recordExpense("42.10", in: app)
+
+        let row = app.descendants(matching: .any).matching(identifier: "expenseRow").firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        XCTAssertTrue(waitForLabel(row, toContain: "$42.10"), "The amount entered: \(row.label)")
+        XCTAssertTrue(row.label.contains("Fuel"), "And the category it was recorded under: \(row.label)")
+        XCTAssertFalse(app.descendants(matching: .any)["expensesEmptyState"].exists)
+    }
+
+    /// An amount the parser refuses is not written, and the sheet says why.
+    @MainActor
+    func testInvalidExpenseAmountIsNotSaved() throws {
+        let app = launchWithEmptyStore()
+        openExpenses(in: app)
+
+        app.buttons["addExpenseButton"].tap()
+        let field = app.textFields["expenseAmountField"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        field.tap()
+        field.typeText("-5")
+
+        app.buttons["saveExpenseButton"].tap()
+
+        // The identifier is mirrored onto the label's icon as well as its text,
+        // and the icon's label is "Warning", so the sentence is read off the
+        // static text rather than off whichever element matches first.
+        let message = app.staticTexts.matching(identifier: "expenseValidationMessage").firstMatch
+        XCTAssertTrue(message.waitForExistence(timeout: 5), "The refusal is explained rather than silent")
+        XCTAssertTrue(
+            message.label.lowercased().contains("negative"),
+            "And it names the rule that was broken: \(message.label)"
+        )
+
+        app.buttons["cancelExpenseButton"].tap()
+        XCTAssertTrue(app.descendants(matching: .any)["expensesEmptyState"].waitForExistence(timeout: 5))
+    }
+
+    /// A recorded cost can be corrected, and removed.
+    @MainActor
+    func testEditsAndDeletesAnExpense() throws {
+        let app = launchWithEmptyStore()
+        openExpenses(in: app)
+        recordExpense("42.10", in: app)
+
+        let row = app.descendants(matching: .any).matching(identifier: "expenseRow").firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        row.tap()
+
+        let field = app.textFields["expenseAmountField"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        XCTAssertEqual(field.value as? String, "42.1", "The editor opens on what was recorded")
+        clear(field, in: app)
+        field.typeText("50.00")
+        app.buttons["saveExpenseButton"].tap()
+        XCTAssertTrue(app.buttons["saveExpenseButton"].waitForNonExistence(timeout: 5))
+
+        XCTAssertTrue(waitForLabel(row, toContain: "$50.00"), "The correction is what the list shows")
+
+        row.tap()
+        let delete = app.buttons["deleteExpenseButton"]
+        XCTAssertTrue(delete.waitForExistence(timeout: 5))
+        delete.tap()
+
+        XCTAssertTrue(app.descendants(matching: .any)["expensesEmptyState"].waitForExistence(timeout: 5))
+    }
+
+    /// A day's recorded costs, their categories, and what the recorded earnings
+    /// come to after them.
+    @MainActor
+    func testPeriodSummaryShowsRecordedExpensesAndTheNetAfterThem() throws {
+        let app = launchWithPeriodSummary()
+        openPeriodSummary(in: app)
+
+        let expenses = app.descendants(matching: .any)["periodExpenses"]
+        XCTAssertTrue(scrollTo(expenses, in: app), "The summary reports what the day cost")
+        XCTAssertTrue(
+            waitForLabel(expenses, toContain: "$48.60"),
+            "The two costs recorded today, added up: \(expenses.label)"
+        )
+        XCTAssertTrue(
+            expenses.label.contains("2 recorded expenses"),
+            "With the count of records behind it: \(expenses.label)"
+        )
+
+        let categories = app.descendants(matching: .any).matching(identifier: "periodExpenseCategory")
+        XCTAssertEqual(categories.count, 2, "Fuel and parking, and no category with nothing in it")
+
+        let net = app.descendants(matching: .any)["periodNetAfterExpenses"]
+        XCTAssertTrue(scrollTo(net, in: app))
+        XCTAssertTrue(
+            waitForLabel(net, toContain: "$37.65"),
+            "$86.25 recorded, less $48.60 recorded: \(net.label)"
+        )
+    }
+
+    /// The net figure never presents itself as profit, and never without the
+    /// counts behind both of its halves.
+    @MainActor
+    func testNetAfterExpensesIsNotCalledProfit() throws {
+        let app = launchWithPeriodSummary()
+        openPeriodSummary(in: app)
+
+        let net = app.descendants(matching: .any)["periodNetAfterExpenses"]
+        XCTAssertTrue(scrollTo(net, in: app))
+        XCTAssertTrue(waitForLabel(net, toContain: "net after recorded expenses"))
+        XCTAssertTrue(
+            net.label.contains("1 of 2 shifts"),
+            "The earnings half is a subtotal, and says so: \(net.label)"
+        )
+        XCTAssertTrue(
+            net.label.contains("not profit"),
+            "And the figure states what it is not: \(net.label)"
+        )
+    }
+
+    /// Recording costs changes nothing about the gross figures beside them.
+    @MainActor
+    func testExpensesLeaveTheGrossFiguresAlone() throws {
+        let app = launchWithPeriodSummary()
+        openPeriodSummary(in: app)
+
+        let earnings = app.descendants(matching: .any)["periodEarnings"]
+        XCTAssertTrue(earnings.waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            waitForLabel(earnings, toContain: "$86.25"),
+            "Gross earnings are still the amounts recorded on the shifts: \(earnings.label)"
+        )
+        XCTAssertTrue(earnings.label.contains("Recorded gross earnings"))
+        XCTAssertFalse(earnings.label.contains("$37.65"), "The net is a separate figure, in its own section")
+    }
+
+    /// A cost recorded on a day with no shift is still that day's record.
+    @MainActor
+    func testExpenseOnADayWithoutAShiftIsStillSummarised() throws {
+        let app = launchWithEmptyStore()
+        openExpenses(in: app)
+        recordExpense("42.10", in: app)
+
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        openPeriodSummary(in: app)
+
+        XCTAssertTrue(
+            app.descendants(matching: .any)["periodEmptyState"].waitForExistence(timeout: 5),
+            "The day still holds no completed shift, and says so"
+        )
+
+        let expenses = app.descendants(matching: .any)["periodExpenses"]
+        XCTAssertTrue(scrollTo(expenses, in: app), "But the cost recorded on it is not hidden behind that")
+        XCTAssertTrue(waitForLabel(expenses, toContain: "$42.10"))
+
+        let net = app.descendants(matching: .any)["periodNetAfterExpenses"]
+        XCTAssertTrue(scrollTo(net, in: app))
+        XCTAssertTrue(
+            net.label.lowercased().contains("no net after recorded expenses"),
+            "With no recorded earnings there is nothing to net, rather than a negative figure: \(net.label)"
+        )
+    }
+
     @MainActor
     func testShowsLocationAuthorizationState() throws {
         let app = launchWithEmptyStore()
