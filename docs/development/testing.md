@@ -24,7 +24,10 @@ test cannot see, such as a screen that renders a sentence the model never claime
 | Delivery persistence | The v4 to v5 migration, and several active deliveries recovered independently from a reopened store |
 | Pickup place name | The normalisation policy: what is folded, and what is conservatively left alone |
 | Pickup place service | Reuse of an equivalent name, the first-spelling-wins policy, assign, change, remove, recent ordering, and deletion sparing a shared place |
-| Pickup place persistence | The v5 to v6 migration, every earlier version reaching v6, a shared place surviving a reopened store, and a place's wait metrics being identical either side of a reopen |
+| Pickup place persistence | The v5 to v6 migration, every earlier version reaching v6, a shared place surviving a reopened store, a place's wait metrics being identical either side of a reopen, and a rename and a merge each surviving one |
+| Pickup place rename | The normalisation it reuses, case-only and Unicode renames, empty and oversized input refused, a collision refused without moving a delivery, and identity, waits and recency all unchanged |
+| Pickup place merge | Deliveries moved, the destination unchanged, the source removed only after success, self-merge and stale models refused, empty, cancelled and active sources, and a refused save rolled back in full |
+| Pickup wait history after a merge, Recent places after a merge | Two histories becoming one, a recomputed median, exclusions still excluded, no duplicated sample, nothing written to the store, and recency following the reassigned deliveries |
 | Pickup wait samples | Which lifecycles yield a wait: both ends present and in order, and the cancelled-before-pickup and cancelled-after-pickup rules |
 | Pickup wait median | Zero, one, two, odd and even counts, unsorted input, repeats, an exact fractional midpoint, a long wait retained, and a hundred samples |
 | Pickup wait aggregation by place | Isolation between places, a place reused across shifts, deliveries excluded for naming no place or recording no pickup, and that nothing is written back |
@@ -118,7 +121,8 @@ The UI target covers a handful of paths: launching, starting and ending a shift,
 delivery through its whole lifecycle, cancelling one, being refused a shift end while a delivery is
 running, recovering an already-running delivery at launch, opening a completed shift, adding and
 editing an amount, reading the detail screen's delivery, route and rate statements, opening a pickup
-place's recorded wait history, and deleting a shift through its confirmation.
+place's recorded wait history, renaming a place and being refused a colliding rename, merging two
+places into one history, and deleting a shift through its confirmation.
 
 The permission panel is asserted only to be on screen. Which state it displays depends on the
 device, and no test drives the system alert, because automating it would be brittle and would change

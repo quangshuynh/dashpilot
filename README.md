@@ -43,7 +43,8 @@ derived legitimately from device sensors and stored history is typed by the driv
   each of them, and a shift end refused while any delivery is running.
 - **Optional pickup identity**: a delivery can name the place it was collected from, typed by the
   driver and reused across deliveries when the same name is entered again, with no address, no
-  lookup and no platform involved.
+  lookup and no platform involved. A place can be renamed, and one place explicitly merged into
+  another, without moving a delivery or a recorded time.
 - **Manual gross earnings**, optional, locale-aware, refused rather than reinterpreted when it
   cannot be read.
 - **Delivery active time**: the union of a shift's delivery intervals, so deliveries worked at the
@@ -133,6 +134,9 @@ The short version, with the full list in [`docs/reference/limitations.md`](docs/
 - **A pickup place's recorded waits are summarised, not predicted.** The median is shown beside the
   number of pickups behind it, one recorded wait is never called typical, long waits are never
   trimmed away, and nothing forecasts the next pickup or ranks one place against another.
+- **Places are never merged automatically.** Two spellings of one business stay two places, with two
+  separate wait histories, until the driver merges them deliberately. There is no similarity
+  matching, and a merge cannot be undone.
 - Not implemented yet: most things built on the delivery records (merchant scoring, offer
   profitability, per-delivery earnings), expenses, aggregates over a period, maps, App Intents,
   Live Activities and recommendations.
