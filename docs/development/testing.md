@@ -29,7 +29,7 @@ test cannot see, such as a screen that renders a sentence the model never claime
 | Delivery and shift earnings are independent | Neither amount moving when the other changes, delivery amounts allowed to fall short of or exceed the shift total, either allowed to exist alone, and recorded, missing and explicit zero staying three distinguishable states |
 | Stacked delivery earnings | Two overlapping deliveries holding independent amounts, editing or removing one leaving the other, and each rate dividing by its own duration only |
 | Gross per recorded delivery hour | A delivered delivery's own rate, zero earnings, missing earnings, a zero duration, a cancelled delivery, and rounding identical to the shift's hourly rates |
-| Delivery earnings persistence | The v6 to v7 migration, every earlier version reaching v7, a shift total never divided among its deliveries, and amounts surviving a reopened store including an explicit zero. The migration plan's version and stage counts are asserted here, once |
+| Delivery earnings persistence | The v6 to v7 migration, every earlier version reaching v7, a shift total never divided among its deliveries, and amounts surviving a reopened store including an explicit zero |
 | Pickup place rename | The normalisation it reuses, case-only and Unicode renames, empty and oversized input refused, a collision refused without moving a delivery, and identity, waits and recency all unchanged |
 | Pickup place merge | Deliveries moved, the destination unchanged, the source removed only after success, self-merge and stale models refused, empty, cancelled and active sources, and a refused save rolled back in full |
 | Pickup wait history after a merge, Recent places after a merge | Two histories becoming one, a recomputed median, exclusions still excluded, no duplicated sample, nothing written to the store, and recency following the reassigned deliveries |
@@ -52,6 +52,10 @@ test cannot see, such as a screen that renders a sentence the model never claime
 | CSV field quoting, CSV spreadsheet safety, CSV records | Commas, quotes, CRLF, edge whitespace and Unicode; the formula guard for `=`, `+`, `-`, `@`, tab and CR, asserted both in the file and after a parser strips the quotes; and that nothing DashPilot generates is altered by it |
 | Shift export service | Every scope, an overnight shift counted once, empty scopes and running shifts refused, file names and their absence of content, exports replacing rather than accumulating, an existing file never overwritten, a write failure surfaced, and errors that name no path |
 | Shift export privacy | No coordinate in either format, the route reduced to a measurement and its coverage, no normalised pickup key, no catalogue bookkeeping and no store internals |
+| Expense record | What an expense accepts and refuses, a recorded zero distinct from none, an edit replacing every fact at once and a refused edit changing nothing, the note's trimming and length rule counted in characters, the closed category set and its stored words, no category implying a tax treatment, and an unrecognised stored word reading as `other` |
+| Period expenses | Totals and category subtotals, missing distinct from an explicit zero, membership by the expense's own timestamp across a half-open boundary and a 23-hour day, a month totalled from its own records, a day holding costs but no shift, the net's two refusals and its negative case, the gross figures unchanged by any of it, no coverage pair invented for expenses, and the words the net may and may not use |
+| Expense persistence | The v7 to v8 migration with every earlier record intact and no expense fabricated from mileage or earnings, the plan's version and stage counts asserted here once, an expense with no relationship to a shift, a round trip through a reopened store, deleting a shift leaving expenses alone, and the service's refusals |
+| Expense export | Expenses selected by their own dates, none in a single shift's file, a period of costs alone exported rather than refused, the summary's totals and net, the JSON key set and its explicit nulls, a round trip, the CSV unchanged at 32 columns with no expense in it, and the format version deliberately unmoved |
 
 Running one suite:
 
@@ -99,7 +103,7 @@ a period locale and a comma locale side by side.
 
 ## Launch arguments
 
-Debug builds accept four arguments, all used only by UI tests and screenshots:
+Debug builds accept five arguments, all used only by UI tests and screenshots:
 
 | Argument | Effect |
 | --- | --- |
@@ -107,6 +111,7 @@ Debug builds accept four arguments, all used only by UI tests and screenshots:
 | `-dashpilot-seeded-history` | Opens an in-memory store already holding synthetic history: one completed shift with an amount, a route recorded in two capture sessions and three deliveries (two delivered, one cancelled), and one shift with none of those |
 | `-dashpilot-seeded-active-delivery` | Opens an in-memory store holding a running shift whose delivery has already been picked up, which is the state a relaunch recovers into |
 | `-dashpilot-seeded-pickup-history` | Opens an in-memory store holding one completed shift whose deliveries give two pickup places deliberately different amounts of recorded history |
+| `-dashpilot-seeded-period-summary` | Opens an in-memory store holding a week of synthetic completed shifts and three synthetic expenses, anchored to today rather than to a fixed instant, so the period summary opens on a period that holds something |
 
 A UI test cannot make a simulator record a route, so a measured, partial route and the
 per-recorded-mile rate over it would otherwise be unreachable end to end. Nor can it terminate and
@@ -129,8 +134,14 @@ reachable without typing — and so is the claim that editing one delivery's amo
 delivery and the shift total alone. The amounts deliberately do not add up to the shift's `$86.25`,
 because nothing reconciles them.
 
+The period-summary fixture is the only one anchored to **today**: the summary shows the period the
+driver is actually in, so a fixture pinned to a fixed instant would open on an empty one. Its
+offsets stay fixed and only the anchor moves. Its three expenses are dated rather than attached to
+its shifts, which is what makes a recorded total, a category split and a net after recorded expenses
+reachable end to end without typing.
+
 The seeded paths are app code that exists only for tests. They are DEBUG-only and in-memory, and
-they are three more launch paths to keep honest.
+they are four more launch paths to keep honest.
 
 ## UI journeys
 
@@ -145,8 +156,11 @@ exporting a shift as JSON and as CSV, exporting a selected day and week, an empt
 export, exporting all history, a running shift offering none, switching between the four period
 lengths, stepping back to an empty month, being refused a step past the current month, choosing and
 applying a custom date range, cancelling that sheet without changing the period, a chosen range
-surviving a switch to another period length, exporting a month and a chosen range, and deleting a
-shift through its confirmation.
+surviving a switch to another period length, exporting a month and a chosen range, recording an
+expense and finding it in the list, being refused a negative one, editing and deleting one, reading a
+period's recorded costs, its categories and the net after them, that net never calling itself profit,
+gross earnings unchanged beside it, an expense recorded on a day with no shift still being
+summarised, and deleting a shift through its confirmation.
 
 The share sheet itself is never opened. `ShareLink` presents a system surface XCUITest cannot inspect
 reliably, and what the export journeys are for is proving DashPilot wrote a file and offered it — not

@@ -110,6 +110,116 @@ nonisolated struct PeriodDeliveryEarningsExport: Equatable, Sendable, Codable {
     }
 }
 
+/// One category's share of the period's recorded expenses.
+nonisolated struct PeriodExpenseCategoryExport: Equatable, Sendable, Codable {
+    /// One of ``ExpenseCategory``'s closed set.
+    let category: ExpenseCategory
+
+    /// The recorded amounts in this category, added up.
+    let total: ExportAmount
+
+    /// How many records that was.
+    let recordCount: Int
+
+    init(_ total: ExpenseCategoryTotal) {
+        category = total.category
+        self.total = ExportAmount(total.total)
+        recordCount = total.recordCount
+    }
+}
+
+/// What the driver recorded the period cost.
+///
+/// **A subtotal of entered records, never the period's costs.** There is no
+/// coverage pair here, and its absence is deliberate rather than an oversight: a
+/// coverage pair needs a denominator, and nothing on the device knows how many
+/// costs a driver incurred and did not enter. A count of what was entered is the
+/// whole of what can honestly be stated, and a reader must not turn it into
+/// completeness.
+///
+/// Nothing here is per hour, per mile or per delivery. See
+/// ``ExpenseTotalsCalculator`` for why no such rate exists anywhere in the app.
+nonisolated struct PeriodExpensesExport: Equatable, Sendable, Codable {
+    /// The recorded amounts added up, or `null` when nothing was recorded in the
+    /// period. Never `0.00`: a period with no expense recorded is not a period
+    /// that cost nothing.
+    let recordedTotal: ExportAmount?
+
+    /// How many expense records the total came from.
+    let recordCount: Int
+
+    let currencyCode: String
+
+    /// The same total split by category, holding only the categories with a
+    /// record in the period.
+    let byCategory: [PeriodExpenseCategoryExport]
+
+    init(_ totals: PeriodExpenseTotals) {
+        recordedTotal = ExportAmount.recorded(totals.recordedTotal)
+        recordCount = totals.recordCount
+        currencyCode = Money.displayCurrencyCode
+        byCategory = totals.categoryTotals.map(PeriodExpenseCategoryExport.init)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case recordedTotal, recordCount, currencyCode, byCategory
+    }
+
+    func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encodeAlways(recordedTotal, forKey: .recordedTotal)
+        try container.encode(recordCount, forKey: .recordCount)
+        try container.encode(currencyCode, forKey: .currencyCode)
+        try container.encode(byCategory, forKey: .byCategory)
+    }
+}
+
+/// The period's recorded gross earnings less its recorded expenses.
+///
+/// The field is named for exactly what the figure is, and the name is the
+/// contract: a reader relabelling `netAfterRecordedExpenses` as profit, take-home
+/// pay or a taxable amount is making a claim this file does not. Both halves are
+/// subtotals of what the driver entered, so the difference is an **upper bound**
+/// on what the period netted, and the counts beside it are what say how partial
+/// each half was.
+///
+/// `null` unless both halves were recorded — see ``PeriodNetAfterExpenses`` for
+/// why each refusal exists.
+nonisolated struct PeriodNetAfterExpensesExport: Equatable, Sendable, Codable {
+    let amount: ExportAmount?
+
+    /// Shifts that carried a recorded amount, out of the completed shifts in the
+    /// period.
+    let contributingShiftCount: Int
+    let totalShiftCount: Int
+
+    /// How many expense records were subtracted.
+    let expenseRecordCount: Int
+
+    let currencyCode: String
+
+    init(_ net: PeriodNetAfterExpenses) {
+        amount = ExportAmount.recorded(net.amount)
+        contributingShiftCount = net.earningsCoverage.contributingCount
+        totalShiftCount = net.earningsCoverage.eligibleCount
+        expenseRecordCount = net.expenseRecordCount
+        currencyCode = Money.displayCurrencyCode
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case amount, contributingShiftCount, totalShiftCount, expenseRecordCount, currencyCode
+    }
+
+    func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encodeAlways(amount, forKey: .amount)
+        try container.encode(contributingShiftCount, forKey: .contributingShiftCount)
+        try container.encode(totalShiftCount, forKey: .totalShiftCount)
+        try container.encode(expenseRecordCount, forKey: .expenseRecordCount)
+        try container.encode(currencyCode, forKey: .currencyCode)
+    }
+}
+
 /// One period rate and the shifts that carried **both** halves of it.
 ///
 /// A shift missing either the amount or the denominator contributed neither, so
@@ -272,6 +382,13 @@ nonisolated struct PeriodExportSummary: Equatable, Sendable, Codable {
     let earnings: PeriodEarningsExport
     let deliveryEarnings: PeriodDeliveryEarningsExport
 
+    /// What the driver recorded the period cost, selected by the expenses' own
+    /// dates rather than by any shift.
+    let expenses: PeriodExpensesExport
+
+    /// **Not profit.** See ``PeriodNetAfterExpensesExport``.
+    let netAfterRecordedExpenses: PeriodNetAfterExpensesExport
+
     let route: PeriodRouteExport
     let deliveries: PeriodDeliveriesExport
 
@@ -292,6 +409,8 @@ nonisolated struct PeriodExportSummary: Equatable, Sendable, Codable {
             metrics.recordedDeliveryEarnings,
             coverage: metrics.deliveryEarningsCoverage
         )
+        expenses = PeriodExpensesExport(metrics.expenses)
+        netAfterRecordedExpenses = PeriodNetAfterExpensesExport(metrics.netAfterRecordedExpenses)
         route = PeriodRouteExport(metrics.recordedDistance, coverage: metrics.routeCoverage)
         deliveries = PeriodDeliveriesExport(metrics)
         grossPerElapsedHour = PeriodRateExport(metrics.grossPerElapsedHour)

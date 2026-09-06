@@ -19,6 +19,35 @@ import Foundation
 ///
 /// ## Version history
 ///
+/// ### Still 2 — recorded expenses
+///
+/// Recorded operating costs added a top-level `expenses` array, a
+/// `summary.expenses` block and a `summary.netAfterRecordedExpenses` block. The
+/// version was **evaluated and deliberately not bumped**, by the rule above:
+///
+/// - **Nothing existing changed meaning.** `shiftCount` still counts shifts,
+///   `shifts[]` still holds the same records, and no earnings, mileage,
+///   duration or rate field is derived any differently. In particular nothing
+///   subtracts an expense from an earnings figure that already existed: the net
+///   is a new field beside them, never a redefinition of one.
+/// - **No field was removed or renamed**, which is what forced version 2.
+/// - **No enumeration gained a value.** `scope.kind` is the same closed set of
+///   six. `expenses[].category` is a new field, so its set is new rather than
+///   widened, and a version-1 or version-2 reader that has never seen the key
+///   cannot be broken by what is in it.
+/// - **The new arrays are always present.** A scope with no expenses writes
+///   `[]`, so a reader never has to distinguish "no expenses" from "an older
+///   build" — the same reason every optional in this format is an explicit
+///   `null`.
+///
+/// A reader that ignores unknown keys therefore keeps working unchanged, which
+/// is the whole of what the version number promises. A reader written against a
+/// file produced *before* expenses existed will find the keys absent, which is
+/// how it can tell that build had no such field.
+///
+/// The CSV form is unchanged, and its columns are the same 32. Expenses are not
+/// in it: see ``ExportFileFormat/explanation``.
+///
 /// ### 2 — month and custom reporting periods
 ///
 /// Two changes, both of which a version-1 reader can be broken by, which is why
@@ -94,15 +123,18 @@ nonisolated enum ExportFileFormat: String, CaseIterable, Sendable, Hashable, Ide
         switch self {
         case .json:
             """
-            The complete record: every shift, every delivery recorded during it, and — for a day, \
-            week, month or range — the summary with the counts each figure was worked out from.
+            The complete record: every shift, every delivery recorded during it, the expenses you \
+            recorded, and — for a day, week, month or range — the summary with the counts each \
+            figure was worked out from.
             """
         case .csv:
             """
             One row per recorded delivery, with its shift's own figures repeated on it, for opening in \
-            a spreadsheet. The period summary is not included: each of its figures is paired with \
-            the number of shifts behind it, and a single flat table cannot keep that pairing. Export \
-            JSON for the summary.
+            a spreadsheet. Two things are not included. The period summary: each of its figures is \
+            paired with the number of shifts behind it, and a single flat table cannot keep that \
+            pairing. Your recorded expenses: an expense belongs to a date rather than to a shift or a \
+            delivery, so it has no row in a table of deliveries and DashPilot will not invent one. \
+            Export JSON for both.
             """
         }
     }

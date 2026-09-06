@@ -15,18 +15,20 @@ rather than a store reset.
 | 5.0.0 | Adds the `Delivery` entity and a `Shift.deliveries` relationship |
 | 6.0.0 | Adds the `PickupPlace` entity and an optional `Delivery.pickupPlace` reference |
 | 7.0.0 | Adds `Delivery.grossEarningsAmount`, an optional `Decimal` holding manually entered per-delivery earnings |
+| 8.0.0 | Adds the `Expense` entity. No existing entity changes, and no relationship is added |
 
-The current version is **v7**. Field-level detail is on [Data model](../reference/data-model.md).
+The current version is **v8**. Field-level detail is on [Data model](../reference/data-model.md).
 
-`DashPilotSchemaV1` through `DashPilotSchemaV6` hold frozen copies of their models rather than
+`DashPilotSchemaV1` through `DashPilotSchemaV7` hold frozen copies of their models rather than
 reusing the file-scope types, which have moved on. The plan then describes where a store is coming
 from as truthfully as where it is going, and the copies are never used at runtime outside
 migration.
 
-`DashPilotSchemaV6` was frozen in the interval that added v7: the file-scope `Delivery` gained a
-recorded amount of its own, so reusing it would have made v6 claim a shape no store on a device ever
-had. Each version gets its copies at the moment the next one moves the models on, exactly as v5 got
-its own when v6 added pickup places.
+`DashPilotSchemaV7` was frozen in the interval that added v8. v8 adds an entity beside the four v7
+described rather than changing any of them, so the copies were not yet forced by a shape change.
+They were taken at the moment v7 stopped being current, before a later version moves a model on and
+leaves that enum quietly claiming a shape no store ever had. Each version gets its copies as the plan
+moves past it, exactly as v6 got its own when v7 added a per-delivery amount.
 
 ## Every stage so far is lightweight, deliberately
 
@@ -106,6 +108,24 @@ migrated delivery keeps `nil`, which the app reads as "not recorded" and never a
 interface offers to add an amount rather than showing one. See
 [Earnings and metrics](../product/earnings-and-metrics.md#per-delivery-gross-earnings).
 
+### v7 to v8
+
+A new entity with **no relationship to anything**, which SwiftData can add without being told how.
+Not one existing entity changes shape, so there is nothing to rewrite, reinterpret or walk: every
+shift, route sample, capture session identifier, delivery, lifecycle timestamp, pickup place and
+recorded amount carries over untouched, and the expense table starts empty.
+
+Empty is the only honest state for it. A v7 store records what a driver's work paid and nothing about
+what it cost, and DashPilot has no source from which a past cost could be recovered: it observes no
+purchase, reads no card, receipt or platform, and models no fuel consumption or vehicle wear.
+Deriving fuel from recorded mileage, or a per-mile vehicle charge from anything at all, would write
+costs the driver never entered into their history, and this fabrication would be worse than an
+invented earnings figure, because every net figure the app shows would then be built on it.
+
+The absence of a relationship is itself the modelling decision, not a shortcut: an expense carries
+its own date, and a period contains it by that date. See
+[Recorded expenses](../product/expenses.md).
+
 It becomes a custom stage the first time a version step actually has to transform something.
 
 ## Proving a migration rather than assuming it
@@ -128,6 +148,11 @@ That is how "a v1 store keeps its shifts" is proven. The suite covers each step:
   produce identical afterwards — and no delivery is given an amount. One case is built specifically
   to make dividing a round shift total by four deliveries look reasonable, and asserts that it does
   not happen.
+
+- A v7 store's shifts, samples, sessions, shift amounts, deliveries, pickup places, per-delivery
+  amounts and the derived results over them survive, and the new expense table is empty. One case
+  presents a store holding an amount, a route and deliveries, which is everything a plausible cost
+  could have been derived from, and asserts that no expense is fabricated from any of it.
 
 Each step is also walked from every earlier version, so a device that skipped several releases is
 covered by the same suite rather than by assumption.

@@ -40,8 +40,11 @@ nothing entered, not a number, more precision than the currency has, negative, o
 
 - **More than two fraction digits is refused, not rounded.** Rounding at the point of entry would
   store a number the driver did not type. Rounding belongs to display.
-- **Negative is refused.** Gross earnings are what a shift paid; a shift that cost money is an
-  expense, and expenses are not recorded anywhere yet. Zero is allowed, and meaningful.
+- **Negative is refused.** Gross earnings are what a shift paid; money the work cost is an
+  **expense**, which is recorded separately and is itself never negative. Zero is allowed, and
+  meaningful, on both. The parser is one; only the sentence naming the subject differs, so a driver
+  typing what fuel cost is not told that gross earnings cannot be negative. See
+  [Recorded expenses](../product/expenses.md).
 - **`MoneyInput.maximumAmount` (1,000,000) is a guard against pathological input**, such as a pasted
   page of digits or a stuck key, not a judgement about what a driver can earn. `Decimal` holds 38
   significant digits, so without a bound a shift could store an amount no formatting in the app is

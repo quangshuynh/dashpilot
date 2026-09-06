@@ -13,9 +13,12 @@ import Foundation
 /// contract is built to represent them — so there is nothing to fail over and
 /// nothing is silently dropped.
 nonisolated enum ShiftExportError: Error, Equatable {
-    /// The scope holds no completed shift. Offered rather than an empty file: a
-    /// document with an empty `shifts` array is a file a driver would keep,
-    /// wondering later what it was meant to contain.
+    /// The scope holds nothing to export: no completed shift, and no recorded
+    /// expense either. Offered rather than an empty file, which is a file a
+    /// driver would keep and wonder later what it was meant to contain.
+    ///
+    /// A scope holding **only** expenses is exported. They are records in their
+    /// own right, and a day off with a tank of fuel on it is not an empty day.
     case noCompletedShiftsInScope
 
     /// A running shift was asked for. Its elapsed time is still growing and it
@@ -42,7 +45,7 @@ nonisolated extension ShiftExportError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .noCompletedShiftsInScope:
-            "There are no completed shifts to export here."
+            "There are no completed shifts and no recorded expenses to export here."
         case .shiftNotCompleted:
             "A shift that is still in progress cannot be exported. End it first."
         case .shiftUnavailable:

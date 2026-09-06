@@ -138,7 +138,9 @@ and one they cannot.
 - **The per-recorded-mile rate is biased upward** by exactly the mileage capture missed, so it is
   not comparable to a per-mile figure from an app that records in the background.
 - **Every rate is gross.** Nothing subtracts fuel, wear, insurance or tax. None is a profit,
-  take-home or tax figure, and none is a mileage deduction.
+  take-home or tax figure, and none is a mileage deduction. Recorded expenses are a separate record
+  and are subtracted in exactly one place, a period's net after recorded expenses, which is also not
+  profit.
 - **USD only.** Nothing converts currencies or records which currency a shift was earned in.
 - **Aggregates cover a day, a week, a calendar month or a chosen date range.** No quarter, no year,
   no all-time total, no best or worst shift, no comparison between periods, no chart and no sorting.
@@ -176,6 +178,26 @@ and one they cannot.
   a week of long routes is measured again each time the driver switches to it. Acceptable at current
   route sizes; caching is deferred until there is a measurement behind it.
 
+## Recorded expenses
+
+- **Only what the driver types exists.** DashPilot observes no purchase and estimates no cost, so a
+  period's recorded expense total is a floor and a period with none recorded is not a period that
+  cost nothing.
+- **An expense total carries no coverage pair**, because there is no denominator: nothing knows how
+  many costs went unrecorded. A count of records is all that can honestly be stated.
+- **An expense belongs to a date, not to a shift.** There is no per-shift, per-delivery or per-mile
+  cost anywhere, and no shift-level net figure. Attaching a cost to work the driver did not attach it
+  to would be an attribution the app invented.
+- **Net after recorded expenses is not profit**, not take-home pay and not a tax figure. It is one
+  recorded subtotal less another, and it is absent unless both halves were recorded.
+- **Five fixed categories.** No custom categories, no subcategories and no renaming.
+- **No recurring expenses, receipts, photographs, attachments, merchant, payment method or vehicle.**
+- **No tax treatment of any kind**: no deduction, no mileage allowance, no depreciation and no
+  classification of a cost as claimable.
+- **Expenses are not in the CSV export.** Its rows are deliveries, and an expense belongs to a date
+  rather than to one, so it has no row there, the same deliberate refusal the period summary gets.
+- **A note is capped at 120 characters** and is exported as the driver wrote it.
+
 ## Data and safety
 
 - **Deletion is permanent.** No undo, no trash and no archive. A mis-tap past the confirmation costs
@@ -192,6 +214,8 @@ and one they cannot.
   one.
 - **No raw coordinates.** A route is exported as a measurement and a description of its coverage.
   There is no GPX, KML or GeoJSON output, and no way to export positions at all.
+- **The CSV carries neither the period summary nor the recorded expenses**, and a single shift's
+  file carries no expenses at all because no expense belongs to a shift.
 - **The CSV carries no period summary.** Each of a summary's figures is paired with the count of
   shifts behind it, and a flat table cannot keep that pairing, so the summary is JSON-only. This is a
   deliberate refusal rather than a gap to be filled by flattening it.
@@ -204,7 +228,8 @@ and one they cannot.
   control that starts the export, and the only choice on the sheet is JSON or CSV.
 - **No PDF, spreadsheet or archive format**, and nothing is packaged: one file per export.
 - **An export is not a tax statement**, not a deduction calculation and not a record from any
-  delivery platform. Nothing in it was imported, confirmed or reconciled against one.
+  delivery platform. The expenses in a file are the ones the driver typed, and the net beside them is
+  not profit. Nothing in it was imported, confirmed or reconciled against one.
 - **Once a file is shared, DashPilot knows nothing about it.** Where it goes and what happens to it
   are outside the app, and there is no revoke, no expiry and no record that it was shared.
 - **Exports are temporary and are not kept.** The export directory is emptied before each new export
