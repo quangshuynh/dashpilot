@@ -167,6 +167,29 @@ struct ExportFixture {
         return delivery
     }
 
+    // MARK: Expenses
+
+    /// A recorded expense, inserted and returned.
+    ///
+    /// Dated rather than attached: nothing here takes a shift, because an
+    /// expense does not belong to one.
+    @discardableResult
+    func expense(
+        _ amount: String,
+        category: ExpenseCategory = .fuel,
+        hoursAfterStart hours: Double,
+        note: String = ""
+    ) throws -> Expense {
+        let expense = try Expense(
+            occurredAt: at(hours),
+            amount: try money(amount),
+            category: category,
+            noteText: note
+        )
+        context.insert(expense)
+        return expense
+    }
+
     // MARK: Pickup places
 
     @discardableResult

@@ -434,7 +434,14 @@ struct ExportFormatVersionTests {
         let data = try ExportDocumentEncoder().json(for: document)
         let object = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
 
-        #expect(Set(object.keys) == ["formatVersion", "producer", "exportedAt", "scope", "shiftCount", "shifts", "summary"])
+        // The version-1 keys are all still here and still mean what they meant.
+        // `expenses` was added beside them by a later, additive change that did
+        // not move the version — see `ExpenseExportTests`.
+        let versionOneKeys: Set<String> = [
+            "formatVersion", "producer", "exportedAt", "scope", "shiftCount", "shifts", "summary"
+        ]
+        #expect(versionOneKeys.isSubset(of: Set(object.keys)))
+        #expect(Set(object.keys).subtracting(versionOneKeys) == ["expenses"])
         #expect(object["producer"] as? String == "DashPilot")
         // Money is still a decimal string, never a JSON number.
         let text = String(decoding: data, as: UTF8.self)
