@@ -145,11 +145,40 @@ struct ShiftExportSheet: View {
                 not a tax statement and not a record from any delivery platform.
                 """
             )
+            Text(expenseStatement)
         } header: {
             Text("What Leaves the Device")
         }
         .font(.footnote)
         .foregroundStyle(.secondary)
+    }
+
+    /// What the file says about recorded costs, which depends on both the scope
+    /// and the format rather than on one of them.
+    ///
+    /// A single shift carries none at all: an expense belongs to a date rather
+    /// than to a shift, so there is no set of them this file could honestly
+    /// claim. The CSV carries none either, because its rows are deliveries.
+    private var expenseStatement: String {
+        switch (scope, format) {
+        case (.shift, _):
+            """
+            Expenses you recorded are not in a single shift's file. An expense belongs to a date \
+            rather than to a shift, so DashPilot cannot say which ones were part of this one. Export \
+            a day, week, month or range for costs alongside the work.
+            """
+        case (_, .csv):
+            """
+            Expenses you recorded are not in the CSV: its rows are deliveries, and an expense belongs \
+            to a date rather than to one. Export JSON to include them.
+            """
+        case (_, .json):
+            """
+            Expenses you recorded in this period are included, with their notes, and so is what your \
+            recorded gross earnings come to after them. That figure is not profit: costs you did not \
+            record are not in it.
+            """
+        }
     }
 
     // MARK: Writing

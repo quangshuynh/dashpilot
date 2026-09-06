@@ -158,12 +158,28 @@ nonisolated struct ExportDocument: Equatable, Sendable, Codable {
     /// Newest first, matching the order history is read in.
     let shifts: [ShiftExportRecord]
 
+    /// The operating costs the driver recorded in this scope, newest first.
+    ///
+    /// Selected by the expenses' **own** dates: a period scope holds the
+    /// expenses dated inside it, and an all-history scope holds every one.
+    ///
+    /// **Always empty for a single-shift scope**, and that is a statement about
+    /// the model rather than a gap in the export. An expense is dated, not
+    /// attached to a shift, so DashPilot cannot say which expenses belong to one
+    /// shift — and picking the ones that happen to share its clock hours would
+    /// invent exactly the attribution the app refuses to invent. Export the day,
+    /// the week, the month or a range to get costs beside work.
+    ///
+    /// Present and empty rather than absent, so a reader never has to tell "no
+    /// expenses" from "an older build".
+    let expenses: [ExpenseExportRecord]
+
     /// The period's own figures with the counts behind them, or `null` for a
     /// scope that is not a calendar period.
     let summary: PeriodExportSummary?
 
     private enum CodingKeys: String, CodingKey {
-        case formatVersion, producer, exportedAt, scope, shiftCount, shifts, summary
+        case formatVersion, producer, exportedAt, scope, shiftCount, shifts, expenses, summary
     }
 
     func encode(to encoder: any Encoder) throws {
@@ -174,6 +190,7 @@ nonisolated struct ExportDocument: Equatable, Sendable, Codable {
         try container.encode(scope, forKey: .scope)
         try container.encode(shiftCount, forKey: .shiftCount)
         try container.encode(shifts, forKey: .shifts)
+        try container.encode(expenses, forKey: .expenses)
         try container.encodeAlways(summary, forKey: .summary)
     }
 }
@@ -183,6 +200,7 @@ nonisolated extension ExportDocument {
     init(
         scope: ExportScope,
         shifts: [ShiftExportRecord],
+        expenses: [ExpenseExportRecord] = [],
         summary: PeriodExportSummary?,
         exportedAt: Date
     ) {
@@ -192,6 +210,7 @@ nonisolated extension ExportDocument {
         self.scope = ExportScopeRecord(scope)
         shiftCount = shifts.count
         self.shifts = shifts
+        self.expenses = expenses
         self.summary = summary
     }
 }
