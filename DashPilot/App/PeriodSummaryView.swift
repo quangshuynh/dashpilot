@@ -31,6 +31,7 @@ import SwiftUI
 struct PeriodSummaryView: View {
     @Environment(\.calendar) private var calendar
     @Environment(\.locale) private var locale
+    @Environment(\.scenePhase) private var scenePhase
 
     /// Every completed shift. The period's own shifts are selected from these by
     /// ``ReportingPeriod/contains(_:)``, which is also the rule the calculator
@@ -56,8 +57,22 @@ struct PeriodSummaryView: View {
     /// day, and a 28- or 31-day month, without any arithmetic on seconds here.
     @State private var anchor = Date.now
 
-    /// Fixed when the screen appears rather than read continuously: which period
-    /// is "current" must not change under the driver mid-read.
+    /// What "now" is, for naming the period and for refusing a selection in the
+    /// future.
+    ///
+    /// Read when the screen appears and again whenever the app returns to the
+    /// foreground, rather than continuously: which period is "current" must not
+    /// change under the driver mid-read, but it must not be wrong either. A
+    /// summary opened before midnight and returned to after one held a "now"
+    /// from the previous day, which called yesterday `Today`, disabled the step
+    /// forward because the day on screen still looked current, and refused
+    /// today as the end of a custom range. A driver on a long shift is exactly
+    /// the person that happens to.
+    ///
+    /// Only the naming moves. The period on screen stays the one the driver was
+    /// reading, so nothing they were looking at is swapped out; it is simply
+    /// named correctly, and the step to the new current period becomes
+    /// available.
     @State private var now = Date.now
 
     /// The custom range's two **inclusive** dates.
@@ -134,6 +149,13 @@ struct PeriodSummaryView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task(id: measurementToken) { measureRoutes() }
         .onAppear(perform: seedCustomRangeIfNeeded)
+        .onChange(of: scenePhase) { _, phase in
+            // `.inactive` is deliberately not included, for the reason
+            // `RootView` ignores it: the app switcher and a call banner are not
+            // the driver leaving, and re-reading the clock for one of them could
+            // rename the period they are mid-way through reading.
+            if phase == .active { now = .now }
+        }
         // On the list rather than on the section that presents it: the sections
         // are rebuilt whenever the routes are re-measured, and a sheet attached
         // to one that briefly disappears goes with it.
