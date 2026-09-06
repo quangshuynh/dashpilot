@@ -29,6 +29,13 @@ nonisolated enum AppLog {
     /// logs.
     static let earnings = Logger(subsystem: subsystem, category: "earnings")
 
+    /// Operating costs the driver recorded: that an expense was added, changed
+    /// or removed, which **category** it was, and whether a note exists. Never
+    /// the amount, never the date the money was spent, and never a word of the
+    /// note — a note is free text the driver typed, which is exactly the kind of
+    /// value this project keeps out of the logs.
+    static let expenses = Logger(subsystem: subsystem, category: "expenses")
+
     /// Delivery lifecycle transitions and the rules that reject them. Records
     /// that a delivery started, advanced or finished — never when, never where,
     /// and never what it paid. A driver's delivery timing is work history, and
