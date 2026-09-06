@@ -528,5 +528,54 @@ enum PreviewSupport {
         let numbered = NumberedDelivery(number: 2, delivery: subject)
         return PickupPlaceEditor(numbered: numbered).modelContainer(container)
     }
+
+    /// The rename sheet over a synthetic place that a delivery already names.
+    ///
+    /// A second place exists in the store so the preview exercises the screen a
+    /// collision is actually reachable from.
+    @MainActor
+    static func pickupPlaceRename() -> some View {
+        let (container, subject, _) = twoPlacesSharingAShift()
+        return PickupPlaceRenameView(place: subject).modelContainer(container)
+    }
+
+    /// The merge sheet over a synthetic place, with one destination to choose.
+    @MainActor
+    static func pickupPlaceMerge() -> some View {
+        let (container, subject, _) = twoPlacesSharingAShift()
+        return PickupPlaceMergeView(source: subject, onMerged: {}).modelContainer(container)
+    }
+
+    /// One completed shift, two synthetic places, and a delivery at each.
+    ///
+    /// Enough for both correction screens: the first place is the one being
+    /// renamed or merged away, and the second is what a rename could collide
+    /// with and what a merge can be pointed at.
+    @MainActor
+    private static func twoPlacesSharingAShift() -> (ModelContainer, PickupPlace, PickupPlace) {
+        let container = emptyContainer()
+        let context = container.mainContext
+        let start = Date(timeIntervalSince1970: 1_756_000_000)
+
+        let shift = Shift(startedAt: start)
+        try? shift.end(at: start.addingTimeInterval(4 * 3600))
+        context.insert(shift)
+
+        let subject = place(named: SyntheticPickupPlace.diner, at: start, in: context)
+        let other = place(named: SyntheticPickupPlace.noodles, at: start.addingTimeInterval(60), in: context)
+
+        for (index, attached) in [subject, other].enumerated() {
+            let accepted = start.addingTimeInterval(Double(index) * 3_000 + 300)
+            let delivery = Delivery(shift: shift, acceptedAt: accepted)
+            try? delivery.markArrivedAtPickup(at: accepted.addingTimeInterval(300))
+            try? delivery.markPickedUp(at: accepted.addingTimeInterval(900))
+            try? delivery.markDelivered(at: accepted.addingTimeInterval(1_800))
+            delivery.setPickupPlace(attached)
+            context.insert(delivery)
+        }
+        try? context.save()
+
+        return (container, subject, other)
+    }
 }
 #endif

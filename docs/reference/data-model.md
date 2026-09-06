@@ -86,7 +86,7 @@ attributed to a delivery.
 | Field | Type | Notes |
 | --- | --- | --- |
 | `id` | `UUID` | Unique attribute |
-| `displayName` | `String` | The driver's own spelling. The first accepted one wins and is never rewritten |
+| `displayName` | `String` | The driver's own spelling. The first accepted one wins against matching, and only `rename(to:)` rewrites it |
 | `normalizedName` | `String` | The comparison key from `PickupPlaceName`. Never shown, spoken or logged |
 | `createdAt` | `Date` | When the place was first named on this device. Used for ordering, not analysis |
 | `deliveries` | `[Delivery]` | Nullify delete, inverse of `Delivery.pickupPlace` |
@@ -99,6 +99,13 @@ Derived, never stored:
 | `pickupWaitSamples` | Each referencing delivery's recorded wait, oldest first. Deliveries missing either end are skipped |
 | `pickupWaitMetrics(using:)` | A `PickupWaitMetrics`: sample count, median, shortest, longest and most recent. See [Pickup wait](../product/pickup-wait.md) |
 | `namedBefore(_:_:)` | The total, repeatable order over places: creation ascending, identity breaking a tie |
+| `displayedBefore(_:_:)` | Alphabetical presentation order: `localizedStandardCompare` on the display name, `namedBefore` breaking a tie. Used for merge destinations |
+
+Mutating:
+
+| Member | Meaning |
+| --- | --- |
+| `rename(to:)` | Writes `displayName` and `normalizedName` together from one `PickupPlaceName`. Leaves `id`, `createdAt` and `deliveries` alone. Collision detection is the service's, not the model's |
 
 No aggregate is stored. There is no `medianWait`, `averageWait` or `pickupCount` column, and adding
 one is what a test in `PickupWaitMetricsTests` exists to fail on.
@@ -110,6 +117,11 @@ median wait or score is stored on a place** — every such figure is derived fro
 asked, and a stored copy could drift away from them. There is no address, coordinate, phone number, store
 number or platform identifier, and nothing here came from anywhere but the driver's keyboard. See
 [Pickup identity](../product/pickup-identity.md).
+
+Renaming a place and merging one place into another are **relationship and attribute mutations
+only** — no version of the store records an alias, a merge history, a redirect identifier or a
+tombstone, and neither operation changed the schema. A merge reassigns `Delivery.pickupPlace` for
+every delivery on the source and then deletes the source, in one commit.
 
 A delivery is independent of every other delivery: it derives its state from its own timestamps
 alone, so several can be active at once with overlapping lifecycles, and nothing here records a
@@ -157,7 +169,8 @@ none either — it is unioned from timestamps already stored, every time it is s
 | `NumberedDelivery` | A delivery with the local number the interface labels it with. Presentation only, never persisted |
 | `DeliveryError`, `DeliveryLifecycleError` | Refused delivery transitions, and why |
 | `PickupPlaceName` | The normalisation policy: a display spelling and the key identity is decided by |
-| `PickupPlaceNameError`, `PickupPlaceError` | Refused pickup names and failed pickup writes, and why |
+| `PickupPlaceNameError`, `PickupPlaceError` | Refused pickup names, rename collisions, refused merges and failed pickup writes, and why |
+| `PickupPlaceIdentity` | A place's id and spelling as a `Sendable` value, so a rename collision can name what it collided with without a thrown error holding a model |
 
 ## What is not in the store
 
