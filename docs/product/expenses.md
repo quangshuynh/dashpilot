@@ -179,7 +179,9 @@ none inside a delivery.
   deleting a *shift* never deletes an expense: the two are unrelated rows.
 - **A date cannot be in the future.** An expense is something that already
   happened, and a mistyped year would silently drop the record out of every
-  period the driver looks at.
+  period the driver looks at. The bound is re-read when the app returns to the
+  foreground, so an editor left open across a midnight does not refuse the day
+  that has begun; the date already chosen is never rewritten.
 - **A negative amount is refused** by the model, not only by the screen.
 
 Typing an amount and a note is a stopped-vehicle task. Nothing in the expense
