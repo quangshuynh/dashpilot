@@ -27,11 +27,14 @@ struct PickupPlacePersistenceTests {
 
     // MARK: Schema
 
-    @Test("Version 6 is current, and it is the version that adds pickup places")
+    /// What v6 added, and nothing about the plan's overall shape: the version
+    /// count and the stage count are asserted once, in the suite for whichever
+    /// version is current — `DeliveryEarningsPersistenceTests` today. A count
+    /// repeated across suites is one that gets updated in four places and
+    /// forgotten in the fifth.
+    @Test("Version 6 is the version that adds pickup places")
     func schemaVersion() throws {
         #expect(DashPilotSchemaV6.versionIdentifier == Schema.Version(6, 0, 0))
-        #expect(DashPilotMigrationPlan.schemas.count == 6)
-        #expect(DashPilotMigrationPlan.stages.count == 5)
 
         let entities = Set(ModelContainerFactory.currentSchema.entities.map(\.name))
         #expect(entities == ["Shift", "RouteSample", "Delivery", "PickupPlace"])
