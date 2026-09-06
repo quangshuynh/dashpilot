@@ -68,12 +68,17 @@ struct RootView: View {
                 Section {
                     // The entry point to everything that spans shifts, at the
                     // head of history rather than buried inside one shift: a
-                    // summary of a day or a week is not a property of any single
-                    // shift in it.
+                    // summary of a day, a week, a month or a chosen range is not
+                    // a property of any single shift in it.
+                    //
+                    // Named for what the screen is rather than for the four
+                    // lengths it offers: listing them here would have to be
+                    // corrected every time one is added, and the screen already
+                    // says which one it is showing.
                     NavigationLink {
                         PeriodSummaryView()
                     } label: {
-                        Label("Day and Week Summaries", systemImage: "calendar")
+                        Label("Period Summaries", systemImage: "calendar")
                     }
                     .accessibilityIdentifier("periodSummaryLink")
 
