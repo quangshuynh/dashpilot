@@ -85,8 +85,8 @@ database" action.
 
 Expenses, fuel, taxes, mileage deductions, a tips-versus-base breakdown, per-delivery mileage,
 customer identity, merchant scoring, ranking or profitability, offer profitability, automatic
-delivery or pickup detection, geocoding, maps, route visualisation, weekly or all-time totals,
-export, App Intents, Live Activities and recommendations.
+delivery or pickup detection, geocoding, maps, route visualisation, monthly or all-time totals,
+importing an exported file, backup, sync, App Intents, Live Activities and recommendations.
 
 Deliveries are recorded, and three things are built on them. One is the shift time at least one
 delivery was active, with overlapping deliveries counted once, and gross earnings over it. Another

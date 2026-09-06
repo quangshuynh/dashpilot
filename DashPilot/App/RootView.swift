@@ -24,6 +24,9 @@ struct RootView: View {
 
     @State private var lifecycleError: ShiftLifecycleError?
 
+    /// Exporting every completed shift.
+    @State private var isExportingHistory = false
+
     private var activeShift: Shift? { unfinishedShifts.first }
 
     var body: some View {
@@ -74,6 +77,20 @@ struct RootView: View {
                     }
                     .accessibilityIdentifier("periodSummaryLink")
 
+                    // Beside the summaries rather than inside a shift: this one
+                    // spans every shift there is. Absent when history is empty,
+                    // because an export control over no records is an offer the
+                    // app would have to refuse.
+                    if !completedShifts.isEmpty {
+                        Button {
+                            isExportingHistory = true
+                        } label: {
+                            Label(ExportScope.allHistory.actionTitle, systemImage: "square.and.arrow.up")
+                        }
+                        .accessibilityLabel(ExportScope.allHistory.spokenActionLabel)
+                        .accessibilityIdentifier("exportAllHistoryButton")
+                    }
+
                     ForEach(completedShifts) { shift in
                         // The whole row is one destination: a finished shift is
                         // a thing to open, not a row with controls scattered
@@ -96,10 +113,20 @@ struct RootView: View {
             .navigationDestination(for: Shift.self) { shift in
                 CompletedShiftDetailView(shift: shift)
             }
+            .sheet(isPresented: $isExportingHistory) {
+                ShiftExportSheet(scope: .allHistory)
+            }
             // A shift that was still running when the app was terminated is
             // still running now, so capture resumes here rather than waiting for
             // the driver to touch anything.
-            .task { routeCapture.synchronize() }
+            .task {
+                routeCapture.synchronize()
+                // A share that was interrupted by termination can leave a file
+                // in the temporary export directory. It is cleared once per
+                // launch so the app never holds a copy of a driver's history
+                // they did not ask it to keep.
+                ShiftExportService(context: modelContext).purgeTemporaryExports()
+            }
             .onChange(of: scenePhase) { _, phase in
                 switch phase {
                 case .active:

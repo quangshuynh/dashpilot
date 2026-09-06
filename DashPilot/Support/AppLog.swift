@@ -43,6 +43,14 @@ nonisolated enum AppLog {
     /// of where they are.
     static let pickupPlace = Logger(subsystem: subsystem, category: "pickup-place")
 
+    /// Local history export: that a file was written, for which scope and in
+    /// which format, and how many shifts went into it; that an export was
+    /// refused, by rule; and that a write failed. **Never the contents** — no
+    /// date a driver worked, no amount, no place name, no distance — and never
+    /// the path the file was written to, which names a location on the device
+    /// and tells a reader of the log nothing they can act on.
+    static let export = Logger(subsystem: subsystem, category: "export")
+
     /// Route sample capture: when it starts and stops, why it cannot run, how
     /// many samples were kept, and which rule rejected a candidate. Records the
     /// behaviour of the pipeline, never a coordinate that went through it.

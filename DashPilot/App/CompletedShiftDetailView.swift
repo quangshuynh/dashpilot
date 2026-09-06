@@ -39,6 +39,10 @@ struct CompletedShiftDetailView: View {
     /// belonging to this screen.
     @State private var isEditingEarnings = false
 
+    /// Exporting is a sheet for the reason editing is: the file is written when
+    /// it opens, and the driver can leave without sharing anything.
+    @State private var isExporting = false
+
     @State private var isConfirmingDeletion = false
     @State private var deletionError: ShiftLifecycleError?
 
@@ -72,6 +76,7 @@ struct CompletedShiftDetailView: View {
             // with the shift, and a long per-delivery log between the header
             // and the figures would bury everything that summarises it.
             deliveriesSection
+            exportSection
             deleteSection
         }
         .navigationTitle(shift.startedAt.formatted(date: .abbreviated, time: .omitted))
@@ -79,6 +84,9 @@ struct CompletedShiftDetailView: View {
         .task(id: shift.id) { recordedDistance = shift.recordedDistance() }
         .sheet(isPresented: $isEditingEarnings) {
             ShiftEarningsEditor(shift: shift)
+        }
+        .sheet(isPresented: $isExporting) {
+            ShiftExportSheet(scope: .shift(shift.id))
         }
         // An alert rather than a confirmation dialog: a dialog is presented as a
         // popover in some layouts, where iOS drops the explicit Cancel button
@@ -451,6 +459,40 @@ struct CompletedShiftDetailView: View {
                 delivery active time counts shared minutes once, and a per-delivery hourly figure \
                 covers only that delivery's own lifecycle. Any amount here is one you recorded \
                 against that delivery; nothing is taken from, or added to, the shift's own amount.
+                """
+            )
+        }
+    }
+
+    // MARK: Export
+
+    /// Taking this shift's record somewhere else.
+    ///
+    /// Between the log and the deletion, deliberately: it belongs with the two
+    /// actions that act on the whole shift rather than with the figures, and it
+    /// sits above deletion because a driver about to delete a shift may well
+    /// want to keep a copy of it first.
+    ///
+    /// Offered only from a finished shift, like everything else on this screen.
+    /// A running shift has no export control anywhere in the app.
+    private var exportSection: some View {
+        Section {
+            Button {
+                isExporting = true
+            } label: {
+                Label(ExportScope.shift(shift.id).actionTitle, systemImage: "square.and.arrow.up")
+            }
+            .accessibilityLabel(ExportScope.shift(shift.id).spokenActionLabel)
+            .accessibilityIdentifier("exportShiftButton")
+        } header: {
+            Text("Export")
+        } footer: {
+            Text(
+                """
+                Writes what DashPilot recorded for this shift — its times, its deliveries, the amounts \
+                you typed and its recorded mileage — as a JSON or CSV file on this device, then offers \
+                it to the share sheet. Recorded positions are not included, and nothing is sent \
+                anywhere unless you send it.
                 """
             )
         }

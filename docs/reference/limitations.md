@@ -173,11 +173,37 @@ and one they cannot.
 
 ## Data and safety
 
-- **Deletion is permanent.** No undo, no trash, no archive and no export before deleting. A mis-tap
-  past the confirmation costs the shift and its route.
-- **No export.** There is no CSV or JSON output, so the only copy of a driver's history is the one
-  on the device.
-- **No backup beyond the device.** No accounts, no sync and no cloud copy of any kind.
+- **Deletion is permanent.** No undo, no trash and no archive. A mis-tap past the confirmation costs
+  the shift and its route; exporting first is possible but is not offered as part of the deletion
+  flow and is not a prompt.
+- **No backup beyond the device.** No accounts, no sync and no cloud copy of any kind. An export is a
+  copy the driver makes and places somewhere themselves; it is not a backup the app manages.
+- **No import.** An exported file cannot be read back in. There is no restore, no merge and no way to
+  move history onto another device through the app.
+
+## History export
+
+- **Completed shifts only.** A running shift is never exported, and there is no export control on
+  one.
+- **No raw coordinates.** A route is exported as a measurement and a description of its coverage.
+  There is no GPX, KML or GeoJSON output, and no way to export positions at all.
+- **The CSV carries no period summary.** Each of a summary's figures is paired with the count of
+  shifts behind it, and a flat table cannot keep that pairing, so the summary is JSON-only. This is a
+  deliberate refusal rather than a gap to be filled by flattening it.
+- **CSV cells beginning with a formula character are prefixed with an apostrophe.** That is a visible
+  change to a pickup place's name as it appears in the file. It is the only defence that survives an
+  RFC 4180 parser stripping the quotes.
+- **A rate is exported at two decimal places**, the figure the app displays, not the six fraction
+  digits it is derived at.
+- **No column selection, date-range builder or scheduled export.** The scope is decided by the
+  control that starts the export, and the only choice on the sheet is JSON or CSV.
+- **No PDF, spreadsheet or archive format**, and nothing is packaged: one file per export.
+- **An export is not a tax statement**, not a deduction calculation and not a record from any
+  delivery platform. Nothing in it was imported, confirmed or reconciled against one.
+- **Once a file is shared, DashPilot knows nothing about it.** Where it goes and what happens to it
+  are outside the app, and there is no revoke, no expiry and no record that it was shared.
+- **Exports are temporary and are not kept.** The export directory is emptied before each new export
+  and once at launch, so there is no in-app list of past exports to return to.
 
 ## Product scope
 
