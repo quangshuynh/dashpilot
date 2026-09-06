@@ -243,18 +243,19 @@ nonisolated extension ReportingPeriod {
         if unit == .day, isDayBefore(now, calendar: calendar) {
             return "Yesterday"
         }
+        let style = dayStyle(calendar: calendar, locale: locale)
         switch unit {
         case .day:
-            return start.formatted(.dateTime.weekday(.abbreviated).month().day().locale(locale))
+            return start.formatted(style.weekday(.abbreviated).month().day())
         case .week:
-            return "Week of \(start.formatted(.dateTime.month().day().locale(locale)))"
+            return "Week of \(start.formatted(style.month().day()))"
         case .month:
             // The month's own name and its year, from the locale. Never a name
             // this app assembled: "September" is not a string DashPilot is
             // entitled to hard-code on a device set to another language.
-            return start.formatted(.dateTime.month(.wide).year().locale(locale))
+            return start.formatted(style.month(.wide).year())
         case .custom:
-            return datesStatement(locale: locale)
+            return datesStatement(calendar: calendar, locale: locale)
         }
     }
 
@@ -269,11 +270,13 @@ nonisolated extension ReportingPeriod {
     ) -> String {
         switch unit {
         case .day:
-            return start.formatted(.dateTime.weekday().month().day().locale(locale))
+            return start.formatted(dayStyle(calendar: calendar, locale: locale).weekday().month().day())
         case .week, .month:
-            return datesStatement(locale: locale)
+            return datesStatement(calendar: calendar, locale: locale)
         case .custom:
-            guard let days = dayCount(using: calendar) else { return datesStatement(locale: locale) }
+            guard let days = dayCount(using: calendar) else {
+                return datesStatement(calendar: calendar, locale: locale)
+            }
             return days == 1 ? "1 selected day" : "\(days) selected days"
         }
     }
@@ -287,9 +290,31 @@ nonisolated extension ReportingPeriod {
     /// `Foundation` writes the separator and decides whether the month or the
     /// year is worth repeating. Hand-assembling `"Sep 1 – 7, 2026"` would be
     /// correct in one language.
-    private func datesStatement(locale: Locale = .autoupdatingCurrent) -> String {
-        let style = Date.IntervalFormatStyle(date: .abbreviated, time: .omitted).locale(locale)
+    private func datesStatement(
+        calendar: Calendar = .autoupdatingCurrent,
+        locale: Locale = .autoupdatingCurrent
+    ) -> String {
+        let style = Date.IntervalFormatStyle(
+            date: .abbreviated,
+            time: .omitted,
+            locale: locale,
+            calendar: calendar,
+            timeZone: calendar.timeZone
+        )
         return style.format(start..<max(start, lastInstant))
+    }
+
+    /// The style every single date in this extension is written with.
+    ///
+    /// The period's **own** calendar and time zone travel with the wording,
+    /// never the ones the process happens to be running in. `start` and
+    /// `lastInstant` are boundary instants this calendar computed, and reading
+    /// one back in another zone moves it across a day boundary: 23:59:59 on a
+    /// period's last day is already the next day anywhere further east, so a
+    /// September month named in a zone ahead of the calendar's reads as ending
+    /// on 1 October, a date the period does not contain.
+    private func dayStyle(calendar: Calendar, locale: Locale) -> Date.FormatStyle {
+        Date.FormatStyle(locale: locale, calendar: calendar, timeZone: calendar.timeZone)
     }
 
     /// What VoiceOver hears in place of the title, which on its own can be a
