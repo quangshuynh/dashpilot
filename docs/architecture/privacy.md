@@ -20,6 +20,12 @@ there is nothing to configure, disable or trust.
 - Deletion is local and permanent. A deleted shift is removed from the device's store, and there is
   no copy anywhere else to remove it from.
 - Location permission is requested at the When In Use scope only, and only when the driver taps.
+- **The voice and Shortcuts actions carry no values and are not donated.** None of the four intents
+  takes a parameter, so nothing dictated is stored and no shortcut, suggestion or tile holds an
+  amount, a place or a position. DashPilot does not donate performed intents to the system either:
+  App Shortcuts are offered from installation, and a donation would additionally feed the system's
+  prediction of what a driver does and when. See
+  [Voice and system actions](../product/voice-actions.md).
 - **Export is the one way data leaves, and it is a user action.** DashPilot writes a JSON or CSV file
   into a temporary directory on the device when the driver taps an export control, and hands it to
   the system share sheet. Nothing exports on a schedule, on shift end or at launch, and there is
@@ -55,9 +61,10 @@ counts and errors. Coordinates, addresses and earnings amounts are never logged.
 | `earnings` | That an amount was added, updated or removed, or that a save failed | The amount |
 | `pickup-place` | That a place was assigned, changed, removed, reused, created, renamed or merged; that a name, rename or merge was refused, by rule; that a save failed | The name typed, the normalised key derived from it, and how many deliveries a merge moved |
 | `expenses` | That an expense was recorded, updated or deleted, which **category** it was, whether a note exists, and that a write was refused by rule or failed | The amount, the date the money was spent, and any word of the note |
+| `intents` | Which action a system surface asked for, that it started or ended a shift, started a delivery or recorded an event, and which rule refused it | When any of it happened, and anything the driver said: the intents take no dictated value at all |
 | `export` | That a file was written, for which scope and in which format, and how many shifts went into it; that an export was refused, by rule; that a write failed | Anything in the file — a date worked, an amount, a place, a distance — and the path it was written to |
 
-Seven deliberate silences are worth stating.
+Eight deliberate silences are worth stating.
 
 **Mileage is not logged at all.** The calculation reads coordinates and produces a trip metric, and
 neither belongs in a log. There is no failure it can report, because an unmeasurable route is a
@@ -87,6 +94,10 @@ a description of their spending. The category is a fixed word from a closed set,
 it cannot accidentally become the value. Nothing about a period's expense total, its split by
 category or the net after it is logged at all: every one of those is a derived figure that is a
 normal result rather than a failure, exactly as a rate is.
+
+**An action performed by voice records no time.** The log says a shift was started from an intent,
+not when. When a driver starts and stops work is their schedule, and a category that exists partly to
+make an off-screen write auditable would otherwise become the most convenient place to read one off.
 
 **A merge records nothing about what it moved.** The log says two pickup places were merged, and not
 which two or how many deliveries changed hands. A count of a driver's pickups at one place is work

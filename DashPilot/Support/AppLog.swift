@@ -42,6 +42,13 @@ nonisolated enum AppLog {
     /// the log is not the place for it.
     static let delivery = Logger(subsystem: subsystem, category: "delivery")
 
+    /// Actions performed from Siri, Shortcuts and other system surfaces:
+    /// which action was asked for, and which rule refused it. Never a
+    /// timestamp, because when a driver started work is work history, and never
+    /// anything the driver said — the intents take no dictated value in the
+    /// first place.
+    static let intents = Logger(subsystem: subsystem, category: "intents")
+
     /// Pickup identity: that a place was assigned, changed or removed, and
     /// whether an existing place was reused or a new one created. **Never a
     /// place's name**, in any form — not the spelling the driver typed and not

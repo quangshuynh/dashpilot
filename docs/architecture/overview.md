@@ -11,6 +11,7 @@ kept flat and explicit; layers are introduced when a concrete problem calls for 
 | `Models` | SwiftData `@Model` types, which own the invariants of their own transitions |
 | `Persistence` | The versioned schema, the migration plan and container construction |
 | `Services` | Application services that own state transitions, plus thin adapters over platform frameworks |
+| `Intents` | The App Intents surface: four short lifecycle actions performed with no screen, over those same services |
 | `App` | SwiftUI entry point, screens and preview fixtures |
 | `Support` | Cross-cutting utilities: logging and launch arguments |
 
@@ -97,6 +98,40 @@ does not know how a delivery advances.
   cancelled, deleted or reparented to tidy it up, because each of those would invent a fact about
   work the driver did.
 
+## System surfaces: App Intents
+
+Four intents (start a shift, end a shift, start a delivery, record the next delivery event) can be
+performed by voice, from Shortcuts or from Spotlight, with the app never coming to the screen. They
+exist for driving safety: the timestamp recorded at the moment the driver says so is the accurate
+one.
+
+`IntentLifecycleService` is the only type they call, and **it owns no lifecycle logic.** It calls
+`ShiftService` and `DeliveryService`, carries their refusals through unchanged so a driver hears the
+same sentence they would read, and adds exactly one rule of its own.
+
+That rule is which delivery a spoken step meant. On screen the question does not arise: with three
+deliveries running there are three cards, each with its own button. A sentence has no card, so a step
+is recorded only while **exactly one** delivery is in progress; with more, nothing is recorded and the
+refusal names the count. That is `DeliveryService`'s own principle, where every mutation takes its
+delivery as a parameter and nothing resolves a target internally, applied where there is nobody to
+supply one.
+
+Two consequences worth stating:
+
+- **Every process shares one container.** `AppModelContainer` opens it lazily and hands the same
+  instance to the scene and to the intents, so a shift started by voice while DashPilot is on screen
+  is visible to the `@Query` behind that screen. Two containers over one file would leave the
+  interface offering to end a shift that had already ended. It is also what makes a background launch
+  ordinary: when iOS starts the process only to run an intent, the intent's first access opens the
+  store.
+- **Route capture is unaffected and still foreground-only.** Nothing in the intent layer starts,
+  stops or knows about capture. While the app is open, the root screen reconciles capture when the
+  active shift changes, whoever changed it; while it is not, a shift started by voice records no
+  route until the app is opened, and every spoken confirmation of a start says so.
+
+What the intents deliberately cannot do (cancel a delivery, record an amount, a cost, or a pickup
+name) is described under [Voice and system actions](../product/voice-actions.md).
+
 ## Nothing derived is stored
 
 Recorded mileage, all three rates, a delivery's state, its two derived intervals, the shift's
@@ -123,6 +158,10 @@ Domain types (`Money`, `MoneyInput`, `Shift`, `RouteSample`, `Delivery`, `Delive
 state, they are used from tests that are not main-actor bound, and background persistence work will
 need them off the main actor.
 
+`IntentLifecycleService` and the four intents' `perform()` methods are main-actor isolated for the
+same reason the services are: an intent performs one lifecycle operation over the main context, and
+it must not interleave with the interface doing the same.
+
 `ShiftService` and `DeliveryService` are deliberately the opposite. Both are `@MainActor` because
 they drive the main context the views observe, and that isolation is what serialises lifecycle
 operations: each operation runs to completion without suspending, so two concurrent callers cannot
@@ -136,7 +175,8 @@ documented guarantee rather than a proof, and the same assumption throughout the
 
 ## Failure is a state, not a crash
 
-Container creation throws instead of trapping. `DashPilotApp` builds the container once at launch
-and renders `PersistenceUnavailableView` on failure. That screen intentionally offers no "reset the
+Container creation throws instead of trapping. `AppModelContainer` opens the process's container
+once, lazily, and `DashPilotApp` renders `PersistenceUnavailableView` on failure. An intent that
+finds the same failure records nothing and says that nothing was recorded. That screen intentionally offers no "reset the
 database" action: recorded shifts cannot be reconstructed from memory, so destroying them is not an
 acceptable one-tap recovery.

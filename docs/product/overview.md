@@ -43,6 +43,14 @@ delivery. Deliveries left in progress when the app was terminated are
 picked up on the next launch at the step it had reached. See
 [Delivery lifecycle](delivery-lifecycle.md).
 
+**Voice and system actions.** Starting a shift, ending it, starting a delivery and recording that
+delivery's next event can be performed by voice, from Shortcuts or from Spotlight, without the app
+coming to the screen. Each one calls the same service the on-screen control calls, so every rule that
+refuses a tap refuses a sentence. A spoken delivery step is recorded only while exactly one delivery
+is in progress; with more, DashPilot records nothing and says which screen can say it unambiguously.
+No intent takes a dictated value, and nothing offers to cancel a delivery or record an amount. See
+[Voice and system actions](voice-actions.md).
+
 **Pickup identity.** A delivery can optionally name the place it was collected from. The name is
 typed by the driver — there is no geocoding, no place search and no address — and a name equivalent
 to one already recorded reuses that place rather than creating a second, so a recurring pickup has
