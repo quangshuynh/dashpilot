@@ -27,6 +27,7 @@ struct ExpenseEditor: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @Environment(\.locale) private var locale
+    @Environment(\.scenePhase) private var scenePhase
 
     @State private var amountText = ""
     @State private var category: ExpenseCategory = .fuel
@@ -34,8 +35,13 @@ struct ExpenseEditor: View {
     @State private var noteText = ""
     @State private var message: String?
 
-    /// Fixed when the sheet appears rather than read continuously, so the latest
-    /// selectable moment cannot move under the driver while they are choosing.
+    /// The present, for the bound on the date picker.
+    ///
+    /// Read when the sheet appears and again on returning to the foreground,
+    /// rather than continuously: the bound must not move under the driver while
+    /// they are choosing, but a sheet left open across a midnight must not go on
+    /// refusing the day it is now. Only the bound moves; ``occurredAt`` is the
+    /// driver's own choice and is never rewritten.
     @State private var now = Date.now
 
     @FocusState private var isAmountFocused: Bool
@@ -64,6 +70,11 @@ struct ExpenseEditor: View {
             }
         }
         .onAppear(perform: seed)
+        .onChange(of: scenePhase) { _, phase in
+            // `.active` only, for the reason the summary screen ignores
+            // `.inactive`: the app switcher is not the driver leaving.
+            if phase == .active { now = .now }
+        }
     }
 
     // MARK: Sections
