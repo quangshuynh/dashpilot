@@ -1943,6 +1943,164 @@ final class DashPilotUITests: XCTestCase {
     /// covered by `LocationAuthorizationServiceTests` instead, and no test
     /// drives the system permission alert — automating it would be brittle and
     /// would change the device state other tests run against.
+    // MARK: Export
+
+    /// Opens the export sheet and waits for the file to be written.
+    ///
+    /// The share sheet itself is deliberately never opened. `ShareLink` presents
+    /// a system surface XCUITest cannot inspect reliably, and what these
+    /// journeys are for is proving that DashPilot produced a file and offered
+    /// it — not that iOS can share one.
+    @MainActor
+    private func openExport(_ identifier: String, in app: XCUIApplication) {
+        let button = app.buttons[identifier]
+        XCTAssertTrue(scrollTo(button, in: app), "The export control should be reachable")
+        button.tap()
+        XCTAssertTrue(
+            app.descendants(matching: .any)["exportFileName"].waitForExistence(timeout: 10),
+            "The sheet writes the file when it opens"
+        )
+    }
+
+    @MainActor
+    private func selectExportFormat(_ title: String, in app: XCUIApplication) {
+        let picker = app.segmentedControls["exportFormatPicker"]
+        XCTAssertTrue(picker.waitForExistence(timeout: 5))
+        picker.buttons[title].tap()
+    }
+
+    @MainActor
+    private func exportFileName(in app: XCUIApplication) -> String {
+        app.descendants(matching: .any)["exportFileName"].label
+    }
+
+    /// A completed shift offers an export, and JSON is what it writes first.
+    @MainActor
+    func testCompletedShiftExportsJSON() throws {
+        let app = launchWithSeededHistory()
+        openFirstShift(in: app)
+        openExport("exportShiftButton", in: app)
+
+        let name = exportFileName(in: app)
+        XCTAssertTrue(name.contains("DashPilot-Shift-"), "The file is named for its scope: \(name)")
+        XCTAssertTrue(name.contains(".json"), "JSON is the default format: \(name)")
+        XCTAssertTrue(name.contains("1 shift"), "The sheet says how much is in the file: \(name)")
+
+        XCTAssertTrue(
+            app.buttons["shareExportButton"].waitForExistence(timeout: 5),
+            "A written file is offered to the share sheet"
+        )
+        XCTAssertFalse(
+            app.descendants(matching: .any)["exportFailureMessage"].exists,
+            "Nothing failed"
+        )
+    }
+
+    /// Choosing CSV rewrites the file, and the name says so.
+    @MainActor
+    func testCompletedShiftExportsCSV() throws {
+        let app = launchWithSeededHistory()
+        openFirstShift(in: app)
+        openExport("exportShiftButton", in: app)
+        selectExportFormat("CSV", in: app)
+
+        let fileName = app.descendants(matching: .any)["exportFileName"]
+        XCTAssertTrue(
+            waitForLabel(fileName, toContain: ".csv"),
+            "The CSV file replaces the JSON one: \(fileName.label)"
+        )
+        XCTAssertTrue(app.buttons["shareExportButton"].exists, "And it is offered to the share sheet")
+    }
+
+    /// A period summary exports the period it is showing, named for it.
+    @MainActor
+    func testPeriodSummaryExportsTheSelectedPeriod() throws {
+        let app = launchWithPeriodSummary()
+        openPeriodSummary(in: app)
+        selectPeriod("Week", in: app)
+
+        openExport("exportPeriodButton", in: app)
+
+        let name = exportFileName(in: app)
+        XCTAssertTrue(name.contains("DashPilot-Week-"), "The file names the period it covers: \(name)")
+        XCTAssertTrue(name.contains("3 shifts"), "The week holds three completed shifts: \(name)")
+    }
+
+    /// Switching to Day exports a different period, with a different name.
+    @MainActor
+    func testDayAndWeekExportDifferentPeriods() throws {
+        let app = launchWithPeriodSummary()
+        openPeriodSummary(in: app)
+        selectPeriod("Day", in: app)
+
+        openExport("exportPeriodButton", in: app)
+        let day = exportFileName(in: app)
+        XCTAssertTrue(day.contains("DashPilot-Day-"), "\(day)")
+        XCTAssertTrue(day.contains("2 shifts"), "Today holds two of the three: \(day)")
+
+        app.buttons["dismissExportButton"].tap()
+        XCTAssertTrue(app.segmentedControls["periodUnitPicker"].waitForExistence(timeout: 5))
+    }
+
+    /// A period with nothing recorded in it offers no export at all, rather than
+    /// an export that would have to be refused.
+    @MainActor
+    func testEmptyPeriodOffersNoExport() throws {
+        let app = launchWithPeriodSummary()
+        openPeriodSummary(in: app)
+        selectPeriod("Day", in: app)
+
+        // Far enough back that the fixture's shifts cannot reach it.
+        let previous = app.buttons["periodPreviousButton"]
+        XCTAssertTrue(previous.waitForExistence(timeout: 5))
+        for _ in 0..<10 { previous.tap() }
+
+        XCTAssertTrue(
+            app.descendants(matching: .any)["periodEmptyState"].waitForExistence(timeout: 5),
+            "The period is empty"
+        )
+        XCTAssertFalse(
+            app.buttons["exportPeriodButton"].exists,
+            "An empty period must not offer an export it would have to refuse"
+        )
+    }
+
+    /// History as a whole can be exported, and the file holds every completed
+    /// shift.
+    @MainActor
+    func testExportsAllHistory() throws {
+        let app = launchWithSeededHistory()
+        openExport("exportAllHistoryButton", in: app)
+
+        let name = exportFileName(in: app)
+        XCTAssertTrue(name.contains("DashPilot-History-"), "\(name)")
+        XCTAssertTrue(name.contains("2 shifts"), "The seeded history holds two completed shifts: \(name)")
+    }
+
+    /// A running shift offers no export anywhere: not on the shift panel, and
+    /// not through a history export that does not exist yet.
+    @MainActor
+    func testRunningShiftHasNoExportControl() throws {
+        let app = launchWithEmptyStore()
+
+        let start = app.buttons["startShiftButton"]
+        XCTAssertTrue(start.waitForExistence(timeout: 10))
+        // Before starting: no completed shift, so no history export either.
+        XCTAssertFalse(app.buttons["exportAllHistoryButton"].exists)
+
+        start.tap()
+        XCTAssertTrue(app.buttons["endShiftButton"].waitForExistence(timeout: 5))
+
+        XCTAssertFalse(
+            app.buttons["exportShiftButton"].exists,
+            "A running shift is not history and offers no export"
+        )
+        XCTAssertFalse(
+            app.buttons["exportAllHistoryButton"].exists,
+            "And it does not put anything exportable into history"
+        )
+    }
+
     @MainActor
     func testShowsLocationAuthorizationState() throws {
         let app = launchWithEmptyStore()

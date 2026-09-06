@@ -82,6 +82,14 @@ struct PeriodSummaryView: View {
         .navigationTitle("Summary")
         .navigationBarTitleDisplayMode(.inline)
         .task(id: measurementToken) { measureRoutes() }
+        // On the list rather than on the section that presents it: the sections
+        // are rebuilt whenever the routes are re-measured, and a sheet attached
+        // to one that briefly disappears goes with it.
+        .sheet(isPresented: $isExporting) {
+            if let period {
+                ShiftExportSheet(scope: .period(period))
+            }
+        }
     }
 
     // MARK: Period selection
@@ -381,9 +389,6 @@ struct PeriodSummaryView: View {
                     shifts and deliveries. Recorded positions are not included.
                     """
                 )
-            }
-            .sheet(isPresented: $isExporting) {
-                ShiftExportSheet(scope: scope)
             }
         }
     }
