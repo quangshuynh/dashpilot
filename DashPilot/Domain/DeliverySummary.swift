@@ -36,6 +36,23 @@ nonisolated struct DeliverySummary: Equatable, Sendable {
         self.init(completed: completed, cancelled: cancelled, inProgress: inProgress)
     }
 
+    /// The counts of several shifts added together, for a summary that spans
+    /// them.
+    ///
+    /// Each outcome is added to its own total. Nothing is merged, reclassified
+    /// or folded into a single "deliveries" figure on the way — a period's
+    /// cancelled deliveries are as much a fact as its completed ones, and the
+    /// two are as separate here as they are within one shift.
+    init(combining summaries: some Sequence<DeliverySummary>) {
+        self = summaries.reduce(DeliverySummary(completed: 0, cancelled: 0)) { running, summary in
+            DeliverySummary(
+                completed: running.completed + summary.completed,
+                cancelled: running.cancelled + summary.cancelled,
+                inProgress: running.inProgress + summary.inProgress
+            )
+        }
+    }
+
     var recorded: Int { completed + cancelled + inProgress }
 
     var isEmpty: Bool { recorded == 0 }

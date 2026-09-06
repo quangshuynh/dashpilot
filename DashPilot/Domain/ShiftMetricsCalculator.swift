@@ -188,6 +188,26 @@ nonisolated struct ShiftMetricsCalculator: Equatable, Sendable {
         return grossEarnings.divided(by: seconds / secondsPerHour, scale: rateScale)
     }
 
+    /// **The** definition of gross earnings per recorded mile in DashPilot.
+    ///
+    /// The companion to ``grossPerHour(of:over:)``, and shared for the same
+    /// reason: one shift's rate and a period's rate must not be able to disagree
+    /// in the last cent because two divisions were written twice.
+    ///
+    /// It answers `nil` — never zero — for a distance that cannot be a
+    /// denominator: one that is not a finite measurement, and one of no length.
+    /// What that absence *means* is the caller's to name, as it is above.
+    ///
+    /// - Parameters:
+    ///   - grossEarnings: the exact amount recorded. It stays a `Decimal`
+    ///     throughout.
+    ///   - miles: the distance to divide by. It crosses from binary measurement
+    ///     into decimal arithmetic once, here.
+    static func grossPerMile(of grossEarnings: Money, over miles: Double) -> Money? {
+        guard let miles = decimal(miles, scale: distanceScale), miles > 0 else { return nil }
+        return grossEarnings.divided(by: miles, scale: rateScale)
+    }
+
     /// Gross earnings per mile the route **recorded**.
     ///
     /// Whether the route covers the whole shift is not this calculation's
@@ -213,7 +233,9 @@ nonisolated struct ShiftMetricsCalculator: Equatable, Sendable {
             // measurement, whatever the segment count says.
             return .unavailable(.routeNotMeasurable)
         }
-        guard miles > 0, let rate = grossEarnings.divided(by: miles, scale: Self.rateScale) else {
+        // The distance is known to be expressible and non-negative by now, so
+        // the only way the shared division declines it is a measured zero.
+        guard let rate = Self.grossPerMile(of: grossEarnings, over: recordedDistance.miles) else {
             return .unavailable(.zeroRecordedDistance)
         }
         return .available(rate)
