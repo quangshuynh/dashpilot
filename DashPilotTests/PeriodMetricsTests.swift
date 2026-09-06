@@ -1129,11 +1129,16 @@ struct PeriodShiftRecordTests {
 
     // MARK: Schema
 
-    /// Everything a period shows is derived. Nothing about this interval touches
+    /// Everything a period shows is derived. Nothing about aggregation touches
     /// the store's shape, and nothing it computes writes to the store.
-    @Test("Aggregation persists nothing and leaves the schema at v7")
+    ///
+    /// The current schema version is asserted in the suite belonging to whatever
+    /// version is current, not here: a figure repeated across suites is one that
+    /// gets updated in four places and forgotten in the fifth. What matters to a
+    /// period summary is that no aggregate is stored at all, which is what the
+    /// rest of this test says.
+    @Test("Aggregation persists nothing")
     func aggregationPersistsNothing() throws {
-        #expect(ModelContainerFactory.currentSchema.version == Schema.Version(7, 0, 0))
 
         let shift = try #require(ModelContainerFactory.currentSchema.entities.first { $0.name == "Shift" })
         let properties = Set(shift.properties.map(\.name))

@@ -36,13 +36,17 @@ struct PickupPlacePersistenceTests {
     func schemaVersion() throws {
         #expect(DashPilotSchemaV6.versionIdentifier == Schema.Version(6, 0, 0))
 
-        let entities = Set(ModelContainerFactory.currentSchema.entities.map(\.name))
+        // Read from the frozen v6 schema rather than from whichever version is
+        // current: this test is about what v6 held, and a later version adding
+        // an entity beside those four does not change that.
+        let schema = Schema(versionedSchema: DashPilotSchemaV6.self)
+        let entities = Set(schema.entities.map(\.name))
         #expect(entities == ["Shift", "RouteSample", "Delivery", "PickupPlace"])
 
-        let delivery = try #require(ModelContainerFactory.currentSchema.entities.first { $0.name == "Delivery" })
+        let delivery = try #require(schema.entities.first { $0.name == "Delivery" })
         #expect(delivery.properties.map(\.name).contains("pickupPlace"))
 
-        let place = try #require(ModelContainerFactory.currentSchema.entities.first { $0.name == "PickupPlace" })
+        let place = try #require(schema.entities.first { $0.name == "PickupPlace" })
         let properties = Set(place.properties.map(\.name))
         #expect(properties == ["id", "displayName", "normalizedName", "createdAt", "deliveries"])
         #expect(

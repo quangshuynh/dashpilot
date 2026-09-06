@@ -499,14 +499,159 @@ enum DashPilotSchemaV6: VersionedSchema {
 /// other. Every migrated delivery keeps `nil`, which the app reads as "not
 /// recorded" and never as `0.00`.
 ///
-/// This version reuses the file-scope models rather than freezing copies,
-/// because it *is* the current shape. It gets frozen copies of its own the first
-/// time v8 moves them on, exactly as v6 did here.
+/// All four models are frozen copies. v7 held them at file scope while it was
+/// the current shape; v8 adds an entity beside them, so they are frozen here
+/// now — before a later version moves one of them on and makes this enum claim a
+/// shape no store ever had.
 enum DashPilotSchemaV7: VersionedSchema {
     static var versionIdentifier: Schema.Version { Schema.Version(7, 0, 0) }
 
     static var models: [any PersistentModel.Type] {
         [Shift.self, RouteSample.self, Delivery.self, PickupPlace.self]
+    }
+
+    /// The v7 shift, unchanged from v5: timestamps, a route, an optional amount
+    /// and its deliveries.
+    @Model
+    nonisolated final class Shift {
+        @Attribute(.unique) private(set) var id: UUID
+        private(set) var startedAt: Date
+        private(set) var endedAt: Date?
+
+        @Relationship(deleteRule: .cascade, inverse: \RouteSample.shift)
+        private(set) var routeSamples: [RouteSample] = []
+
+        @Relationship(deleteRule: .cascade, inverse: \Delivery.shift)
+        private(set) var deliveries: [Delivery] = []
+
+        private(set) var grossEarningsAmount: Decimal?
+
+        init(
+            id: UUID = UUID(),
+            startedAt: Date,
+            endedAt: Date? = nil,
+            grossEarningsAmount: Decimal? = nil
+        ) {
+            self.id = id
+            self.startedAt = startedAt
+            self.endedAt = endedAt
+            self.grossEarningsAmount = grossEarningsAmount
+        }
+    }
+
+    /// The v7 route sample, unchanged from v3.
+    @Model
+    nonisolated final class RouteSample {
+        private(set) var timestamp: Date
+        private(set) var latitude: Double
+        private(set) var longitude: Double
+        private(set) var horizontalAccuracy: Double
+        private(set) var captureSessionID: UUID?
+        private(set) var shift: Shift?
+
+        init(
+            shift: Shift,
+            timestamp: Date,
+            latitude: Double,
+            longitude: Double,
+            horizontalAccuracy: Double,
+            captureSessionID: UUID?
+        ) {
+            self.timestamp = timestamp
+            self.latitude = latitude
+            self.longitude = longitude
+            self.horizontalAccuracy = horizontalAccuracy
+            self.captureSessionID = captureSessionID
+            self.shift = shift
+        }
+    }
+
+    /// The v7 delivery: the v6 lifecycle and pickup place, plus its own optional
+    /// recorded amount.
+    @Model
+    nonisolated final class Delivery {
+        @Attribute(.unique) private(set) var id: UUID
+        private(set) var acceptedAt: Date
+        private(set) var arrivedAtPickupAt: Date?
+        private(set) var pickedUpAt: Date?
+        private(set) var deliveredAt: Date?
+        private(set) var cancelledAt: Date?
+        private(set) var shift: Shift?
+        private(set) var pickupPlace: PickupPlace?
+        private(set) var grossEarningsAmount: Decimal?
+
+        init(
+            id: UUID = UUID(),
+            shift: Shift,
+            acceptedAt: Date,
+            arrivedAtPickupAt: Date? = nil,
+            pickedUpAt: Date? = nil,
+            deliveredAt: Date? = nil,
+            cancelledAt: Date? = nil,
+            pickupPlace: PickupPlace? = nil,
+            grossEarningsAmount: Decimal? = nil
+        ) {
+            self.id = id
+            self.acceptedAt = acceptedAt
+            self.arrivedAtPickupAt = arrivedAtPickupAt
+            self.pickedUpAt = pickedUpAt
+            self.deliveredAt = deliveredAt
+            self.cancelledAt = cancelledAt
+            self.shift = shift
+            self.pickupPlace = pickupPlace
+            self.grossEarningsAmount = grossEarningsAmount
+        }
+    }
+
+    /// The v7 pickup place, unchanged from v6. Both forms of the name are plain
+    /// strings for the reason ``DashPilotSchemaV6/PickupPlace`` states.
+    @Model
+    nonisolated final class PickupPlace {
+        @Attribute(.unique) private(set) var id: UUID
+        private(set) var displayName: String
+        private(set) var normalizedName: String
+        private(set) var createdAt: Date
+
+        @Relationship(deleteRule: .nullify, inverse: \Delivery.pickupPlace)
+        private(set) var deliveries: [Delivery] = []
+
+        init(id: UUID = UUID(), displayName: String, normalizedName: String, createdAt: Date) {
+            self.id = id
+            self.displayName = displayName
+            self.normalizedName = normalizedName
+            self.createdAt = createdAt
+        }
+    }
+}
+
+/// Version 8 of the persisted schema: the driver can record what the work cost.
+///
+/// One new entity, `Expense`, and **no change to any existing one**. That shape
+/// is the decision, not an accident of implementation: an expense holds its own
+/// date and is not attached to a shift or to a delivery, so nothing on `Shift`,
+/// `Delivery`, `RouteSample` or `PickupPlace` moves, and no relationship is
+/// added anywhere. A v7 store opens under v8 with every shift, route sample,
+/// capture session identifier, delivery, lifecycle timestamp, pickup place and
+/// recorded amount exactly as it left them.
+///
+/// **The new table starts empty, and nothing could honestly put a row in it.**
+/// DashPilot observes no purchase: it reads no card, no bank, no receipt and no
+/// delivery platform, and it models no fuel consumption and no vehicle wear. A
+/// store written before expense recording existed therefore contains no evidence
+/// that any particular cost was incurred. Deriving one — a fuel cost from
+/// recorded mileage, a per-mile vehicle charge, anything at all — would put an
+/// amount into a driver's history that they never entered, and every later net
+/// figure would be built on it. There is nothing to backfill, and that is the
+/// truthful state.
+///
+/// This version reuses the file-scope models rather than freezing copies,
+/// because it *is* the current shape. It gets frozen copies of its own the first
+/// time v9 moves them on, exactly as v7 did above.
+enum DashPilotSchemaV8: VersionedSchema {
+    static var versionIdentifier: Schema.Version { Schema.Version(8, 0, 0) }
+
+    static var models: [any PersistentModel.Type] {
+        [Shift.self, RouteSample.self, Delivery.self, PickupPlace.self, Expense.self]
     }
 }
 
@@ -524,11 +669,12 @@ enum DashPilotMigrationPlan: SchemaMigrationPlan {
             DashPilotSchemaV4.self,
             DashPilotSchemaV5.self,
             DashPilotSchemaV6.self,
-            DashPilotSchemaV7.self
+            DashPilotSchemaV7.self,
+            DashPilotSchemaV8.self
         ]
     }
 
-    static var stages: [MigrationStage] { [v1ToV2, v2ToV3, v3ToV4, v4ToV5, v5ToV6, v6ToV7] }
+    static var stages: [MigrationStage] { [v1ToV2, v2ToV3, v3ToV4, v4ToV5, v5ToV6, v6ToV7, v7ToV8] }
 
     /// V1 → V2 is lightweight.
     ///
@@ -627,5 +773,27 @@ enum DashPilotMigrationPlan: SchemaMigrationPlan {
     static let v6ToV7 = MigrationStage.lightweight(
         fromVersion: DashPilotSchemaV6.self,
         toVersion: DashPilotSchemaV7.self
+    )
+
+    /// V7 → V8 is lightweight.
+    ///
+    /// A new entity with no relationship to anything, which SwiftData can add
+    /// without being told how. Not one existing entity changes shape, so there
+    /// is nothing to rewrite, reinterpret or walk: every shift, route sample,
+    /// delivery, pickup place and recorded amount carries over untouched, and
+    /// the expense table starts empty.
+    ///
+    /// Empty is the only honest state for it. A v7 store records what the
+    /// driver's work paid and nothing about what it cost, and DashPilot has no
+    /// source from which a past cost could be recovered — it observes no
+    /// purchase and estimates none. Deriving fuel from recorded mileage, or a
+    /// per-mile vehicle charge from anything at all, would write costs the
+    /// driver never entered into their history, and no later screen or export
+    /// could tell an invented amount from one they typed. Worse than an
+    /// invented earnings figure: every net figure in the app would then be
+    /// built on it.
+    static let v7ToV8 = MigrationStage.lightweight(
+        fromVersion: DashPilotSchemaV7.self,
+        toVersion: DashPilotSchemaV8.self
     )
 }

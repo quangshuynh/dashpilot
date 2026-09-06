@@ -12,12 +12,12 @@ not already show, and nothing recorded is turned into a stronger claim on the wa
 
 | Scope | Where it is offered | What it holds |
 | --- | --- | --- |
-| One shift | `Export Shift`, on a completed shift's detail screen | That shift and its deliveries |
-| A day | `Export Day`, on the period summary with **Day** selected | Every completed shift that started that day, plus the day's summary |
-| A week | `Export Week`, on the period summary with **Week** selected | Every completed shift that started that week, plus the week's summary |
-| A month | `Export Month`, on the period summary with **Month** selected | Every completed shift that started that calendar month, plus the month's summary |
-| A chosen range | `Export Range`, on the period summary with **Custom** selected | Every completed shift that started within the selected dates, plus that range's summary |
-| All history | `Export All History`, in the History section | Every completed shift in the store |
+| One shift | `Export Shift`, on a completed shift's detail screen | That shift and its deliveries. **No expenses** |
+| A day | `Export Day`, on the period summary with **Day** selected | Every completed shift that started that day, the expenses dated that day, plus the day's summary |
+| A week | `Export Week`, on the period summary with **Week** selected | Every completed shift that started that week, the expenses dated in it, plus the week's summary |
+| A month | `Export Month`, on the period summary with **Month** selected | Every completed shift that started that calendar month, the expenses dated in it, plus the month's summary |
+| A chosen range | `Export Range`, on the period summary with **Custom** selected | Every completed shift that started within the selected dates, the expenses dated in them, plus that range's summary |
+| All history | `Export All History`, in the History section | Every completed shift and every recorded expense in the store |
 
 **Only completed shifts are exported.** A running shift has no finalised duration and no final
 amount, and a file claiming to be its record would be out of date before it finished writing. There
@@ -32,14 +32,19 @@ All four period lengths go through **one** `ReportingPeriod` and one calculator.
 exported as a set of weeks and a chosen range is not exported as a set of days: each one selects the
 underlying shifts it contains, so the file and the screen cannot disagree about a single figure.
 
-A scope holding no completed shift is refused rather than producing an empty file, and an empty
-period offers no export control at all.
+A scope holding **nothing at all**, meaning no completed shift and no recorded expense, is refused
+rather than producing an empty file, and such a period offers no export control. A period holding only
+expenses *is* exported: a day off with a tank of fuel on it is not an empty day.
+
+Expenses are selected by their **own dates**, never through a shift. A single shift's export
+therefore carries none, because no expense belongs to a shift. See
+[Recorded expenses](expenses.md).
 
 ## Export format version
 
 Every file states `formatVersion: 2`.
 
-**This is not the SwiftData schema version**, which is currently v7. The two describe different
+**This is not the SwiftData schema version**, which is currently v8. The two describe different
 things and are free to move independently:
 
 - The schema version describes how a database is laid out on one device. Nothing outside the app has
@@ -52,9 +57,29 @@ a change to what the file says does not pretend the store changed. The version i
 an existing field's meaning changes or a field is removed; adding a field is additive, and a reader
 that ignores unknown keys keeps working.
 
-Exports are never called "v7".
+Exports are never called "v8".
 
 ### Version history
+
+#### Still 2: recorded expenses
+
+Recorded expenses added a top-level `expenses` array, a `summary.expenses` block and a
+`summary.netAfterRecordedExpenses` block. The version was **evaluated and deliberately not moved**,
+by the rule above:
+
+- **Nothing existing changed meaning.** `shiftCount` still counts shifts, `shifts[]` holds the same
+  records, and no earnings, mileage, duration or rate field is derived any differently. Nothing
+  subtracts an expense from a figure that already existed: the net is a new field beside them.
+- **No field was removed or renamed**, which is what forced version 2.
+- **No enumeration gained a value.** `scope.kind` is the same closed set of six.
+  `expenses[].category` is a new field, so its set is new rather than widened.
+- **The new array is always present.** A scope with no expenses writes `[]`, so a reader never has to
+  tell "no expenses" from "an older build".
+
+A reader that ignores unknown keys keeps working unchanged, which is the whole of what the version
+number promises. A file produced before expenses existed simply has no such keys.
+
+The CSV is unchanged, and its columns are the same 32.
 
 #### 2 — month and chosen ranges
 
@@ -71,7 +96,7 @@ rather than the values being added quietly:
   *1 September through 7 September* writes `2026-09-08T00:00:00Z`, and the key has to say why rather
   than leaving a reader to assume the range runs to the 8th.
 
-The store's schema is **unchanged at v7** by this release. It is a different number describing a
+The store's schema was **unchanged at v7** by that release. It is a different number describing a
 different thing, and the two moved independently exactly as intended.
 
 #### 1 — the first export format
@@ -91,6 +116,13 @@ cancelled counts, and its deliveries.
 Every lifecycle timestamp that was recorded, the state it ended in, the pickup place name if one was
 recorded, the recorded pickup wait, acceptance-to-delivery duration, the amount recorded against that
 delivery, and that delivery's own gross per recorded delivery hour.
+
+### Per expense (JSON only)
+
+The date the cost was incurred, its category, its amount, the currency, and the driver's note if they
+wrote one. Nothing else: there is no shift identifier, no delivery identifier and no allocation,
+because there is none to export. A consumer wanting costs beside work joins on the **date**, which is
+the only relationship DashPilot can honestly state.
 
 ### Per period (JSON only)
 
@@ -116,6 +148,33 @@ same count as the earnings coverage:
 }
 ```
 
+The period's recorded expenses are carried with the count of records behind them, split by category,
+and with the net after them:
+
+```json
+"expenses": {
+  "recordedTotal": "48.60",
+  "recordCount": 2,
+  "currencyCode": "USD",
+  "byCategory": [
+    { "category": "fuel", "total": "42.10", "recordCount": 1 },
+    { "category": "parkingAndTolls", "total": "6.50", "recordCount": 1 }
+  ]
+},
+"netAfterRecordedExpenses": {
+  "amount": "37.65",
+  "contributingShiftCount": 1,
+  "totalShiftCount": 2,
+  "expenseRecordCount": 2,
+  "currencyCode": "USD"
+}
+```
+
+There is **no coverage pair on the expense total**, and its absence is deliberate: nothing knows how
+many costs went unrecorded, so a count of what was entered is all that can honestly be written. The
+net is `null` unless both halves were recorded, and the field name is the whole claim: it is not
+profit, and a reader relabelling it as such is making a claim this file does not.
+
 Route partiality is preserved as its own counts (`measuredShiftCount`, `partialShiftCount`,
 `unmeasurableShiftCount`, `totalShiftCount`), and so is the pickup-wait sample count behind the
 median.
@@ -139,7 +198,13 @@ is exactly where they get lost.
 - **A recorded pickup wait is not a predicted one.** `pickupWaitSeconds` exists only when both ends
   of the wait were recorded and are in order. A delivery cancelled before its pickup exports no wait
   rather than a wait of zero.
-- **Gross is gross.** Nothing for fuel, wear, insurance or tax is subtracted anywhere.
+- **Gross is gross.** No gross figure in the file has anything subtracted from it. The recorded
+  expenses and the net after them are separate fields beside them, and every gross field keeps the
+  word.
+- **A recorded cost is not a cost.** The expense total is the sum of the rows the driver entered, and
+  a period with none is not a period that cost nothing.
+- **An expense belongs to a date, not to a shift.** No file relates one to a shift or a delivery, and
+  none divides one across work.
 
 ## Encoding
 
@@ -176,7 +241,16 @@ the full key set, and so every record in an array is the same shape.
 deliveries still gets a row, with the delivery columns empty. Records end `\r\n`, per RFC 4180, and
 the file is UTF-8.
 
-A period summary is **not** in the CSV. Every figure in one is paired with the count of shifts behind
+Two things are **not** in the CSV.
+
+The **recorded expenses**, for a reason that comes from the model rather than the format: this
+table's unit is a delivery, and an expense belongs to a date rather than to a delivery, so there is
+no row it can occupy and putting it on the nearest delivery would manufacture an attribution the app
+refuses to make. Appending a second table of expenses under the first was the alternative and was
+rejected: a file whose row shape changes half way down is one most parsers read as a corrupt table,
+and the row count would stop agreeing with the JSON's shift count.
+
+The **period summary**. Every figure in one is paired with the count of shifts behind
 it, and a single flat table has nowhere to keep that pairing — a `2.18` in a spreadsheet cell with
 its "4 of 6 shifts" left behind is exactly the claim this project refuses to make. Export JSON for
 the summary; the format picker says so before the file is written.
@@ -211,6 +285,9 @@ quoting; a name's own line breaks are preserved inside its quotes and never rewr
   Exact positions are substantially more sensitive than a shift summary and are not needed to answer
   what the app recorded. If exporting them is ever wanted it will be a separate, explicit feature
   with its own consent, not a field that appeared because the model had it.
+- **Expense notes are exported**, because they are the driver's own record and a file that dropped
+  them would hand back less than they entered. They are free text, so the sheet says what leaves the
+  device before the file is written.
 - **Pickup place names are exported**, because they are part of the driver's own recorded history.
   They can reveal where someone works: for a driver working a small area, the places they pick up
   from are close to a description of where they are. The **normalised matching key** the catalogue
@@ -250,8 +327,9 @@ file is never overwritten — a numbered suffix is added instead.
 
 ## What this is not
 
-- **Not a tax statement**, and not a deduction calculation. No expense, mileage allowance or taxable
-  figure is derived anywhere in DashPilot.
+- **Not a tax statement**, and not a deduction calculation. The expenses in a file are the ones the
+  driver typed; no mileage allowance, deduction or taxable figure is derived anywhere in DashPilot,
+  and the net after recorded expenses is not profit.
 - **Not a record from any delivery platform.** Nothing in the file was imported, confirmed or
   reconciled against one.
 - **Not a backup.** There is no import, no restore and no sync. An export is a copy of what was

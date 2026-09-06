@@ -223,6 +223,41 @@ with it. No rate is ever fabricated as zero or infinity.
 The numerator is always the **shift** amount, for all three rates. Per-delivery
 amounts never enter one.
 
+## Recorded expenses, and the net after them
+
+A period also reports the operating costs the driver recorded in it, selected by
+the **expenses' own dates** rather than through any shift, and what the recorded
+gross earnings come to after them:
+
+```
+$48.60 recorded
+Across 2 recorded expenses
+
+Fuel                                            $42.10
+Parking and tolls                                $6.50
+
+Net after recorded expenses                     $37.65
+Recorded gross earnings across 1 of 2 shifts, less 2 recorded expenses.
+```
+
+Three rules carry over from everything above, and one is new:
+
+- **A recorded total is not the period's costs.** Anything the driver did not
+  enter is missing rather than zero, and the app observes no purchase of its own.
+- **An expense has no coverage pair**, because it has no denominator: nothing
+  knows how many costs went unrecorded. The count of records is what is shown.
+- **The net is never called profit**, is written in full every time, and is
+  absent unless both halves were recorded.
+- **The gross figures do not move.** Nothing is subtracted from the period's
+  earnings, from any of the three rates, or from anything else on the screen.
+
+A period holding expenses but **no completed shift** still shows them, under the
+sentence saying no shift was recorded: a day off with a tank of fuel on it is not
+an empty day.
+
+See [Recorded expenses](expenses.md) for the model, the categories and the
+reasons an expense is dated rather than attached to work.
+
 ## Recorded mileage
 
 The period's mileage is the sum of the distances its shifts' routes measured.
@@ -323,8 +358,11 @@ a pace or a comparison against another period.
   count.
 - **No comparison between period *types*.** A month is not shown beside its weeks,
   and nothing states how a range compares with the month it sits in.
-- **No tax summaries, expenses or fuel cost.** Every figure is gross, and none is
+- **No tax summaries and no estimated costs.** The only costs shown are the ones
+  the driver entered; nothing is derived from mileage or hours, and no figure is
   a deduction figure.
+- **No cost per hour, per mile or per delivery**, and no shift-level net figure.
+  See [Recorded expenses](expenses.md).
 - **No projection, target or goal.**
 - **No quarters, years or all-time totals**, and no recurring or saved report.
 
@@ -339,6 +377,10 @@ leaving VoiceOver to infer it from a caption nearby:
   partial route capture."*
 - *"2 dollars and 18 cents gross earnings per recorded mile, based on 4 of 6
   shifts with both earnings and a measurable route."*
+- *"Recorded expenses, 48 dollars and 60 cents, across 2 recorded expenses."*
+- *"37 dollars and 65 cents net after recorded expenses. Recorded gross earnings
+  across 1 of 2 shifts, less 2 recorded expenses. Both halves are what you
+  recorded … This is not profit, and it is not a tax figure."*
 
 The period controls name what they do rather than leaving a chevron to be guessed
 at — *"Previous month"*, *"Next month"*, *"Choose custom date range"* — and a
@@ -353,5 +395,5 @@ statistic now covers thirty days.
 ## Privacy
 
 Aggregation happens entirely on device, in memory, from data already stored.
-Nothing is logged: no period total, no mileage, no rate, no median, no selected
-month and neither end of a chosen range. The selection is not persisted either. There is no networking and no analytics anywhere in the project.
+Nothing is logged: no period total, no mileage, no rate, no median, no recorded
+cost, no net figure, no selected month and neither end of a chosen range. The selection is not persisted either. There is no networking and no analytics anywhere in the project.

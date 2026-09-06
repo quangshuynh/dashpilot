@@ -115,6 +115,28 @@ struct RootView: View {
                 }
             }
             .navigationTitle("DashPilot")
+            .toolbar {
+                // In the bar rather than in the list, for two reasons. An
+                // expense belongs to no shift, so there is no section of this
+                // screen it is part of — and every row this screen gains pushes
+                // the shift history further down, which is the list a driver
+                // opens the app to read. The bar keeps it reachable from
+                // wherever they have scrolled to.
+                ToolbarItem(placement: .topBarTrailing) {
+                    NavigationLink {
+                        ExpenseListView()
+                    } label: {
+                        // The word, not a glyph. A `Label` here renders as its
+                        // icon alone in the navigation bar, and a credit-card
+                        // symbol in a corner does not say "the costs you
+                        // recorded" to anyone who has not already found the
+                        // screen once.
+                        Text("Expenses")
+                    }
+                    .accessibilityLabel("Recorded expenses")
+                    .accessibilityIdentifier("expensesLink")
+                }
+            }
             .navigationDestination(for: Shift.self) { shift in
                 CompletedShiftDetailView(shift: shift)
             }
