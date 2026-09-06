@@ -81,7 +81,7 @@ struct IntentLifecycleService {
     /// Ends the shift in progress.
     ///
     /// Deliberately not confirmed first. The transition that would cost a
-    /// driver something — ending over deliveries still running — is refused by
+    /// driver something, ending over deliveries still running, is refused by
     /// ``ShiftService`` and named in the refusal, and the shift's own record
     /// survives ending it early. A spoken yes/no round trip at a kerb buys
     /// nothing that rule does not already provide.

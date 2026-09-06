@@ -41,6 +41,11 @@ derived legitimately from device sensors and stored history is typed by the driv
   one primary control per delivery, **several deliveries recordable at once** for stacked orders,
   every event targeted at one delivery, transitions enforced against the store, relaunch recovery for
   each of them, and a shift end refused while any delivery is running.
+- **Voice and system actions** for the four short lifecycle steps (start a shift, end it, start a
+  delivery, record that delivery's next event) through App Intents, with the app never coming to the
+  screen. Each calls the same service the button calls, and a spoken delivery step is recorded only
+  while exactly one delivery is in progress; with more, DashPilot records nothing and says so. No
+  intent takes a dictated value.
 - **Optional pickup identity**: a delivery can name the place it was collected from, typed by the
   driver and reused across deliveries when the same name is entered again, with no address, no
   lookup and no platform involved. A place can be renamed, and one place explicitly merged into
@@ -73,7 +78,7 @@ derived legitimately from device sensors and stored history is typed by the driv
 
 ## Technology
 
-Swift, SwiftUI, SwiftData, Core Location, OSLog, Swift Testing and XCUITest. **No third-party
+Swift, SwiftUI, SwiftData, Core Location, App Intents, OSLog, Swift Testing and XCUITest. **No third-party
 runtime dependencies.**
 
 Versioned schema at v8 with lightweight migrations from v1, tested by opening stores written under
@@ -125,6 +130,7 @@ Once GitHub Pages is enabled for this repository, the deployment workflow publis
 Start with [`docs/index.md`](docs/index.md), or go straight to
 [product overview](docs/product/overview.md),
 [delivery lifecycle](docs/product/delivery-lifecycle.md),
+[voice and system actions](docs/product/voice-actions.md),
 [architecture](docs/architecture/overview.md),
 [building](docs/development/building.md),
 [testing](docs/development/testing.md), the
@@ -153,6 +159,9 @@ The short version, with the full list in [`docs/reference/limitations.md`](docs/
   amount on a delivery is there only because the driver typed it for that delivery. Delivery active
   time is only as good as the tapping, overlapping deliveries are unioned rather than summed, their
   hourly figures are never added together, and non-delivery time is not idle time.
+- **Voice actions cover four lifecycle steps and nothing else.** No cancelling, no amounts, no costs,
+  no pickup names, nothing read back, and a shift started by voice records no route until the app is
+  opened.
 - **No delivery-platform integration**, permanently and by design.
 - **Local only.** No backup, no sync, no import, and deleting a shift is permanent. Export writes a
   file on the device and hands it to the share sheet; where it goes after that is the driver's

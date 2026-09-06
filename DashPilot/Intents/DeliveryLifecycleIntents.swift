@@ -38,7 +38,7 @@ struct StartDeliveryIntent: AppIntent {
 ///
 /// **It works only while exactly one delivery is in progress.** With two, the
 /// sentence identifies no particular order, and DashPilot refuses rather than
-/// choosing one — see ``IntentLifecycleError/severalDeliveriesInProgress(count:)``.
+/// choosing one. See ``IntentLifecycleError/severalDeliveriesInProgress(count:)``.
 struct RecordDeliveryProgressIntent: AppIntent {
     static let title: LocalizedStringResource = "Record Delivery Progress"
 

@@ -18,7 +18,7 @@ nonisolated enum IntentLifecycleError: Error {
     ///
     /// **This is the interval's central refusal.** With two orders in the car,
     /// "record the next step" names no particular record, and every way of
-    /// choosing one — the newest, the oldest, the one furthest along — would
+    /// choosing one (the newest, the oldest, the one furthest along) would
     /// write a driver's spoken sentence into a delivery they did not mean.
     /// Nothing is recorded and the driver is told which screen can say it
     /// unambiguously.

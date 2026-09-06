@@ -9,9 +9,11 @@ data and no remote database.
 `DashPilotMigrationPlan`. Wiring the plan up front from v1 meant adding v2 was an ordinary change
 rather than a store reset.
 
-Container creation throws instead of trapping. `DashPilotApp` builds the container once at launch
-and renders `PersistenceUnavailableView` on failure, which is a visible state a driver can act on
-rather than a crash.
+Container creation throws instead of trapping. `AppModelContainer` opens the process's container
+once, lazily, and is the one place the app's own store is chosen; `DashPilotApp` renders
+`PersistenceUnavailableView` on failure, which is a visible state a driver can act on rather than a
+crash. The scene and the App Intents share that single container, so a write made without a screen is
+visible to the screen when there is one.
 
 Tests and previews use `makeInMemoryContainer()`, which shares the same schema and the same
 migration plan as the shipping store, so a schema mistake fails in tests rather than only on a

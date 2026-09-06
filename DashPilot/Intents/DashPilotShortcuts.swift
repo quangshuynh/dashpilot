@@ -4,8 +4,8 @@ import AppIntents
 /// anything.
 ///
 /// Four, and they are the four short lifecycle actions. Everything else
-/// DashPilot does — an amount, a cost, a pickup name, a summary — either needs
-/// a value dictated or needs a screen read, and neither belongs in a sentence
+/// DashPilot does (an amount, a cost, a pickup name, a summary) either needs a
+/// value dictated or needs a screen read, and neither belongs in a sentence
 /// said while driving.
 ///
 /// ## Nothing is donated

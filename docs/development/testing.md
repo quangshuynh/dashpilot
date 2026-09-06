@@ -55,6 +55,9 @@ test cannot see, such as a screen that renders a sentence the model never claime
 | Expense record | What an expense accepts and refuses, a recorded zero distinct from none, an edit replacing every fact at once and a refused edit changing nothing, the note's trimming and length rule counted in characters, the closed category set and its stored words, no category implying a tax treatment, and an unrecognised stored word reading as `other` |
 | Period expenses | Totals and category subtotals, missing distinct from an explicit zero, membership by the expense's own timestamp across a half-open boundary and a 23-hour day, a month totalled from its own records, a day holding costs but no shift, the net's two refusals and its negative case, the gross figures unchanged by any of it, no coverage pair invented for expenses, and the words the net may and may not use |
 | Expense persistence | The v7 to v8 migration with every earlier record intact and no expense fabricated from mileage or earnings, the plan's version and stage counts asserted here once, an expense with no relationship to a shift, a round trip through a reopened store, deleting a shift leaving expenses alone, and the service's refusals |
+| Intent lifecycle service | Every action performed off screen: the shift and delivery refusals carried through unchanged, a step recorded only while exactly one delivery is in progress, the refusal naming two and three, neither delivery moving under it, the refusal lifting once one remains, a cancelled delivery neither reachable nor counted, and no amount, place or cancellation reachable at all |
+| App intents | The four intents performed end to end against a throwaway store, the ambiguous step recording nothing, and the metadata the system reads: no intent opening the app, every one runnable on a locked device, and each carrying a title and a description that states its rule |
+| Intent wording | What a driver hears back: the recorded event named as history names it, the route caution on every shift start, an unknown number left out rather than invented, no figure claimed in any sentence, and a refusal repeating the service's own words rather than a second version of them |
 | Expense export | Expenses selected by their own dates, none in a single shift's file, a period of costs alone exported rather than refused, the summary's totals and net, the JSON key set and its explicit nulls, a round trip, the CSV unchanged at 32 columns with no expense in it, and the format version deliberately unmoved |
 
 Running one suite:
@@ -79,6 +82,12 @@ termination; an in-memory store disappears with its container.
 **`ModelContainerFactory.makeContainer(versionedSchema:at:)`** opens a store under a historical
 version without the migration plan, so a test can write a store shaped the way an older build would
 have left it. See [Migrations](../architecture/migrations.md).
+
+**`IntentLifecycleService.testContext`** (debug builds only) is the store the App Intents perform
+against when a test sets one. An intent is created by the system with no arguments, so there is
+nowhere for a test to hand it a context, and without the seam the only store a `perform()` could
+reach is the device's own. The suite that uses it is serialised, and a shipped intent has exactly one
+store it can reach.
 
 **`StubLocationTrackingProvider`** (debug builds only) replaces Core Location's position updates and
 nothing else. The capture pipeline has to be verifiable: that a good sample is retained, that a
