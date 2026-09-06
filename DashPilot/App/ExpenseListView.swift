@@ -61,6 +61,12 @@ struct ExpenseListView: View {
                             editing = .existing(expense)
                         } label: {
                             ExpenseRow(expense: expense)
+                                // The whole row, including the space between its
+                                // lines. A plain button is hit-testable only
+                                // where its content actually draws, so without
+                                // this a tap in the middle of the row — which is
+                                // where a thumb lands — does nothing at all.
+                                .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
                         .accessibilityIdentifier("expenseRow")

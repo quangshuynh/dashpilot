@@ -25,8 +25,8 @@ from as truthfully as where it is going, and the copies are never used at runtim
 migration.
 
 `DashPilotSchemaV7` was frozen in the interval that added v8. v8 adds an entity beside the four v7
-described rather than changing any of them, so the copies were not yet forced by a shape change —
-they were taken at the moment v7 stopped being current, before a later version moves a model on and
+described rather than changing any of them, so the copies were not yet forced by a shape change.
+They were taken at the moment v7 stopped being current, before a later version moves a model on and
 leaves that enum quietly claiming a shape no store ever had. Each version gets its copies as the plan
 moves past it, exactly as v6 got its own when v7 added a per-delivery amount.
 
@@ -119,7 +119,7 @@ Empty is the only honest state for it. A v7 store records what a driver's work p
 what it cost, and DashPilot has no source from which a past cost could be recovered: it observes no
 purchase, reads no card, receipt or platform, and models no fuel consumption or vehicle wear.
 Deriving fuel from recorded mileage, or a per-mile vehicle charge from anything at all, would write
-costs the driver never entered into their history — and this fabrication would be worse than an
+costs the driver never entered into their history, and this fabrication would be worse than an
 invented earnings figure, because every net figure the app shows would then be built on it.
 
 The absence of a relationship is itself the modelling decision, not a shortcut: an expense carries
@@ -151,8 +151,8 @@ That is how "a v1 store keeps its shifts" is proven. The suite covers each step:
 
 - A v7 store's shifts, samples, sessions, shift amounts, deliveries, pickup places, per-delivery
   amounts and the derived results over them survive, and the new expense table is empty. One case
-  presents a store holding an amount, a route and deliveries — everything a plausible cost could have
-  been derived from — and asserts that no expense is fabricated from any of it.
+  presents a store holding an amount, a route and deliveries, which is everything a plausible cost
+  could have been derived from, and asserts that no expense is fabricated from any of it.
 
 Each step is also walked from every earlier version, so a device that skipped several releases is
 covered by the same suite rather than by assumption.

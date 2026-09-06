@@ -32,12 +32,12 @@ All four period lengths go through **one** `ReportingPeriod` and one calculator.
 exported as a set of weeks and a chosen range is not exported as a set of days: each one selects the
 underlying shifts it contains, so the file and the screen cannot disagree about a single figure.
 
-A scope holding **nothing at all** — no completed shift and no recorded expense — is refused rather
-than producing an empty file, and such a period offers no export control. A period holding only
+A scope holding **nothing at all**, meaning no completed shift and no recorded expense, is refused
+rather than producing an empty file, and such a period offers no export control. A period holding only
 expenses *is* exported: a day off with a tank of fuel on it is not an empty day.
 
 Expenses are selected by their **own dates**, never through a shift. A single shift's export
-therefore carries none, because no expense belongs to a shift — see
+therefore carries none, because no expense belongs to a shift. See
 [Recorded expenses](expenses.md).
 
 ## Export format version
@@ -61,7 +61,7 @@ Exports are never called "v8".
 
 ### Version history
 
-#### Still 2 — recorded expenses
+#### Still 2: recorded expenses
 
 Recorded expenses added a top-level `expenses` array, a `summary.expenses` block and a
 `summary.netAfterRecordedExpenses` block. The version was **evaluated and deliberately not moved**,
@@ -172,7 +172,7 @@ and with the net after them:
 
 There is **no coverage pair on the expense total**, and its absence is deliberate: nothing knows how
 many costs went unrecorded, so a count of what was entered is all that can honestly be written. The
-net is `null` unless both halves were recorded, and the field name is the whole claim — it is not
+net is `null` unless both halves were recorded, and the field name is the whole claim: it is not
 profit, and a reader relabelling it as such is making a claim this file does not.
 
 Route partiality is preserved as its own counts (`measuredShiftCount`, `partialShiftCount`,

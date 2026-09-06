@@ -253,7 +253,7 @@ arithmetic, are under [Money and metrics](../architecture/money-and-metrics.md).
 
 ## Costs are recorded separately, and never subtracted here
 
-A driver can record what the work cost — see [Recorded expenses](expenses.md) — and those records
+A driver can record what the work cost, see [Recorded expenses](expenses.md), and those records
 change **nothing** on this page. No rate, total or amount here has a cost taken off it, and every
 figure keeps the word *gross*.
 

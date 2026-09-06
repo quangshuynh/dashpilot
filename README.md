@@ -59,7 +59,8 @@ derived legitimately from device sensors and stored history is typed by the driv
   with an amount, a date, and an optional short note. An expense belongs to a **date** rather than to
   a shift, so nothing is attributed to work the driver did not attribute it to and no cost is divided
   across shifts, deliveries or miles. A period reports what was recorded, its split by category, and
-  **net after recorded expenses** — one recorded subtotal less another, never called profit.
+  **net after recorded expenses**, which is one recorded subtotal less another and is never called
+  profit.
 - **Day, week, month and custom-range summaries with explicit data coverage**: periods built by
   `Calendar` rather than by fixed 24-hour or 30-day arithmetic, a chosen range picked as inclusive
   dates and held internally as a half-open interval, completed shifts only, every figure shown with

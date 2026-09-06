@@ -82,7 +82,7 @@ they went, or where on the device the file landed — a path names a location on
 tells a reader nothing they can act on.
 
 **A recorded cost is logged only as a category.** Not the amount, not the day money was spent, and
-not a word of the note — a note is free text the driver typed, and a date and an amount together are
+not a word of the note. A note is free text the driver typed, and a date and an amount together are
 a description of their spending. The category is a fixed word from a closed set, chosen in code, so
 it cannot accidentally become the value. Nothing about a period's expense total, its split by
 category or the net after it is logged at all: every one of those is a derived figure that is a
@@ -102,8 +102,8 @@ name rather than a candidate position.
 Every coordinate, amount, route and business name in this repository is invented. Tests, previews,
 fixtures, documentation and screenshots use `SyntheticRoute`, which builds offsets from a
 round-number origin rather than from anywhere anyone has driven, amounts chosen to be obviously
-fictional, pickup places — `Nowhere Noodles`, `Example Diner` — that name no real business, and
-expense notes describing nothing that happened.
+fictional, pickup places such as `Nowhere Noodles` and `Example Diner` that name no real business,
+and expense notes describing nothing that happened.
 
 The debug-only `-dashpilot-seeded-history` launch argument opens an in-memory store holding that
 same synthetic history, which is how a measured route and the rates over it are reachable in a UI

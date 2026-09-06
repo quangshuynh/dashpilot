@@ -234,4 +234,4 @@ delivery's. A period's recorded expense total, its split by category and the net
 after it are derived from the expense rows the same way, and no cost per hour, per mile or per
 delivery exists at all. The store holds timestamps, positions, the optional amounts a driver typed
 against a shift and against individual deliveries, the costs they entered, and the names and notes
-they typed — and nothing that could disagree with them.
+they typed, and nothing that could disagree with them.
