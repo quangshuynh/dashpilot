@@ -186,7 +186,7 @@ struct ShiftExportServiceTests {
 
         let written = try Data(contentsOf: file.url)
         #expect(written.count == file.byteCount)
-        #expect(String(decoding: written, as: UTF8.self).contains("\"formatVersion\" : 1"))
+        #expect(String(decoding: written, as: UTF8.self).contains("\"formatVersion\" : 2"))
     }
 
     @Test("A CSV export writes a non-empty file with the expected name and extension")
