@@ -55,6 +55,11 @@ derived legitimately from device sensors and stored history is typed by the driv
   per recorded mile, with the reason stated whenever a rate cannot be derived, its deliveries listed
   with their recorded events and any amount recorded against them, and a confirmed delete that
   removes the shift's route positions and deliveries with it.
+- **Recorded operating expenses**: fuel, parking and tolls, maintenance, supplies or other, each
+  with an amount, a date, and an optional short note. An expense belongs to a **date** rather than to
+  a shift, so nothing is attributed to work the driver did not attribute it to and no cost is divided
+  across shifts, deliveries or miles. A period reports what was recorded, its split by category, and
+  **net after recorded expenses** — one recorded subtotal less another, never called profit.
 - **Day, week, month and custom-range summaries with explicit data coverage**: periods built by
   `Calendar` rather than by fixed 24-hour or 30-day arithmetic, a chosen range picked as inclusive
   dates and held internally as a half-open interval, completed shifts only, every figure shown with
@@ -70,7 +75,7 @@ derived legitimately from device sensors and stored history is typed by the driv
 Swift, SwiftUI, SwiftData, Core Location, OSLog, Swift Testing and XCUITest. **No third-party
 runtime dependencies.**
 
-Versioned schema at v7 with lightweight migrations from v1, tested by opening stores written under
+Versioned schema at v8 with lightweight migrations from v1, tested by opening stores written under
 each older version. Domain calculations import neither SwiftUI nor SwiftData, so every rule is
 tested without a container or a rendered view. Money is `Decimal` throughout: no monetary value
 passes through binary floating point, in memory or in the store. Nothing derived is stored, so
@@ -134,6 +139,11 @@ The short version, with the full list in [`docs/reference/limitations.md`](docs/
   deduction figure.
 - **Gross earnings are what the driver typed.** Nothing is imported, no amount is a profit,
   take-home or taxable figure, and no amount recorded is a different state from `$0.00`.
+- **Recorded expenses are only what the driver entered.** DashPilot observes no purchase and
+  estimates no cost, so a period's recorded expenses are a floor and a period with none recorded is
+  not one that cost nothing. Net after recorded expenses is one recorded subtotal less another: it is
+  not profit, not take-home pay and not a tax figure, and there is no cost per shift, per delivery,
+  per hour or per mile anywhere.
 - **All three rates are gross.** The per-shift-hour rate divides by elapsed time; the
   per-active-delivery-hour rate divides by the time a recorded delivery was open, which is not a
   measure of work and not a wage; the per-mile rate divides by recorded miles, which makes it
@@ -159,8 +169,9 @@ The short version, with the full list in [`docs/reference/limitations.md`](docs/
   shifts' own rates, and never an average of a shorter period's rates — and nothing forecasts,
   compares periods or ranks days.
 - Not implemented yet: most things built on the delivery records (merchant scoring, merchant
-  profitability, offer profitability, per-delivery mileage), expenses, aggregates longer than a week,
-  maps, App Intents, Live Activities, recommendations, and importing an exported file back.
+  profitability, offer profitability, per-delivery mileage), any tax feature, recurring expenses or
+  receipts, aggregates longer than a month or a chosen range, maps, App Intents, Live Activities,
+  recommendations, and importing an exported file back.
 
 ## License
 

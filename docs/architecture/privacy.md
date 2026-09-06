@@ -8,8 +8,8 @@ there is nothing to configure, disable or trust.
 - All data stays on device. There are no accounts, no sync, no analytics, no telemetry and no ads.
 - There is no third-party SDK of any kind, so nothing is collected on anyone else's behalf.
 - Recorded route samples never leave the device.
-- Precise coordinates, routes, earnings, delivery history, pickup-place names and the waits recorded
-  at them are treated as sensitive: they are not logged, and they are never committed to the
+- Precise coordinates, routes, earnings, recorded costs and the notes written on them, delivery
+  history, pickup-place names and the waits recorded at them are treated as sensitive: they are not logged, and they are never committed to the
   repository. For a driver who
   works a small area, the places they pick up from are close to a description of where they are.
 - Pickup places are typed by the driver. There is no geocoding, no place search and no directory
@@ -30,6 +30,9 @@ there is nothing to configure, disable or trust.
   description of its coverage, never a latitude, a longitude, a timestamped position or a
   capture-session identifier. Exporting raw positions would be a separate, explicit feature with its
   own consent; there is a test asserting they are absent.
+- **Expense notes are exported**, because they are the driver's own record and a file that dropped
+  them would hand back less than they entered. They are free text and are treated exactly as a place
+  name is: never logged, and out of the app only through an export the driver started.
 - **Pickup place names are exported**, because they are part of the driver's own recorded history and
   the file would be much less useful without them. They can reveal where someone works. The
   normalised matching key is never exported.
@@ -51,9 +54,10 @@ counts and errors. Coordinates, addresses and earnings amounts are never logged.
 | `route-capture` | Capture started or stopped, why it could not start, how many samples were retained and persisted, and the *name* of the rule that rejected a candidate | Latitude, longitude, address or route geometry |
 | `earnings` | That an amount was added, updated or removed, or that a save failed | The amount |
 | `pickup-place` | That a place was assigned, changed, removed, reused, created, renamed or merged; that a name, rename or merge was refused, by rule; that a save failed | The name typed, the normalised key derived from it, and how many deliveries a merge moved |
+| `expenses` | That an expense was recorded, updated or deleted, which **category** it was, whether a note exists, and that a write was refused by rule or failed | The amount, the date the money was spent, and any word of the note |
 | `export` | That a file was written, for which scope and in which format, and how many shifts went into it; that an export was refused, by rule; that a write failed | Anything in the file — a date worked, an amount, a place, a distance — and the path it was written to |
 
-Six deliberate silences are worth stating.
+Seven deliberate silences are worth stating.
 
 **Mileage is not logged at all.** The calculation reads coordinates and produces a trip metric, and
 neither belongs in a log. There is no failure it can report, because an unmeasurable route is a
@@ -77,6 +81,13 @@ as CSV and how many shifts it held. It does not say which week, what those shift
 they went, or where on the device the file landed — a path names a location on someone's phone and
 tells a reader nothing they can act on.
 
+**A recorded cost is logged only as a category.** Not the amount, not the day money was spent, and
+not a word of the note — a note is free text the driver typed, and a date and an amount together are
+a description of their spending. The category is a fixed word from a closed set, chosen in code, so
+it cannot accidentally become the value. Nothing about a period's expense total, its split by
+category or the net after it is logged at all: every one of those is a derived figure that is a
+normal result rather than a failure, exactly as a rate is.
+
 **A merge records nothing about what it moved.** The log says two pickup places were merged, and not
 which two or how many deliveries changed hands. A count of a driver's pickups at one place is work
 history, which is the thing this category exists to keep out.
@@ -91,7 +102,8 @@ name rather than a candidate position.
 Every coordinate, amount, route and business name in this repository is invented. Tests, previews,
 fixtures, documentation and screenshots use `SyntheticRoute`, which builds offsets from a
 round-number origin rather than from anywhere anyone has driven, amounts chosen to be obviously
-fictional, and pickup places — `Nowhere Noodles`, `Example Diner` — that name no real business.
+fictional, pickup places — `Nowhere Noodles`, `Example Diner` — that name no real business, and
+expense notes describing nothing that happened.
 
 The debug-only `-dashpilot-seeded-history` launch argument opens an in-memory store holding that
 same synthetic history, which is how a measured route and the rates over it are reachable in a UI

@@ -251,6 +251,16 @@ through binary floating point in memory or in the store, and every monetary stri
 built in one place. The details, including where a duration and a distance cross into decimal
 arithmetic, are under [Money and metrics](../architecture/money-and-metrics.md).
 
+## Costs are recorded separately, and never subtracted here
+
+A driver can record what the work cost — see [Recorded expenses](expenses.md) — and those records
+change **nothing** on this page. No rate, total or amount here has a cost taken off it, and every
+figure keeps the word *gross*.
+
+Costs are subtracted in exactly one place: a period summary's *net after recorded expenses*, which is
+one recorded subtotal less another and is not profit. There is no cost per shift, per delivery, per
+hour or per mile anywhere in the app, because an expense belongs to a date rather than to work.
+
 ## What these numbers are not
 
 - Neither rate subtracts fuel, wear, insurance, phone costs or tax. Neither is a profit, net or
