@@ -148,7 +148,20 @@ nonisolated struct PeriodShiftRecord: Equatable, Sendable {
 ///   times would silently repair a store holding overlapping shifts instead of
 ///   leaving the anomaly visible.
 nonisolated struct PeriodMetricsCalculator: Equatable, Sendable {
+    /// The one definition of a recorded-expense total, reused rather than
+    /// restated here.
+    private let expenseCalculator = ExpenseTotalsCalculator()
+
     init() {}
+
+    /// The period's shifts, summarised with **no expense records in play**.
+    ///
+    /// For a caller that holds none: the result reports no recorded expenses and
+    /// no net figure, which is exactly what such a caller is entitled to say.
+    /// The screen and the export both pass their expenses.
+    func metrics(of records: some Sequence<PeriodShiftRecord>, in period: ReportingPeriod) -> PeriodMetrics {
+        metrics(of: records, expenses: [ExpenseRecord](), in: period)
+    }
 
     /// Derives everything a period summary shows from the records it is given.
     ///
@@ -157,10 +170,21 @@ nonisolated struct PeriodMetricsCalculator: Equatable, Sendable {
     ///     completed, and records whose `startedAt` falls outside `period`, are
     ///     excluded here — a caller may pre-filter for cost, but the rule is
     ///     applied here so it holds however the calculator is called.
+    ///   - expenses: candidate expenses, in any order, selected by their own
+    ///     timestamps. Independent of the shifts: an expense is never attached
+    ///     to one, and a period can hold expenses with no shift beside them.
     ///   - period: the calendar span being summarised.
-    func metrics(of records: some Sequence<PeriodShiftRecord>, in period: ReportingPeriod) -> PeriodMetrics {
+    func metrics(
+        of records: some Sequence<PeriodShiftRecord>,
+        expenses expenseRecords: some Sequence<ExpenseRecord>,
+        in period: ReportingPeriod
+    ) -> PeriodMetrics {
         let shifts = records.filter { $0.isCompleted && period.contains($0.startedAt) }
-        guard !shifts.isEmpty else { return .empty(period) }
+        let expenses = expenseCalculator.totals(of: expenseRecords, in: period)
+        // A period with no completed shift still reports what it cost: a driver
+        // can buy fuel on a day they did not drive, and dropping the record
+        // because no shift shares its date would lose a fact they entered.
+        guard !shifts.isEmpty else { return .empty(period, expenses: expenses) }
 
         let shiftCount = shifts.count
 
@@ -169,6 +193,13 @@ nonisolated struct PeriodMetricsCalculator: Equatable, Sendable {
         let nonDelivery = total(of: shifts, using: \.nonDeliveryDuration, eligibleCount: shiftCount)
 
         let earnings = shifts.compactMap(\.grossEarnings)
+        // The subtotal and its coverage are built once and used twice: the
+        // period's own earnings figure, and the earnings half of the net after
+        // recorded expenses. Deriving the second from anything else would let
+        // the two disagree.
+        let recordedGrossEarnings = earnings.isEmpty ? nil : earnings.reduce(Money.zero, +)
+        let earningsCoverage = MetricCoverage(contributingCount: earnings.count, eligibleCount: shiftCount)
+
         let waits = shifts.flatMap(\.pickupWaits)
         let waitMetrics = PickupWaitCalculator().metrics(of: waits)
         let deliveryEarnings = shifts.flatMap(\.recordedDeliveryEarnings)
@@ -180,8 +211,8 @@ nonisolated struct PeriodMetricsCalculator: Equatable, Sendable {
             elapsedCoverage: elapsed.coverage,
             // The sum of the amounts that were recorded, over the count that
             // recorded them. Absent — not zero — when nobody recorded one.
-            recordedGrossEarnings: earnings.isEmpty ? nil : earnings.reduce(Money.zero, +),
-            earningsCoverage: MetricCoverage(contributingCount: earnings.count, eligibleCount: shiftCount),
+            recordedGrossEarnings: recordedGrossEarnings,
+            earningsCoverage: earningsCoverage,
             deliveryActiveDuration: active.value,
             deliveryActiveCoverage: active.coverage,
             nonDeliveryDuration: nonDelivery.value,
@@ -196,6 +227,15 @@ nonisolated struct PeriodMetricsCalculator: Equatable, Sendable {
             deliveryEarningsCoverage: MetricCoverage(
                 contributingCount: deliveryEarnings.count,
                 eligibleCount: shifts.reduce(0) { $0 + $1.terminalDeliveryCount }
+            ),
+            expenses: expenses,
+            // The shift subtotal less the recorded costs, and only when both
+            // halves exist. Nothing here divides an expense among shifts,
+            // deliveries or miles — see ``ExpenseTotalsCalculator``.
+            netAfterRecordedExpenses: expenseCalculator.net(
+                of: recordedGrossEarnings,
+                coverage: earningsCoverage,
+                after: expenses
             ),
             grossPerElapsedHour: Self.hourlyRate(
                 of: shifts,

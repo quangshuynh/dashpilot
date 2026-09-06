@@ -65,7 +65,8 @@ struct ShiftExportService {
                 calendar: calendar
             ),
             format: format,
-            shiftCount: document.shiftCount
+            shiftCount: document.shiftCount,
+            expenseCount: document.expenses.count
         )
         // The scope's kind and the format, and a count. Never a date a driver
         // worked, never an amount, never a place, and never the path the file
@@ -74,7 +75,8 @@ struct ShiftExportService {
             """
             Export written: scope \(scope.kind, privacy: .public), \
             format \(format.rawValue, privacy: .public), \
-            \(document.shiftCount, privacy: .public) shifts
+            \(document.shiftCount, privacy: .public) shifts, \
+            \(document.expenses.count, privacy: .public) expenses
             """
         )
         return file
@@ -88,8 +90,13 @@ struct ShiftExportService {
     /// - Throws: ``ShiftExportError``.
     func document(for scope: ExportScope, exportedAt: Date = .now) throws -> ExportDocument {
         let shifts = try shifts(in: scope)
-        guard !shifts.isEmpty else {
-            AppLog.export.notice("Export refused: no completed shifts in scope \(scope.kind, privacy: .public)")
+        // Expenses are records in their own right, so a scope holding one is not
+        // an empty scope even with no completed shift in it: a driver can buy
+        // fuel on a day they did not drive, and refusing to export that day
+        // would refuse to export something they entered.
+        let expenses = try expenses(in: scope)
+        guard !shifts.isEmpty || !expenses.isEmpty else {
+            AppLog.export.notice("Export refused: nothing recorded in scope \(scope.kind, privacy: .public)")
             throw ShiftExportError.noCompletedShiftsInScope
         }
 
@@ -107,7 +114,8 @@ struct ShiftExportService {
         return ExportDocument(
             scope: scope,
             shifts: records,
-            summary: summary(for: scope, shifts: shifts, distances: distances),
+            expenses: expenses.map(ExpenseExportRecord.init),
+            summary: summary(for: scope, shifts: shifts, distances: distances, expenses: expenses),
             exportedAt: exportedAt
         )
     }
@@ -162,6 +170,26 @@ struct ShiftExportService {
         }
     }
 
+    /// The recorded expenses a scope covers, newest first.
+    ///
+    /// **A single shift covers none.** An expense is dated rather than attached
+    /// to a shift, so there is no set of expenses that belongs to one — and
+    /// taking the ones that fall between its start and end would invent the
+    /// attribution the model refuses to hold. See ``Expense``.
+    private func expenses(in scope: ExportScope) throws -> [Expense] {
+        let service = ExpenseService(context: context)
+        do {
+            switch scope {
+            case .shift: return []
+            case let .period(period): return try service.expenses(in: period)
+            case .allHistory: return try service.allExpenses()
+            }
+        } catch {
+            AppLog.export.error("Failed to read expenses for export: \(error)")
+            throw ShiftExportError.storeUnavailable
+        }
+    }
+
     private func fetch(_ descriptor: FetchDescriptor<Shift>) throws -> [Shift] {
         do {
             return try context.fetch(descriptor)
@@ -181,11 +209,18 @@ struct ShiftExportService {
     private func summary(
         for scope: ExportScope,
         shifts: [Shift],
-        distances: [UUID: RouteDistance]
+        distances: [UUID: RouteDistance],
+        expenses: [Expense]
     ) -> PeriodExportSummary? {
         guard let period = scope.period else { return nil }
         let records = shifts.map { $0.periodRecord(for: distances[$0.id] ?? .none) }
-        return PeriodExportSummary(periodCalculator.metrics(of: records, in: period))
+        return PeriodExportSummary(
+            periodCalculator.metrics(
+                of: records,
+                expenses: expenses.map(\.expenseRecord),
+                in: period
+            )
+        )
     }
 
     // MARK: Naming

@@ -47,7 +47,7 @@ nonisolated enum LaunchArgument {
     static let seededPickupHistory = "-dashpilot-seeded-pickup-history"
 
     /// Runs against a throwaway store already holding a week of synthetic
-    /// completed shifts, anchored to today.
+    /// completed shifts and three synthetic expenses, anchored to today.
     ///
     /// The period summary shows the day and week the driver is actually in, so
     /// the epoch-pinned fixtures above would open it on an empty period. This

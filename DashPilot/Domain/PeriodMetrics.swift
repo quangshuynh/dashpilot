@@ -235,6 +235,29 @@ nonisolated struct PeriodMetrics: Equatable, Sendable {
     /// deliveries in the period.
     let deliveryEarningsCoverage: MetricCoverage
 
+    // MARK: Expenses
+
+    /// The operating costs the driver recorded in this period, added up and
+    /// split by category.
+    ///
+    /// Selected by their **own** timestamps rather than by a shift: an expense
+    /// belongs to the period containing the moment it happened, and nothing
+    /// attaches one to a shift or a delivery. See ``Expense``.
+    ///
+    /// A period with no expense recorded is not a period that cost nothing, and
+    /// this total is a floor rather than the period's costs — the same claim
+    /// ``recordedDistance`` makes about miles.
+    let expenses: PeriodExpenseTotals
+
+    /// Recorded gross earnings less recorded expenses, when both halves were
+    /// recorded.
+    ///
+    /// **Never called profit**, and never a rate: see ``PeriodNetAfterExpenses``
+    /// for what the figure may be said to be and
+    /// ``ExpenseTotalsCalculator`` for why no cost-per-hour or cost-per-mile
+    /// exists anywhere in the app.
+    let netAfterRecordedExpenses: PeriodNetAfterExpenses
+
     // MARK: Rates
 
     /// Period gross earnings per elapsed shift hour.
@@ -265,7 +288,11 @@ nonisolated struct PeriodMetrics: Equatable, Sendable {
     /// Every figure is absent rather than zero. A week nobody drove is not a
     /// week of no earnings, no miles and no deliveries — it is a week with no
     /// records, and the interface says so instead of printing a grid of zeros.
-    static func empty(_ period: ReportingPeriod) -> PeriodMetrics {
+    ///
+    /// Expenses are carried in rather than emptied, because they do not depend
+    /// on a shift: a driver can buy fuel on a day they did not drive, and that
+    /// record must not disappear because no shift shares its date.
+    static func empty(_ period: ReportingPeriod, expenses: PeriodExpenseTotals = .none) -> PeriodMetrics {
         PeriodMetrics(
             period: period,
             completedShiftCount: 0,
@@ -285,6 +312,11 @@ nonisolated struct PeriodMetrics: Equatable, Sendable {
             pickupWaitSampleCount: 0,
             recordedDeliveryEarnings: nil,
             deliveryEarningsCoverage: .none,
+            expenses: expenses,
+            netAfterRecordedExpenses: .unavailable(
+                earningsCoverage: .none,
+                expenseRecordCount: expenses.recordCount
+            ),
             grossPerElapsedHour: .unavailable(eligibleCount: 0),
             grossPerDeliveryActiveHour: .unavailable(eligibleCount: 0),
             grossPerRecordedMile: .unavailable(eligibleCount: 0)
@@ -292,7 +324,20 @@ nonisolated struct PeriodMetrics: Equatable, Sendable {
     }
 
     /// Whether the period holds no completed shift at all.
+    ///
+    /// Says nothing about expenses, deliberately: it is the flag every figure
+    /// derived from shifts depends on, and a period can hold a recorded cost
+    /// with no shift beside it. Use ``hasAnyRecords`` to decide whether the
+    /// period holds anything at all.
     var isEmpty: Bool { completedShiftCount == 0 }
+
+    /// Whether DashPilot recorded anything at all in this period — a completed
+    /// shift, an expense, or both.
+    ///
+    /// The two are independent records. A day off with a tank of fuel on it is
+    /// not an empty day, and a day of driving with no cost recorded is not
+    /// empty either.
+    var hasAnyRecords: Bool { completedShiftCount > 0 || expenses.hasRecords }
 }
 
 /// The three rates a period derives, and what each one may be called.
@@ -496,6 +541,113 @@ nonisolated extension PeriodMetrics {
             + "based on \(rate.coverage.statement(noun: kind.basisNoun, pluralNoun: kind.basisPluralNoun))."
     }
 
+    // MARK: Expenses
+
+    /// The recorded costs: `"$48.60 recorded"`, or `nil` when the driver
+    /// recorded none in this period.
+    ///
+    /// `recorded` is doing the same work it does under earnings, and more of it:
+    /// there is no denominator here at all, so the word is the whole of what
+    /// keeps a subtotal of typed-in costs from reading as what the period cost.
+    func expenseStatement(locale: Locale = .autoupdatingCurrent) -> String? {
+        expenses.recordedTotal.map { "\($0.formatted(locale: locale)) recorded" }
+    }
+
+    /// How many records the total came from: `"Across 3 recorded expenses"`.
+    ///
+    /// A count and never a coverage pair. Nothing on the device knows how many
+    /// costs a driver incurred, so `"3 of 3"` would state a completeness the app
+    /// cannot observe.
+    var expenseBasisStatement: String {
+        guard expenses.hasRecords else { return "No expenses recorded" }
+        return "Across \(expenses.recordCount) recorded \(Self.expenseNoun(expenses.recordCount))"
+    }
+
+    /// The sentence that keeps a recorded total from being read as the period's
+    /// costs. Always present when there is a total: unlike a partial route,
+    /// there is no count that could make it unnecessary.
+    var expensesIncompleteExplanation: String {
+        """
+        These are the expenses you entered. DashPilot records no purchase of its own, so anything you \
+        have not entered is not here and is not counted as zero.
+        """
+    }
+
+    func spokenExpenseStatement(locale: Locale = .autoupdatingCurrent) -> String {
+        guard let amount = expenses.recordedTotal else {
+            return "No expenses recorded in this period. That is not the same as spending nothing."
+        }
+        return "Recorded expenses, \(amount.formatted(locale: locale)), "
+            + "across \(expenses.recordCount) recorded \(Self.expenseNoun(expenses.recordCount))."
+    }
+
+    /// One category's share: `"Fuel, $42.10, 1 expense"`, spoken and written the
+    /// same way because a row this short reads correctly either way.
+    func categoryStatement(_ total: ExpenseCategoryTotal, locale: Locale = .autoupdatingCurrent) -> String {
+        "\(total.category.title), \(total.total.formatted(locale: locale)), "
+            + "\(total.recordCount) recorded \(Self.expenseNoun(total.recordCount))"
+    }
+
+    // MARK: Net after recorded expenses
+
+    /// The figure itself, or `nil` when the period's records cannot support one.
+    ///
+    /// Deliberately not named on its own anywhere: every call site pairs it with
+    /// ``netTitle``, which is the phrase that makes it honest.
+    func netStatement(locale: Locale = .autoupdatingCurrent) -> String? {
+        netAfterRecordedExpenses.amount.map { $0.formatted(locale: locale) }
+    }
+
+    /// What the figure is called, in full, every time: `"Net after recorded
+    /// expenses"`.
+    ///
+    /// Never shortened to "Net", and never "profit", "take-home" or "earnings
+    /// after costs". The three words after "net" are the ones that stop it being
+    /// a claim about what the driver actually made.
+    var netTitle: String { "Net after recorded expenses" }
+
+    /// What the net was worked out from: `"Recorded gross earnings across 2 of 3
+    /// shifts, less 3 recorded expenses"`.
+    var netBasisStatement: String {
+        let net = netAfterRecordedExpenses
+        return "Recorded gross earnings \(net.earningsCoverage.spokenStatement(noun: "shift")), "
+            + "less \(net.expenseRecordCount) recorded \(Self.expenseNoun(net.expenseRecordCount))"
+    }
+
+    /// The sentence that has to sit under the figure wherever it appears.
+    ///
+    /// Both halves are floors — earnings over the shifts that recorded an
+    /// amount, costs over the expenses that were entered — so their difference
+    /// is an upper bound rather than a result. Saying so is what separates this
+    /// figure from profit.
+    var netCautionStatement: String {
+        """
+        Both halves are what you recorded: shifts with no amount are not counted, and costs you did \
+        not enter are not subtracted. This is not profit, and it is not a tax figure.
+        """
+    }
+
+    /// Why a period with records still shows no net figure.
+    var netUnavailableExplanation: String {
+        if !expenses.hasRecords {
+            return """
+                No expense is recorded in this period, so there is nothing to subtract. DashPilot does \
+                not treat that as costing nothing.
+                """
+        }
+        return """
+            No completed shift in this period has an amount recorded, so there are no recorded \
+            earnings to subtract these expenses from.
+            """
+    }
+
+    func spokenNetStatement(locale: Locale = .autoupdatingCurrent) -> String {
+        guard let amount = netStatement(locale: locale) else {
+            return "No net after recorded expenses. \(netUnavailableExplanation)"
+        }
+        return "\(amount) net after recorded expenses. \(netBasisStatement). \(netCautionStatement)"
+    }
+
     // MARK: Deliveries and pickups
 
     /// The middle recorded wait: `"9 min"`, or `nil` when none was recorded.
@@ -548,5 +700,9 @@ nonisolated extension PeriodMetrics {
 
     private static func pickupNoun(_ count: Int) -> String {
         count == 1 ? "pickup" : "pickups"
+    }
+
+    private static func expenseNoun(_ count: Int) -> String {
+        count == 1 ? "expense" : "expenses"
     }
 }

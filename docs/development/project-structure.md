@@ -43,9 +43,11 @@ no view builds a CSV string. See [History export](../product/history-export.md).
 - A "Providing" protocol is a seam over a platform framework, and its Core Location implementation
   is the only file on that side allowed to import it.
 - Vocabulary the interface says out loud lives in a tested domain type (`RouteQuality`,
-  `ShiftRateUnavailability`, `DeliveryAction`, `DeliverySummary`, `PickupWaitMetrics`), never as
-  strings in a view. `DurationText` holds the one rule for writing and speaking a duration, so the
-  shift, delivery and pickup-place surfaces cannot drift apart.
+  `ShiftRateUnavailability`, `DeliveryAction`, `DeliverySummary`, `PickupWaitMetrics`,
+  `ExpenseCategory`), never as strings in a view. The phrase *net after recorded expenses* and the
+  caution under it are `PeriodMetrics` wording for the same reason: a figure's name is a claim.
+  `DurationText` holds the one rule for writing and speaking a duration, so the shift, delivery and
+  pickup-place surfaces cannot drift apart.
 
 ## Repository conventions
 

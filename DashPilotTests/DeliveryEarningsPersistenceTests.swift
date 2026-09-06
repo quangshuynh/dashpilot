@@ -49,23 +49,24 @@ struct DeliveryEarningsPersistenceTests {
 
     // MARK: Schema
 
-    /// The one place the migration plan's shape is asserted.
+    /// What v7 added, asserted against the version itself rather than against
+    /// the plan's current end.
     ///
-    /// Deliberately a single authoritative check rather than a count repeated
-    /// across suites: a schema version is added by one interval, and a figure
-    /// scattered over unrelated files is one that gets updated in four places
-    /// and forgotten in the fifth.
-    @Test("Version 7 is current, and it is the version that adds per-delivery earnings")
+    /// The plan's shape — how many versions it has and which one is current — is
+    /// asserted once, in the suite belonging to the version that is current. It
+    /// moved to `ExpensePersistenceTests` when v8 was added, for the reason it
+    /// was a single check here: a figure repeated across suites is one that gets
+    /// updated in four places and forgotten in the fifth.
+    @Test("Version 7 is the version that adds per-delivery earnings")
     func schemaVersion() throws {
         #expect(DashPilotSchemaV7.versionIdentifier == Schema.Version(7, 0, 0))
-        #expect(DashPilotMigrationPlan.schemas.count == 7)
-        #expect(DashPilotMigrationPlan.stages.count == 6)
-        #expect(DashPilotMigrationPlan.schemas.last is DashPilotSchemaV7.Type)
+        #expect(DashPilotMigrationPlan.schemas.contains { $0 is DashPilotSchemaV7.Type })
 
-        let entities = Set(ModelContainerFactory.currentSchema.entities.map(\.name))
+        let schema = Schema(versionedSchema: DashPilotSchemaV7.self)
+        let entities = Set(schema.entities.map(\.name))
         #expect(entities == ["Shift", "RouteSample", "Delivery", "PickupPlace"], "v7 adds no entity")
 
-        let delivery = try #require(ModelContainerFactory.currentSchema.entities.first { $0.name == "Delivery" })
+        let delivery = try #require(schema.entities.first { $0.name == "Delivery" })
         let properties = Set(delivery.properties.map(\.name))
         #expect(properties.contains("grossEarningsAmount"), "The amount is real new shape, which is why this is v7")
         #expect(properties.contains("pickupPlace"), "And everything v6 held is still held")
