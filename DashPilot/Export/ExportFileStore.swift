@@ -16,14 +16,30 @@ nonisolated struct ExportedFile: Equatable, Sendable {
     /// How many completed shifts the file holds, so the sheet can say what is
     /// about to be shared before it is shared.
     let shiftCount: Int
+
+    /// How many recorded expenses it holds. Counted separately because they are
+    /// separate records: an expense belongs to no shift, so it cannot be implied
+    /// by the shift count.
+    let expenseCount: Int
 }
 
 nonisolated extension ExportedFile {
-    /// `"3 shifts · 4 KB"`, for the line under the file name.
+    /// `"3 shifts · 4 KB"`, and `"3 shifts · 2 expenses · 4 KB"` when the file
+    /// also carries costs, for the line under the file name.
+    ///
+    /// A kind of record with nothing in it is left out rather than written as
+    /// `0`: a day whose only record is a tank of fuel reads as `"2 expenses"`,
+    /// not as `"0 shifts · 2 expenses"`.
     func sizeStatement(locale: Locale = .autoupdatingCurrent) -> String {
-        let shifts = shiftCount == 1 ? "1 shift" : "\(shiftCount) shifts"
-        let size = byteCount.formatted(.byteCount(style: .file).locale(locale))
-        return "\(shifts) · \(size)"
+        var parts: [String] = []
+        if shiftCount > 0 || expenseCount == 0 {
+            parts.append(shiftCount == 1 ? "1 shift" : "\(shiftCount) shifts")
+        }
+        if expenseCount > 0 {
+            parts.append(expenseCount == 1 ? "1 expense" : "\(expenseCount) expenses")
+        }
+        parts.append(byteCount.formatted(.byteCount(style: .file).locale(locale)))
+        return parts.joined(separator: " · ")
     }
 }
 
@@ -105,7 +121,13 @@ nonisolated struct ExportFileStore {
     ///
     /// - Throws: ``ShiftExportError/temporaryLocationUnavailable`` or
     ///   ``ShiftExportError/writeFailed``.
-    func write(_ data: Data, named fileName: String, format: ExportFileFormat, shiftCount: Int) throws -> ExportedFile {
+    func write(
+        _ data: Data,
+        named fileName: String,
+        format: ExportFileFormat,
+        shiftCount: Int,
+        expenseCount: Int = 0
+    ) throws -> ExportedFile {
         purge()
 
         do {
@@ -130,7 +152,8 @@ nonisolated struct ExportFileStore {
             fileName: url.lastPathComponent,
             format: format,
             byteCount: data.count,
-            shiftCount: shiftCount
+            shiftCount: shiftCount,
+            expenseCount: expenseCount
         )
     }
 
@@ -144,7 +167,7 @@ nonisolated struct ExportFileStore {
     /// destroyed.
     ///
     /// Internal rather than private so the rule can be asserted directly. The
-    /// path it guards is unreachable through ``write(_:named:format:shiftCount:)``
+    /// path it guards is unreachable through ``write(_:named:format:shiftCount:expenseCount:)``
     /// in an ordinary run, which is exactly why it needs a test of its own.
     func availableURL(for fileName: String) -> URL {
         let candidate = directory.appendingPathComponent(fileName, isDirectory: false)

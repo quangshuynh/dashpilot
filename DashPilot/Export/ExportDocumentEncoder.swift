@@ -110,6 +110,17 @@ nonisolated struct ExportDocumentEncoder: Equatable, Sendable {
     /// summary is in the JSON export, and the sheet says so before the driver
     /// chooses.
     ///
+    /// Recorded expenses, for a reason that comes from the model rather than
+    /// from the format. This table's unit is a delivery, and an expense belongs
+    /// to a **date** rather than to a delivery or a shift — so there is no row
+    /// it can occupy, and putting it on the delivery that happens to be nearest
+    /// would manufacture the attribution ``Expense`` exists to avoid. Appending
+    /// a second table of expenses under the first was the alternative and was
+    /// rejected: a file whose row shape changes half way down is one most
+    /// parsers read as a corrupt table, and the row count would stop agreeing
+    /// with the JSON's shift count. Expenses are in the JSON export, and the
+    /// format picker says so before the driver chooses.
+    ///
     /// Identifiers are also absent. They are of no use in a spreadsheet and
     /// would push the columns a driver actually reads off the first screen.
     func csv(for document: ExportDocument) throws -> Data {
