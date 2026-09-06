@@ -27,6 +27,11 @@ The root screen offers a start control while no shift is running. Starting recor
 timestamp and nothing else. At most one shift may be unfinished at a time, and the rule is checked
 against the store, so the absence of the button is presentation and not the protection.
 
+A shift can also be started by voice, without opening the app: see
+[Voice and system actions](voice-actions.md). The rule is the same either way, because the same
+service enforces it, and the spoken confirmation states that the route is recorded only while the app
+is open.
+
 If the app is terminated while a shift is running, the next launch finds the same unfinished shift
 and resumes it with its original start time. Nothing synthesises a replacement shift, and no
 recovery step is asked of the driver.
