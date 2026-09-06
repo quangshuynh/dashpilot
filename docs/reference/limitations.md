@@ -140,15 +140,20 @@ and one they cannot.
 - **Every rate is gross.** Nothing subtracts fuel, wear, insurance or tax. None is a profit,
   take-home or tax figure, and none is a mileage deduction.
 - **USD only.** Nothing converts currencies or records which currency a shift was earned in.
-- **Aggregates cover a day or a week only.** No month, no year, no all-time total, no best or worst
-  shift, no comparison between periods, no chart and no sorting. See
-  [Period summaries](../product/period-summaries.md).
+- **Aggregates cover a day, a week, a calendar month or a chosen date range.** No quarter, no year,
+  no all-time total, no best or worst shift, no comparison between periods, no chart and no sorting.
+  See [Period summaries](../product/period-summaries.md).
 - **No live figures.** A running shift shows no mileage, no rate and no active time. Active-time
   figures are finalised only once a shift ends.
 
 ## Period summaries
 
-- **Day and week only.** No month, quarter, year or all-time period, and no custom date range.
+- **Day, week, month and a chosen date range.** No quarter, no year and no all-time period.
+- **A chosen range is not persisted.** It survives switching between period lengths while the screen
+  is open, and is gone at the next launch. There are no saved or named reports.
+- **A chosen range cannot reach into the future**, and has no previous or next to step to.
+- **A reversed range is refused rather than corrected.** An end date before the start date will not
+  apply, and the dates are never silently swapped.
 - **A shift is assigned by where it started**, whole. A shift running past midnight counts entirely
   in the day it began, so a driver who works overnight will see their nights land on the day they
   clocked on rather than split across two.
@@ -209,7 +214,7 @@ and one they cannot.
 
 - **Little is built on the delivery records yet.** Delivery active time, the rate over it, an
   optional pickup place, that place's recorded pickup waits, an optional manually entered amount per
-  delivery and the day and week summaries over all of it are the whole of it: no merchant scoring, no
+  delivery and the period summaries over all of it are the whole of it: no merchant scoring, no
   merchant profitability, no earnings per pickup place, no wait-time recommendation, no offer
   profitability, no tips-versus-base breakdown and no automatic detection.
 - **No recommendations, predictions or machine learning.** None is implemented, and none is claimed.

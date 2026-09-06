@@ -48,9 +48,9 @@ struct ShiftExportJSONTests {
         let shift = try fixture.completedShift()
         let object = try object(try document(fixture, scope: .shift(shift.id), shifts: [shift]))
 
-        #expect(object["formatVersion"] as? Int == 1)
+        #expect(object["formatVersion"] as? Int == 2)
         #expect(object["producer"] as? String == "DashPilot")
-        // The store is at v7 and the file is at 1. If a future change ever made
+        // The store is at v7 and the file is at 2. If a future change ever made
         // these the same number by accident, this is where it would show.
         #expect(ExportFormat.version != 7)
     }
@@ -67,7 +67,7 @@ struct ShiftExportJSONTests {
         let scope = try #require(object["scope"] as? [String: Any])
         #expect(scope["kind"] as? String == "allHistory")
         #expect(scope["periodStart"] is NSNull)
-        #expect(scope["periodEnd"] is NSNull)
+        #expect(scope["periodEndExclusive"] is NSNull)
     }
 
     @Test("A period scope carries its half-open span")
@@ -82,7 +82,7 @@ struct ShiftExportJSONTests {
 
         #expect(scope["kind"] as? String == "day")
         #expect(scope["periodStart"] as? String == "2026-06-17T00:00:00Z")
-        #expect(scope["periodEnd"] as? String == "2026-06-18T00:00:00Z")
+        #expect(scope["periodEndExclusive"] as? String == "2026-06-18T00:00:00Z")
     }
 
     @Test("Nothing about the device or the driver is in the metadata")

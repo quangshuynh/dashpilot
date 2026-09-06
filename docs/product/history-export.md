@@ -15,6 +15,8 @@ not already show, and nothing recorded is turned into a stronger claim on the wa
 | One shift | `Export Shift`, on a completed shift's detail screen | That shift and its deliveries |
 | A day | `Export Day`, on the period summary with **Day** selected | Every completed shift that started that day, plus the day's summary |
 | A week | `Export Week`, on the period summary with **Week** selected | Every completed shift that started that week, plus the week's summary |
+| A month | `Export Month`, on the period summary with **Month** selected | Every completed shift that started that calendar month, plus the month's summary |
+| A chosen range | `Export Range`, on the period summary with **Custom** selected | Every completed shift that started within the selected dates, plus that range's summary |
 | All history | `Export All History`, in the History section | Every completed shift in the store |
 
 **Only completed shifts are exported.** A running shift has no finalised duration and no final
@@ -23,14 +25,19 @@ is no export control on a running shift, and the export layer refuses one even i
 
 A period export uses the same membership rule as the [period summary](period-summaries.md): a shift
 belongs to the period containing its start, so an overnight shift is exported whole, on the day it
-began, and never counted twice.
+began, and never counted twice. That holds at every period length — a shift starting at 23:00 on
+30 September is in September's file, entirely, and is not in October's.
+
+All four period lengths go through **one** `ReportingPeriod` and one calculator. A month is not
+exported as a set of weeks and a chosen range is not exported as a set of days: each one selects the
+underlying shifts it contains, so the file and the screen cannot disagree about a single figure.
 
 A scope holding no completed shift is refused rather than producing an empty file, and an empty
 period offers no export control at all.
 
 ## Export format version
 
-Every file states `formatVersion: 1`.
+Every file states `formatVersion: 2`.
 
 **This is not the SwiftData schema version**, which is currently v7. The two describe different
 things and are free to move independently:
@@ -46,6 +53,30 @@ an existing field's meaning changes or a field is removed; adding a field is add
 that ignores unknown keys keeps working.
 
 Exports are never called "v7".
+
+### Version history
+
+#### 2 — month and chosen ranges
+
+Two changes, and **both are ones a version-1 reader can be broken by**, which is why the number moved
+rather than the values being added quietly:
+
+- **`scope.kind` gained `month` and `custom`.** Version 1 documented a closed set — `shift`, `day`,
+  `week`, `allHistory` — and a reader switching exhaustively over those four now meets a fifth or a
+  sixth. The field's type did not change; the set of things it can say did, and a scope a reader
+  cannot name is a file it cannot interpret.
+- **`scope.periodEnd` was renamed `scope.periodEndExclusive`.** A key was removed, which is a bump by
+  the rule above. The instant was always the exclusive end, and with only whole days and weeks that
+  was easy to overlook. With a range the driver chose by two *inclusive* dates it is not: selecting
+  *1 September through 7 September* writes `2026-09-08T00:00:00Z`, and the key has to say why rather
+  than leaving a reader to assume the range runs to the 8th.
+
+The store's schema is **unchanged at v7** by this release. It is a different number describing a
+different thing, and the two moved independently exactly as intended.
+
+#### 1 — the first export format
+
+Shift, day, week and all-history scopes, in JSON and CSV.
 
 ## What a file says
 
@@ -195,12 +226,21 @@ quoting; a name's own line breaks are preserved inside its quotes and never rewr
 
 Names are predictable and filesystem-safe: `DashPilot-Shift-2026-09-05.json`,
 `DashPilot-Week-2026-08-31.csv`, `DashPilot-Day-2026-09-05.json`,
+`DashPilot-Month-2026-09.json`, `DashPilot-Range-2026-09-01-to-2026-09-07.json`,
 `DashPilot-History-2026-09-06.json`. ASCII letters, digits and hyphens only.
 
+The dates are machine-written — `yyyy-MM-dd`, or `yyyy-MM` for a month — never a locale-formatted
+date with slashes in it, so a name sorts, parses and is legal on every filesystem the file passes
+through.
+
 The date is the day the records are **about**, in the driver's own calendar — the shift's day, the
-period's first day, or, for an all-history export, the day it was written. No pickup place, merchant
-or amount ever appears in a file name: a name shows up in a share sheet, a notification and a folder
-listing, often on someone else's screen.
+period's first day, or, for an all-history export, the day it was written. A month is named by its
+month rather than by its first day, and a chosen range names **both** of the days the driver
+selected: a range chosen as *1 through 7 September* is `…-2026-09-01-to-2026-09-07`, never
+`…-to-2026-09-08`, so the name cannot contradict the screen it came from.
+
+No pickup place, merchant or amount ever appears in a file name: a name shows up in a share sheet, a
+notification and a folder listing, often on someone else's screen.
 
 Exports go into one temporary directory that is **emptied before each new export** and once at
 launch, so at most one export exists at a time and the app never accumulates copies of a driver's

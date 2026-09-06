@@ -1,7 +1,8 @@
 import SwiftData
 import SwiftUI
 
-/// What the completed shifts of one day or one week add up to.
+/// What the completed shifts of one day, week, month or chosen date range add
+/// up to.
 ///
 /// ## What this screen is for
 ///
@@ -15,6 +16,12 @@ import SwiftUI
 /// Nothing is calculated in this view. ``PeriodMetricsCalculator`` owns every
 /// rule, including which figures exist at all; this reads the store, hands over
 /// plain records, and writes down the result.
+///
+/// The four period lengths differ **only** in which shifts they select. A month
+/// is not summarised from its weeks and a range is not summarised from its days:
+/// each one hands the same calculator the underlying shift records it contains,
+/// so a month's per-hour rate is its own amounts over its own hours rather than
+/// an average of smaller periods' rates.
 ///
 /// The routes are measured in a task rather than in `body`, for the reason the
 /// history row measures in one: a week can hold several shifts and each holds
@@ -34,14 +41,29 @@ struct PeriodSummaryView: View {
 
     @State private var unit: ReportingPeriodUnit = .day
 
-    /// A moment inside the selected period. Stepping moves this to the
+    /// A moment inside the selected calendar period. Stepping moves this to the
     /// neighbouring period's start, so the selection survives a 23- or 25-hour
-    /// day without any arithmetic on seconds here.
+    /// day, and a 28- or 31-day month, without any arithmetic on seconds here.
     @State private var anchor = Date.now
 
     /// Fixed when the screen appears rather than read continuously: which period
     /// is "current" must not change under the driver mid-read.
     @State private var now = Date.now
+
+    /// The custom range's two **inclusive** dates.
+    ///
+    /// Held here rather than in the sheet so switching to Day and back returns
+    /// to the range the driver chose. Deliberately not persisted: a saved report
+    /// is a feature with its own questions — naming, staleness, migration — and
+    /// this interval does not answer them.
+    @State private var customStart = Date.now
+    @State private var customEnd = Date.now
+
+    /// Whether the range selector is open.
+    @State private var isChoosingRange = false
+
+    /// Whether the custom range has been given its opening dates yet.
+    @State private var hasSeededCustomRange = false
 
     /// The measured routes, and the selection they were measured for.
     @State private var measurement: RouteMeasurement?
@@ -58,7 +80,16 @@ struct PeriodSummaryView: View {
                 periodSelector
             }
 
-            if let metrics {
+            if period == nil {
+                // Only reachable if the calendar cannot describe the selection
+                // at all. Said plainly rather than left as a spinner that never
+                // resolves, and it names the one control that can fix it.
+                Section {
+                    Text("This selection cannot be summarised. Choose different dates.")
+                        .foregroundStyle(.secondary)
+                        .accessibilityIdentifier("periodUnavailable")
+                }
+            } else if let metrics {
                 if metrics.isEmpty {
                     emptySection(metrics)
                 } else {
@@ -82,6 +113,7 @@ struct PeriodSummaryView: View {
         .navigationTitle("Summary")
         .navigationBarTitleDisplayMode(.inline)
         .task(id: measurementToken) { measureRoutes() }
+        .onAppear(perform: seedCustomRangeIfNeeded)
         // On the list rather than on the section that presents it: the sections
         // are rebuilt whenever the routes are re-measured, and a sheet attached
         // to one that briefly disappears goes with it.
@@ -90,12 +122,26 @@ struct PeriodSummaryView: View {
                 ShiftExportSheet(scope: .period(period))
             }
         }
+        .sheet(isPresented: $isChoosingRange) {
+            CustomRangeSheet(
+                start: customStart,
+                end: customEnd,
+                latestSelectableDay: now
+            ) { start, end in
+                customStart = start
+                customEnd = end
+            }
+        }
     }
 
     // MARK: Period selection
 
     private var periodSelector: some View {
         VStack(spacing: 12) {
+            // Four short words still fit one segmented row on the narrowest
+            // iPhone, and keeping them in one row is what stops Month and
+            // Custom looking like a different kind of choice from Day and Week.
+            // They are all the same choice: how much history to look at.
             Picker("Period", selection: $unit) {
                 ForEach(ReportingPeriodUnit.allCases) { unit in
                     Text(unit.title).tag(unit)
@@ -104,44 +150,80 @@ struct PeriodSummaryView: View {
             .pickerStyle(.segmented)
             .accessibilityIdentifier("periodUnitPicker")
 
-            HStack {
-                stepButton(
-                    systemImage: "chevron.left",
-                    label: "Previous \(unit.stepNoun)",
-                    identifier: "periodPreviousButton",
-                    destination: period?.previous(using: calendar)
-                )
-
-                Spacer(minLength: 8)
-
-                VStack(spacing: 2) {
-                    Text(title)
-                        .font(.headline)
-                    if let period {
-                        Text(period.rangeStatement(locale: locale))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .frame(maxWidth: .infinity)
-                .accessibilityElement(children: .combine)
-                .accessibilityLabel(spokenTitle)
-                .accessibilityIdentifier("periodTitle")
-
-                Spacer(minLength: 8)
-
-                stepButton(
-                    systemImage: "chevron.right",
-                    label: "Next \(unit.stepNoun)",
-                    identifier: "periodNextButton",
-                    // Nothing is offered beyond the period the driver is in.
-                    // A future week holds no records, and an empty state for one
-                    // is a screen that looks broken rather than informative.
-                    destination: isCurrent ? nil : period?.next(using: calendar)
-                )
+            if unit.isCalendarPeriod {
+                steppingHeader
+            } else {
+                chosenRangeHeader
             }
         }
         .padding(.vertical, 4)
+    }
+
+    /// A calendar period: its name, with a step to either neighbour.
+    private var steppingHeader: some View {
+        HStack {
+            stepButton(
+                systemImage: "chevron.left",
+                label: "Previous \(unit.stepNoun)",
+                identifier: "periodPreviousButton",
+                destination: period?.previous(using: calendar)
+            )
+
+            Spacer(minLength: 8)
+
+            periodTitleLabel
+
+            Spacer(minLength: 8)
+
+            stepButton(
+                systemImage: "chevron.right",
+                label: "Next \(unit.stepNoun)",
+                identifier: "periodNextButton",
+                // Nothing is offered beyond the period the driver is in.
+                // A future week or month holds no records, and an empty state
+                // for one is a screen that looks broken rather than
+                // informative.
+                destination: isCurrent ? nil : period?.next(using: calendar)
+            )
+        }
+    }
+
+    /// A range the driver chose: its dates, and the way back to the picker.
+    ///
+    /// No chevrons. A custom range has no neighbour to step to — the range after
+    /// *Sep 1–7* is not a thing the driver asked for — and offering one would
+    /// invent a period nobody selected.
+    private var chosenRangeHeader: some View {
+        VStack(spacing: 10) {
+            periodTitleLabel
+
+            Button {
+                isChoosingRange = true
+            } label: {
+                Label("Choose Dates", systemImage: "calendar")
+                    .frame(maxWidth: .infinity, minHeight: 44)
+            }
+            .buttonStyle(.bordered)
+            .accessibilityLabel("Choose custom date range")
+            .accessibilityIdentifier("periodCustomRangeButton")
+        }
+    }
+
+    private var periodTitleLabel: some View {
+        VStack(spacing: 2) {
+            Text(title)
+                .font(.headline)
+                .multilineTextAlignment(.center)
+            if let period {
+                Text(period.rangeStatement(calendar: calendar, locale: locale))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(spokenTitle)
+        .accessibilityIdentifier("periodTitle")
     }
 
     private func stepButton(
@@ -212,9 +294,9 @@ struct PeriodSummaryView: View {
         } footer: {
             Text(
                 """
-                Only completed shifts are counted, and a shift belongs to the \(unit.stepNoun) it \
-                started on — one that runs past midnight is counted whole, on the \(unit.stepNoun) it \
-                began. Elapsed time is the whole of those shifts. Delivery active time is the part of \
+                Only completed shifts are counted, and a shift belongs to the \(unit.stepNoun) its \
+                start time falls in — one that runs past midnight is counted whole, in the \
+                \(unit.stepNoun) it began. Elapsed time is the whole of those shifts. Delivery active time is the part of \
                 them a recorded delivery was open for, with deliveries worked at once counted once. \
                 Non-delivery time is the rest: it is not idle time, and DashPilot does not know what \
                 you were doing during either.
@@ -494,9 +576,34 @@ struct PeriodSummaryView: View {
     // MARK: Deriving
 
     /// The period the screen is showing, or `nil` if the calendar cannot build
-    /// one for the selected date.
+    /// one for the current selection.
+    ///
+    /// One type for all four selections. A month and a chosen range arrive at
+    /// the calculator as the same `[start, end)` span a day does, which is what
+    /// keeps every metric rule identical across them.
     private var period: ReportingPeriod? {
-        ReportingPeriod(unit: unit, containing: anchor, calendar: calendar)
+        if unit == .custom {
+            return ReportingPeriod(from: customStart, through: customEnd, calendar: calendar)
+        }
+        return ReportingPeriod(unit: unit, containing: anchor, calendar: calendar)
+    }
+
+    /// Starts the custom range at **this week so far**: the first day of the
+    /// current week through today.
+    ///
+    /// Deterministic, never in the future, and the span the driver most likely
+    /// just looked at under Week — so opening Custom shows familiar figures with
+    /// the dates spelled out, ready to widen or narrow. It is described as
+    /// selected dates and never as "a week": once either end moves it is neither
+    /// a week nor a rolling seven days, and only the dates stay true.
+    ///
+    /// Runs once. After the driver has chosen a range, returning to this screen
+    /// must not quietly reset it.
+    private func seedCustomRangeIfNeeded() {
+        guard !hasSeededCustomRange else { return }
+        hasSeededCustomRange = true
+        customEnd = now
+        customStart = ReportingPeriod(unit: .week, containing: now, calendar: calendar)?.start ?? now
     }
 
     private var isCurrent: Bool {
@@ -535,9 +642,14 @@ struct PeriodSummaryView: View {
     /// which period. A route changes only while its shift is running, and a
     /// running shift is never in here, so this is the whole of what invalidates
     /// a measurement.
+    ///
+    /// Both bounds are in the token, not just the start: two custom ranges can
+    /// begin on the same day and cover different numbers of shifts.
     private var measurementToken: String {
-        let start = period.map { "\($0.unit.rawValue)@\($0.start.timeIntervalSince1970)" } ?? "none"
-        return ([start] + shiftsInPeriod.map(\.id.uuidString)).joined(separator: "|")
+        let span = period.map {
+            "\($0.unit.rawValue)@\($0.start.timeIntervalSince1970)-\($0.end.timeIntervalSince1970)"
+        } ?? "none"
+        return ([span] + shiftsInPeriod.map(\.id.uuidString)).joined(separator: "|")
     }
 
     private func measureRoutes() {

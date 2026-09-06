@@ -1,266 +1,631 @@
 # AGENTS.md
 
-## Purpose
-
-This file defines repository-wide instructions for coding agents working on DashPilot.
+This file defines repository-wide engineering rules for automated coding agents working on DashPilot.
 
 Read this file before modifying the repository.
 
-Also read:
+Agent-specific workflow instructions may exist separately. `context.md`, when present, contains the current local project handoff.
 
-* `CLAUDE.md` when using Claude
-* `context.md` when it exists locally
+---
 
-## Product
+# Project
 
 DashPilot is a native iOS companion for delivery drivers.
 
-The application helps drivers measure and understand:
+It records and analyzes local driver history such as:
 
 * shifts
-* mileage
-* driving time
-* idle time
-* earnings
-* earnings per hour
-* earnings per mile
-* delivery efficiency
-* pickup delays
-* geographic performance
-* repositioning decisions
+* delivery lifecycle events
+* route samples
+* recorded mileage
+* gross earnings
+* delivery active time
+* pickup places
+* recorded pickup waits
+* historical period metrics
 
-The project is local-first and privacy-conscious.
+The long-term product direction is trustworthy, explainable decision support based on the driver's own recorded history.
 
-## Platform
+DashPilot is not an official client or integration for DoorDash or another delivery platform.
 
-Primary target:
+---
 
-* iOS
+# Stack
 
-Primary implementation:
+Primary technologies:
 
 * Swift
 * SwiftUI
 * SwiftData
+* Swift Testing
+* XCTest UI testing where justified
+* Core Location
+* MapKit where justified
+* Core Motion where justified
+* ActivityKit where justified
+* App Intents where justified
+* UserNotifications where justified
+* Charts where justified
+* OSLog
 
 Prefer first-party Apple frameworks.
 
-## External platform boundary
+Do not introduce third-party runtime dependencies without a concrete architectural need.
 
-DashPilot must remain independent of unauthorized delivery-platform integrations.
+---
 
-Agents must not implement:
+# Engineering priorities
 
-* credential capture for DoorDash or similar platforms
-* scraping
-* reverse engineering
-* private API access
-* network interception
-* automated acceptance or rejection of delivery offers
-* UI automation intended to control another delivery application
-* techniques intended to bypass platform restrictions
+Optimize for:
 
-If a requested feature would require one of these mechanisms, stop that portion of the implementation and identify a legitimate alternative.
+1. correctness
+2. explicit semantics
+3. preservation of user data
+4. privacy
+5. testability
+6. accessibility
+7. recoverability
+8. maintainability
+9. performance supported by evidence
+10. feature breadth
 
-## Privacy
+Do not manufacture feature work merely to make the project look larger.
 
-Keep personal driver data local unless requirements explicitly change.
+---
 
-Never commit:
+# Local-first
 
-* real earnings
-* real customer addresses
-* personal routes
-* exact personal GPS history
-* authentication secrets
-* API credentials
-* personally identifying delivery records
+DashPilot is local-first.
 
-Committed sample data must be synthetic.
+Unless explicitly changed by a scoped feature:
 
-## Safety
+* no backend
+* no accounts
+* no cloud persistence
+* no analytics
+* no telemetry
+* no advertising
+* no automatic upload
+* no required network service for core behavior
 
-The product must minimize required interaction while driving.
+Sensitive work history stays on device unless the user explicitly exports it.
 
-Prefer passive data collection and actions suitable for use while stopped.
+---
 
-Do not build flows that require sustained typing or visual attention while driving.
+# Platform boundaries
 
-## Code quality
+Do not:
 
-Prefer readable code over clever code.
+* scrape delivery platforms
+* reverse-engineer private delivery APIs
+* intercept private application traffic
+* store delivery-platform credentials
+* automate acceptance or rejection of offers
+* control another delivery application
+* claim official platform integration
 
-Avoid unnecessary architecture.
+DashPilot should remain a general delivery-driver companion.
 
-Keep:
+---
 
-* views focused
-* domain logic testable
-* persistence behavior explicit
-* state transitions understandable
-* error states visible
-* permissions handled deliberately
+# Privacy
 
-Use comments to explain why, not to narrate obvious code.
+Treat as sensitive:
 
-Remove dead code rather than leaving large commented-out sections.
+* GPS coordinates
+* routes
+* addresses
+* pickup-place names
+* normalized pickup-place keys
+* earnings
+* exact work schedules
+* historical performance data
 
-## Dependencies
+Do not log sensitive values.
 
-Do not introduce a third-party dependency when Apple frameworks or a small internal implementation reasonably solve the problem.
+Logs should describe structural events only.
 
-Before adding any dependency, consider:
+Use synthetic information in:
 
-* maintenance
-* privacy
-* binary size
-* licensing
-* long-term compatibility
-* whether the dependency is actually necessary
+* tests
+* fixtures
+* previews
+* screenshots
+* documentation
+* examples
 
-## Tests
+Never commit real user, customer, merchant, route, earnings, or address data.
 
-New domain behavior should normally include tests.
+---
 
-Bug fixes should include a regression test when practical.
+# Driving safety
 
-Tests should validate behavior, not implementation trivia.
+DashPilot may be used during delivery work.
 
-Do not weaken tests merely to make a build pass.
+Active-driving workflows should minimize interaction.
 
-## Build health
+Prefer:
 
-Before completing an interval:
+* passive collection
+* large controls
+* glanceable information
+* short explicit lifecycle actions
+* voice interaction where appropriate
+* post-delivery editing
 
-* run relevant tests
-* build the relevant target
-* inspect warnings introduced by the change
-* inspect Git status
-* inspect the final diff
+Avoid requiring substantial typing or sustained visual attention during active work.
 
-Do not report success if the relevant build or tests are known to fail.
+---
 
-## Git workflow
+# Domain truth over presentation convenience
 
-Agents are authorized to create local branches and commits.
+The domain model defines what a fact means.
 
-Agents are not authorized to push or publish changes unless explicitly instructed.
+Do not weaken semantics to make UI implementation easier.
 
-Branch conventions:
+Presentation should expose uncertainty or missing coverage when it materially changes interpretation.
 
-* `feat/...`
-* `fix/...`
-* `refactor/...`
-* `test/...`
-* `docs/...`
-* `chore/...`
+Do not replace:
 
-Commit conventions:
+* missing with zero
+* partial with complete
+* recorded with total
+* gross with profit
+* historical association with prediction
 
-* `feat: ...`
-* `fix: ...`
-* `refactor: ...`
-* `test: ...`
-* `docs: ...`
-* `chore: ...`
+---
 
-Do not mix unrelated work into the same commit.
+# Derived state
 
-Do not delete or overwrite unrelated uncommitted user work.
+Prefer deriving values from authoritative facts.
 
-## Development intervals
+Do not persist a value merely because the UI displays it.
 
-Work should proceed through small, reviewable intervals.
+Persist only when:
 
-Each interval should:
+* it is an authoritative user/device fact, or
+* recomputation has been demonstrated to be inappropriate and invalidation semantics are defined
 
-1. establish current repository state
-2. choose one coherent objective
-3. create or use a focused branch
-4. implement that objective
-5. test it
-6. build it
-7. review the diff
-8. commit coherent completed work
-9. summarize the result
-10. stop before starting a substantially different objective
+Avoid duplicated persisted state that can disagree.
 
-Agents should not attempt to implement the complete roadmap in a single run.
+---
 
-## Suggested product progression
+# Money
 
-Prefer approximately this order unless the current repository state establishes another priority:
+Use the existing Decimal-backed `Money` representation.
 
-1. application foundation
-2. shift lifecycle
-3. persistence
-4. location authorization
-5. route capture
-6. mileage calculation
-7. shift summaries
-8. earnings input
-9. shift history
-10. analytics
-11. delivery records
-12. pickup wait measurement
-13. geographic visualization
-14. App Intents
-15. Live Activities
-16. repositioning recommendations
-17. advanced prediction only when enough data exists
-18. accessibility
-19. performance
-20. migration hardening
+Do not use `Double` or `Float` as authoritative monetary storage.
 
-## Recommendations and prediction
+Missing money and explicit zero are distinct.
 
-Do not label basic heuristics as artificial intelligence.
+Never silently replace missing money with zero.
 
-Start with explainable calculations and historical statistics.
+Use existing input and rounding policies.
 
-A recommendation should expose enough reasoning to understand why it was produced.
+Do not create parallel money parsing rules for individual features.
 
-Examples:
+---
 
-* historical median wait
-* historical earnings per active hour
-* average idle duration
-* distance required to reposition
-* sample size
-* confidence or insufficient-data state
+# Earnings
 
-Core ML should only be introduced when:
+Shift gross earnings and delivery gross earnings are independent recorded facts.
 
-* sufficient training data exists
-* there is a measurable prediction target
-* a simpler statistical approach is insufficient
-* evaluation methodology is defined
+Never:
 
-## Honest product claims
+* infer one from the other
+* allocate shift earnings among deliveries
+* require them to reconcile
+* label their difference as missing earnings
+* automatically modify one when the other changes
 
-Repository-facing prose must accurately describe the application.
+Period headline gross earnings use shift-level gross earnings under the current domain model.
 
-Do not claim:
+Delivery-level amounts remain separately recorded facts.
 
-* guaranteed increased earnings
-* guaranteed mileage accuracy
-* continuous location tracking guarantees
-* tax compliance
-* official DoorDash integration
-* autonomous delivery decisions
-* machine learning capabilities that are not implemented
+---
 
-Describe limitations explicitly where relevant.
+# Delivery lifecycle
 
-## Definition of done
+Delivery state is derived from lifecycle timestamps.
 
-A feature is not complete merely because code was written.
+Preserve lifecycle invariants.
 
-It should normally include:
+Do not persist redundant state if existing timestamps already establish it.
 
-* integrated implementation
-* appropriate failure handling
-* appropriate tests
-* successful relevant build
-* documentation updates when needed
-* coherent commit history
+Stacked deliveries are supported.
+
+Multiple deliveries may overlap.
+
+Do not assume individual delivery durations can be summed to obtain shift active time.
+
+---
+
+# Time
+
+Shift elapsed time and delivery active time are different metrics.
+
+Delivery active time unions overlapping delivery intervals within a shift.
+
+Non-delivery time must not be mislabeled as idle time.
+
+Do not invent interpretations that the recorded lifecycle does not support.
+
+---
+
+# Pickup identity
+
+Pickup-place matching is intentionally conservative.
+
+Reuse the existing pickup-name normalization policy.
+
+Do not add:
+
+* fuzzy matching
+* automatic duplicate detection
+* automatic merges
+* aliases
+
+without an explicit feature requiring them.
+
+Incorrectly merging different places is worse than preserving a duplicate.
+
+Rename and merge operations must preserve delivery history according to existing domain rules.
+
+---
+
+# Pickup waits
+
+Recorded pickup wait is based on valid recorded lifecycle timestamps.
+
+Missing or malformed endpoints do not produce zero or estimated waits.
+
+Use individual qualifying samples for aggregate medians.
+
+Do not aggregate medians as a substitute for aggregating the underlying samples.
+
+Long but valid samples remain factual observations unless an explicit statistical policy says otherwise.
+
+---
+
+# Location
+
+Location history is sensitive.
+
+Respect the existing authorization and tracking architecture.
+
+Do not add stronger authorization, background tracking, or new location entitlements casually.
+
+Recorded mileage is mileage supported by accepted route samples.
+
+It is not necessarily total driven mileage.
+
+Preserve:
+
+* capture sessions
+* continuity boundaries
+* gap semantics
+* partial-route semantics
+* route filtering
+
+Do not bridge missing capture periods with invented distance.
+
+---
+
+# Historical periods
+
+Historical summaries operate on completed shifts.
+
+Running shifts are excluded.
+
+A completed shift belongs to the reporting period containing its `startedAt`.
+
+Do not split overnight shifts across reporting periods under the current model.
+
+Use `Calendar` for calendar boundaries.
+
+Do not assume a day is always 86,400 seconds.
+
+Reporting intervals use half-open semantics.
+
+---
+
+# Aggregate coverage
+
+Coverage is part of a metric.
+
+If only some records contribute, preserve that information.
+
+Missing records must not silently contribute zero.
+
+Explicit zero is a recorded value and therefore counts as coverage.
+
+Rates requiring two facts must use records where both facts are available.
+
+Do not combine a numerator from one population with a denominator from another.
+
+---
+
+# Aggregate rates
+
+Calculate aggregate rates from aggregate numerators and denominators over the same contributing subset.
+
+Do not average already-derived per-record rates unless that is explicitly the intended statistic.
+
+For example:
+
+Correct:
+
+`sum(earnings) / sum(hours)`
+
+Incorrect for a period-wide earnings rate:
+
+`mean(eachShift.earningsPerHour)`
+
+Reuse existing calculator definitions.
+
+---
+
+# SwiftData
+
+Treat persistence changes as compatibility work.
+
+Before changing stored shape:
+
+* inspect the current schema
+* inspect frozen historical schemas
+* determine whether the new value truly needs persistence
+* preserve previous schemas
+* add the smallest valid migration
+* test migration using real historical shape
+
+Never rewrite frozen historical schemas to match current models.
+
+Do not use destructive reset as normal migration behavior.
+
+---
+
+# Rollback behavior
+
+Do not assume SwiftData rollback makes every already-held model object immediately reflect restored relationship state.
+
+When correctness depends on persisted rollback, verify through a fresh context where necessary.
+
+Distinguish:
+
+* authoritative store correctness
+* transient state of cached model objects
+
+Document framework limitations rather than pretending they do not exist.
+
+---
+
+# Export
+
+Export is an external contract, separate from persistence.
+
+Use export-specific value types rather than serializing SwiftData models directly.
+
+Preserve:
+
+* missing values
+* Decimal money
+* shift/delivery earnings separation
+* route quality
+* recorded-mileage wording
+* coverage information where supported
+
+Standard export must not include raw GPS coordinates or normalized pickup-place keys.
+
+CSV must correctly handle:
+
+* commas
+* quotes
+* line breaks
+* Unicode
+* spreadsheet formula injection
+
+Export is explicit and user initiated.
+
+---
+
+# Architecture
+
+Prefer:
+
+* pure domain calculators
+* value types for derived results
+* small services with clear ownership
+* dependency injection at framework boundaries
+* SwiftUI views that present rather than define domain rules
+* one authoritative implementation for each calculation
+
+Avoid:
+
+* business logic duplicated across views
+* global mutable state without necessity
+* broad generic frameworks created for one use
+* speculative abstractions
+* hidden fallback behavior
+
+Follow existing repository conventions before introducing a new pattern.
+
+---
+
+# Concurrency
+
+Do not change Swift language mode or concurrency settings casually.
+
+The project may use explicit `nonisolated` where domain/value semantics need to remain independent of main-actor isolation.
+
+Treat a move to stricter Swift concurrency or Swift 6 language mode as a deliberate hardening task.
+
+Do not scatter annotations solely to silence diagnostics without understanding isolation.
+
+---
+
+# Errors
+
+Prefer explicit failure over silent corruption or data loss.
+
+Do not:
+
+* silently reset persistent stores
+* silently discard records
+* silently substitute fabricated values
+* expose sensitive implementation details in user-facing errors
+
+Errors should be testable and understandable.
+
+---
+
+# Accessibility
+
+Accessibility is required for user-visible features.
+
+Interactive controls should identify their subject.
+
+Metrics should expose relevant meaning and coverage to assistive technologies.
+
+Do not rely exclusively on visual layout to communicate:
+
+* operation direction
+* missing coverage
+* metric units
+* delivery identity
+
+Use reasonable interaction target sizes.
+
+---
+
+# Tests
+
+Use deterministic tests for domain behavior.
+
+Prefer Swift Testing for domain and persistence behavior.
+
+Use XCTest UI tests for important user journeys.
+
+Tests should cover meaningful:
+
+* invariants
+* boundaries
+* missing-data semantics
+* failure paths
+* persistence/reopen behavior
+* migrations
+* accessibility behavior
+* regressions
+
+Do not duplicate all domain cases in UI tests.
+
+Do not weaken tests simply to make a feature pass.
+
+Use synthetic fixtures.
+
+---
+
+# Build and warnings
+
+New source warnings are not acceptable interval output.
+
+Distinguish project warnings from SDK/toolchain informational notes.
+
+Perform clean builds when validating substantial changes.
+
+---
+
+# Documentation
+
+Documentation must describe implemented behavior accurately.
+
+Update relevant docs when behavior or limitations change.
+
+Do not claim planned features as implemented.
+
+Keep README concise.
+
+Correct nearby objectively stale documentation when discovered, but do not turn scoped engineering work into unrelated documentation cleanup.
+
+Do not use em dashes in repository-facing prose.
+
+---
+
+# Scope
+
+Keep changes bounded to the requested task.
+
+Do not opportunistically implement unrelated roadmap features.
+
+When another issue is discovered:
+
+* fix it if required for correctness of the current task
+* otherwise document it for later
+
+Avoid large refactors unless the current task genuinely requires them.
+
+---
+
+# Git safety
+
+Use conventional branch and commit naming consistent with the repository.
+
+Before committing:
+
+* inspect `git status`
+* inspect staged changes
+* verify generated artifacts are not staged
+
+Do not commit:
+
+* DerivedData
+* `.xcresult`
+* generated documentation sites
+* temporary export files
+* secrets
+* local handoff files
+* unrelated IDE artifacts
+
+Do not automatically:
+
+* push
+* force push
+* merge
+* create pull requests
+* tag
+* release
+* modify remotes
+
+unless explicitly authorized.
+
+---
+
+# Local context
+
+When `context.md` exists, it is the current local handoff.
+
+Read it before substantial work.
+
+It may contain:
+
+* current schema/export versions
+* implemented capabilities
+* important current semantics
+* known limitations
+* verification baseline
+* recommended next work
+
+Source code remains authoritative if context and implementation disagree.
+
+Update local context according to the active agent's workflow instructions.
+
+Do not commit `context.md`.
+
+---
+
+# Final engineering principle
+
+DashPilot should become more useful by making trustworthy recorded facts easier to understand and act on.
+
+Do not gain apparent sophistication by weakening semantics.
+
+A smaller feature with explicit assumptions, strong tests, honest coverage, and recoverable persistence is preferable to a larger feature whose claims cannot be defended.
