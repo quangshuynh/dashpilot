@@ -1,6 +1,7 @@
 # Period summaries
 
-DashPilot summarises completed shifts over one **day** or one **week**. The
+DashPilot summarises completed shifts over one **day**, one **week**, one
+calendar **month**, or a **custom** range of dates the driver chooses. The
 summary answers one question:
 
 > What do the records DashPilot actually has say about this period?
@@ -18,13 +19,18 @@ elapsed time is still growing and its amount is not final, so including it would
 make a historical total change every second the driver worked.
 
 **A shift belongs to the period containing its `startedAt`.** That is the whole
-membership rule.
+membership rule, and it is the same rule at every period length.
 
 A shift that begins at 22:00 and ends at 02:00 belongs entirely to the day it
 began on. Its money, its mileage and its deliveries are counted there, whole, and
 nothing is counted again in the day it ended. Nothing is split at midnight:
 those figures describe one working session, and cutting them at a boundary would
 invent a division the records do not contain.
+
+The same holds at a month or a range boundary. A shift starting at 23:00 on
+30 September and ending at 02:00 on 1 October is **September's, entirely**. It
+does not appear in October at all, and no part of its earnings, mileage, elapsed
+time or delivery count is moved across.
 
 ## Calendar semantics
 
@@ -38,10 +44,80 @@ seconds.
   consumer app, and a driver's week starts where their calendar says it does.
 - **Time zone matters, and comes from the same calendar.** Which day a shift
   belongs to is decided in the driver's own zone.
-- **A week spanning a month or year boundary is one week.**
+- **A month is 28, 29, 30 or 31 days**, taken from `Calendar`. Nothing assumes a
+  length, and stepping between months is calendar arithmetic — one step back
+  from March lands on the whole of February, whichever February it is.
+- **A week spanning a month or year boundary is one week**, and a month spanning
+  a DST transition is still that month.
 
 Period spans are half-open: `[start, end)`. A shift starting at exactly midnight
 belongs to the day that is beginning, and to that day only.
+
+## The four period lengths
+
+| Period | How it is chosen | What decides its bounds |
+| --- | --- | --- |
+| Day | `‹ Today ›` | The driver's calendar |
+| Week | `‹ This Week ›` | The driver's calendar, starting on their own first weekday |
+| Month | `‹ This Month ›` | The driver's calendar |
+| Custom | A date-range sheet | Two inclusive dates the driver picked |
+
+A period type is **a selection boundary and nothing else.** It changes which
+shifts are counted, and nothing about what any figure means, which shifts
+contribute to one, or how a rate is worked out. Everything below this line
+applies identically to all four.
+
+### Month and custom ranges are worked out from shifts, not from smaller periods
+
+A month's per-hour rate is **its own amounts over its own hours**. It is never an
+average of its weeks' rates, and a range's median pickup wait is never a median of
+its days' medians.
+
+!!! warning "The wrong answer, written down"
+
+    A month holds two shifts, each paying `$100`: one over 1 hour, one over 9.
+    The weeks they fall in report `$100.00/hr` and `$11.11/hr`, whose mean is
+    `$55.56`. The month earned `$200` over 10 hours, so it is **`$20.00/hr`**.
+
+    Both figures are computed by tests. Only one of them describes the month.
+
+## Custom ranges
+
+The driver picks a **start date** and an **end date** in a sheet, and both are
+**included**. Choosing *1 September* and *7 September* selects seven days — which
+is what a date range means everywhere else on a phone.
+
+Internally that becomes the same half-open span every other period is:
+
+```
+1 Sep 00:00  ..<  8 Sep 00:00
+```
+
+The conversion happens in one place, so the interface's inclusive end and the
+domain's exclusive one can never drift apart. A shift starting at exactly midnight
+on the 8th is **outside** the range.
+
+- **A reversed range is refused, not swapped.** An end date before the start date
+  produces no period; the sheet says so and will not apply it. Quietly turning the
+  dates round would answer a question the driver did not ask and hide the fact
+  that they typed one wrong.
+- **A one-day range is valid**, and covers exactly that day.
+- **Neither date may be in the future.** Today is selectable; tomorrow is not.
+  DashPilot summarises records it already holds and forecasts nothing, so a range
+  reaching past today could only ever be empty by definition.
+- **The time of day is ignored.** Both bounds are reduced to the start of their
+  day in the driver's calendar.
+- **Choosing is a draft.** Nothing recomputes while a picker is moving, and
+  **Cancel leaves the previous selection exactly as it was**.
+- **A chosen range opens on this week so far** — the first day of the current week
+  through today. It is described as selected dates and never as "a week": once
+  either end moves it is neither a week nor a rolling seven days.
+- **The range is remembered while the screen is open**, so switching to Month and
+  back returns to it. It is **not** persisted across launches: there are no saved
+  reports and no named ranges.
+- **A chosen range has no previous or next.** The range "after" *1–7 September* is
+  not something the driver asked for, so there are no stepping controls — only the
+  way back to the picker.
 
 ## Nothing is stored
 
@@ -222,17 +298,19 @@ place**.
 
 ## Empty and partial periods
 
-A day or week with no completed shift shows a sentence:
+A period with no completed shift shows a sentence:
 
 ```
 No completed shifts recorded this week.
+No completed shifts recorded this month.
+No completed shifts recorded in this range.
 ```
 
 Not a grid of zeroes. A week nobody drove is a week with no records, not a week
 of no earnings and no miles.
 
-A period still in progress is simply named — `Today`, `This Week` — and never
-described as complete, final or projected. There is **no forecasting** of any
+A period still in progress is simply named — `Today`, `This Week`, `This Month` —
+and never described as complete, final or projected. There is **no forecasting** of any
 kind: nothing extrapolates a partial week to its end, and no figure is a target,
 a pace or a comparison against another period.
 
@@ -243,10 +321,12 @@ a pace or a comparison against another period.
   day, no streaks and no trend.
 - **No merchant ranking or profitability by place.** The pickup-place count is a
   count.
+- **No comparison between period *types*.** A month is not shown beside its weeks,
+  and nothing states how a range compares with the month it sits in.
 - **No tax summaries, expenses or fuel cost.** Every figure is gross, and none is
   a deduction figure.
-- **No export.** See [Limitations](../reference/limitations.md).
 - **No projection, target or goal.**
+- **No quarters, years or all-time totals**, and no recurring or saved report.
 
 ## Accessibility
 
@@ -260,8 +340,18 @@ leaving VoiceOver to infer it from a caption nearby:
 - *"2 dollars and 18 cents gross earnings per recorded mile, based on 4 of 6
   shifts with both earnings and a measurable route."*
 
+The period controls name what they do rather than leaving a chevron to be guessed
+at — *"Previous month"*, *"Next month"*, *"Choose custom date range"* — and a
+chosen range is spoken as what it is rather than as a bare pair of dates:
+
+- *"Custom reporting range, Sep 1 – 7, 2026, 7 selected days."*
+
+Every figure keeps the coverage claim it had at a shorter period length. Reading a
+month's earnings must not require inferring from elsewhere on the screen that the
+statistic now covers thirty days.
+
 ## Privacy
 
 Aggregation happens entirely on device, in memory, from data already stored.
-Nothing is logged: no period total, no mileage, no rate, no median and no
-selected date. There is no networking and no analytics anywhere in the project.
+Nothing is logged: no period total, no mileage, no rate, no median, no selected
+month and neither end of a chosen range. The selection is not persisted either. There is no networking and no analytics anywhere in the project.

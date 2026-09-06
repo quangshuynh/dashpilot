@@ -55,13 +55,15 @@ derived legitimately from device sensors and stored history is typed by the driv
   per recorded mile, with the reason stated whenever a rate cannot be derived, its deliveries listed
   with their recorded events and any amount recorded against them, and a confirmed delete that
   removes the shift's route positions and deliveries with it.
-- **Day and week summaries with explicit data coverage**: calendar periods built by `Calendar` rather
-  than by fixed 24-hour arithmetic, completed shifts only, every figure shown with the shifts behind
-  it, missing values excluded rather than counted as zero, and each rate divided over the one subset
-  of shifts carrying both halves of it.
-- **Portable JSON and CSV history export** of one shift, a day, a week or all completed shifts,
-  written locally and offered to the system share sheet, with a format version of its own, coverage
-  counts preserved, spreadsheet formula injection guarded against, and no raw coordinates.
+- **Day, week, month and custom-range summaries with explicit data coverage**: periods built by
+  `Calendar` rather than by fixed 24-hour or 30-day arithmetic, a chosen range picked as inclusive
+  dates and held internally as a half-open interval, completed shifts only, every figure shown with
+  the shifts behind it, missing values excluded rather than counted as zero, and each rate divided
+  over the one subset of shifts carrying both halves of it.
+- **Portable JSON and CSV history export** of one shift, a day, a week, a month, a chosen date range
+  or all completed shifts, written locally and offered to the system share sheet, with a format
+  version of its own, coverage counts preserved, spreadsheet formula injection guarded against, and
+  no raw coordinates.
 
 ## Technology
 
@@ -150,11 +152,12 @@ The short version, with the full list in [`docs/reference/limitations.md`](docs/
 - **Places are never merged automatically.** Two spellings of one business stay two places, with two
   separate wait histories, until the driver merges them deliberately. There is no similarity
   matching, and a merge cannot be undone.
-- **A period summary reports what was recorded, not what happened.** Day and week totals cover
-  completed shifts only, count a shift whole on the period it started in, exclude missing values
-  rather than reading them as zero, and state the shifts behind every figure. Each rate divides
-  aggregate by aggregate over one paired subset of shifts — never an average of the shifts' own
-  rates — and nothing forecasts, compares periods or ranks days.
+- **A period summary reports what was recorded, not what happened.** Day, week, month and
+  custom-range totals cover completed shifts only, count a shift whole on the period it started in,
+  exclude missing values rather than reading them as zero, and state the shifts behind every figure.
+  Each rate divides aggregate by aggregate over one paired subset of shifts — never an average of the
+  shifts' own rates, and never an average of a shorter period's rates — and nothing forecasts,
+  compares periods or ranks days.
 - Not implemented yet: most things built on the delivery records (merchant scoring, merchant
   profitability, offer profitability, per-delivery mileage), expenses, aggregates longer than a week,
   maps, App Intents, Live Activities, recommendations, and importing an exported file back.

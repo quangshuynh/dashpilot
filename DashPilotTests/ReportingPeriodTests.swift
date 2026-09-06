@@ -191,7 +191,7 @@ struct ReportingPeriodTests {
     func stepsAreInverses() throws {
         let calendar = try calendar()
 
-        for unit in ReportingPeriodUnit.allCases {
+        for unit in ReportingPeriodUnit.calendarUnits {
             let period = try #require(
                 ReportingPeriod(unit: unit, containing: try date(2026, 6, 17, 12, 0, in: calendar), calendar: calendar)
             )
@@ -204,7 +204,7 @@ struct ReportingPeriodTests {
     func consecutivePeriodsMeet() throws {
         let calendar = try calendar()
 
-        for unit in ReportingPeriodUnit.allCases {
+        for unit in ReportingPeriodUnit.calendarUnits {
             let period = try #require(
                 // The week of a daylight saving transition, so the arithmetic is
                 // exercised where a fixed-length assumption would break.
@@ -271,8 +271,8 @@ struct ReportingPeriodTests {
         let now = try date(2026, 6, 17, 14, 0, in: calendar)
         let period = try week(now, in: calendar)
 
-        let range = period.rangeStatement()
-        #expect(range.contains("–"), "A week's range names both ends: \(range)")
+        let range = period.rangeStatement(calendar: calendar)
+        #expect(range.contains("14") && range.contains("20"), "A week's range names both ends: \(range)")
         #expect(period.spokenTitle(asOf: now, calendar: calendar).contains(range))
     }
 }

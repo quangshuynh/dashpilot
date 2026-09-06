@@ -142,8 +142,11 @@ two stacked deliveries keeping independent amounts while the shift total stays u
 detail screen's delivery, route and rate statements, opening a pickup place's recorded wait history,
 renaming a place and being refused a colliding rename, merging two places into one history,
 exporting a shift as JSON and as CSV, exporting a selected day and week, an empty period offering no
-export, exporting all history, a running shift offering none, and deleting a shift through its
-confirmation.
+export, exporting all history, a running shift offering none, switching between the four period
+lengths, stepping back to an empty month, being refused a step past the current month, choosing and
+applying a custom date range, cancelling that sheet without changing the period, a chosen range
+surviving a switch to another period length, exporting a month and a chosen range, and deleting a
+shift through its confirmation.
 
 The share sheet itself is never opened. `ShareLink` presents a system surface XCUITest cannot inspect
 reliably, and what the export journeys are for is proving DashPilot wrote a file and offered it — not
