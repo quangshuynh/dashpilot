@@ -94,7 +94,23 @@ nonisolated struct RouteDistance: Equatable, Sendable {
         width: Measurement<UnitLength>.FormatStyle.UnitWidth = .abbreviated,
         locale: Locale = .autoupdatingCurrent
     ) -> String {
-        measurement.converted(to: .miles).formatted(
+        Self.formattedMiles(metres: metres, width: width, locale: locale)
+    }
+
+    /// The same conversion and the same rounding, for a distance that is not a
+    /// recorded route.
+    ///
+    /// A difference between two periods' recorded mileage is a distance, but it
+    /// is not a route: it has no segments, no gaps and no capture behind it, so
+    /// building a ``RouteDistance`` to format one would claim a measurement that
+    /// was never taken. This exists so that difference is still written in the
+    /// app's one metres-to-miles rule rather than in a second copy of it.
+    static func formattedMiles(
+        metres: Double,
+        width: Measurement<UnitLength>.FormatStyle.UnitWidth = .abbreviated,
+        locale: Locale = .autoupdatingCurrent
+    ) -> String {
+        Measurement(value: metres, unit: UnitLength.meters).converted(to: .miles).formatted(
             .measurement(
                 width: width,
                 usage: .asProvided,
