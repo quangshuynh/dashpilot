@@ -112,16 +112,22 @@ struct AppIntentTests {
     /// property declared with the wrong type does not become the witness, and
     /// the framework's default is used instead. That is silent, and it is
     /// exactly how an intent ships with no description.
+    ///
+    /// ``AppIntent/supportedModes`` replaced ``AppIntent/openAppWhenRun``,
+    /// which iOS 26 deprecated. ``IntentModes/background`` states the same fact
+    /// the old `false` did, and reading it here rather than the deprecated
+    /// property is what proves the intents still declare it themselves instead
+    /// of falling back on whatever the framework defaults to.
     private struct Metadata {
         let title: String
         let description: String?
-        let opensApp: Bool
+        let modes: IntentModes
         let authentication: IntentAuthenticationPolicy
 
         init<I: AppIntent>(_ type: I.Type) {
             title = String(localized: I.title)
             description = I.description.map { String(localized: $0.descriptionText) }
-            opensApp = I.openAppWhenRun
+            modes = I.supportedModes
             authentication = I.authenticationPolicy
         }
     }
@@ -138,7 +144,10 @@ struct AppIntentTests {
     @Test("No intent brings the app to the screen")
     func intentsRunWithoutOpeningTheApp() {
         for intent in everyIntent {
-            #expect(intent.opensApp == false, "\(intent.title) would replace one spoken action with a screen")
+            #expect(
+                intent.modes == .background,
+                "\(intent.title) would replace one spoken action with a screen"
+            )
         }
     }
 

@@ -8,9 +8,10 @@ import Foundation
 /// accurately, instead of being recorded late because the app had to be found,
 /// opened and tapped.
 ///
-/// ``AppIntent/openAppWhenRun`` is `false` on every intent here. Bringing
-/// DashPilot to the screen would replace one interaction with a longer one, and
-/// the whole point is that the driver never looks at it.
+/// ``AppIntent/supportedModes`` is ``IntentModes/background`` on every intent
+/// here, which is what `openAppWhenRun = false` said before iOS 26 deprecated
+/// it. Bringing DashPilot to the screen would replace one interaction with a
+/// longer one, and the whole point is that the driver never looks at it.
 struct StartShiftIntent: AppIntent {
     static let title: LocalizedStringResource = "Start Shift"
 
@@ -24,7 +25,7 @@ struct StartShiftIntent: AppIntent {
         searchKeywords: ["shift", "start", "driving", "work"]
     )
 
-    static let openAppWhenRun = false
+    static let supportedModes: IntentModes = .background
 
     /// Runs with the device locked. A phone in a cradle is locked most of a
     /// shift, and requiring it to be unlocked first would make the spoken
@@ -56,7 +57,7 @@ struct EndShiftIntent: AppIntent {
         searchKeywords: ["shift", "end", "stop", "finish"]
     )
 
-    static let openAppWhenRun = false
+    static let supportedModes: IntentModes = .background
 
     static let authenticationPolicy = IntentAuthenticationPolicy.alwaysAllowed
 
