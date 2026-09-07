@@ -53,7 +53,9 @@ no view builds a CSV string. See [History export](../product/history-export.md).
 - Vocabulary the interface says out loud lives in a tested domain type (`RouteQuality`,
   `ShiftRateUnavailability`, `DeliveryAction`, `DeliverySummary`, `PickupWaitMetrics`,
   `ExpenseCategory`), never as strings in a view. The phrase *net after recorded expenses* and the
-  caution under it are `PeriodMetrics` wording for the same reason: a figure's name is a claim.
+  caution under it are `PeriodMetrics` wording for the same reason: a figure's name is a claim, and
+  the words a period may be compared in — *more recorded*, *less recorded*, and every reason a
+  percentage is withheld — are `PeriodComparison` wording rather than strings in the summary.
   `DurationText` holds the one rule for writing and speaking a duration, so the shift, delivery and
   pickup-place surfaces cannot drift apart. `IntentLifecycleOutcome` holds what a voice surface says
   back, for the same reason and with more at stake: it is the driver's only report of what was

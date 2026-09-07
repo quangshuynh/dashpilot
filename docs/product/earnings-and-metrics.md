@@ -273,7 +273,10 @@ hour or per mile anywhere in the app, because an expense belongs to a date rathe
   delivery's or compared with the shift's rates as though they measured the same thing.
 - The rates on this page are read one shift, or one delivery, at a time. Period totals — a day, a
   week, a month or a chosen range — are a separate calculation with its own coverage rules — see [Period summaries](period-summaries.md) —
-  and even there nothing averages one shift's rate against another's, ranks shifts, compares periods
-  or charts anything.
+  and even there nothing averages one shift's rate against another's, ranks shifts or charts
+  anything. A period may be read beside the equivalent period before it, as two period results and
+  the difference between them — see
+  [Period summaries](period-summaries.md#comparing-a-period-with-the-one-before-it) — and that
+  comparison is still never an average of shift rates.
 - Amounts are held in a single fixed currency (`USD`). Nothing converts between currencies or
   records which currency a shift was earned in.
