@@ -102,8 +102,8 @@ database" action.
 Taxes and mileage deductions, estimated or recurring costs, receipts, a tips-versus-base breakdown,
 per-delivery mileage, customer identity, merchant scoring, ranking or profitability, offer
 profitability, automatic delivery or pickup detection, geocoding, maps, route visualisation,
-quarterly, yearly or all-time totals, comparison or trend between periods, importing an exported
-file, backup, sync, App Intents, Live Activities and recommendations.
+quarterly, yearly or all-time totals, trends or comparisons across more than two periods, importing
+an exported file, backup, sync, Live Activities and recommendations.
 
 Deliveries are recorded, and three things are built on them. One is the shift time at least one
 delivery was active, with overlapping deliveries counted once, and gross earnings over it. Another
@@ -114,7 +114,9 @@ derives a delivery duration for presentation and stops. There is no restaurant r
 no earnings grouped by place, no comparison between shifts and no prediction.
 
 Shifts are aggregated over a day, a week, a calendar month or a chosen date range, and no further;
-see [Period summaries](period-summaries.md). A period, a shift or the whole history can be written to
+see [Period summaries](period-summaries.md). A period may be read beside the equivalent period
+immediately before it, as two sets of records and the differences between them, with no judgement,
+score or trend attached. A period, a shift or the whole history can be written to
 a JSON or CSV file the driver shares themselves, see [History export](history-export.md). No route is drawn on a map, and no mileage or live rate is
 shown while a shift is still running. There is no undo for a deleted shift and no backup of any
 kind.

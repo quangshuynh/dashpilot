@@ -343,3 +343,47 @@ nonisolated extension ReportingPeriod {
         ReportingPeriod(unit: .day, containing: now, calendar: calendar)?.previous(using: calendar) == self
     }
 }
+
+// MARK: Comparison
+
+nonisolated extension ReportingPeriod {
+    /// The period this one is compared against: the equivalent span immediately
+    /// before it.
+    ///
+    /// ## Why this is not ``previous(using:)``
+    ///
+    /// ``previous(using:)`` answers *"which period does the back chevron move
+    /// the selection to"*, and it refuses a custom range on purpose: the range
+    /// before *1 to 7 September* is not a range the driver asked for, and
+    /// stepping to one would put a span nobody selected on screen under a title
+    /// that says they did.
+    ///
+    /// A comparison asks a different question, and the refusal does not carry
+    /// over. Naming an equal-length span immediately before a chosen range
+    /// invents no selection: it states which days the second figure came from
+    /// and leaves the driver's own range exactly where it is.
+    ///
+    /// ## What "equivalent" means for each unit
+    ///
+    /// - A day, a week and a month step back by one calendar unit, so the
+    ///   preceding month of a 31-day month may be 30 days long and the day
+    ///   before a spring-forward day is 24 hours where that one was 23. Those
+    ///   are the periods a driver's calendar actually has, and shortening
+    ///   February to match March would compare against a month that does not
+    ///   exist. The lengths differ, and ``PeriodComparison`` says so rather than
+    ///   hiding it.
+    /// - A custom range steps back by **its own number of calendar days**, so a
+    ///   seven-day range is compared with the seven days immediately before it.
+    ///   The step is calendar-day arithmetic, not a subtraction of seconds, so a
+    ///   range containing a 23- or 25-hour day still lands on whole days.
+    ///
+    /// - Returns: `nil` when the calendar cannot reach the preceding span, or
+    ///   when this period covers no whole calendar day.
+    func precedingEquivalent(using calendar: Calendar = .autoupdatingCurrent) -> ReportingPeriod? {
+        guard unit == .custom else { return previous(using: calendar) }
+        guard let days = dayCount(using: calendar), days > 0,
+              let precedingEnd = calendar.date(byAdding: .day, value: -1, to: start),
+              let precedingStart = calendar.date(byAdding: .day, value: -days, to: start) else { return nil }
+        return ReportingPeriod(from: precedingStart, through: precedingEnd, calendar: calendar)
+    }
+}

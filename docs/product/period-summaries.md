@@ -331,6 +331,97 @@ A period may also state how many distinct pickup places its deliveries named.
 That is a count and nothing else — **no ranking, no scoring, no earnings per
 place**.
 
+## Comparing a period with the one before it
+
+A period can be read beside the **equivalent period immediately before it**: today beside yesterday,
+this week beside last week, March beside February, a chosen seven-day range beside the seven days
+before it.
+
+It is two sets of records and the differences between them. It is not a judgement, a score, a rank,
+a streak, a goal, a trend or a forecast, and there is no third period anywhere in it.
+
+### Which period is compared
+
+| Selection | Compared with |
+| --- | --- |
+| Day | The calendar day before it |
+| Week | The calendar week before it |
+| Month | The whole calendar month before it, whatever its length |
+| Custom range | The same number of calendar days, immediately before it |
+
+A month keeps its own length. February is not stretched to 31 days and March is not trimmed to 28:
+those are the months the driver's calendar has, and the comparison **states the difference in length
+rather than correcting it**.
+
+A chosen range is compared with an equal-length range and still has **no previous or next to step
+to**. Naming the days a second figure came from invents no selection; moving the screen to a range
+the driver did not choose would.
+
+### Both figures are shown
+
+```
+Recorded gross earnings
+$100.00 compared with $80.00
+$20.00 more recorded
+1 of 2 shifts, compared with 1 of 1 shift
+```
+
+The difference alone would be uncheckable. Both figures are printed, and the records behind **both**
+sides are printed under them whether or not they agree — a figure can move entirely because one of
+the two periods is more completely filled in than the other, and that line is where a driver sees it.
+
+### More recorded is not better
+
+A total moves by **more recorded** or **less recorded**. A rate moves by **higher** or **lower**.
+Nothing in this feature says better, worse, improved, up, down, on track or behind.
+
+The reason is the whole premise of the app: DashPilot holds the records the driver entered about work
+it did not observe. A week with fewer recorded miles may be a quieter week, a week spent on another
+app, or a week the phone stayed locked — and the app cannot tell those apart.
+
+### When a percentage is shown
+
+A percentage change is shown only when **all** of these hold:
+
+- both periods have the figure,
+- the previous figure is not zero,
+- the selected period has **finished** — a part of a period against the whole of one is a ratio of
+  two different amounts of time,
+- **both** sides cover all of their records, and
+- the change does not round to nothing.
+
+Otherwise the difference is still shown and the percentage is not, with the reason beside it. Some
+consequences of those rules are permanent:
+
+- **Recorded expenses never carry a percentage.** They have no denominator at all: nothing knows how
+  many costs went unrecorded, so no expense figure can ever be known to be complete.
+- **A period holding a partial route carries no mileage percentage.** Partial capture is the
+  ordinary case, and a partial route contributes real distance that is known to be short.
+- **The period the driver is living in carries no percentage at all**, on any figure.
+
+A figure whose previous side is **missing** has no difference either. Nothing is subtracted from an
+absence: a week whose shifts carry no amount has not earned nothing, and reading it as `$0.00` would
+manufacture a fall.
+
+### What is compared
+
+Completed shifts, elapsed time, delivery active time, recorded gross earnings, the three rates,
+recorded expenses, recorded mileage and deliveries delivered.
+
+Two figures are deliberately left out:
+
+- **Net after recorded expenses.** Each side is already the difference between two floors — earnings
+  over the shifts that carry an amount, costs over the records that exist — so the difference between
+  two of them moves with the driver's bookkeeping in a direction nothing can state.
+- **The median recorded pickup wait.** Two medians taken over different pickups are two order
+  statistics; subtracting one from the other describes no wait anybody experienced.
+
+### One calculation, not two
+
+Both sides are produced by the **same** calculator as the summary above them, from the same records,
+over the same paired subsets, carrying the same coverage. A compared figure *is* the figure on the
+screen above it. Nothing here averages a period's smaller periods, and no aggregate is stored.
+
 ## Empty and partial periods
 
 A period with no completed shift shows a sentence:
@@ -346,8 +437,9 @@ of no earnings and no miles.
 
 A period still in progress is simply named — `Today`, `This Week`, `This Month` —
 and never described as complete, final or projected. There is **no forecasting** of any
-kind: nothing extrapolates a partial week to its end, and no figure is a target,
-a pace or a comparison against another period.
+kind: nothing extrapolates a partial week to its end, and no figure is a target
+or a pace. Where the period before it is shown beside it, the comparison says that this one has not
+finished and withholds every percentage while that is true.
 
 Which period is the current one is read when the screen opens and again whenever the app
 returns to the foreground, so a summary opened before midnight and returned to after one
@@ -358,8 +450,8 @@ driver stepped to, and its figures do not change underneath them.
 ## What is deliberately absent
 
 - **No charts.** Figures are read as text.
-- **No comparison between periods.** No "up 12% on last week", no best or worst
-  day, no streaks and no trend.
+- **No third period.** A period is compared with the one immediately before it and
+  with nothing else: no series, no trend line, no best or worst day and no streak.
 - **No merchant ranking or profitability by place.** The pickup-place count is a
   count.
 - **No comparison between period *types*.** A month is not shown beside its weeks,
@@ -384,6 +476,9 @@ leaving VoiceOver to infer it from a caption nearby:
 - *"2 dollars and 18 cents gross earnings per recorded mile, based on 4 of 6
   shifts with both earnings and a measurable route."*
 - *"Recorded expenses, 48 dollars and 60 cents, across 2 recorded expenses."*
+- *"Recorded gross earnings, 100 dollars, compared with 80 dollars, 20 dollars more recorded, based
+  on 1 of 2 shifts, compared with 1 of 1 shift. This day is still in progress, so a percentage
+  against a complete day would compare different amounts of time."*
 - *"37 dollars and 65 cents net after recorded expenses. Recorded gross earnings
   across 1 of 2 shifts, less 2 recorded expenses. Both halves are what you
   recorded … This is not profit, and it is not a tax figure."*
@@ -402,4 +497,5 @@ statistic now covers thirty days.
 
 Aggregation happens entirely on device, in memory, from data already stored.
 Nothing is logged: no period total, no mileage, no rate, no median, no recorded
-cost, no net figure, no selected month and neither end of a chosen range. The selection is not persisted either. There is no networking and no analytics anywhere in the project.
+cost, no net figure, no difference between two periods, no selected month and neither end of a
+chosen range. The selection is not persisted either. There is no networking and no analytics anywhere in the project.

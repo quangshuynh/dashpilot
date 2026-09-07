@@ -161,7 +161,8 @@ and one they cannot.
   profit.
 - **USD only.** Nothing converts currencies or records which currency a shift was earned in.
 - **Aggregates cover a day, a week, a calendar month or a chosen date range.** No quarter, no year,
-  no all-time total, no best or worst shift, no comparison between periods, no chart and no sorting.
+  no all-time total, no best or worst shift, no chart and no sorting. A period may be read beside the
+  equivalent period immediately before it, and no further back than that.
   See [Period summaries](../product/period-summaries.md).
 - **No live figures.** A running shift shows no mileage, no rate and no active time. Active-time
   figures are finalised only once a shift ends.
@@ -188,8 +189,22 @@ and one they cannot.
   distance they missed is not, because nothing can say.
 - **Delivery active time is summed per shift, never unioned across shifts.** Two shifts that overlap
   in clock time — which the app cannot produce, but a store could hold — would be counted twice.
-- **No comparison, trend, projection or goal.** Nothing extrapolates a partial week, compares one
-  period to another, or ranks days.
+- **Two periods, and no more.** A period is compared with the equivalent period immediately before
+  it and with nothing else: no third period, no series, no chart, no trend line, no best or worst
+  day, no streak, no goal and no projection. Nothing extrapolates a period that has not finished.
+- **A comparison is between records, not between weeks of work.** More recorded is not better and
+  less recorded is not worse; the app holds what the driver entered and never saw the work.
+- **A percentage change is often withheld, and that is the normal case.** It is stated only when both
+  figures exist, the previous one is not zero, the selected period has finished, and both sides cover
+  all of their records — which excludes every expense figure, every period holding a partial route,
+  and every period still in progress. The difference itself is still shown, with the reason the
+  percentage is not.
+- **Differences in length are stated, never corrected.** A 31-day month against a 28-day one is
+  reported as those two months, with their day counts; nothing is scaled to a common length, because
+  a scaled figure is an estimate.
+- **Net after recorded expenses and the median recorded pickup wait are not compared.** Each side of
+  the first is already a difference between two floors, and two medians over different pickups
+  describe no wait anybody experienced.
 - **No merchant analysis.** The distinct pickup-place count is a count; no earnings, wait or score is
   grouped by place.
 - **Aggregates are recomputed on every view.** A period's routes are measured when it is selected, so

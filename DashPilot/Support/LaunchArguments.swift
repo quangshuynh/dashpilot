@@ -56,6 +56,19 @@ nonisolated enum LaunchArgument {
     /// only, and in memory, so it can never touch a real store.
     static let seededPeriodSummary = "-dashpilot-seeded-period-summary"
 
+    /// Runs against a throwaway store holding three consecutive days of
+    /// synthetic completed shifts, anchored to today.
+    ///
+    /// The period summary fixture above is pinned by the journeys that assert
+    /// its exact day and week figures, and it holds nothing before this week, so
+    /// it cannot also be where a period is read beside the one before it. This
+    /// one gives today an incomplete record and a shift still to be paid for,
+    /// yesterday and the day before a complete one each, and the day before
+    /// those nothing at all — which is the three cases a comparison has to tell
+    /// apart. Debug builds only, and in memory, so it can never touch a real
+    /// store.
+    static let seededPeriodComparison = "-dashpilot-seeded-period-comparison"
+
     static func isPresent(_ argument: String, in processInfo: ProcessInfo = .processInfo) -> Bool {
         processInfo.arguments.contains(argument)
     }
