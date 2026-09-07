@@ -311,13 +311,21 @@ For substantial feature intervals, unless explicitly scoped otherwise:
 
 * run the full domain test suite
 * run the full UI suite
-* perform a clean build
+* perform a clean build of the app target and both test targets, in one
+  `xcodebuild build-for-testing`
 * resolve new source warnings
 * run `mkdocs build --strict`
 * verify README links when relevant
 * update affected documentation
 
-Distinguish project warnings from SDK/toolchain informational notes.
+Report the warning count per target. A baseline that names only the app target hides test-target
+warnings, which is how 212 of them accumulated unnoticed.
+
+Distinguish project warnings from SDK/toolchain informational notes, and count them separately.
+
+Never wait for a test run with a broad `pgrep -f` polling loop: the pattern matches the waiter's own
+command line, so two waiters satisfy each other and neither exits. Run the command synchronously,
+wait on the run's own pid, or wait for its completion notification.
 
 ## Scope discipline
 
