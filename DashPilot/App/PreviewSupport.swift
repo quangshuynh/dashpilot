@@ -271,6 +271,59 @@ enum PreviewSupport {
     /// Every amount, date and note here is invented. An expense carries no shift
     /// and no delivery, which is why this takes none: the fixture dates them and
     /// nothing else relates them to the work above.
+    static func periodComparisonContainer(now: Date = .now) -> ModelContainer {
+        // Previews cannot meaningfully recover from a container failure.
+        try! seededPeriodComparisonContainer(now: now)
+    }
+
+    /// Three consecutive days of synthetic completed shifts, anchored to today,
+    /// for reading a period beside the one before it.
+    ///
+    /// Separate from the period-summary fixture because that one is pinned by
+    /// the journeys asserting its exact figures and holds nothing before this
+    /// week. The days here are chosen so that each of the three answers a
+    /// comparison differently:
+    ///
+    /// - **today**: four hours paying `$100.00`, plus a two-hour shift with no
+    ///   amount. The day is still in progress and its earnings cover one shift
+    ///   of two, so no percentage may be stated against it.
+    /// - **yesterday**: five hours paying `$80.00`, the whole of the day's
+    ///   record. Complete on both counts, and finished.
+    /// - **the day before**: five hours paying `$64.00`, also complete, so
+    ///   stepping back once gives `$80.00` against `$64.00` — a change of a
+    ///   quarter, which is the one case a percentage is shown in.
+    /// - **the day before that**: nothing, so stepping back twice shows what an
+    ///   empty previous day is said to be rather than a day that earned zero.
+    ///
+    /// No route and no expense anywhere: mileage and cost comparisons have their
+    /// own coverage rules, and this fixture is about the earnings and count
+    /// rules. Debug builds only, and in memory.
+    static func seededPeriodComparisonContainer(
+        now: Date = .now,
+        calendar: Calendar = .autoupdatingCurrent
+    ) throws -> ModelContainer {
+        let container = try ModelContainerFactory.makeInMemoryContainer()
+        let context = ModelContext(container)
+
+        let today = calendar.startOfDay(for: now)
+        let yesterday = calendar.date(byAdding: .day, value: -1, to: today) ?? today
+        let dayBefore = calendar.date(byAdding: .day, value: -2, to: today) ?? today
+
+        let paid = shift(startingAt: today.addingTimeInterval(9 * 3600), hours: 4, in: context)
+        try? paid.setGrossEarnings(Money(minorUnits: 10_000))
+        _ = shift(startingAt: today.addingTimeInterval(15 * 3600), hours: 2, in: context)
+
+        let earlier = shift(startingAt: yesterday.addingTimeInterval(9 * 3600), hours: 5, in: context)
+        try? earlier.setGrossEarnings(Money(minorUnits: 8_000))
+
+        let earliest = shift(startingAt: dayBefore.addingTimeInterval(9 * 3600), hours: 5, in: context)
+        try? earliest.setGrossEarnings(Money(minorUnits: 6_400))
+
+        try? context.save()
+
+        return container
+    }
+
     private static func seedExpenses(
         _ expenses: [(Date, Money, ExpenseCategory, String)],
         in context: ModelContext
