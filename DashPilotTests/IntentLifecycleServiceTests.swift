@@ -14,6 +14,11 @@ import Testing
 ///
 /// Every operation is given its timestamp, so nothing depends on how long the
 /// test took to run.
+///
+/// A call that only arranges the store discards its confirmation with `_ =`.
+/// The confirmation is what the driver hears, so it is asserted where it is the
+/// subject and deliberately dropped where it is not; the service keeps it
+/// non-discardable so shipping code cannot lose it by accident.
 @MainActor
 @Suite("Intent lifecycle service")
 struct IntentLifecycleServiceTests {
@@ -48,7 +53,7 @@ struct IntentLifecycleServiceTests {
     @Test("A second shift is refused with the service's own sentence")
     func refusesASecondShift() throws {
         let (context, service) = try makeService()
-        try service.startShift(at: start)
+        _ = try service.startShift(at: start)
 
         #expect(throws: IntentLifecycleError.shift(.shiftAlreadyActive(startedAt: start))) {
             try service.startShift(at: at(60))
@@ -59,7 +64,7 @@ struct IntentLifecycleServiceTests {
     @Test("Ending a shift reports how long it ran")
     func endsAShift() throws {
         let (context, service) = try makeService()
-        try service.startShift(at: start)
+        _ = try service.startShift(at: start)
 
         let outcome = try service.endShift(at: at(5_400))
 
@@ -81,8 +86,8 @@ struct IntentLifecycleServiceTests {
     @Test("A shift with a delivery still running is not ended by voice either")
     func refusesToEndOverARunningDelivery() throws {
         let (context, service) = try makeService()
-        try service.startShift(at: start)
-        try service.startDelivery(at: at(300))
+        _ = try service.startShift(at: start)
+        _ = try service.startDelivery(at: at(300))
 
         #expect(throws: IntentLifecycleError.shift(.activeDeliveriesInProgress(count: 1))) {
             try service.endShift(at: at(3_600))
@@ -98,7 +103,7 @@ struct IntentLifecycleServiceTests {
     @Test("A delivery starts on the running shift and is named and counted")
     func startsADelivery() throws {
         let (context, service) = try makeService()
-        try service.startShift(at: start)
+        _ = try service.startShift(at: start)
 
         let outcome = try service.startDelivery(at: at(300))
 
@@ -112,9 +117,9 @@ struct IntentLifecycleServiceTests {
     @Test("A second delivery is started without touching the first")
     func startsASecondDelivery() throws {
         let (_, service) = try makeService()
-        try service.startShift(at: start)
-        try service.startDelivery(at: at(300))
-        try service.recordDeliveryProgress(at: at(400))
+        _ = try service.startShift(at: start)
+        _ = try service.startDelivery(at: at(300))
+        _ = try service.recordDeliveryProgress(at: at(400))
 
         let outcome = try service.startDelivery(at: at(900))
 
@@ -136,8 +141,8 @@ struct IntentLifecycleServiceTests {
     @Test("The one delivery in progress advances one step at a time, in order")
     func advancesTheOnlyDelivery() throws {
         let (context, service) = try makeService()
-        try service.startShift(at: start)
-        try service.startDelivery(at: at(300))
+        _ = try service.startShift(at: start)
+        _ = try service.startDelivery(at: at(300))
 
         #expect(try service.recordDeliveryProgress(at: at(600)) == .deliveryEventRecorded(number: 1, state: .arrivedAtPickup))
         #expect(try service.recordDeliveryProgress(at: at(900)) == .deliveryEventRecorded(number: 1, state: .pickedUp))
@@ -153,11 +158,11 @@ struct IntentLifecycleServiceTests {
     @Test("A finished delivery leaves nothing to record")
     func refusesOnceTheDeliveryIsFinished() throws {
         let (_, service) = try makeService()
-        try service.startShift(at: start)
-        try service.startDelivery(at: at(300))
-        try service.recordDeliveryProgress(at: at(600))
-        try service.recordDeliveryProgress(at: at(900))
-        try service.recordDeliveryProgress(at: at(1_200))
+        _ = try service.startShift(at: start)
+        _ = try service.startDelivery(at: at(300))
+        _ = try service.recordDeliveryProgress(at: at(600))
+        _ = try service.recordDeliveryProgress(at: at(900))
+        _ = try service.recordDeliveryProgress(at: at(1_200))
 
         #expect(throws: IntentLifecycleError.noDeliveryInProgress) {
             try service.recordDeliveryProgress(at: at(1_500))
@@ -167,7 +172,7 @@ struct IntentLifecycleServiceTests {
     @Test("A step asked for with no delivery running is refused")
     func refusesWithNothingRunning() throws {
         let (context, service) = try makeService()
-        try service.startShift(at: start)
+        _ = try service.startShift(at: start)
 
         #expect(throws: IntentLifecycleError.noDeliveryInProgress) {
             try service.recordDeliveryProgress(at: at(300))
@@ -189,10 +194,10 @@ struct IntentLifecycleServiceTests {
     @Test("Two deliveries in progress refuse the step and neither one moves")
     func refusesWhileTwoDeliveriesRun() throws {
         let (context, service) = try makeService()
-        try service.startShift(at: start)
-        try service.startDelivery(at: at(300))
-        try service.recordDeliveryProgress(at: at(400))
-        try service.startDelivery(at: at(900))
+        _ = try service.startShift(at: start)
+        _ = try service.startDelivery(at: at(300))
+        _ = try service.recordDeliveryProgress(at: at(400))
+        _ = try service.startDelivery(at: at(900))
 
         #expect(throws: IntentLifecycleError.severalDeliveriesInProgress(count: 2)) {
             try service.recordDeliveryProgress(at: at(1_000))
@@ -206,10 +211,10 @@ struct IntentLifecycleServiceTests {
     @Test("Three in progress name the count they refused over")
     func namesHowManyAreRunning() throws {
         let (_, service) = try makeService()
-        try service.startShift(at: start)
-        try service.startDelivery(at: at(300))
-        try service.startDelivery(at: at(600))
-        try service.startDelivery(at: at(900))
+        _ = try service.startShift(at: start)
+        _ = try service.startDelivery(at: at(300))
+        _ = try service.startDelivery(at: at(600))
+        _ = try service.startDelivery(at: at(900))
 
         #expect(throws: IntentLifecycleError.severalDeliveriesInProgress(count: 3)) {
             try service.recordDeliveryProgress(at: at(1_000))
@@ -219,9 +224,9 @@ struct IntentLifecycleServiceTests {
     @Test("The refusal lifts as soon as one delivery is left running")
     func recordsAgainOnceOneRemains() throws {
         let (context, service) = try makeService()
-        try service.startShift(at: start)
+        _ = try service.startShift(at: start)
         let first = try DeliveryService(context: context).startDelivery(at: at(300))
-        try service.startDelivery(at: at(600))
+        _ = try service.startDelivery(at: at(600))
 
         #expect(throws: IntentLifecycleError.severalDeliveriesInProgress(count: 2)) {
             try service.recordDeliveryProgress(at: at(700))
@@ -238,9 +243,9 @@ struct IntentLifecycleServiceTests {
     @Test("A cancelled delivery is not one the voice step can reach or count")
     func ignoresACancelledDelivery() throws {
         let (context, service) = try makeService()
-        try service.startShift(at: start)
+        _ = try service.startShift(at: start)
         let first = try DeliveryService(context: context).startDelivery(at: at(300))
-        try service.startDelivery(at: at(600))
+        _ = try service.startDelivery(at: at(600))
         try DeliveryService(context: context).cancelDelivery(first, at: at(700))
 
         let outcome = try service.recordDeliveryProgress(at: at(800))
@@ -255,12 +260,12 @@ struct IntentLifecycleServiceTests {
     @Test("Nothing here records an amount, a place or a cancellation")
     func recordsNoValues() throws {
         let (context, service) = try makeService()
-        try service.startShift(at: start)
-        try service.startDelivery(at: at(300))
-        try service.recordDeliveryProgress(at: at(600))
-        try service.recordDeliveryProgress(at: at(900))
-        try service.recordDeliveryProgress(at: at(1_200))
-        try service.endShift(at: at(1_800))
+        _ = try service.startShift(at: start)
+        _ = try service.startDelivery(at: at(300))
+        _ = try service.recordDeliveryProgress(at: at(600))
+        _ = try service.recordDeliveryProgress(at: at(900))
+        _ = try service.recordDeliveryProgress(at: at(1_200))
+        _ = try service.endShift(at: at(1_800))
 
         let shift = try #require(try context.fetch(FetchDescriptor<Shift>()).first)
         let delivery = try #require(try context.fetch(FetchDescriptor<Delivery>()).first)
