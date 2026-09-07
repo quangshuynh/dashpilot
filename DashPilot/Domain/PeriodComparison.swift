@@ -501,7 +501,10 @@ nonisolated extension PeriodComparisonEntry {
                 percentage is shown.
                 """
         case .previousIsZero:
-            return "The previous \(noun) has nothing here for a percentage to be a percentage of."
+            return """
+                The previous \(noun)'s figure is zero, so there is nothing for a percentage to be a \
+                percentage of.
+                """
         case .currentPeriodInProgress:
             return """
                 This \(noun) is still in progress, so a percentage against a complete \(noun) would \
@@ -513,7 +516,10 @@ nonisolated extension PeriodComparisonEntry {
                 be a percentage of what was entered rather than of the \(noun).
                 """
         case .tooSmallToState:
-            return "The change is under 1%."
+            // Nothing to say about a figure that did not move: "no change" is
+            // already on the row, and calling it a change under one percent
+            // would argue with it.
+            return direction == .unchanged ? nil : "The change is under 1%."
         }
     }
 
