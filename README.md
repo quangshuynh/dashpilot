@@ -176,11 +176,17 @@ The short version, with the full list in [`docs/reference/limitations.md`](docs/
   custom-range totals cover completed shifts only, count a shift whole on the period it started in,
   exclude missing values rather than reading them as zero, and state the shifts behind every figure.
   Each rate divides aggregate by aggregate over one paired subset of shifts — never an average of the
-  shifts' own rates, and never an average of a shorter period's rates — and nothing forecasts,
-  compares periods or ranks days.
+  shifts' own rates, and never an average of a shorter period's rates — and nothing forecasts or
+  ranks days.
+- **A period may be read beside the equivalent period before it.** Both figures are shown with the
+  records behind each side, a total moves by "more" or "less recorded" rather than by better or
+  worse, and a percentage is stated only when both figures exist, the previous one is not zero, the
+  selected period has finished and both sides cover all of their records. Differences in length and
+  in coverage are stated rather than scaled away, and nothing here is a goal, a trend or a
+  prediction.
 - Not implemented yet: most things built on the delivery records (merchant scoring, merchant
   profitability, offer profitability, per-delivery mileage), any tax feature, recurring expenses or
-  receipts, aggregates longer than a month or a chosen range, maps, App Intents, Live Activities,
+  receipts, aggregates longer than a month or a chosen range, maps, Live Activities,
   recommendations, and importing an exported file back.
 
 ## License
