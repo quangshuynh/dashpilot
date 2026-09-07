@@ -18,7 +18,7 @@ struct StartDeliveryIntent: AppIntent {
         searchKeywords: ["delivery", "order", "accept", "start"]
     )
 
-    static let openAppWhenRun = false
+    static let supportedModes: IntentModes = .background
 
     static let authenticationPolicy = IntentAuthenticationPolicy.alwaysAllowed
 
@@ -52,7 +52,7 @@ struct RecordDeliveryProgressIntent: AppIntent {
         searchKeywords: ["delivery", "arrived", "picked up", "delivered", "progress"]
     )
 
-    static let openAppWhenRun = false
+    static let supportedModes: IntentModes = .background
 
     static let authenticationPolicy = IntentAuthenticationPolicy.alwaysAllowed
 
