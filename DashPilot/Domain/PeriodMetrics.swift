@@ -70,6 +70,21 @@ nonisolated struct PeriodRouteCoverage: Equatable, Sendable {
     var measuredCoverage: MetricCoverage {
         MetricCoverage(contributingCount: measuredShiftCount, eligibleCount: totalShiftCount)
     }
+
+    /// How much of the period's driving the routes account for:
+    /// `"5 of 6 shifts measured · 3 partial"`.
+    ///
+    /// The partial count is a second clause rather than a footnote, because a
+    /// partial route contributes real distance to any total above it and is the
+    /// reason that total is a floor. Written here rather than in each caller so
+    /// the mileage row and the mileage comparison say it identically.
+    var statement: String {
+        var parts = ["\(measuredCoverage.statement()) measured"]
+        if partialShiftCount > 0 {
+            parts.append("\(partialShiftCount) partial")
+        }
+        return parts.joined(separator: " · ")
+    }
 }
 
 /// What DashPilot can honestly say about a calendar period, read from the
@@ -473,17 +488,7 @@ nonisolated extension PeriodMetrics {
 
     /// How much of the period's driving the routes account for:
     /// `"5 of 6 shifts measured · 3 partial"`.
-    ///
-    /// The partial count is a second clause rather than a footnote, because a
-    /// partial route contributes real distance to the total above it and is the
-    /// reason that total is a floor.
-    var mileageCoverageStatement: String {
-        var parts = ["\(routeCoverage.measuredCoverage.statement()) measured"]
-        if routeCoverage.partialShiftCount > 0 {
-            parts.append("\(routeCoverage.partialShiftCount) partial")
-        }
-        return parts.joined(separator: " · ")
-    }
+    var mileageCoverageStatement: String { routeCoverage.statement }
 
     /// The sentence that keeps a period's mileage from being read as the miles
     /// driven, or `nil` when no route in it is known to be incomplete.
