@@ -306,6 +306,21 @@ nonisolated enum PeriodPercentageRefusal: String, Equatable, Sendable, Hashable 
     /// The change rounds to nothing at this scale. The difference itself is
     /// still stated.
     case tooSmallToState
+
+    /// Whether the reason belongs on the figure's own row.
+    ///
+    /// Three of these are about one figure: a side that is missing, a previous
+    /// value of zero, a change too small to state. The other two are about the
+    /// **pair of periods** — one of them has not finished, or the records behind
+    /// them are short — and are said once for the whole comparison rather than
+    /// repeated down every row of it, where the repetition would bury the
+    /// reasons that differ.
+    var isStatedOnTheRow: Bool {
+        switch self {
+        case .valueMissing, .previousIsZero, .tooSmallToState: true
+        case .currentPeriodInProgress, .completenessUnknown: false
+        }
+    }
 }
 
 /// One figure, in both periods, with what each side was derived from.

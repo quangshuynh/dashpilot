@@ -16,6 +16,9 @@ final class DashPilotUITests: XCTestCase {
     /// Must match `LaunchArgument.seededPeriodSummary`, for the same reason.
     private static let seededPeriodSummaryArgument = "-dashpilot-seeded-period-summary"
 
+    /// Must match `LaunchArgument.seededPeriodComparison`, for the same reason.
+    private static let seededPeriodComparisonArgument = "-dashpilot-seeded-period-comparison"
+
     override func setUpWithError() throws {
         continueAfterFailure = false
     }
@@ -1977,6 +1980,135 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertTrue(
             earnings.label.contains("$86.25"),
             "The headline stays the shift amount: \(earnings.label)"
+        )
+    }
+
+    // MARK: Period comparison
+
+    /// Launches against a throwaway store holding three consecutive days of
+    /// synthetic completed shifts, anchored to today.
+    ///
+    /// By the rules of the driver's own calendar it holds:
+    ///
+    /// - **today**: four hours paying `$100.00`, and a two-hour shift with no
+    ///   amount at all.
+    /// - **yesterday**: five hours paying `$80.00`, the whole of that day.
+    /// - **the day before**: five hours paying `$64.00`, the whole of that day.
+    /// - **the day before that**: nothing.
+    @MainActor
+    private func launchWithPeriodComparison() -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments.append(Self.seededPeriodComparisonArgument)
+        app.launch()
+        return app
+    }
+
+    @MainActor
+    private func comparisonRow(_ metric: String, in app: XCUIApplication) -> XCUIElement {
+        app.descendants(matching: .any)["periodComparison.\(metric)"]
+    }
+
+    /// A day is read beside the day before it, with both figures on screen and
+    /// the shifts behind each of them.
+    ///
+    /// Today is still in progress and one of its two shifts carries no amount,
+    /// so the difference is stated and a percentage is not: a part of a day
+    /// against the whole of one, over records that do not cover the day, is not
+    /// a ratio of anything.
+    @MainActor
+    func testADayIsComparedWithTheDayBeforeItAndBothCoveragesAreShown() throws {
+        let app = launchWithPeriodComparison()
+        openPeriodSummary(in: app)
+
+        let earnings = comparisonRow("recordedGrossEarnings", in: app)
+        XCTAssertTrue(scrollTo(earnings, in: app), "The comparison is on the summary")
+        XCTAssertTrue(
+            earnings.label.contains("$100.00") && earnings.label.contains("$80.00"),
+            "Both figures are printed, not only the difference: \(earnings.label)"
+        )
+        XCTAssertTrue(
+            earnings.label.contains("more recorded"),
+            "A total moves by more or less recorded, never by better or worse: \(earnings.label)"
+        )
+        XCTAssertTrue(
+            earnings.label.contains("1 of 2 shifts") && earnings.label.contains("1 of 1 shift"),
+            "The records behind both sides are stated: \(earnings.label)"
+        )
+        XCTAssertFalse(
+            earnings.label.contains("%"),
+            "No percentage against a day that has not finished: \(earnings.label)"
+        )
+
+        let notes = app.descendants(matching: .any)["periodComparisonNotes"]
+        XCTAssertTrue(scrollTo(notes, in: app))
+        XCTAssertTrue(
+            notes.label.contains("still in progress"),
+            "And the screen says why: \(notes.label)"
+        )
+    }
+
+    /// Stepping back to a finished day, whose records cover it and whose
+    /// predecessor's cover that one, is the case a percentage is stated in.
+    @MainActor
+    func testAFinishedDayWithCompleteRecordsStatesThePercentageChange() throws {
+        let app = launchWithPeriodComparison()
+        openPeriodSummary(in: app)
+
+        app.buttons["periodPreviousButton"].tap()
+
+        let earnings = comparisonRow("recordedGrossEarnings", in: app)
+        XCTAssertTrue(scrollTo(earnings, in: app))
+        XCTAssertTrue(
+            waitForLabel(earnings, toContain: "$64.00"),
+            "Yesterday is now read beside the day before it: \(earnings.label)"
+        )
+        XCTAssertTrue(
+            earnings.label.contains("$16.00 more recorded"),
+            "The difference between the two recorded amounts: \(earnings.label)"
+        )
+        XCTAssertTrue(
+            earnings.label.contains("25%"),
+            "Both days are complete and finished, so the percentage is stated: \(earnings.label)"
+        )
+        XCTAssertTrue(
+            earnings.label.contains("1 of 1 shift, compared with 1 of 1 shift"),
+            "Over all of both days' shifts: \(earnings.label)"
+        )
+    }
+
+    /// A day before which nothing was recorded is said to hold nothing. Its
+    /// earnings are missing rather than zero, and the counts are still compared.
+    @MainActor
+    func testAnEmptyPreviousDayIsStatedRatherThanShownAsNoEarnings() throws {
+        let app = launchWithPeriodComparison()
+        openPeriodSummary(in: app)
+
+        app.buttons["periodPreviousButton"].tap()
+        app.buttons["periodPreviousButton"].tap()
+
+        let previous = app.descendants(matching: .any)["periodComparisonPrevious"]
+        XCTAssertTrue(scrollTo(previous, in: app))
+        XCTAssertTrue(
+            waitForLabel(previous, toContain: "No completed shift and no recorded expense"),
+            "The day before this one holds nothing, and the screen says so: \(previous.label)"
+        )
+
+        let earnings = comparisonRow("recordedGrossEarnings", in: app)
+        XCTAssertTrue(scrollTo(earnings, in: app))
+        XCTAssertTrue(
+            earnings.label.contains("Not recorded"),
+            "A day with no amount recorded has no figure to compare: \(earnings.label)"
+        )
+        XCTAssertFalse(
+            earnings.label.contains("$0.00"),
+            "And is never read as a day that earned nothing: \(earnings.label)"
+        )
+
+        let shifts = comparisonRow("completedShifts", in: app)
+        XCTAssertTrue(scrollTo(shifts, in: app))
+        XCTAssertTrue(
+            shifts.label.contains("1 more recorded"),
+            "The counts are still compared, as counts of records: \(shifts.label)"
         )
     }
 

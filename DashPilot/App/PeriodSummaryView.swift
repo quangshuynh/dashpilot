@@ -28,6 +28,15 @@ import SwiftUI
 /// thousands of positions. The arithmetic over the measured result stays in the
 /// body, which is what keeps the summary correct the moment a driver edits an
 /// amount and comes back.
+///
+/// ## The period before this one
+///
+/// The comparison section reads the equivalent period immediately before the
+/// selected one through the **same** calculator, over the same records, and
+/// hands the two finished results to ``PeriodComparisonCalculator``. There is
+/// one aggregation on this screen; the comparison is not a second one, and every
+/// figure in it is the figure above it. Measuring both periods' routes is what
+/// makes that true and is why a selection costs two measurements.
 struct PeriodSummaryView: View {
     @Environment(\.calendar) private var calendar
     @Environment(\.locale) private var locale
@@ -99,6 +108,11 @@ struct PeriodSummaryView: View {
 
     private let calculator = PeriodMetricsCalculator()
 
+    /// The comparison between the selected period and the one before it. It
+    /// aggregates nothing: it is handed the two results the calculator above
+    /// produced.
+    private let comparisons = PeriodComparisonCalculator()
+
     var body: some View {
         List {
             Section {
@@ -130,6 +144,13 @@ struct PeriodSummaryView: View {
                     expensesSection(metrics)
                     drivingSection(metrics)
                     deliveriesSection(metrics)
+                }
+                // Last of the figures, and shown for an empty period too when
+                // the one before it holds something: a day with no records is
+                // one of the things a driver may be looking at the previous day
+                // to understand.
+                if let comparison, comparison.current.hasAnyRecords || comparison.previousHasRecords {
+                    comparisonSection(comparison)
                 }
                 // Only for a period that holds something. A period with neither
                 // a completed shift nor an expense has nothing to export, and an
@@ -568,6 +589,126 @@ struct PeriodSummaryView: View {
         }
     }
 
+    /// The same figures, beside the equivalent period before this one.
+    ///
+    /// ## Nothing here is a verdict
+    ///
+    /// A difference between two periods is a difference between two sets of
+    /// **records**, and the section says so in as many places as it takes: the
+    /// change words are "more recorded" and "less recorded" rather than better
+    /// and worse, the records behind both sides sit under every figure, and the
+    /// footer refuses the reading the whole section invites.
+    ///
+    /// ``PeriodComparisonCalculator`` decides all of it. This lays the result
+    /// out and adds no rule of its own — including which percentages exist,
+    /// which is the decision most easily lost in a view body.
+    private func comparisonSection(_ comparison: PeriodComparison) -> some View {
+        Section {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(comparison.previousPeriodStatement(asOf: now, calendar: calendar, locale: locale))
+                    .font(.subheadline)
+                if let statement = comparison.previousEmptyStatement {
+                    Text(statement)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(
+                [
+                    comparison.spokenPreviousPeriodStatement(asOf: now, calendar: calendar, locale: locale),
+                    comparison.previousEmptyStatement
+                ]
+                .compactMap { $0 }
+                .joined(separator: " ")
+            )
+            .accessibilityIdentifier("periodComparisonPrevious")
+
+            // The facts about this particular pair of periods: one of them has
+            // not finished, they are different lengths, they are recorded to
+            // different extents. Each is a reason a figure below moved, so they
+            // sit in the section rather than in the footer, where the general
+            // explanation lives.
+            if let notes = comparisonNotes(comparison) {
+                Text(notes)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("periodComparisonNotes")
+            }
+
+            ForEach(comparison.entries) { entry in
+                comparisonRow(entry, noun: comparison.periodNoun)
+            }
+        } header: {
+            Text(comparison.title)
+        } footer: {
+            Text(comparison.cautionStatement)
+        }
+    }
+
+    /// One figure in both periods, the change between them, and the records
+    /// behind each side.
+    ///
+    /// Both figures are printed, not just the difference. A driver has to be
+    /// able to see what is being subtracted from what, and a lone `−$25.50`
+    /// cannot be checked against anything they remember.
+    private func comparisonRow(_ entry: PeriodComparisonEntry, noun: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(entry.metric.title)
+                .font(.subheadline)
+            Text(entry.valuesStatement(locale: locale))
+                .font(.headline)
+                .monospacedDigit()
+                .fixedSize(horizontal: false, vertical: true)
+            if let change = comparisonChangeStatement(entry, noun: noun) {
+                Text(change)
+                    .font(.caption)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            // The coverage of both sides, printed whether or not they agree. A
+            // figure can move entirely because one period is more completely
+            // filled in than the other, and that is exactly what this line is
+            // for.
+            if let basis = entry.basisStatement {
+                Text(basis)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(entry.spokenStatement(noun: noun, locale: locale))
+        .accessibilityIdentifier("periodComparison.\(entry.metric.id)")
+    }
+
+    /// The change, its percentage, and the row's own reason for having no
+    /// percentage.
+    ///
+    /// The two reasons that belong to the pair of periods rather than to one
+    /// figure — a period that has not finished, records short of their sources —
+    /// are stated once above instead of on all ten rows.
+    private func comparisonChangeStatement(_ entry: PeriodComparisonEntry, noun: String) -> String? {
+        var parts = [entry.changeStatement(locale: locale), entry.percentStatement(locale: locale)]
+            .compactMap { $0 }
+        if entry.percentageRefusal?.isStatedOnTheRow == true, let refusal = entry.refusalStatement(noun: noun) {
+            parts.append(refusal)
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    /// What is true of this pair of periods, in one paragraph or none.
+    private func comparisonNotes(_ comparison: PeriodComparison) -> String? {
+        let notes = [
+            comparison.inProgressStatement,
+            comparison.lengthStatement,
+            comparison.coverageStatement
+        ]
+        .compactMap { $0 }
+        return notes.isEmpty ? nil : notes.joined(separator: " ")
+    }
+
     /// Taking this day or week somewhere else.
     ///
     /// Last, under the figures it exports, and it names the period rather than
@@ -745,8 +886,28 @@ struct PeriodSummaryView: View {
         period?.spokenTitle(asOf: now, calendar: calendar, locale: locale) ?? unit.title
     }
 
+    /// The equivalent period immediately before the selected one, which every
+    /// figure in the comparison section is read from.
+    ///
+    /// ``ReportingPeriod/precedingEquivalent(using:)`` and never
+    /// ``ReportingPeriod/previous(using:)``: the second is what the back chevron
+    /// steps to and refuses a chosen range, and this one names the span an equal
+    /// number of days before that range without moving the selection to it.
+    private var comparisonPeriod: ReportingPeriod? {
+        period?.precedingEquivalent(using: calendar)
+    }
+
     /// The completed shifts belonging to the selected period.
     private var shiftsInPeriod: [Shift] {
+        shifts(in: period)
+    }
+
+    /// The completed shifts belonging to the period before it.
+    private var shiftsInComparisonPeriod: [Shift] {
+        shifts(in: comparisonPeriod)
+    }
+
+    private func shifts(in period: ReportingPeriod?) -> [Shift] {
         guard let period else { return [] }
         return completedShifts.filter { period.contains($0.startedAt) }
     }
@@ -758,8 +919,29 @@ struct PeriodSummaryView: View {
     /// unmeasured routes would say "No route measured" for a fraction of a
     /// second, which is a claim rather than a loading state.
     private var metrics: PeriodMetrics? {
+        metrics(of: shiftsInPeriod, in: period)
+    }
+
+    /// The same figures for the period before the selected one, or `nil` while
+    /// its routes are still being measured.
+    private var comparisonMetrics: PeriodMetrics? {
+        metrics(of: shiftsInComparisonPeriod, in: comparisonPeriod)
+    }
+
+    /// The two results side by side, or `nil` when either is not ready or the
+    /// calendar cannot name the period before this one.
+    ///
+    /// Built from the finished results rather than from the records, which is
+    /// what keeps a compared figure identical to the figure above it: there is
+    /// one aggregation in this screen, and the comparison is not a second one.
+    private var comparison: PeriodComparison? {
+        guard let metrics, let comparisonMetrics else { return nil }
+        return comparisons.comparison(of: metrics, with: comparisonMetrics, asOf: now, calendar: calendar)
+    }
+
+    private func metrics(of shifts: [Shift], in period: ReportingPeriod?) -> PeriodMetrics? {
         guard let period, let measurement, measurement.token == measurementToken else { return nil }
-        let records = shiftsInPeriod.map { shift in
+        let records = shifts.map { shift in
             shift.periodRecord(for: measurement.distances[shift.id] ?? .none)
         }
         return calculator.metrics(
@@ -779,18 +961,28 @@ struct PeriodSummaryView: View {
     /// a measurement.
     ///
     /// Both bounds are in the token, not just the start: two custom ranges can
-    /// begin on the same day and cover different numbers of shifts.
+    /// begin on the same day and cover different numbers of shifts. The
+    /// preceding period's shifts are in it too, because the comparison measures
+    /// their routes as well and a selection that changes only the earlier of the
+    /// two spans still needs a re-measure.
     private var measurementToken: String {
         let span = period.map {
             "\($0.unit.rawValue)@\($0.start.timeIntervalSince1970)-\($0.end.timeIntervalSince1970)"
         } ?? "none"
-        return ([span] + shiftsInPeriod.map(\.id.uuidString)).joined(separator: "|")
+        let ids = (shiftsInPeriod + shiftsInComparisonPeriod).map(\.id.uuidString)
+        return ([span] + ids).joined(separator: "|")
     }
 
+    /// Measures both periods' routes in one pass.
+    ///
+    /// The comparison doubles the work a selection costs, which is the price of
+    /// its second column being the same measurement as the first rather than a
+    /// cheaper estimate of it. Measuring is why this runs in a task rather than
+    /// in `body`.
     private func measureRoutes() {
         let token = measurementToken
         var distances: [UUID: RouteDistance] = [:]
-        for shift in shiftsInPeriod {
+        for shift in shiftsInPeriod + shiftsInComparisonPeriod {
             distances[shift.id] = shift.recordedDistance()
         }
         measurement = RouteMeasurement(token: token, distances: distances)
@@ -809,6 +1001,13 @@ struct PeriodSummaryView: View {
         PeriodSummaryView()
     }
     .modelContainer(PreviewSupport.periodSummaryContainer())
+}
+
+#Preview("Day beside the day before") {
+    NavigationStack {
+        PeriodSummaryView()
+    }
+    .modelContainer(PreviewSupport.periodComparisonContainer())
 }
 
 #Preview("Empty period") {
