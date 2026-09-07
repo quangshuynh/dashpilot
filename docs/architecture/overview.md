@@ -101,9 +101,10 @@ does not know how a delivery advances.
 ## System surfaces: App Intents
 
 Four intents (start a shift, end a shift, start a delivery, record the next delivery event) can be
-performed by voice, from Shortcuts or from Spotlight, with the app never coming to the screen. They
-exist for driving safety: the timestamp recorded at the moment the driver says so is the accurate
-one.
+performed by voice, from Shortcuts or from Spotlight, with the app never coming to the screen. Each
+declares `supportedModes` as `.background`, which is where that guarantee lives and what
+`openAppWhenRun = false` said before iOS 26 deprecated it. They exist for driving safety: the
+timestamp recorded at the moment the driver says so is the accurate one.
 
 `IntentLifecycleService` is the only type they call, and **it owns no lifecycle logic.** It calls
 `ShiftService` and `DeliveryService`, carries their refusals through unchanged so a driver hears the
