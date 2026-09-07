@@ -583,6 +583,8 @@ struct PeriodComparisonTests {
         #expect(entry.changeStatement() == "No change")
         #expect(entry.percentChange == nil)
         #expect(entry.percentageRefusal == .tooSmallToState)
+        // Nothing argues with "No change" by calling it a change under 1%.
+        #expect(entry.refusalStatement(noun: "day") == nil)
     }
 
     // MARK: What is compared, and what is refused
