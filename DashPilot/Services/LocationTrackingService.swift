@@ -34,6 +34,15 @@ import SwiftData
 /// was actually missed. Leaving the foreground with a session running is that
 /// case.
 ///
+/// ## A paused shift
+///
+/// Pausing stops capture at once, and resuming starts a **new** session. That
+/// is not an implementation detail to work around: nothing was recorded between
+/// the two, so nothing may be measured across them either, and the session
+/// change is exactly what stops the mileage calculation from drawing a line from
+/// where the driver paused to wherever they resumed. The route carries the break
+/// because the break is real.
+///
 /// ## Where capture may run
 ///
 /// A session can only be **started** while the app is in the foreground, and
@@ -186,6 +195,17 @@ final class LocationTrackingService {
 
         adopt(shift)
 
+        // The driver's own decision outranks everything below it. A paused shift
+        // is not recording because they said so, and reporting a permission
+        // problem or a background pause instead would explain a stop they
+        // already know the reason for — and would imply that fixing it would
+        // resume recording, which it would not.
+        guard !shift.isPaused else {
+            stopCapturing()
+            transition(to: .shiftPaused)
+            return
+        }
+
         // Permission is judged before the app's own position, because it
         // outranks it: a shift that cannot be recorded at all should say why,
         // not report a pause it would not come back from anyway.
@@ -220,6 +240,20 @@ final class LocationTrackingService {
     /// If ending then fails, ``synchronize()`` restarts capture — this leaves
     /// nothing latched, it only closes the window.
     func prepareForShiftEnd() {
+        stopCapturing()
+    }
+
+    /// Stops capture ahead of pausing a shift.
+    ///
+    /// The same ordering rule ``prepareForShiftEnd()`` keeps, for the same
+    /// reason: updates are stopped and pending samples are written *before* the
+    /// pause is recorded, so no candidate can be judged against a shift the
+    /// store has already paused, and no position recorded after the driver
+    /// tapped Pause is retained. If the pause then fails to save,
+    /// ``synchronize()`` restarts capture in a new session — nothing is latched,
+    /// and the few seconds of route that stop cost are honestly reported as a
+    /// break rather than measured across.
+    func prepareForShiftPause() {
         stopCapturing()
     }
 
@@ -300,6 +334,7 @@ final class LocationTrackingService {
             in: RouteSampleFilter.Context(
                 shiftStart: shift.startedAt,
                 shiftEnd: shift.endedAt,
+                isPaused: shift.isPaused,
                 lastAccepted: lastAccepted,
                 now: now()
             )
@@ -310,7 +345,11 @@ final class LocationTrackingService {
             // The reason names the rule, never the sample, so this cannot leak
             // a position.
             AppLog.routeCapture.debug("Rejected a location sample: \(reason.rawValue, privacy: .public)")
-            if reason == .shiftEnded {
+            // Both of these say the shift stopped accepting route while a fix
+            // was in flight. Reconciling settles which state that is, and the
+            // stop is what guarantees the next accepted sample opens a new
+            // capture session.
+            if reason == .shiftEnded || reason == .shiftPaused {
                 stopCapturing()
                 synchronize()
             }

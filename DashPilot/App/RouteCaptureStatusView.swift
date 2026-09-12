@@ -39,6 +39,7 @@ struct RouteCaptureStatusView: View {
         switch state {
         case .idle, .tracking: "Location tracking active"
         case .pausedInBackground: "Route recording paused"
+        case .shiftPaused: "Route recording stopped"
         case .unavailable(.permissionRequired): "Location permission required"
         case .unavailable: "Location unavailable"
         }
@@ -48,6 +49,7 @@ struct RouteCaptureStatusView: View {
         switch state {
         case .idle, .tracking: "location.fill"
         case .pausedInBackground: "pause.circle"
+        case .shiftPaused: "pause.circle"
         case .unavailable: "location.slash"
         }
     }
@@ -56,6 +58,7 @@ struct RouteCaptureStatusView: View {
         switch state {
         case .idle, .tracking: .green
         case .pausedInBackground: .orange
+        case .shiftPaused: .orange
         case .unavailable: .secondary
         }
     }
@@ -69,6 +72,11 @@ struct RouteCaptureStatusView: View {
             """
         case .pausedInBackground:
             "Recording starts when DashPilot is open. Open the app to record the rest of this shift."
+        case .shiftPaused:
+            """
+            The shift is paused, so nothing is being recorded. Resuming starts a new recording, and \
+            the distance between where you paused and where you resume is not counted.
+            """
         case .unavailable(.permissionRequired), .unavailable(.permissionDenied):
             "Turn on location access for DashPilot to record this shift's route."
         case .unavailable(.permissionRestricted):
@@ -90,6 +98,7 @@ struct RouteCaptureStatusView: View {
     List {
         RouteCaptureStatusView(state: .tracking)
         RouteCaptureStatusView(state: .pausedInBackground)
+        RouteCaptureStatusView(state: .shiftPaused)
         RouteCaptureStatusView(state: .unavailable(.permissionRequired))
         RouteCaptureStatusView(state: .unavailable(.locationServicesOff))
         RouteCaptureStatusView(state: .unavailable(.storeUnavailable))

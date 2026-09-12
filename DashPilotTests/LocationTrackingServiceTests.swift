@@ -864,4 +864,258 @@ struct LocationTrackingServiceTests {
         #expect(secondSessions.count == 1)
         #expect(firstSessions.isDisjoint(with: secondSessions))
     }
+
+    // MARK: A paused shift
+
+    @Test("Pausing stops capture immediately and says why")
+    func pausingStopsCapture() throws {
+        let harness = try makeHarness()
+        try harness.shifts.startShift(at: shiftStart)
+        harness.tracking.synchronize()
+        harness.provider.emit(sample(harness, secondsAfterStart: 10))
+
+        harness.tracking.prepareForShiftPause()
+        try harness.shifts.pauseActiveShift(at: shiftStart.addingTimeInterval(20))
+        harness.tracking.synchronize()
+
+        #expect(harness.tracking.state == .shiftPaused)
+        #expect(!harness.provider.isUpdating)
+        // Not idle and not a failure: a shift is running, and nothing is wrong.
+        #expect(harness.tracking.state.accompaniesActiveShift)
+        #expect(!harness.tracking.state.isCapturing)
+        #expect(try harness.storedSamples().count == 1, "What was recorded before the pause is kept")
+    }
+
+    @Test("Nothing is retained while the shift is paused")
+    func retainsNothingWhilePaused() throws {
+        let harness = try makeHarness()
+        try harness.shifts.startShift(at: shiftStart)
+        harness.tracking.synchronize()
+        harness.tracking.prepareForShiftPause()
+        try harness.shifts.pauseActiveShift(at: shiftStart.addingTimeInterval(20))
+        harness.tracking.synchronize()
+
+        harness.provider.emitWhileStopped(sample(harness, secondsAfterStart: 60, northMetres: 2_000))
+
+        #expect(try harness.pendingAndStoredSamples().isEmpty)
+        #expect(harness.tracking.state == .shiftPaused)
+    }
+
+    /// The same window ``shiftEnded`` closes: a fix already in flight when the
+    /// driver paused must not be retained against a stretch the app is reporting
+    /// as unrecorded.
+    @Test("A sample arriving after the pause but before capture stopped is refused")
+    func refusesSamplesAtThePauseBoundary() throws {
+        let harness = try makeHarness()
+        try harness.shifts.startShift(at: shiftStart)
+        harness.tracking.synchronize()
+
+        // Paused without telling capture first, which is what an App Intent run
+        // while the app is on screen does.
+        try harness.shifts.pauseActiveShift(at: shiftStart.addingTimeInterval(20))
+        harness.provider.emit(sample(harness, secondsAfterStart: 30, northMetres: 400))
+
+        #expect(try harness.pendingAndStoredSamples().isEmpty)
+        #expect(harness.tracking.state == .shiftPaused)
+        #expect(!harness.provider.isUpdating)
+    }
+
+    @Test("The filter names a paused shift as its own reason, apart from an ended one")
+    func filterReportsPausedSeparately() {
+        let filter = RouteSampleFilter()
+        let candidate = SyntheticRoute.sample(at: shiftStart.addingTimeInterval(10), northMetres: 100)
+
+        let paused = filter.evaluate(
+            candidate,
+            in: RouteSampleFilter.Context(
+                shiftStart: shiftStart,
+                isPaused: true,
+                now: shiftStart.addingTimeInterval(12)
+            )
+        )
+        #expect(paused == .reject(.shiftPaused))
+
+        // An ended shift is ended whatever its pause rows say, so that reason
+        // wins when both are true.
+        let ended = filter.evaluate(
+            candidate,
+            in: RouteSampleFilter.Context(
+                shiftStart: shiftStart,
+                shiftEnd: shiftStart.addingTimeInterval(5),
+                isPaused: true,
+                now: shiftStart.addingTimeInterval(12)
+            )
+        )
+        #expect(ended == .reject(.shiftEnded))
+    }
+
+    /// The rule that keeps the mileage honest: nothing was recorded across the
+    /// pause, so nothing may be measured across it either.
+    @Test("Resuming starts a new capture session, so no distance spans the pause")
+    func resumingOpensANewSession() throws {
+        let harness = try makeHarness()
+        let shift = try harness.shifts.startShift(at: shiftStart)
+        harness.tracking.synchronize()
+        harness.provider.emit(sample(harness, secondsAfterStart: 10))
+        harness.provider.emit(sample(harness, secondsAfterStart: 20, northMetres: 100))
+
+        harness.tracking.prepareForShiftPause()
+        try harness.shifts.pauseActiveShift(at: shiftStart.addingTimeInterval(30))
+        harness.tracking.synchronize()
+
+        try harness.shifts.resumeActiveShift(at: shiftStart.addingTimeInterval(3_600))
+        harness.tracking.synchronize()
+
+        #expect(harness.tracking.state == .tracking)
+        #expect(harness.provider.isUpdating)
+        #expect(harness.provider.startCount == 2)
+
+        harness.provider.emit(sample(harness, secondsAfterStart: 3_610, northMetres: 8_000))
+        harness.provider.emit(sample(harness, secondsAfterStart: 3_620, northMetres: 8_100))
+
+        let sessions = shift.routeSamples.map(\.captureSessionID)
+        #expect(Set(sessions).count == 2, "The pause is a break in capture, not a continuation")
+
+        let distance = shift.recordedDistance()
+        #expect(distance.segmentCount == 2)
+        #expect(distance.gapCount == 1)
+        // 100 m before the pause and 100 m after it. The ~7.9 km between where
+        // the driver paused and where they resumed is not in the total.
+        #expect(distance.metres < 300, "No distance is measured across the pause")
+    }
+
+    @Test("A shift paused when the app was terminated is still paused, and records nothing")
+    func relaunchRecoversAPausedShift() throws {
+        let container = try ModelContainerFactory.makeInMemoryContainer()
+        let context = container.mainContext
+
+        // The process that was terminated.
+        try ShiftService(context: context).startShift(at: shiftStart)
+        try ShiftService(context: context).pauseActiveShift(at: shiftStart.addingTimeInterval(600))
+
+        // A new process: fresh capture service, same store.
+        let provider = StubLocationTrackingProvider()
+        let authorization = LocationAuthorizationService(
+            provider: StubLocationAuthorizationProvider(servicesEnabled: true, status: .authorizedWhenInUse, accuracy: .full)
+        )
+        let clock = Clock(shiftStart.addingTimeInterval(3_600))
+        let tracking = LocationTrackingService(
+            context: context,
+            authorization: authorization,
+            provider: provider,
+            saveBatchSize: 1,
+            now: { clock.date }
+        )
+
+        tracking.synchronize()
+
+        #expect(tracking.state == .shiftPaused)
+        #expect(!provider.isUpdating)
+        #expect(provider.startCount == 0, "A relaunch into a paused shift starts no capture at all")
+    }
+
+    /// A paused shift reports the pause, not a permission problem. Fixing the
+    /// permission would not resume recording, so saying so would mislead.
+    @Test("Being paused outranks a permission problem in what the screen says")
+    func pauseOutranksPermission() throws {
+        let harness = try makeHarness()
+        try harness.shifts.startShift(at: shiftStart)
+        harness.tracking.synchronize()
+        try harness.shifts.pauseActiveShift(at: shiftStart.addingTimeInterval(20))
+
+        harness.authorizationProvider.update(status: .denied)
+        harness.authorization.refresh()
+        harness.tracking.synchronize()
+
+        #expect(harness.tracking.state == .shiftPaused)
+    }
+
+    /// Background capture is unchanged while an unpaused shift runs, and a
+    /// paused shift does not acquire a session by going off screen and back.
+    @Test("Leaving and returning to the foreground does not resume a paused shift's capture")
+    func backgroundingAPausedShiftChangesNothing() throws {
+        let harness = try makeHarness()
+        try harness.shifts.startShift(at: shiftStart)
+        harness.tracking.synchronize()
+        harness.tracking.prepareForShiftPause()
+        try harness.shifts.pauseActiveShift(at: shiftStart.addingTimeInterval(20))
+        harness.tracking.synchronize()
+
+        harness.tracking.enterBackground()
+        #expect(harness.tracking.state == .shiftPaused)
+
+        harness.tracking.enterForeground()
+        #expect(harness.tracking.state == .shiftPaused)
+        #expect(harness.provider.startCount == 1, "Only the session before the pause was ever started")
+        #expect(!harness.provider.isUpdating)
+    }
+
+    @Test("An unpaused shift still records through a backgrounding, in one session")
+    func backgroundCaptureIsUnchanged() throws {
+        let harness = try makeHarness()
+        let shift = try harness.shifts.startShift(at: shiftStart)
+        harness.tracking.synchronize()
+        harness.provider.emit(sample(harness, secondsAfterStart: 10))
+
+        harness.tracking.enterBackground()
+        #expect(harness.tracking.state == .tracking)
+        harness.provider.emit(sample(harness, secondsAfterStart: 20, northMetres: 200))
+        harness.tracking.enterForeground()
+        harness.provider.emit(sample(harness, secondsAfterStart: 30, northMetres: 400))
+
+        #expect(harness.provider.startCount == 1)
+        #expect(Set(shift.routeSamples.map(\.captureSessionID)).count == 1)
+    }
+
+    /// Capture and the persisted lifecycle must not end up disagreeing. The
+    /// order is: stop capture, try to persist, reconcile from the store — so a
+    /// pause the store refused leaves capture running against a shift that is
+    /// still running.
+    @Test("A pause that was never persisted leaves capture recording the running shift")
+    func refusedPauseLeavesCaptureRunning() throws {
+        let harness = try makeHarness()
+        let shift = try harness.shifts.startShift(at: shiftStart)
+        harness.tracking.synchronize()
+        try DeliveryService(context: harness.context).startDelivery(at: shiftStart.addingTimeInterval(60))
+
+        // What the screen does: stop first, attempt, reconcile.
+        harness.tracking.prepareForShiftPause()
+        #expect(throws: ShiftLifecycleError.activeDeliveriesBlockPause(count: 1)) {
+            try harness.shifts.pauseActiveShift(at: shiftStart.addingTimeInterval(120))
+        }
+        harness.tracking.synchronize()
+
+        #expect(shift.lifecycleState == .running)
+        #expect(harness.tracking.state == .tracking)
+        #expect(harness.provider.isUpdating)
+
+        // And the restart is a new session, because capture really did stop: the
+        // few seconds it cost are reported as a break rather than measured over.
+        #expect(harness.provider.startCount == 2)
+    }
+
+    @Test("A resume that was refused leaves capture stopped and the shift paused")
+    func refusedResumeLeavesCaptureStopped() throws {
+        let harness = try makeHarness()
+        let shift = try harness.shifts.startShift(at: shiftStart)
+        harness.tracking.synchronize()
+        harness.tracking.prepareForShiftPause()
+        try harness.shifts.pauseActiveShift(at: shiftStart.addingTimeInterval(20))
+        harness.tracking.synchronize()
+
+        try harness.shifts.resumeActiveShift(at: shiftStart.addingTimeInterval(600))
+        try harness.shifts.pauseActiveShift(at: shiftStart.addingTimeInterval(700))
+        harness.tracking.synchronize()
+
+        // A second resume on a shift that is paused once is fine; a second one
+        // after it succeeded is refused, and must not start capture.
+        try harness.shifts.resumeActiveShift(at: shiftStart.addingTimeInterval(800))
+        #expect(throws: ShiftLifecycleError.shiftNotPaused) {
+            try harness.shifts.resumeActiveShift(at: shiftStart.addingTimeInterval(900))
+        }
+        harness.tracking.synchronize()
+
+        #expect(shift.lifecycleState == .running)
+        #expect(harness.tracking.state == .tracking)
+    }
 }

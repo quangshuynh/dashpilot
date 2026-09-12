@@ -42,6 +42,17 @@ nonisolated enum RouteCaptureState: Equatable, Sendable {
     ///
     /// It is named rather than hidden because the route has a gap in it.
     case pausedInBackground
+    /// The driver has paused the shift, so nothing is being recorded.
+    ///
+    /// Not a failure and not an interruption: it is what the driver asked for.
+    /// It is a state of its own rather than ``idle`` because a shift *is*
+    /// running, and rather than ``unavailable`` because nothing is wrong — the
+    /// screen has to say "stopped because you paused" and not "stopped because
+    /// DashPilot cannot record".
+    ///
+    /// Resuming starts a **new** capture session, so no distance is ever
+    /// measured across the stretch this state covers.
+    case shiftPaused
     /// A shift is running and capture cannot proceed.
     case unavailable(RouteCaptureUnavailableReason)
 

@@ -16,6 +16,15 @@ nonisolated enum RouteSampleRejection: String, Equatable, Sendable, CaseIterable
     case poorAccuracy
     /// The shift this sample would belong to has already ended.
     case shiftEnded
+    /// The driver has the shift paused, so the route is not being recorded.
+    ///
+    /// Kept apart from ``shiftEnded`` because the two are different facts about
+    /// the shift and the app behaves differently about each: an ended shift
+    /// never grows again, while a paused one resumes into a **new** capture
+    /// session. It exists at all to close the same window ``shiftEnded`` closes
+    /// — a fix already in flight when the driver paused must not be retained
+    /// against a stretch the app is reporting as unrecorded.
+    case shiftPaused
     /// The fix predates the start of the shift.
     case beforeShiftStart
     /// The fix is older than the pipeline is willing to accept, typically the
@@ -116,14 +125,24 @@ nonisolated struct RouteSampleFilter: Equatable, Sendable {
         /// End of that shift, or `nil` while it is still running. A non-nil
         /// value rejects every sample: a completed shift never grows.
         var shiftEnd: Date?
+        /// Whether the driver has the shift paused. `true` rejects every
+        /// sample: a paused shift records no route.
+        var isPaused: Bool
         /// The most recent sample already retained for this shift, if any.
         var lastAccepted: LocationSample?
         /// The current time, supplied rather than read so staleness is testable.
         var now: Date
 
-        init(shiftStart: Date, shiftEnd: Date? = nil, lastAccepted: LocationSample? = nil, now: Date) {
+        init(
+            shiftStart: Date,
+            shiftEnd: Date? = nil,
+            isPaused: Bool = false,
+            lastAccepted: LocationSample? = nil,
+            now: Date
+        ) {
             self.shiftStart = shiftStart
             self.shiftEnd = shiftEnd
+            self.isPaused = isPaused
             self.lastAccepted = lastAccepted
             self.now = now
         }
@@ -147,6 +166,10 @@ nonisolated struct RouteSampleFilter: Equatable, Sendable {
         // previous samples: a sample outside the window is not this shift's
         // business at all, regardless of how good it is.
         guard context.shiftEnd == nil else { return .reject(.shiftEnded) }
+        // Ended is reported before paused: a finished shift is finished whatever
+        // its pause rows say, and the two reasons must not depend on which
+        // stored fact happened to be read first.
+        guard !context.isPaused else { return .reject(.shiftPaused) }
         guard candidate.timestamp >= context.shiftStart else { return .reject(.beforeShiftStart) }
         guard context.now.timeIntervalSince(candidate.timestamp) <= maximumAge else {
             return .reject(.stale)
