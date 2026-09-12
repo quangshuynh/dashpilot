@@ -332,11 +332,11 @@ struct PeriodSummaryView: View {
             .accessibilityIdentifier("periodShiftCount")
 
             durationRow(
-                "Elapsed",
-                spokenAs: "elapsed shift time",
-                duration: metrics.elapsedDuration,
-                coverage: metrics.elapsedCoverage,
-                identifier: "periodElapsedTime"
+                "Working",
+                spokenAs: "working shift time",
+                duration: metrics.workingDuration,
+                coverage: metrics.workingCoverage,
+                identifier: "periodWorkingTime"
             )
             durationRow(
                 "Delivery active",
@@ -389,7 +389,7 @@ struct PeriodSummaryView: View {
                     .accessibilityIdentifier("periodEarnings")
             }
 
-            rateRow(metrics, .perElapsedHour, identifier: "periodElapsedHourRate")
+            rateRow(metrics, .perWorkingHour, identifier: "periodWorkingHourRate")
             rateRow(metrics, .perDeliveryActiveHour, identifier: "periodActiveHourRate")
         } header: {
             Text("Earnings")

@@ -122,7 +122,7 @@ final class DashPilotUITests: XCTestCase {
         let endButton = app.buttons["endShiftButton"]
         XCTAssertTrue(endButton.waitForExistence(timeout: 5))
         XCTAssertTrue(app.descendants(matching: .any)["activeShiftStatus"].exists)
-        XCTAssertTrue(app.descendants(matching: .any)["elapsedTime"].exists)
+        XCTAssertTrue(app.descendants(matching: .any)["workingTime"].exists)
         // A driver has to be able to see whether their route is being recorded.
         // Only its presence is asserted: which state it shows depends on the
         // simulator's location permission, and every mapping from a capture
@@ -137,6 +137,108 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertTrue(
             rows(in: app).firstMatch.waitForExistence(timeout: 5),
             "The finished shift should appear in history"
+        )
+    }
+
+    /// Pause a running shift, see the screen say so, and resume it.
+    ///
+    /// The three states a shift can be in have to be distinguishable without
+    /// reading, so what is asserted is that the panel actually swaps: the
+    /// running label and the Pause control give way to the paused label and the
+    /// Resume control, and back again.
+    @MainActor
+    func testPausesAndResumesAShift() throws {
+        let app = launchWithEmptyStore()
+
+        let startButton = app.buttons["startShiftButton"]
+        XCTAssertTrue(startButton.waitForExistence(timeout: 10))
+        startButton.tap()
+
+        let pauseButton = app.buttons["pauseShiftButton"]
+        XCTAssertTrue(pauseButton.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.descendants(matching: .any)["activeShiftStatus"].exists)
+        XCTAssertFalse(app.buttons["resumeShiftButton"].exists)
+
+        pauseButton.tap()
+
+        let resumeButton = app.buttons["resumeShiftButton"]
+        XCTAssertTrue(resumeButton.waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            app.descendants(matching: .any)["pausedShiftStatus"].waitForExistence(timeout: 5),
+            "A paused shift says it is paused rather than looking like a running one"
+        )
+        XCTAssertFalse(pauseButton.exists)
+        // The working figure stays on screen: a driver on a break still needs to
+        // see how long they have worked.
+        XCTAssertTrue(app.descendants(matching: .any)["workingTime"].exists)
+        // And the shift can still be ended from here, without resuming first.
+        XCTAssertTrue(app.buttons["endShiftButton"].exists)
+
+        resumeButton.tap()
+
+        XCTAssertTrue(pauseButton.waitForExistence(timeout: 5))
+        XCTAssertFalse(resumeButton.exists)
+        XCTAssertTrue(app.descendants(matching: .any)["activeShiftStatus"].exists)
+    }
+
+    /// A paused shift explains what stopped, rather than leaving the driver to
+    /// find the break in the route afterwards.
+    @MainActor
+    func testAPausedShiftSaysRecordingHasStopped() throws {
+        let app = launchWithEmptyStore()
+
+        let startButton = app.buttons["startShiftButton"]
+        XCTAssertTrue(startButton.waitForExistence(timeout: 10))
+        startButton.tap()
+
+        let pauseButton = app.buttons["pauseShiftButton"]
+        XCTAssertTrue(pauseButton.waitForExistence(timeout: 5))
+        pauseButton.tap()
+
+        XCTAssertTrue(app.buttons["resumeShiftButton"].waitForExistence(timeout: 5))
+
+        let status = app.descendants(matching: .any)["routeCaptureStatus"]
+        XCTAssertTrue(status.waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            status.label.lowercased().contains("paused")
+                || status.label.lowercased().contains("stopped"),
+            "The capture line says recording stopped, not that something failed: \(status.label)"
+        )
+
+        // Deliveries are not offered while paused, because a delivery started
+        // then would be time the app is simultaneously reporting as not worked.
+        XCTAssertTrue(
+            app.descendants(matching: .any)["pausedDeliveryNotice"].waitForExistence(timeout: 5)
+        )
+    }
+
+    /// Pausing and resuming does not end the shift, and the finished shift
+    /// reports the time it was worked rather than the time it covered.
+    @MainActor
+    func testAPausedShiftIsStillTheShiftInProgress() throws {
+        let app = launchWithEmptyStore()
+
+        let startButton = app.buttons["startShiftButton"]
+        XCTAssertTrue(startButton.waitForExistence(timeout: 10))
+        startButton.tap()
+
+        app.buttons["pauseShiftButton"].tap()
+        XCTAssertTrue(app.buttons["resumeShiftButton"].waitForExistence(timeout: 5))
+
+        // Still the shift in progress: no new shift may be started over it, and
+        // nothing has appeared in history.
+        XCTAssertFalse(startButton.exists, "A paused shift is still the shift in progress")
+        XCTAssertEqual(rows(in: app).count, 0)
+
+        app.buttons["resumeShiftButton"].tap()
+        XCTAssertTrue(app.buttons["pauseShiftButton"].waitForExistence(timeout: 5))
+
+        app.buttons["endShiftButton"].tap()
+
+        XCTAssertTrue(startButton.waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            rows(in: app).firstMatch.waitForExistence(timeout: 5),
+            "The shift that was paused still finishes as one shift in history"
         )
     }
 
