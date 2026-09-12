@@ -750,10 +750,18 @@ enum PreviewSupport {
             authorization: authorization,
             provider: StubLocationTrackingProvider()
         )
+        // Presenting nothing, for the reason the debug launch fixtures present
+        // nothing: a preview's data is synthetic, and a Live Activity is a real
+        // system surface that would outlive the preview that requested it.
+        let liveActivity = ShiftLiveActivityService(
+            context: container.mainContext,
+            presenter: SuppressedShiftActivityPresenter()
+        )
         return RootView()
             .modelContainer(container)
             .environment(authorization)
             .environment(routeCapture)
+            .environment(liveActivity)
     }
 
     /// The completed shift detail screen over a synthetic shift.

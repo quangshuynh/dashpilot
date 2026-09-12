@@ -6,6 +6,9 @@ struct RootView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(LocationAuthorizationService.self) private var locationAuthorization
     @Environment(LocationTrackingService.self) private var routeCapture
+    /// Write-only from here. The panel below draws from the store; this is told
+    /// to catch up whenever the store changes.
+    @Environment(ShiftLiveActivityService.self) private var liveActivity
     @Environment(\.scenePhase) private var scenePhase
 
     /// Unfinished shifts, newest first.
@@ -163,6 +166,12 @@ struct RootView: View {
             // the driver to touch anything.
             .task {
                 routeCapture.synchronize()
+                // A shift that was still running when the app was terminated is
+                // still running now, and the activity it had may or may not have
+                // survived with it. Reconciling adopts the one that did, starts
+                // one that did not, and ends a card left behind by a shift that
+                // has since ended.
+                liveActivity.reconcile()
                 // A share that was interrupted by termination can leave a file
                 // in the temporary export directory. It is cleared once per
                 // launch so the app never holds a copy of a driver's history
@@ -179,6 +188,11 @@ struct RootView: View {
                     // left showing a stale state.
                     locationAuthorization.refresh()
                     routeCapture.enterForeground()
+                    // The driver can turn Live Activities off in Settings, and
+                    // can dismiss the card by hand. Neither is reported to the
+                    // app, so the surface is reconciled on return like the
+                    // permission beside it.
+                    liveActivity.reconcile()
                 case .background:
                     routeCapture.enterBackground()
                 case .inactive:
@@ -226,6 +240,10 @@ struct RootView: View {
         // After, not before: capture starts only once the store holds a running
         // shift, so a refused or failed start cannot leave it recording.
         routeCapture.synchronize()
+        // Same ordering, same reason: a refused start leaves no shift for the
+        // activity to describe, and reconciling reads the store rather than the
+        // tap.
+        liveActivity.reconcile()
     }
 
     private func pauseShift() {
@@ -237,6 +255,7 @@ struct RootView: View {
         routeCapture.prepareForShiftPause()
         perform { try ShiftService(context: modelContext).pauseActiveShift() }
         routeCapture.synchronize()
+        liveActivity.reconcile()
     }
 
     private func resumeShift() {
@@ -245,6 +264,7 @@ struct RootView: View {
         // recording against a shift the driver has not resumed.
         perform { try ShiftService(context: modelContext).resumeActiveShift() }
         routeCapture.synchronize()
+        liveActivity.reconcile()
     }
 
     private func endShift() {
@@ -254,6 +274,10 @@ struct RootView: View {
         routeCapture.prepareForShiftEnd()
         perform { try ShiftService(context: modelContext).endActiveShift() }
         routeCapture.synchronize()
+        // A finished shift has no Live Activity. Reconciling ends it, and does
+        // so immediately rather than leaving a card on the Lock Screen saying a
+        // shift is being worked that has stopped.
+        liveActivity.reconcile()
     }
 
     /// Surfaces a rejected or failed transition instead of leaving the tap
