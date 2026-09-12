@@ -422,12 +422,12 @@ struct DeliveryPersistenceTests {
         #expect(shift.completedDuration == 3_600)
         #expect(shift.grossEarnings == nil)
         #expect(shift.deliveries.isEmpty, "No version step fabricates a delivery")
-        #expect(shift.routeSamples.count == (fromVersion == 1 ? 0 : 1))
+        #expect(shift.routeSamples().count == (fromVersion == 1 ? 0 : 1))
         if fromVersion == 3 {
-            #expect(shift.routeSamples.first?.captureSessionID == session)
+            #expect(shift.routeSamples().first?.captureSessionID == session)
         }
         if fromVersion == 2 {
-            #expect(shift.routeSamples.first?.captureSessionID == nil, "A v2 sample's continuity stays unproven")
+            #expect(shift.routeSamples().first?.captureSessionID == nil, "A v2 sample's continuity stays unproven")
         }
     }
 }

@@ -44,10 +44,24 @@ nonisolated final class RouteSample {
 
     /// The shift this sample belongs to.
     ///
-    /// Optional because SwiftData models the inverse of a to-many relationship
-    /// that way, not because a sample without a shift is meaningful: the
-    /// initializer requires one, and `Shift.routeSamples` cascades on delete so
-    /// a sample cannot outlive its shift.
+    /// **This is the only place the relationship is declared.** `Shift` holds no
+    /// matching collection, because maintaining one cost time proportional to
+    /// the length of the route on every single position written; see
+    /// ``DashPilotSchemaV10`` for what that measured and what was ruled out.
+    /// A shift's route is fetched through ``Shift/routeSamples()``, which is
+    /// where the predicate and the ordering live.
+    ///
+    /// Optional because SwiftData models a relationship reference that way, not
+    /// because a sample without a shift is meaningful: the initializer requires
+    /// one.
+    ///
+    /// **Nothing cascades from here.** A relationship declared from one side
+    /// carries no delete rule, so removing a shift's coordinates when the shift
+    /// is removed is an explicit step rather than a property of the model:
+    /// ``ShiftService/deleteCompletedShift(_:)`` deletes the route rows and the
+    /// shift in one transaction. That is the whole of the guarantee that a
+    /// deleted shift leaves no table of coordinates behind, and it is asserted
+    /// in `CompletedShiftDeletionTests` rather than trusted.
     private(set) var shift: Shift?
 
     init(

@@ -87,10 +87,10 @@ struct RouteSamplePersistenceTests {
         context.insert(RouteSample(shift: second, sample: SyntheticRoute.sample(at: start.addingTimeInterval(7210)), captureSessionID: session))
         try context.save()
 
-        #expect(first.routeSamples.count == 2)
-        #expect(second.routeSamples.count == 1)
-        #expect(first.routeSamples.allSatisfy { $0.shift?.id == first.id })
-        #expect(second.routeSamples.first?.shift?.id == second.id)
+        #expect(first.routeSamples().count == 2)
+        #expect(second.routeSamples().count == 1)
+        #expect(first.routeSamples().allSatisfy { $0.shift?.id == first.id })
+        #expect(second.routeSamples().first?.shift?.id == second.id)
     }
 
     @Test("Samples can be fetched for one shift without loading the others")
@@ -113,11 +113,17 @@ struct RouteSamplePersistenceTests {
         #expect(fetched.first?.timestamp == start.addingTimeInterval(10))
     }
 
+    /// The guarantee is the same one it always was; what changed is what keeps
+    /// it. `Shift` holds no collection of its route, so no cascade carries the
+    /// positions away, and ``ShiftService/deleteCompletedShift(_:)`` deletes
+    /// them itself. This asserts the outcome through that path, because that
+    /// path is now the whole of the promise.
     @Test("Deleting a shift deletes its route rather than orphaning it")
-    func deletingAShiftCascadesToItsSamples() throws {
+    func deletingAShiftDeletesItsSamples() throws {
         let context = try makeContext()
         let kept = Shift(startedAt: start)
         let removed = Shift(startedAt: start.addingTimeInterval(7200))
+        try removed.end(at: start.addingTimeInterval(10_800))
         context.insert(kept)
         context.insert(removed)
         context.insert(RouteSample(shift: kept, sample: SyntheticRoute.sample(at: start.addingTimeInterval(10)), captureSessionID: session))
@@ -125,8 +131,7 @@ struct RouteSamplePersistenceTests {
         context.insert(RouteSample(shift: removed, sample: SyntheticRoute.sample(at: start.addingTimeInterval(7220), northMetres: 80), captureSessionID: session))
         try context.save()
 
-        context.delete(removed)
-        try context.save()
+        try ShiftService(context: context).deleteCompletedShift(removed)
 
         let remaining = try context.fetch(FetchDescriptor<RouteSample>())
         #expect(remaining.count == 1)
@@ -176,7 +181,7 @@ struct RouteSamplePersistenceTests {
         #expect(shifts.last?.endedAt == nil, "The shift that was still running is still running")
         // The new relationship starts empty: a shift recorded before route
         // capture existed genuinely has no route.
-        #expect(shifts.allSatisfy { $0.routeSamples.isEmpty })
+        #expect(shifts.allSatisfy { $0.routeSamples().isEmpty })
         #expect(try context.fetch(FetchDescriptor<RouteSample>()).isEmpty)
     }
 
@@ -209,7 +214,7 @@ struct RouteSamplePersistenceTests {
         try context.save()
         try service.endActiveShift(at: start.addingTimeInterval(3600))
 
-        #expect(running.routeSamples.count == 1)
+        #expect(running.routeSamples().count == 1)
         #expect(running.completedDuration == 3600)
     }
 

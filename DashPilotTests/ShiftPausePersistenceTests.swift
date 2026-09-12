@@ -33,19 +33,17 @@ struct ShiftPausePersistenceTests {
 
     // MARK: Schema
 
-    /// The one place the migration plan's current shape is asserted.
+    /// v9's own identifier and the entity it added.
     ///
-    /// Deliberately a single authoritative check rather than a count repeated
-    /// across suites: a schema version is added by one interval, and a figure
-    /// scattered over unrelated files is one that gets updated in four places
-    /// and forgotten in the fifth. It moves here from the expense suite, which
-    /// added the previous version.
-    @Test("Version 9 is current, and it is the version that adds shift pauses")
+    /// The migration plan's *current* shape is asserted once, in the suite for
+    /// whichever version is current, which is now
+    /// `RouteSampleRelationshipTests`. A count repeated across suites is one
+    /// that gets updated in four places and forgotten in the fifth, so this
+    /// keeps only what is true about v9 and nothing about how many versions
+    /// there are.
+    @Test("Version 9 is the version that adds shift pauses")
     func schemaVersion() throws {
         #expect(DashPilotSchemaV9.versionIdentifier == Schema.Version(9, 0, 0))
-        #expect(DashPilotMigrationPlan.schemas.count == 9)
-        #expect(DashPilotMigrationPlan.stages.count == 8)
-        #expect(DashPilotMigrationPlan.schemas.last is DashPilotSchemaV9.Type)
 
         let entities = Set(ModelContainerFactory.currentSchema.entities.map(\.name))
         #expect(entities == ["Shift", "RouteSample", "Delivery", "PickupPlace", "Expense", "ShiftPause"])
@@ -147,7 +145,7 @@ struct ShiftPausePersistenceTests {
         #expect(long.id == longShiftID)
         #expect(long.pauses.isEmpty, "A gap in a route is not evidence of a break")
         #expect(long.completedWorkingDuration == 10 * 3600.0)
-        #expect(long.routeSamples.count == 3)
+        #expect(long.routeSamples().count == 3)
         #expect(long.deliveries.count == 1)
 
         // The pause table exists and is empty, which is the only honest state

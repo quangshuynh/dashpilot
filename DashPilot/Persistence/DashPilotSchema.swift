@@ -829,11 +829,237 @@ enum DashPilotSchemaV8: VersionedSchema {
 /// history on the app's authority rather than theirs, shorten a shift they
 /// recorded as whole, and raise every hourly rate derived from it.
 ///
-/// This version reuses the file-scope models rather than freezing copies,
-/// because it *is* the current shape. It gets frozen copies of its own the first
-/// time v10 moves them on, exactly as v8 did above.
+/// Every model here is a **frozen copy**. v10 removes `Shift.routeSamples`, so
+/// the file-scope `Shift` has moved on; reusing it here would describe every
+/// pre-v10 store as one that never had the inverse collection, which is the one
+/// thing this version is a record of.
 enum DashPilotSchemaV9: VersionedSchema {
     static var versionIdentifier: Schema.Version { Schema.Version(9, 0, 0) }
+
+    static var models: [any PersistentModel.Type] {
+        [Shift.self, RouteSample.self, Delivery.self, PickupPlace.self, Expense.self, ShiftPause.self]
+    }
+
+    /// The v9 shift: timestamps, a route **held as a to-many collection**,
+    /// deliveries, pauses and an optional recorded amount.
+    ///
+    /// `routeSamples` is the property v10 removes, and it is the reason this
+    /// version had to be frozen.
+    @Model
+    nonisolated final class Shift {
+        @Attribute(.unique) private(set) var id: UUID
+        private(set) var startedAt: Date
+        private(set) var endedAt: Date?
+
+        @Relationship(deleteRule: .cascade, inverse: \RouteSample.shift)
+        private(set) var routeSamples: [RouteSample] = []
+
+        @Relationship(deleteRule: .cascade, inverse: \Delivery.shift)
+        private(set) var deliveries: [Delivery] = []
+
+        @Relationship(deleteRule: .cascade, inverse: \ShiftPause.shift)
+        private(set) var pauses: [ShiftPause] = []
+
+        private(set) var grossEarningsAmount: Decimal?
+
+        init(
+            id: UUID = UUID(),
+            startedAt: Date,
+            endedAt: Date? = nil,
+            grossEarningsAmount: Decimal? = nil
+        ) {
+            self.id = id
+            self.startedAt = startedAt
+            self.endedAt = endedAt
+            self.grossEarningsAmount = grossEarningsAmount
+        }
+    }
+
+    /// The v9 route sample, unchanged from v3, and unchanged in shape by v10:
+    /// the position, the accuracy, the capture session and the shift it belongs
+    /// to. What v10 moves is the *other* end of that relationship.
+    @Model
+    nonisolated final class RouteSample {
+        private(set) var timestamp: Date
+        private(set) var latitude: Double
+        private(set) var longitude: Double
+        private(set) var horizontalAccuracy: Double
+        private(set) var captureSessionID: UUID?
+        private(set) var shift: Shift?
+
+        init(
+            shift: Shift,
+            timestamp: Date,
+            latitude: Double,
+            longitude: Double,
+            horizontalAccuracy: Double,
+            captureSessionID: UUID?
+        ) {
+            self.timestamp = timestamp
+            self.latitude = latitude
+            self.longitude = longitude
+            self.horizontalAccuracy = horizontalAccuracy
+            self.captureSessionID = captureSessionID
+            self.shift = shift
+        }
+    }
+
+    /// The v9 delivery, unchanged from v7.
+    @Model
+    nonisolated final class Delivery {
+        @Attribute(.unique) private(set) var id: UUID
+        private(set) var acceptedAt: Date
+        private(set) var arrivedAtPickupAt: Date?
+        private(set) var pickedUpAt: Date?
+        private(set) var deliveredAt: Date?
+        private(set) var cancelledAt: Date?
+        private(set) var shift: Shift?
+        private(set) var pickupPlace: PickupPlace?
+        private(set) var grossEarningsAmount: Decimal?
+
+        init(
+            id: UUID = UUID(),
+            shift: Shift,
+            acceptedAt: Date,
+            arrivedAtPickupAt: Date? = nil,
+            pickedUpAt: Date? = nil,
+            deliveredAt: Date? = nil,
+            cancelledAt: Date? = nil,
+            pickupPlace: PickupPlace? = nil,
+            grossEarningsAmount: Decimal? = nil
+        ) {
+            self.id = id
+            self.acceptedAt = acceptedAt
+            self.arrivedAtPickupAt = arrivedAtPickupAt
+            self.pickedUpAt = pickedUpAt
+            self.deliveredAt = deliveredAt
+            self.cancelledAt = cancelledAt
+            self.shift = shift
+            self.pickupPlace = pickupPlace
+            self.grossEarningsAmount = grossEarningsAmount
+        }
+    }
+
+    /// The v9 pickup place, unchanged from v6. Both forms of the name are plain
+    /// strings for the reason ``DashPilotSchemaV6/PickupPlace`` states.
+    @Model
+    nonisolated final class PickupPlace {
+        @Attribute(.unique) private(set) var id: UUID
+        private(set) var displayName: String
+        private(set) var normalizedName: String
+        private(set) var createdAt: Date
+
+        @Relationship(deleteRule: .nullify, inverse: \Delivery.pickupPlace)
+        private(set) var deliveries: [Delivery] = []
+
+        init(id: UUID = UUID(), displayName: String, normalizedName: String, createdAt: Date) {
+            self.id = id
+            self.displayName = displayName
+            self.normalizedName = normalizedName
+            self.createdAt = createdAt
+        }
+    }
+
+    /// The v9 expense, unchanged from v8. The category is a plain string for
+    /// the reason ``DashPilotSchemaV6/PickupPlace`` stores plain strings.
+    @Model
+    nonisolated final class Expense {
+        @Attribute(.unique) private(set) var id: UUID
+        private(set) var occurredAt: Date
+        private(set) var amountValue: Decimal
+        private(set) var categoryRawValue: String
+        private(set) var note: String?
+
+        init(
+            id: UUID = UUID(),
+            occurredAt: Date,
+            amountValue: Decimal,
+            categoryRawValue: String,
+            note: String? = nil
+        ) {
+            self.id = id
+            self.occurredAt = occurredAt
+            self.amountValue = amountValue
+            self.categoryRawValue = categoryRawValue
+            self.note = note
+        }
+    }
+
+    /// The v9 shift pause: the entity this version was created for.
+    @Model
+    nonisolated final class ShiftPause {
+        @Attribute(.unique) private(set) var id: UUID
+        private(set) var startedAt: Date
+        private(set) var endedAt: Date?
+        private(set) var shift: Shift?
+
+        init(id: UUID = UUID(), shift: Shift, startedAt: Date, endedAt: Date? = nil) {
+            self.id = id
+            self.startedAt = startedAt
+            self.endedAt = endedAt
+            self.shift = shift
+        }
+    }
+}
+
+/// Version 10 of the persisted schema: a shift no longer holds its route as a
+/// collection.
+///
+/// **No attribute anywhere changes, no entity is added or removed, and not one
+/// stored value moves.** `RouteSample` keeps its timestamp, its coordinate, its
+/// accuracy, its capture session identifier and its `shift` reference; `Shift`
+/// keeps its identifier, its timestamps, its recorded amount, its deliveries
+/// and its pauses. The only difference is that `Shift.routeSamples` is gone, so
+/// the relationship between a shift and its route is declared from the sample's
+/// side alone.
+///
+/// ## Why the collection had to go
+///
+/// It was measured, not guessed. Recording a route at one accepted position a
+/// second, through the shipping capture path into one long-lived context, the
+/// cost of writing a single position grew **linearly with the number of samples
+/// already attached to that shift**: about 7.3 µs per stored row, so 6.7 ms at
+/// the start of a shift and 178 ms seven hours in, all of it on the main actor,
+/// once a second. Total work was quadratic in the length of the shift.
+///
+/// The cause was isolated rather than assumed. Discarding and rebuilding the
+/// context made no difference; fetching the shift rather than creating it made
+/// no difference; changing the delete rule made no difference; the size of the
+/// table made no difference. Starting a **new shift** every nine hundred
+/// positions made the cost flat, and so did removing the inverse collection
+/// while keeping the to-one relationship: 21 µs per position, level from the
+/// first position to the last.
+///
+/// Deleting a shift was the same problem in reverse. The cascade walked the
+/// collection and took **35.6 s** for a 7,200-position route; fetching those
+/// rows and deleting them explicitly takes 484 ms.
+///
+/// ## What replaces the cascade
+///
+/// A relationship with no inverse has no delete rule to carry, so the cascade
+/// that took a shift's coordinates with it is gone and something has to do that
+/// job explicitly. ``ShiftService/deleteCompletedShift(_:)`` now fetches the
+/// shift's route rows, deletes them, deletes the shift, and saves **once**, so
+/// the whole removal is one transaction: a store that refuses it leaves the
+/// shift and its whole route, and there is no state in which a shift is gone
+/// while its positions survive. That is the property that mattered, and it is
+/// asserted rather than described.
+///
+/// ## Why this is a version rather than a quiet edit
+///
+/// A v9 store does open against these models with every sample still resolving
+/// to its shift, because the foreign key lives on `RouteSample` and does not
+/// move. That is not the same as the store being unchanged: reopening a v9
+/// store against v10 rewrites the recorded version hashes of **both** `Shift`
+/// and `RouteSample`, which is SwiftData saying the model is a different one
+/// and it has migrated the store. The surviving foreign key is exactly the
+/// thing that makes it tempting to call this no change at all.
+///
+/// This version reuses the file-scope models rather than freezing copies,
+/// because it *is* the current shape. It gets frozen copies of its own the
+/// first time v11 moves them on, exactly as v9 did above.
+enum DashPilotSchemaV10: VersionedSchema {
+    static var versionIdentifier: Schema.Version { Schema.Version(10, 0, 0) }
 
     static var models: [any PersistentModel.Type] {
         [Shift.self, RouteSample.self, Delivery.self, PickupPlace.self, Expense.self, ShiftPause.self]
@@ -856,12 +1082,13 @@ enum DashPilotMigrationPlan: SchemaMigrationPlan {
             DashPilotSchemaV6.self,
             DashPilotSchemaV7.self,
             DashPilotSchemaV8.self,
-            DashPilotSchemaV9.self
+            DashPilotSchemaV9.self,
+            DashPilotSchemaV10.self
         ]
     }
 
     static var stages: [MigrationStage] {
-        [v1ToV2, v2ToV3, v3ToV4, v4ToV5, v5ToV6, v6ToV7, v7ToV8, v8ToV9]
+        [v1ToV2, v2ToV3, v3ToV4, v4ToV5, v5ToV6, v6ToV7, v7ToV8, v8ToV9, v9ToV10]
     }
 
     /// V1 → V2 is lightweight.
@@ -1011,5 +1238,35 @@ enum DashPilotMigrationPlan: SchemaMigrationPlan {
     static let v8ToV9 = MigrationStage.lightweight(
         fromVersion: DashPilotSchemaV8.self,
         toVersion: DashPilotSchemaV9.self
+    )
+
+    /// V9 → V10 is lightweight.
+    ///
+    /// A relationship is declared from one side instead of two, and SwiftData
+    /// can apply that without being told how. Nothing is added, nothing is
+    /// removed, nothing is retyped and nothing is rewritten: the column that
+    /// says which shift a position belongs to is on `RouteSample` and is
+    /// untouched, so every stored route keeps every one of its samples, every
+    /// sample keeps its shift, its timestamp, its coordinate, its accuracy and
+    /// its capture session identifier, and every recorded mileage figure
+    /// measures exactly what it measured before.
+    ///
+    /// There is nothing for a custom stage to do, and that is worth saying
+    /// plainly rather than leaving implied: this version changes how the app
+    /// *reaches* a shift's route, not what the store holds about it. A stage
+    /// that walked every sample to prove that would be code with nothing to do
+    /// over the largest table in the store, which is a way to lose a driver's
+    /// route rather than a way to protect it. `RouteSampleRelationshipTests`
+    /// opens a real v9 store through this stage instead and asserts the route
+    /// comes back whole, in order, with its capture sessions intact and
+    /// measuring the distance it always did.
+    ///
+    /// What this stage must **not** become is a cleanup. A route sample whose
+    /// shift is missing is not something this version creates, and deleting
+    /// rows here on the theory that some might be orphaned would destroy a
+    /// driver's recorded history to tidy a table.
+    static let v9ToV10 = MigrationStage.lightweight(
+        fromVersion: DashPilotSchemaV9.self,
+        toVersion: DashPilotSchemaV10.self
     )
 }
