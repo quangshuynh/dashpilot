@@ -199,8 +199,18 @@ and one they cannot.
   no all-time total, no best or worst shift, no chart and no sorting. A period may be read beside the
   equivalent period immediately before it, and no further back than that.
   See [Period summaries](../product/period-summaries.md).
-- **No live figures.** A running shift shows no mileage, no rate and no active time. Active-time
-  figures are finalised only once a shift ends.
+- **A running shift shows recorded mileage, working time and delivery counts, and nothing derived
+  from money.** Shift gross earnings cannot be recorded until a shift has finished, so no rate is
+  derived for one in progress and the screen says so. Delivery active time is finalised only once a
+  shift ends, and is not shown live either.
+- **Live mileage is a reading, not a second record.** It is measured from the same stored positions,
+  by the same calculation, and nothing derived from it is written to the store. A route that already
+  held positions out of order would be measured correctly by the finished shift and only
+  approximately while it runs; capture cannot produce one, because a candidate that duplicates or
+  precedes the last retained sample is rejected.
+- **Live mileage moves in steps, not continuously.** The store is read every couple of seconds and
+  the figure is written to a tenth of a mile, so a driver watching it sees it advance in tenths
+  rather than climb.
 
 ## Period summaries
 

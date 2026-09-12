@@ -84,6 +84,23 @@ nonisolated enum LaunchArgument {
     /// from a journey rather than a unit test. Debug builds only.
     static let stubbedLocation = "-dashpilot-stubbed-location"
 
+    /// Runs with Core Location replaced by a synthetic vehicle driving in a
+    /// straight line, so a journey can watch a live figure move.
+    ///
+    /// ``stubbedLocation`` grants permission and produces no positions, which is
+    /// enough to reach every capture *state* but not enough to reach a recorded
+    /// *distance*. A live mileage figure cannot be seeded either: what has to be
+    /// asserted is that it grows while positions are accepted, that it stops the
+    /// moment the driver pauses, and that resuming does not add the distance
+    /// covered during the break. All three are statements about capture running.
+    ///
+    /// It implies ``stubbedLocation``'s permission stub, because a fed route
+    /// with no grant would be rejected before the filter ever saw it.
+    /// ``SimulatedRouteLocationProvider`` is the whole of what it replaces; the
+    /// filter, the capture sessions, the store writes and the measurement are
+    /// the shipping ones. Debug builds only.
+    static let simulatedRoute = "-dashpilot-simulated-route"
+
     static func isPresent(_ argument: String, in processInfo: ProcessInfo = .processInfo) -> Bool {
         processInfo.arguments.contains(argument)
     }

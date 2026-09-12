@@ -100,14 +100,53 @@ continuously.
 A route with nothing measurable in it is never shown as `0.0 mi`, which a driver would read as "you
 did not move" rather than "no distance could be measured".
 
+## Measuring a route that is still growing
+
+A shift in progress asks the same question every couple of seconds of a route that has grown by a
+handful of positions. Walking the whole route each time would be work proportional to the length of
+the shift, paid repeatedly on the main actor, for an answer that differs from the last one by a few
+metres.
+
+So the pairwise walk lives in `RouteMileageAccumulator`, a value that remembers where it reached,
+and `RouteMileageCalculator.distance(of:covering:)` is that same walk fed everything at once. There
+is one implementation of what makes two positions continuous, what a gap is and which positions are
+usable, so a whole-route measurement and an extended one cannot drift apart.
+
+`ActiveRouteMeasurement` is the open walk plus the bookkeeping that keeps it honest against the
+store, and `ActiveShiftRouteService` turns it into queries: a **count** of the shift's route rows,
+and — only when the count has moved — a **fetch of the rows after the last position already
+measured**. Neither loads `shift.routeSamples`, which would fault in the whole route to look at the
+end of it.
+
+Three rules make the shortcut safe.
+
+**Nothing derived is persisted.** The measurement is held for as long as the running shift is on
+screen and is thrown away with it. The figure the shift is finally reported with is measured from
+the stored rows in one pass, exactly as it always was.
+
+**It extends forwards only.** A position at or before the last one consumed is not counted, which is
+the rule a single pass applies too, and which capture already guarantees: `RouteSampleFilter` rejects
+a candidate that duplicates or precedes the last sample retained for the shift. A store that already
+holds an out-of-order route is measured correctly by the one-pass calculation and approximately by
+an extension in progress, and only the one-pass figure is ever reported as the shift's.
+
+**Rows that disappear force a fresh measurement.** The rows consumed are counted and compared
+against what the store holds before every extension, so a rollback that discarded samples the
+measurement had already walked is caught and the route is measured again from scratch. A context
+hands back its unsaved inserts as well as its saved rows, so the rows *read* are counted rather than
+the rows the store reports, which is what makes a discard visible at all.
+
 ## What is displayed
 
 A completed shift's row reads `12.4 mi recorded`, with `· partial route` when gaps are known, and
 its detail screen adds the segment and gap counts behind that figure, plus the sentences that
 qualify them. Nothing says total, complete, tax or deductible mileage.
 
-Active shifts show no mileage. A live figure would need a recomputing dashboard to be worth
-anything, and the useful moment is when the shift is done.
+A **running** shift shows the same figure, in the same words, for the route recorded so far:
+`4.5 mi recorded · partial route`, with the segment and gap counts beneath it. It is measured with
+no shift window, because an unfinished shift has none — its window is still growing, and measuring
+against the moment it is read would count every red light as an uncovered end. Gaps *between*
+positions are counted exactly as they are for a finished shift, so a pause always shows as one.
 
 ## Accessibility
 

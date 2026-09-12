@@ -5,9 +5,9 @@ the driver actually drove, and the whole design of this feature is about keeping
 
 ## What the figure means
 
-A completed shift's mileage is measured from the positions retained during it. Positions recorded
-without an interruption are joined and summed; wherever capture stopped, the distance across the
-break is left out rather than bridged with a straight line.
+A shift's mileage is measured from the positions retained during it. Positions recorded without an
+interruption are joined and summed; wherever capture stopped, the distance across the break is left
+out rather than bridged with a straight line.
 
 So the figure is a **floor**. The driver drove at least this far. How much further is unknown, and
 DashPilot does not estimate it.
@@ -42,6 +42,26 @@ started it **continues** off screen. DashPilot asks for location while in use an
 The running shift says which of these is happening at the time, so a driver is not left assuming
 their route is being recorded when it is not, and the active line says plainly that recording is not
 guaranteed.
+
+## While the shift is still running
+
+A running shift reports the same figure, in the same words, for the route recorded so far, with its
+segment and gap counts beneath it. It is the finished shift's calculation applied to the positions
+stored up to now, not a preview or an estimate, and it is subject to every rule on this page: it
+grows only while positions are being accepted, it stops the moment the driver pauses, and resuming
+never adds the distance covered during the break — that stretch was not recorded, so it is not
+measured.
+
+One difference, and it is a consequence of the shift being unfinished. A completed shift's route is
+also checked against the shift's own start and end, so a route that begins long after the shift did
+or stops long before it ended counts that as a gap. A running shift has no such window: its end is
+still moving, and measuring against the moment the figure is read would count every red light as an
+unrecorded stretch. Gaps *between* recorded positions are counted exactly as they are afterwards, so
+a pause always shows as one and the shift reads as a partial route from then on.
+
+The figure is read from the store every couple of seconds and extended with the positions recorded
+since the last reading, rather than measured from the beginning each time. Nothing about it is saved:
+when the shift ends, its mileage is measured from the stored route in one pass, as it always was.
 
 ## Gaps, segments and partial routes
 
@@ -81,7 +101,8 @@ captured continuously.
   one.
 - **Not calibrated.** The thresholds behind capture and measurement are defensible engineering
   choices for driving with a phone in a vehicle, not values tuned against recorded driving.
-- **Not shown live.** Mileage appears when a shift is finished.
+- **Not a live odometer.** The running figure advances in tenths of a mile as the store is read, and
+  it is what was recorded rather than what was driven, exactly as the finished figure is.
 
 The rules behind the numbers are documented under
 [Route measurement](../architecture/route-measurement.md).
