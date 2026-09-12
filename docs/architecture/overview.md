@@ -1,7 +1,8 @@
 # Architecture overview
 
-DashPilot is a single-target SwiftUI app with no third-party runtime dependencies. The structure is
-kept flat and explicit; layers are introduced when a concrete problem calls for one.
+DashPilot is a SwiftUI app with no third-party runtime dependencies: one application target, plus a
+widget extension that draws the running shift's Live Activity and holds no logic of its own. The
+structure is kept flat and explicit; layers are introduced when a concrete problem calls for one.
 
 ## Layers
 
@@ -11,9 +12,11 @@ kept flat and explicit; layers are introduced when a concrete problem calls for 
 | `Models` | SwiftData `@Model` types, which own the invariants of their own transitions |
 | `Persistence` | The versioned schema, the migration plan and container construction |
 | `Services` | Application services that own state transitions, plus thin adapters over platform frameworks |
-| `Intents` | The App Intents surface: four short lifecycle actions performed with no screen, over those same services |
+| `Intents` | The App Intents surface: six short lifecycle actions performed with no screen, over those same services |
 | `App` | SwiftUI entry point, screens and preview fixtures |
 | `Support` | Cross-cutting utilities: logging and launch arguments |
+| `DashPilotActivity` | Value types shared with the widget extension: the Live Activity's snapshot, its control vocabulary and its four intent declarations |
+| `DashPilotWidgets` | The widget extension, which draws that snapshot and nothing else |
 
 Domain types are deliberately free of SwiftUI and SwiftData so calculations can be tested without a
 container or a rendered view. The file-by-file layout is under
@@ -100,8 +103,9 @@ does not know how a delivery advances.
 
 ## System surfaces: App Intents
 
-Four intents (start a shift, end a shift, start a delivery, record the next delivery event) can be
-performed by voice, from Shortcuts or from Spotlight, with the app never coming to the screen. Each
+Six intents (start, end, pause and resume a shift; start a delivery; record the next delivery event)
+can be performed by voice, from Shortcuts or from Spotlight, with the app never coming to the screen.
+Each
 declares `supportedModes` as `.background`, which is where that guarantee lives and what
 `openAppWhenRun = false` said before iOS 26 deprecated it. They exist for driving safety: the
 timestamp recorded at the moment the driver says so is the accurate one.
@@ -132,6 +136,29 @@ Two consequences worth stating:
 
 What the intents deliberately cannot do (cancel a delivery, record an amount, a cost, or a pickup
 name) is described under [Voice and system actions](../product/voice-actions.md).
+
+## System surfaces: the shift's Live Activity
+
+A running shift puts one card on the Lock Screen, and the widget extension that draws it is a
+renderer with no store, no services and no lifecycle rules. Everything it draws comes out of a
+snapshot the app derived; everything it can do runs a `LiveActivityIntent`, which is performed **in
+the app's process** through `IntentLifecycleService`, so a shift paused from the Lock Screen is
+refused by the same rule, with the same sentence, as one paused by voice or by the button in the app.
+
+`ShiftLiveActivityService` keeps the card in step, and has one entry point: `reconcile()`, which
+derives what should be on screen from the store rather than from what happened last. That is the
+shape `LocationTrackingService.synchronize()` has, and for the same reason — a missed call costs a
+delay and never a wrong state — so every caller is one line and no caller has to know which
+transition it is in the middle of. **Nothing is read back from ActivityKit to decide what happened**;
+the only thing asked of it is which cards exist and which shift each says it is about, which is what
+lets a relaunch adopt the card its shift already has and lets a card left behind by a finished shift
+be removed. See [The shift on the Lock Screen](../product/live-activity.md).
+
+One consequence is worth stating beside the intents' own: **route capture drives the cadence while
+the app is off screen.** `LocationTrackingService` reports that samples reached the store, and that
+is the only signal available once the driver has locked the phone, which is where most of a shift is
+recorded. It is a notification and not an instruction: capture does not wait on it, and what the
+Live Activity does with it is decided by reading the store.
 
 ## Nothing derived is stored
 
