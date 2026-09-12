@@ -57,6 +57,17 @@ struct DeliveryControlPanel: View {
     /// one it is about and act on that record.
     @State private var pendingCancellation: NumberedDelivery?
 
+    /// The delivery just marked delivered, and the amount it was expected to
+    /// pay, when it had one recorded.
+    ///
+    /// Captured **before** the transition and held here, rather than re-read
+    /// from the delivery afterwards, for two reasons. The delivered delivery
+    /// leaves ``activeDeliveries`` the moment the write lands, so its card is
+    /// gone and there is nothing left on screen to hang the sheet off; and the
+    /// figure being offered has to be the one the driver entered, not whatever
+    /// the store happens to say a moment later.
+    @State private var pendingEarningsConfirmation: PendingEarningsConfirmation?
+
     private var activeDeliveries: [NumberedDelivery] {
         let running = Set(unfinishedDeliveries.lazy.filter { $0.shift?.id == shift.id }.map(\.id))
         return shift.numberedDeliveries.filter { running.contains($0.id) }
@@ -104,6 +115,12 @@ struct DeliveryControlPanel: View {
             Button("OK", role: .cancel) { lifecycleError = nil }
         } message: { error in
             Text(error.errorDescription ?? "The delivery could not be updated.")
+        }
+        // Raised only by a delivery that carried an expectation, and only after
+        // the delivered event is already in the store. A driver who records no
+        // expected amounts never meets it.
+        .sheet(item: $pendingEarningsConfirmation) { pending in
+            DeliveryEarningsConfirmation(numbered: pending.numbered, expected: pending.expected)
         }
     }
 
@@ -178,7 +195,26 @@ struct DeliveryControlPanel: View {
                 switch numbered.delivery.state.nextAction {
                 case .arriveAtPickup: try service.markArrivedAtPickup(numbered.delivery)
                 case .pickUp: try service.markPickedUp(numbered.delivery)
-                case .complete: try service.markDelivered(numbered.delivery)
+                case .complete:
+                    // Read before the write, because the card disappears with
+                    // it. Nothing is offered unless an expectation is the only
+                    // amount this delivery carries: one that already has a
+                    // recorded gross has been answered, and asking again would
+                    // invite overwriting it by reflex.
+                    let expected = numbered.delivery.hasUnconfirmedExpectedEarnings
+                        ? numbered.delivery.expectedEarnings
+                        : nil
+                    try service.markDelivered(numbered.delivery)
+                    // Only after the transition actually succeeded. A refused
+                    // write leaves a delivery still in progress, and offering to
+                    // record what it paid would be the screen disagreeing with
+                    // the store about whether it is over.
+                    if let expected {
+                        pendingEarningsConfirmation = PendingEarningsConfirmation(
+                            numbered: numbered,
+                            expected: expected
+                        )
+                    }
                 case .start, nil: break
                 }
             case let .cancel(numbered):
@@ -196,6 +232,20 @@ struct DeliveryControlPanel: View {
         // — reconciling only on success — would be this screen deciding what the
         // store now holds.
         liveActivity.reconcile()
+    }
+
+    /// A delivery that has just been recorded as delivered, together with the
+    /// amount it was expected to pay.
+    ///
+    /// The expectation is carried rather than looked up so the sheet is
+    /// unpresentable without one: there is no state in which the confirmation
+    /// appears offering nothing, and no path by which it could show a figure
+    /// read back out of the recorded gross column.
+    private struct PendingEarningsConfirmation: Identifiable {
+        let numbered: NumberedDelivery
+        let expected: Money
+
+        var id: UUID { numbered.id }
     }
 
     private var isConfirmingCancellation: Binding<Bool> {
@@ -224,10 +274,16 @@ private struct ActiveDeliveryCard: View {
     let advance: () -> Void
     let cancel: () -> Void
 
+    @Environment(\.locale) private var locale
+
     /// Presented from the card's secondary pickup control. Sheet state rather
     /// than a navigation push, because naming a pickup is a short aside from the
     /// running shift rather than somewhere to be.
     @State private var isEditingPickupPlace = false
+
+    /// Presented from the card's secondary expected-pay control, for the same
+    /// reason and in the same shape.
+    @State private var isEditingExpectedEarnings = false
 
     private var delivery: Delivery { numbered.delivery }
 
@@ -249,6 +305,19 @@ private struct ActiveDeliveryCard: View {
                 }
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
+
+                // Named "Expected pay" wherever it is printed, so it is never
+                // one word away from the "Gross earnings" row a finished
+                // delivery shows. Absent when none was recorded, like the
+                // pickup place above it.
+                if let expected = delivery.expectedEarnings {
+                    LabeledContent("Expected pay") {
+                        Text(expected.formatted(locale: locale))
+                            .monospacedDigit()
+                    }
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                }
             }
             .accessibilityElement(children: .combine)
             .accessibilityLabel(spokenStatus)
@@ -258,6 +327,13 @@ private struct ActiveDeliveryCard: View {
             // lifecycle button rather than in its place. Naming a pickup is
             // optional and this delivery advances identically without it.
             pickupPlaceControl
+
+            // The same shape, for the same reason, and deliberately beside it
+            // rather than anywhere nearer the lifecycle button: an amount is
+            // optional, is skippable on every delivery, and the one moment it
+            // is easy to enter is while the driver is standing still waiting
+            // for a bag.
+            expectedEarningsControl
 
             // Only the one step this delivery can actually take. A card for a
             // finished delivery does not exist, so the absence is defensive.
@@ -282,6 +358,33 @@ private struct ActiveDeliveryCard: View {
         .sheet(isPresented: $isEditingPickupPlace) {
             PickupPlaceEditor(numbered: numbered)
         }
+        .sheet(isPresented: $isEditingExpectedEarnings) {
+            DeliveryExpectedEarningsEditor(numbered: numbered)
+        }
+    }
+
+    /// The one control for what this delivery is expected to pay.
+    ///
+    /// A sheet rather than a field on the card, for exactly the reason
+    /// ``pickupPlaceControl`` opens one: a keyboard that appears beside the
+    /// lifecycle buttons is the interaction this project refuses to design. The
+    /// sheet can be dismissed and ignored entirely, and the delivery advances
+    /// identically with no amount on it.
+    private var expectedEarningsControl: some View {
+        Button {
+            isEditingExpectedEarnings = true
+        } label: {
+            Label(
+                numbered.expectedEarningsActionTitle(hasExpected: delivery.expectedEarnings != nil),
+                systemImage: delivery.expectedEarnings == nil ? "plus.circle" : "pencil"
+            )
+            .font(.subheadline)
+        }
+        .buttonStyle(.borderless)
+        .accessibilityLabel(
+            numbered.spokenExpectedEarningsLabel(hasExpected: delivery.expectedEarnings != nil)
+        )
+        .accessibilityIdentifier("expectedEarningsButton")
     }
 
     /// The one control for pickup identity: add it, or change what is recorded.
@@ -309,6 +412,11 @@ private struct ActiveDeliveryCard: View {
     /// "Delivery 2, waiting at the pickup, from Nowhere Noodles, accepted at
     /// 5:12 PM" — the identity first, because that is what tells the listener
     /// which card they are on, and the place only when one was recorded.
+    ///
+    /// An expected amount is appended as its own **sentence** rather than as
+    /// another comma-separated clause, because it is the one part of this label
+    /// that has to say what it is not: a figure heard in a run-on list beside a
+    /// time and a place is heard as this delivery's earnings.
     private var spokenStatus: String {
         let accepted = delivery.acceptedAt.formatted(date: .omitted, time: .shortened)
         var parts = [numbered.spokenStatus]
@@ -316,7 +424,12 @@ private struct ActiveDeliveryCard: View {
             parts.append("from \(place.displayName)")
         }
         parts.append("accepted at \(accepted)")
-        return parts.joined(separator: ", ")
+
+        var spoken = parts.joined(separator: ", ")
+        if let expected = delivery.expectedEarnings {
+            spoken += ". \(numbered.spokenExpectedEarnings(expected.formatted(locale: locale)))"
+        }
+        return spoken
     }
 }
 
