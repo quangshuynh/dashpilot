@@ -109,7 +109,7 @@ struct PeriodMetricsTests {
         PeriodShiftRecord(
             startedAt: startedAt ?? at(9),
             isCompleted: isCompleted,
-            elapsedDuration: elapsed,
+            workingDuration: elapsed,
             grossEarnings: earnings,
             recordedDistance: recordedDistance,
             deliveryActiveTime: active,
@@ -134,7 +134,7 @@ struct PeriodMetricsTests {
         #expect(metrics.isEmpty)
         #expect(metrics.completedShiftCount == 0)
         #expect(metrics.recordedGrossEarnings == nil)
-        #expect(metrics.elapsedDuration == nil)
+        #expect(metrics.workingDuration == nil)
         #expect(metrics.deliveryActiveDuration == nil)
         #expect(metrics.nonDeliveryDuration == nil)
         #expect(metrics.medianPickupWait == nil)
@@ -187,7 +187,7 @@ struct PeriodMetricsTests {
         let finished = calculator.metrics(of: [overnight], in: nextDay)
 
         #expect(started.completedShiftCount == 1)
-        #expect(started.elapsedDuration == 4 * 3600.0, "Nothing is cut off at midnight")
+        #expect(started.workingDuration == 4 * 3600.0, "Nothing is cut off at midnight")
         #expect(started.recordedGrossEarnings == (try money("60.00")))
         #expect(finished.isEmpty, "And nothing is counted a second time in the day it ended")
     }
@@ -331,7 +331,7 @@ struct PeriodMetricsTests {
         )
 
         #expect(base.recordedGrossEarnings == withDeliveryAmounts.recordedGrossEarnings)
-        #expect(base.grossPerElapsedHour == withDeliveryAmounts.grossPerElapsedHour)
+        #expect(base.grossPerWorkingHour == withDeliveryAmounts.grossPerWorkingHour)
     }
 
     /// A missing shift amount is *not* quietly replaced by the delivery amounts
@@ -345,7 +345,7 @@ struct PeriodMetricsTests {
 
         #expect(metrics.recordedGrossEarnings == nil)
         #expect(metrics.recordedDeliveryEarnings == (try money("22.00")))
-        #expect(!metrics.grossPerElapsedHour.isAvailable)
+        #expect(!metrics.grossPerWorkingHour.isAvailable)
     }
 
     @Test("The delivery subtotal states how many deliveries answered")
@@ -395,8 +395,8 @@ struct PeriodMetricsTests {
             in: day
         )
 
-        #expect(metrics.elapsedDuration == 7.5 * 3600.0)
-        #expect(metrics.elapsedCoverage.isComplete)
+        #expect(metrics.workingDuration == 7.5 * 3600.0)
+        #expect(metrics.workingCoverage.isComplete)
     }
 
     /// A stored row the app cannot have written is excluded rather than turned
@@ -408,8 +408,8 @@ struct PeriodMetricsTests {
             in: day
         )
 
-        #expect(metrics.elapsedDuration == 3 * 3600.0)
-        #expect(metrics.elapsedCoverage == MetricCoverage(contributingCount: 1, eligibleCount: 3))
+        #expect(metrics.workingDuration == 3 * 3600.0)
+        #expect(metrics.workingCoverage == MetricCoverage(contributingCount: 1, eligibleCount: 3))
     }
 
     // MARK: Delivery active time
@@ -495,7 +495,7 @@ struct PeriodMetricsTests {
             in: day
         )
 
-        let elapsed = try #require(metrics.elapsedDuration)
+        let elapsed = try #require(metrics.workingDuration)
         let active = try #require(metrics.deliveryActiveDuration)
         #expect(metrics.nonDeliveryDuration == 2 * 3600.0)
         #expect(metrics.nonDeliveryDuration != elapsed - active, "That difference would be 7 hours")
@@ -616,9 +616,9 @@ struct PeriodMetricsTests {
             in: day
         )
 
-        #expect(metrics.grossPerElapsedHour.amount == (try money("20.00")))
-        #expect(metrics.grossPerElapsedHour.amount != (try money("55.56")), "The mean of the two shift rates")
-        #expect(metrics.grossPerElapsedHour.coverage.isComplete)
+        #expect(metrics.grossPerWorkingHour.amount == (try money("20.00")))
+        #expect(metrics.grossPerWorkingHour.amount != (try money("55.56")), "The mean of the two shift rates")
+        #expect(metrics.grossPerWorkingHour.coverage.isComplete)
     }
 
     @Test("The active-hour rate is aggregate over aggregate, not a mean of shift rates")
@@ -664,8 +664,8 @@ struct PeriodMetricsTests {
             in: day
         )
 
-        #expect(metrics.grossPerElapsedHour.amount == (try money("25.00")))
-        #expect(metrics.grossPerElapsedHour.coverage == MetricCoverage(contributingCount: 1, eligibleCount: 3))
+        #expect(metrics.grossPerWorkingHour.amount == (try money("25.00")))
+        #expect(metrics.grossPerWorkingHour.coverage == MetricCoverage(contributingCount: 1, eligibleCount: 3))
     }
 
     @Test("The active-hour rate uses only shifts with both an amount and active time")
@@ -728,9 +728,9 @@ struct PeriodMetricsTests {
             in: day
         )
 
-        #expect(alone.grossPerElapsedHour.amount == Money.zero)
-        #expect(alone.grossPerElapsedHour.coverage.isComplete)
-        #expect(mixed.grossPerElapsedHour.amount == (try money("12.50")), "$50 over 4 hours")
+        #expect(alone.grossPerWorkingHour.amount == Money.zero)
+        #expect(alone.grossPerWorkingHour.coverage.isComplete)
+        #expect(mixed.grossPerWorkingHour.amount == (try money("12.50")), "$50 over 4 hours")
     }
 
     /// A zero denominator takes its shift out of the rate entirely — including
@@ -745,8 +745,8 @@ struct PeriodMetricsTests {
             in: day
         )
 
-        #expect(metrics.grossPerElapsedHour.amount == (try money("15.00")), "$30 over 2 hours, not $80")
-        #expect(metrics.grossPerElapsedHour.coverage == MetricCoverage(contributingCount: 1, eligibleCount: 2))
+        #expect(metrics.grossPerWorkingHour.amount == (try money("15.00")), "$30 over 2 hours, not $80")
+        #expect(metrics.grossPerWorkingHour.coverage == MetricCoverage(contributingCount: 1, eligibleCount: 2))
     }
 
     @Test("A zero recorded distance excludes its shift from the per-mile rate")
@@ -797,7 +797,7 @@ struct PeriodMetricsTests {
             metrics.rateBasisStatement(.perRecordedMile)
                 == "Based on 1 of 2 shifts with both earnings and a measurable route"
         )
-        #expect(metrics.rateBasisStatement(.perElapsedHour).contains("1 of 2"))
+        #expect(metrics.rateBasisStatement(.perWorkingHour).contains("1 of 2"))
         #expect(metrics.rateBasisStatement(.perDeliveryActiveHour).contains("1 of 2"))
     }
 
@@ -818,7 +818,7 @@ struct PeriodMetricsTests {
             in: day
         )
 
-        #expect(periodMetrics.grossPerElapsedHour.amount == shiftMetrics.grossPerElapsedHour.amount)
+        #expect(periodMetrics.grossPerWorkingHour.amount == shiftMetrics.grossPerWorkingHour.amount)
         #expect(periodMetrics.grossPerDeliveryActiveHour.amount == shiftMetrics.grossPerDeliveryActiveHour.amount)
         #expect(periodMetrics.grossPerRecordedMile.amount == shiftMetrics.grossPerRecordedMile.amount)
     }
@@ -1040,7 +1040,7 @@ struct PeriodShiftRecordTests {
 
         #expect(record.startedAt == start)
         #expect(record.isCompleted)
-        #expect(record.elapsedDuration == 180 * 60.0)
+        #expect(record.workingDuration == 180 * 60.0)
         #expect(record.grossEarnings == Money(minorUnits: 8625))
         #expect(record.deliverySummary.completed == 1)
         #expect(record.deliverySummary.cancelled == 1)
@@ -1059,7 +1059,7 @@ struct PeriodShiftRecordTests {
         let record = shift.periodRecord(for: .none)
 
         #expect(!record.isCompleted)
-        #expect(record.elapsedDuration == nil)
+        #expect(record.workingDuration == nil)
     }
 
     @Test("Distinct pickup places are read from the shift's deliveries")

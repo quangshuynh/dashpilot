@@ -63,7 +63,13 @@ nonisolated struct ShiftMetricsCalculator: Equatable, Sendable {
     ///   - grossEarnings: what the driver recorded the shift paid, or `nil` if
     ///     they have not. `nil` is never read as zero.
     ///   - elapsedDuration: the shift's wall-clock length, or `nil` while it is
-    ///     still running.
+    ///     still running. Pauses are inside it, and the working duration this
+    ///     calculation divides by is derived by subtracting them.
+    ///   - pausedTime: how much of the shift the driver had it paused. It
+    ///     defaults to ``ShiftPausedTime/none``, which is not a stand-in for a
+    ///     missing fact: a shift with no pause rows was paused for no time, and
+    ///     that is exactly what every shift recorded before pausing existed
+    ///     truthfully has.
     ///   - recordedDistance: what the shift's retained route measured. It
     ///     already distinguishes an unmeasurable route from a measured one, and
     ///     that distinction is carried through rather than flattened here.
@@ -74,15 +80,20 @@ nonisolated struct ShiftMetricsCalculator: Equatable, Sendable {
     func metrics(
         grossEarnings: Money?,
         elapsedDuration: TimeInterval?,
+        pausedTime: ShiftPausedTime = .none,
         recordedDistance: RouteDistance,
         deliveryActiveTime: DeliveryActiveTime = .none
     ) -> ShiftMetrics {
-        ShiftMetrics(
+        let workingDuration = Self.workingDuration(elapsed: elapsedDuration, paused: pausedTime)
+
+        return ShiftMetrics(
             grossEarnings: grossEarnings,
             elapsedDuration: elapsedDuration,
+            pausedTime: pausedTime,
+            workingDuration: workingDuration,
             recordedDistance: recordedDistance,
             deliveryActiveTime: deliveryActiveTime,
-            grossPerElapsedHour: hourlyRate(of: grossEarnings, over: elapsedDuration),
+            grossPerWorkingHour: hourlyRate(of: grossEarnings, over: workingDuration, elapsedDuration: elapsedDuration),
             grossPerDeliveryActiveHour: activeHourlyRate(
                 of: grossEarnings,
                 over: deliveryActiveTime,
@@ -92,21 +103,44 @@ nonisolated struct ShiftMetricsCalculator: Equatable, Sendable {
         )
     }
 
+    /// **The** definition of a shift's working duration: elapsed time less the
+    /// time the driver had the shift paused.
+    ///
+    /// `nil` while the shift is running, because elapsed time is. Never
+    /// negative: a store holding pauses that somehow total more than the shift
+    /// they belong to produces zero working time, which the rates then report as
+    /// ``ShiftRateUnavailability/noWorkingTime`` rather than as a negative
+    /// denominator nothing downstream could interpret.
+    static func workingDuration(elapsed: TimeInterval?, paused: ShiftPausedTime) -> TimeInterval? {
+        guard let elapsed else { return nil }
+        return max(0, elapsed - paused.duration)
+    }
+
     // MARK: Rates
 
-    /// Gross earnings per hour of **elapsed** shift time.
+    /// Gross earnings per hour of **working** shift time.
     ///
-    /// The denominator is the whole wall-clock length of the shift, waiting and
-    /// idling included. It is the figure that does not depend on the driver
-    /// having recorded their deliveries, which is why it stays even though
-    /// ``activeHourlyRate(of:over:elapsedDuration:)`` now exists beside it.
-    private func hourlyRate(of grossEarnings: Money?, over elapsedDuration: TimeInterval?) -> ShiftRate {
-        guard let elapsedDuration else { return .unavailable(.shiftNotCompleted) }
+    /// The denominator is the wall-clock length of the shift less the stretches
+    /// the driver paused it, waiting and repositioning still included. It is the
+    /// figure that does not depend on the driver having recorded their
+    /// deliveries, which is why it stays even though
+    /// ``activeHourlyRate(of:over:elapsedDuration:)`` exists beside it.
+    ///
+    /// The two arguments are both needed, and they answer different questions.
+    /// `elapsedDuration` decides whether the shift has *finished*; the working
+    /// duration decides whether it has hours to divide by. A running shift is
+    /// reported as running, not as a shift with no working time.
+    private func hourlyRate(
+        of grossEarnings: Money?,
+        over workingDuration: TimeInterval?,
+        elapsedDuration: TimeInterval?
+    ) -> ShiftRate {
+        guard elapsedDuration != nil, let workingDuration else { return .unavailable(.shiftNotCompleted) }
         guard let grossEarnings else { return .unavailable(.earningsNotRecorded) }
         // A shift ended at the moment it started — including one whose end was
         // clamped to its start by a backwards device clock — covers no time to
-        // earn over.
-        return rate(of: grossEarnings, overHoursIn: elapsedDuration, otherwise: .noElapsedTime)
+        // earn over, and neither does one the driver kept paused throughout.
+        return rate(of: grossEarnings, overHoursIn: workingDuration, otherwise: .noWorkingTime)
     }
 
     /// Gross earnings per hour at least one recorded delivery was active.
@@ -288,6 +322,7 @@ extension Shift {
         calculator.metrics(
             grossEarnings: grossEarnings,
             elapsedDuration: completedDuration,
+            pausedTime: completedPausedTime ?? .none,
             recordedDistance: recordedDistance,
             deliveryActiveTime: deliveryActiveTime()
         )
