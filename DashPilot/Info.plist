@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	  The one key this file exists for. Everything else DashPilot declares is
+	  generated from INFOPLIST_KEY_* build settings, which have no spelling for
+	  UIBackgroundModes, so this file carries it and the generated keys are
+	  merged into it at build time.
+
+	  location: a route capture session started with the app on screen keeps
+	  running while the driver is in another app or the phone is locked. It is
+	  what makes When In Use authorization sufficient, and it is the only mode
+	  declared: DashPilot runs no background task, no audio, no fetch, and
+	  nothing here asks iOS to relaunch the app.
+	-->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>location</string>
+	</array>
+</dict>
+</plist>

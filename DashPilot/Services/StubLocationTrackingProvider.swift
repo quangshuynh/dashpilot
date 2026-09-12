@@ -15,6 +15,16 @@ import Foundation
 final class StubLocationTrackingProvider: LocationTrackingProviding {
     private(set) var isUpdating = false
 
+    /// What the build would declare to iOS. Settable, because the capture
+    /// service behaves differently either way and both behaviours have to be
+    /// provable: a build carrying the location background mode records through
+    /// a backgrounding, and one without it stops and leaves a gap.
+    ///
+    /// Defaults to the shipping configuration.
+    var supportsBackgroundUpdates = true
+
+    private(set) var allowsBackgroundUpdates = false
+
     var onSample: ((LocationSample) -> Void)?
     var onFailure: ((LocationTrackingFailure) -> Void)?
 
@@ -27,6 +37,7 @@ final class StubLocationTrackingProvider: LocationTrackingProviding {
 
     func startUpdates() {
         guard !isUpdating else { return }
+        allowsBackgroundUpdates = supportsBackgroundUpdates
         isUpdating = true
         startCount += 1
     }
@@ -34,6 +45,7 @@ final class StubLocationTrackingProvider: LocationTrackingProviding {
     func stopUpdates() {
         guard isUpdating else { return }
         isUpdating = false
+        allowsBackgroundUpdates = false
         stopCount += 1
     }
 

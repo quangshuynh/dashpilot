@@ -4,33 +4,68 @@ import OSLog
 
 /// The Core Location implementation of ``LocationTrackingProviding``.
 ///
-/// Owns a `CLLocationManager` used only for foreground position updates. It
-/// makes no judgement about the positions it forwards and writes nothing: every
-/// candidate goes to ``LocationTrackingService``, which decides what to keep.
+/// Owns a `CLLocationManager` used only for position updates. It makes no
+/// judgement about the positions it forwards and writes nothing: every candidate
+/// goes to ``LocationTrackingService``, which decides what to keep.
 ///
-/// **Foreground only.** `allowsBackgroundLocationUpdates` is never set, the app
-/// declares no background location mode, and nothing here starts significant
-/// location change or region monitoring. iOS suspends the app shortly after it
-/// leaves the foreground, and updates stop with it — the service stops them
-/// explicitly first so the behaviour is the app's decision rather than a side
-/// effect of being suspended.
+/// ## Continuing outside the foreground
+///
+/// The app declares the `location` background mode, and this type sets
+/// `allowsBackgroundLocationUpdates` while a session is running so an update
+/// stream started on screen keeps running when the driver switches to another
+/// app or locks the phone. iOS shows its own indicator for the whole of that,
+/// which is the disclosure the driver actually sees.
+///
+/// Two things are deliberately absent, and they are what keeps the app at When
+/// In Use authorization:
+///
+/// - **Nothing starts a session from the background.** With When In Use, iOS
+///   continues a stream that began in the foreground; it does not deliver one
+///   that did not.
+/// - **No significant-location-change or region monitoring**, so nothing here
+///   ever relaunches the app. A process iOS terminates stays stopped until the
+///   driver opens DashPilot again.
+///
+/// iOS guarantees no background execution, and nothing here pretends otherwise.
 @MainActor
 final class CoreLocationTrackingProvider: NSObject, LocationTrackingProviding {
     private let manager: CLLocationManager
 
     private(set) var isUpdating = false
 
+    let supportsBackgroundUpdates: Bool
+
+    private(set) var allowsBackgroundUpdates = false
+
     var onSample: ((LocationSample) -> Void)?
     var onFailure: ((LocationTrackingFailure) -> Void)?
 
     override init() {
         manager = CLLocationManager()
+        supportsBackgroundUpdates = Self.bundleDeclaresLocationBackgroundMode()
         super.init()
         manager.delegate = self
         Self.configure(manager)
+        if !supportsBackgroundUpdates {
+            AppLog.routeCapture.notice(
+                "This build declares no location background mode; capture will stop when the app leaves the foreground"
+            )
+        }
     }
 
-    /// The manager settings foreground route capture depends on.
+    /// Whether the built app declares the `location` background mode.
+    ///
+    /// Read from the bundle rather than assumed. Assigning
+    /// `allowsBackgroundLocationUpdates = true` without the declaration is not a
+    /// no-op and not an error to catch: iOS raises an exception and the process
+    /// dies. A build setting is easy to drop, and losing background capture is a
+    /// far better failure than crashing the moment a driver starts a shift.
+    private static func bundleDeclaresLocationBackgroundMode() -> Bool {
+        let modes = Bundle.main.object(forInfoDictionaryKey: "UIBackgroundModes") as? [String]
+        return modes?.contains("location") ?? false
+    }
+
+    /// The manager settings route capture depends on.
     ///
     /// Separated from `init` so the policy can be asserted directly: every one
     /// of these is invisible from outside this type, and each is a choice with
@@ -49,12 +84,9 @@ final class CoreLocationTrackingProvider: NSObject, LocationTrackingProviding {
     ///   matters on a real shift.** Left at its default, iOS pauses updates
     ///   once it decides the device has stopped moving, which on a delivery
     ///   shift is a driver waiting at a pickup, and it does not resume them on
-    ///   its own. DashPilot declares no background location mode, so
-    ///   there is nothing for the system to wake, and the app would go on
-    ///   showing "Location tracking active" while recording nothing for the
-    ///   rest of the shift. Capture is stopped deliberately when the app leaves
-    ///   the foreground, so nothing here keeps the hardware running behind the
-    ///   driver's back.
+    ///   its own. The app would go on saying it was recording while it recorded
+    ///   nothing for the rest of the shift. It stays off for as long as a shift
+    ///   is being recorded, which is the whole of the time a session runs.
     static func configure(_ manager: CLLocationManager) {
         manager.desiredAccuracy = kCLLocationAccuracyBest
         manager.activityType = .automotiveNavigation
@@ -62,8 +94,15 @@ final class CoreLocationTrackingProvider: NSObject, LocationTrackingProviding {
         manager.pausesLocationUpdatesAutomatically = false
     }
 
+    /// Starts a session, asking for it to survive the app leaving the foreground.
+    ///
+    /// The background flag is set here rather than once at init so it is held
+    /// only while a shift is actually being recorded. It is set *before*
+    /// `startUpdatingLocation()`: a session that began without it does not
+    /// acquire it by having the flag set afterwards.
     func startUpdates() {
         guard !isUpdating else { return }
+        setAllowsBackgroundUpdates(supportsBackgroundUpdates)
         isUpdating = true
         manager.startUpdatingLocation()
     }
@@ -72,6 +111,19 @@ final class CoreLocationTrackingProvider: NSObject, LocationTrackingProviding {
         guard isUpdating else { return }
         isUpdating = false
         manager.stopUpdatingLocation()
+        setAllowsBackgroundUpdates(false)
+    }
+
+    private func setAllowsBackgroundUpdates(_ allowed: Bool) {
+        guard allowed != allowsBackgroundUpdates else { return }
+        // Guarded by the declaration check, not by a `try`: the platform raises
+        // rather than throwing when the two disagree.
+        guard !allowed || supportsBackgroundUpdates else { return }
+        manager.allowsBackgroundLocationUpdates = allowed
+        allowsBackgroundUpdates = allowed
+        AppLog.routeCapture.info(
+            "Background location updates allowed: \(allowed, privacy: .public)"
+        )
     }
 }
 

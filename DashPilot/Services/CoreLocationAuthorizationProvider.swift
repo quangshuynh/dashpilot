@@ -39,11 +39,20 @@ final class CoreLocationAuthorizationProvider: NSObject, LocationAuthorizationPr
         refresh()
     }
 
+    /// Asks for When In Use, which is the least scope the app's behaviour needs.
+    ///
+    /// It is enough for the capture that exists. Paired with the `location`
+    /// background mode, When In Use lets an update session that began with the
+    /// app on screen keep running while the driver is in another app or the
+    /// phone is locked, which is the whole of what route capture does.
+    ///
+    /// Always would buy two further things, and the app implements neither:
+    /// beginning a session from the background, and being relaunched into one by
+    /// a significant-location-change or region event. Asking for a scope to
+    /// support behaviour that does not exist would ask a driver to grant more
+    /// than the app can justify, and iOS does not re-prompt once a scope has
+    /// been chosen, so the over-ask would be permanent.
     func requestWhenInUseAuthorization() {
-        // When In Use is the only scope the app has implemented behaviour for.
-        // Requesting Always here because background route capture may exist
-        // later would ask a driver to grant more than the app can currently
-        // justify, and iOS will not re-prompt once a scope has been chosen.
         AppLog.location.info("Requesting When In Use authorization")
         manager.requestWhenInUseAuthorization()
     }

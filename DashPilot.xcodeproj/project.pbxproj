@@ -29,9 +29,22 @@
 		CE1982BD304B519700E7E150 /* DashPilotUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DashPilotUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		CE1982D1304B519200E7E150 /* Exceptions for "DashPilot" folder in "DashPilot" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = CE1982A5304B519200E7E150 /* DashPilot */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		CE1982A8304B519200E7E150 /* DashPilot */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				CE1982D1304B519200E7E150 /* Exceptions for "DashPilot" folder in "DashPilot" target */,
+			);
 			path = DashPilot;
 			sourceTree = "<group>";
 		};
@@ -400,7 +413,8 @@
 				DEVELOPMENT_TEAM = W785GN4X52;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "DashPilot records the route of a shift while the app is open. Your route is stored on this device and is never sent anywhere.";
+				INFOPLIST_FILE = DashPilot/Info.plist;
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "DashPilot records the route of a shift you have started, and keeps recording it while you use other apps or the screen is locked. Your route is stored on this device and is never sent anywhere.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -433,7 +447,8 @@
 				DEVELOPMENT_TEAM = W785GN4X52;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "DashPilot records the route of a shift while the app is open. Your route is stored on this device and is never sent anywhere.";
+				INFOPLIST_FILE = DashPilot/Info.plist;
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "DashPilot records the route of a shift you have started, and keeps recording it while you use other apps or the screen is locked. Your route is stored on this device and is never sent anywhere.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
