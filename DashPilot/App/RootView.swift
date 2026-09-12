@@ -37,6 +37,8 @@ struct RootView: View {
                         ActiveShiftPanel(
                             shift: activeShift,
                             captureState: routeCapture.state,
+                            pause: pauseShift,
+                            resume: resumeShift,
                             end: endShift
                         )
                     } else {
@@ -46,7 +48,20 @@ struct RootView: View {
 
                 if let activeShift {
                     Section {
-                        DeliveryControlPanel(shift: activeShift)
+                        // A paused shift is one the driver has said they are not
+                        // working, and a delivery started on it would be time
+                        // the app is simultaneously reporting as not worked. The
+                        // control is replaced by the reason rather than removed,
+                        // so the section does not silently vanish.
+                        if activeShift.isPaused {
+                            Text("Deliveries are not recorded while the shift is paused. Resume the shift to start one.")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .accessibilityIdentifier("pausedDeliveryNotice")
+                        } else {
+                            DeliveryControlPanel(shift: activeShift)
+                        }
                     } header: {
                         Text("Delivery")
                     } footer: {
@@ -181,6 +196,11 @@ struct RootView: View {
             // whenever the active shift changes — including changes this screen
             // did not make.
             .onChange(of: activeShift?.id) { _, _ in routeCapture.synchronize() }
+            // Pausing does not change which shift is active, so the line above
+            // does not fire for it. This one catches a pause or resume recorded
+            // from anywhere, including an App Intent run while this screen is
+            // open, without waiting for the next position to be rejected.
+            .onChange(of: activeShift?.lifecycleState) { _, _ in routeCapture.synchronize() }
             .onChange(of: locationAuthorization.authorization) { _, _ in routeCapture.synchronize() }
             .alert(
                 "Shift Not Updated",
@@ -205,6 +225,25 @@ struct RootView: View {
         perform { try ShiftService(context: modelContext).startShift() }
         // After, not before: capture starts only once the store holds a running
         // shift, so a refused or failed start cannot leave it recording.
+        routeCapture.synchronize()
+    }
+
+    private func pauseShift() {
+        // Before, so that no position recorded after the tap is judged against a
+        // shift the store is about to record as paused. `synchronize()`
+        // afterwards restarts capture if the pause did not go through, which is
+        // why stopping first latches nothing: capture always ends up describing
+        // what the store actually holds.
+        routeCapture.prepareForShiftPause()
+        perform { try ShiftService(context: modelContext).pauseActiveShift() }
+        routeCapture.synchronize()
+    }
+
+    private func resumeShift() {
+        // After, not before: capture starts only once the store holds a shift
+        // that is running again, so a refused or failed resume cannot leave it
+        // recording against a shift the driver has not resumed.
+        perform { try ShiftService(context: modelContext).resumeActiveShift() }
         routeCapture.synchronize()
     }
 
@@ -252,65 +291,151 @@ private struct StartShiftPanel: View {
     }
 }
 
+/// The shift in progress: whether it is running or paused, how long it has been
+/// worked, and the one or two lifecycle controls that apply.
+///
+/// The three states a shift can be in are kept visually distinct rather than
+/// distinguished by a button title. A driver glancing at the phone in a cradle
+/// has to be able to tell a running shift from a paused one without reading:
+/// running is a red recording label with a ticking figure, paused is an orange
+/// pause label with a figure that does not move, and ended is not this screen at
+/// all.
 private struct ActiveShiftPanel: View {
     let shift: Shift
     let captureState: RouteCaptureState
+    let pause: () -> Void
+    let resume: () -> Void
     let end: () -> Void
+
+    private var isPaused: Bool { shift.isPaused }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Label("Shift in Progress", systemImage: "record.circle")
-                .font(.headline)
-                .foregroundStyle(.red)
-                .accessibilityIdentifier("activeShiftStatus")
+            Label(
+                isPaused ? ShiftLifecycleState.paused.title : ShiftLifecycleState.running.title,
+                systemImage: isPaused ? "pause.circle.fill" : "record.circle"
+            )
+            .font(.headline)
+            .foregroundStyle(isPaused ? .orange : .red)
+            .accessibilityIdentifier(isPaused ? "pausedShiftStatus" : "activeShiftStatus")
 
-            // Elapsed time is derived from the start timestamp on every tick and
-            // never stored, so it cannot drift away from the recorded times.
-            TimelineView(.periodic(from: .now, by: 1)) { context in
-                ElapsedTimeLabel(elapsed: shift.elapsed(asOf: context.date))
-            }
+            workingTime
 
             LabeledContent("Started") {
                 Text(shift.startedAt, format: .dateTime.hour().minute())
             }
             .font(.subheadline)
 
+            if let pausedAt = shift.openPause?.startedAt {
+                LabeledContent("Paused") {
+                    Text(pausedAt, format: .dateTime.hour().minute())
+                }
+                .font(.subheadline)
+                .accessibilityIdentifier("pausedAtTime")
+            }
+
             RouteCaptureStatusView(state: captureState)
 
-            // Bordered rather than prominent: the prominent control during a
-            // shift is the delivery action just below, which is tapped many
-            // times a shift, while this one is tapped once. Emphasising the
-            // rarer, harder-to-undo button over the frequent one is how a
-            // driver ends a shift by mistake.
-            Button(action: end) {
-                Text("End Shift")
+            controls
+        }
+        .padding(.vertical, 8)
+    }
+
+    /// The working figure, ticking only while the shift is actually running.
+    ///
+    /// While paused it is rendered once rather than on a timeline. The
+    /// subtraction already holds it still — the open pause grows exactly as fast
+    /// as elapsed time — so a per-second refresh would redraw an unchanged
+    /// number every second for as long as the driver is on their break.
+    @ViewBuilder
+    private var workingTime: some View {
+        if isPaused {
+            WorkingTimeLabel(working: shift.workingDuration(asOf: .now), isPaused: true)
+        } else {
+            // Derived from the stored timestamps on every tick and never stored,
+            // so it cannot drift away from the recorded times.
+            TimelineView(.periodic(from: .now, by: 1)) { context in
+                WorkingTimeLabel(working: shift.workingDuration(asOf: context.date), isPaused: false)
+            }
+        }
+    }
+
+    /// Pause or Resume, and End.
+    ///
+    /// Resume is the prominent control on a paused shift, because it is the one
+    /// the driver came back to the app to press. Pause is bordered on a running
+    /// shift for the reason End is: the prominent control during a shift is the
+    /// delivery action below, which is tapped many times a shift.
+    @ViewBuilder
+    private var controls: some View {
+        if isPaused {
+            Button(action: resume) {
+                Text("Resume Shift")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+            .accessibilityIdentifier("resumeShiftButton")
+        } else {
+            Button(action: pause) {
+                Text("Pause Shift")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.bordered)
             .controlSize(.large)
-            .tint(.red)
-            .accessibilityIdentifier("endShiftButton")
+            .accessibilityIdentifier("pauseShiftButton")
         }
-        .padding(.vertical, 8)
+
+        // Bordered rather than prominent: the prominent control during a
+        // shift is the delivery action just below, which is tapped many
+        // times a shift, while this one is tapped once. Emphasising the
+        // rarer, harder-to-undo button over the frequent one is how a
+        // driver ends a shift by mistake. It stays available while paused:
+        // a driver who has finished has finished, and making them resume a
+        // shift they are not working in order to end it would record work
+        // that did not happen.
+        Button(action: end) {
+            Text("End Shift")
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.large)
+        .tint(.red)
+        .accessibilityIdentifier("endShiftButton")
     }
 }
 
-private struct ElapsedTimeLabel: View {
-    let elapsed: TimeInterval
+/// The big figure on a shift in progress: how long it has been **worked**.
+///
+/// Working time rather than elapsed time, because that is the figure every rate
+/// the shift will produce divides by, and a driver watching one number during
+/// the shift and reading a different one afterwards would have no way to tell
+/// which was wrong.
+private struct WorkingTimeLabel: View {
+    let working: TimeInterval
+    let isPaused: Bool
 
     var body: some View {
-        Text(duration.formatted(.time(pattern: .hourMinuteSecond)))
-            .font(.system(.largeTitle, design: .rounded, weight: .semibold))
-            .monospacedDigit()
-            .lineLimit(1)
-            .minimumScaleFactor(0.6)
-            .accessibilityIdentifier("elapsedTime")
-            .accessibilityLabel("Elapsed time")
-            // Spoken to the minute: a per-second read-out is noise for VoiceOver.
-            .accessibilityValue(duration.formatted(.units(allowed: [.hours, .minutes], width: .wide)))
+        VStack(alignment: .leading, spacing: 2) {
+            Text(duration.formatted(.time(pattern: .hourMinuteSecond)))
+                .font(.system(.largeTitle, design: .rounded, weight: .semibold))
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+                .foregroundStyle(isPaused ? .secondary : .primary)
+
+            Text(isPaused ? "Worked so far · paused" : "Worked so far")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("workingTime")
+        .accessibilityLabel(isPaused ? "Working time, paused" : "Working time")
+        // Spoken to the minute: a per-second read-out is noise for VoiceOver.
+        .accessibilityValue(duration.formatted(.units(allowed: [.hours, .minutes], width: .wide)))
     }
 
-    private var duration: Duration { .seconds(elapsed) }
+    private var duration: Duration { .seconds(working) }
 }
 
 /// One finished shift in history: what shift it was, and roughly how it went.
@@ -409,21 +534,33 @@ private struct CompletedShiftRow: View {
         if let marker = quality.partialMarker {
             parts.append(marker)
         }
-        if let hourly = metrics?.grossPerElapsedHour.amount {
+        if let hourly = metrics?.grossPerWorkingHour.amount {
             parts.append("\(hourly.formatted(locale: locale))/hr")
         }
         return parts.joined(separator: " · ")
     }
 
-    /// When the shift ran and how long it lasted.
+    /// When the shift ran and how long it was worked.
+    ///
+    /// The duration here is the **working** one, because it is the figure the
+    /// rate on the line below divides by; a row showing elapsed time beside a
+    /// per-working-hour rate would not multiply out. A shift that was paused
+    /// says so, so the shorter figure is not read as a mistake.
     private var schedule: String {
         let started = shift.startedAt.formatted(date: .omitted, time: .shortened)
-        guard let endedAt = shift.endedAt, let completedDuration = shift.completedDuration else {
+        guard let endedAt = shift.endedAt, let working = shift.completedWorkingDuration else {
             return started
         }
         let ended = endedAt.formatted(date: .omitted, time: .shortened)
-        return "\(started) – \(ended) · \(DurationText.short(completedDuration))"
+        var line = "\(started) – \(ended) · \(DurationText.short(working))"
+        if pauseCount > 0 {
+            line += pauseCount == 1 ? " · 1 pause" : " · \(pauseCount) pauses"
+        }
+        return line
     }
+
+    /// How many stretches the driver paused this shift for.
+    private var pauseCount: Int { shift.completedPausedTime?.intervalCount ?? 0 }
 
     /// What VoiceOver says instead of the abbreviations.
     ///
@@ -433,11 +570,14 @@ private struct CompletedShiftRow: View {
     private var accessibilityLabel: String {
         var sentences = [shift.startedAt.formatted(date: .complete, time: .omitted)]
 
-        if let endedAt = shift.endedAt, let completedDuration = shift.completedDuration {
+        if let endedAt = shift.endedAt, let working = shift.completedWorkingDuration {
             let started = shift.startedAt.formatted(date: .omitted, time: .shortened)
             let ended = endedAt.formatted(date: .omitted, time: .shortened)
             sentences.append("\(started) to \(ended)")
-            sentences.append(DurationText.short(completedDuration))
+            sentences.append("\(DurationText.spoken(working)) worked")
+            if let paused = shift.completedPausedTime, paused.hasPauses {
+                sentences.append("\(DurationText.spoken(paused.duration)) paused")
+            }
         }
 
         if let earnings = shift.grossEarnings {
@@ -450,8 +590,8 @@ private struct CompletedShiftRow: View {
             sentences.append(quality.spokenMileageStatement(locale: locale))
         }
 
-        if let hourly = metrics?.grossPerElapsedHour.amount {
-            sentences.append("\(hourly.formatted(locale: locale)) gross earnings per shift hour")
+        if let hourly = metrics?.grossPerWorkingHour.amount {
+            sentences.append("\(hourly.formatted(locale: locale)) gross earnings per working hour")
         }
 
         return sentences.joined(separator: ". ")
