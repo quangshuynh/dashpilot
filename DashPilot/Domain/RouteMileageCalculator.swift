@@ -76,154 +76,17 @@ nonisolated struct RouteMileageCalculator: Equatable, Sendable {
     ///
     /// Persisted data is not assumed to be well formed: positions arrive in
     /// whatever order the store returns them, and are sorted, deduplicated and
-    /// checked here. The capture filter already prevents all of this under
-    /// normal operation; this is what keeps an imperfect route from producing a
-    /// wrong number or a crash years later.
+    /// checked by the walk. The capture filter already prevents all of this
+    /// under normal operation; this is what keeps an imperfect route from
+    /// producing a wrong number or a crash years later.
+    ///
+    /// The walk itself lives in ``RouteMileageAccumulator``, which is the same
+    /// code a shift still being recorded extends a position at a time. Measuring
+    /// a whole route is that walk fed everything at once, so the two can never
+    /// disagree about a gap, a segment or a metre.
     func distance(of points: [RoutePoint], covering window: ClosedRange<Date>? = nil) -> RouteDistance {
-        let ordered = orderedUsablePoints(in: points)
-        let edgeGaps = uncoveredEdgeCount(of: ordered, in: window)
-
-        guard ordered.count > 1 else {
-            return RouteDistance(
-                metres: 0,
-                segmentCount: 0,
-                gapCount: edgeGaps,
-                usableSampleCount: ordered.count,
-                usesInferredContinuity: false
-            )
-        }
-
-        var metres = 0.0
-        var gapCount = edgeGaps
-        var segmentCount = 0
-        var usesInferredContinuity = false
-        // Whether the pair just measured extended the segment already counted.
-        var isContinuingSegment = false
-
-        for (start, end) in zip(ordered, ordered.dropFirst()) {
-            let link = continuity(from: start, to: end)
-            guard link != .broken else {
-                gapCount += 1
-                isContinuingSegment = false
-                continue
-            }
-
-            if link == .inferred { usesInferredContinuity = true }
-            if !isContinuingSegment {
-                segmentCount += 1
-                isContinuingSegment = true
-            }
-            metres += GeographicDistance.metres(
-                fromLatitude: start.latitude,
-                longitude: start.longitude,
-                toLatitude: end.latitude,
-                longitude: end.longitude
-            )
-        }
-
-        return RouteDistance(
-            metres: metres,
-            segmentCount: segmentCount,
-            gapCount: gapCount,
-            usableSampleCount: ordered.count,
-            usesInferredContinuity: usesInferredContinuity
-        )
-    }
-
-    // MARK: Continuity
-
-    private enum Continuity: Equatable {
-        /// Capture recorded both positions in the same session.
-        case recorded
-        /// Neither position records a session, so continuity is only a
-        /// reasonable reading of their timestamps.
-        case inferred
-        /// Capture stopped between the two, or a session boundary makes it
-        /// impossible to say it did not.
-        case broken
-    }
-
-    private func continuity(from start: RoutePoint, to end: RoutePoint) -> Continuity {
-        guard end.timestamp.timeIntervalSince(start.timestamp) <= maximumSampleInterval else {
-            return .broken
-        }
-        switch (start.captureSessionID, end.captureSessionID) {
-        case let (startSession?, endSession?):
-            return startSession == endSession ? .recorded : .broken
-        case (nil, nil):
-            return .inferred
-        default:
-            // One side was recorded with continuity tracking and the other was
-            // not, which can only happen where a legacy route meets a new one.
-            // That boundary is exactly where capture is known to have stopped.
-            return .broken
-        }
-    }
-
-    /// How many ends of the shift the route does not reach.
-    ///
-    /// A shift whose first position arrives long after it started, or whose last
-    /// position is long before it ended, was not being recorded for part of its
-    /// length. That is the same kind of unmeasured stretch as a gap in the
-    /// middle, and it is the shape an interrupted route takes: a shift started
-    /// by voice records nothing until the app is opened, and a process iOS ends
-    /// records nothing afterwards, which for the last leg of a shift may be the
-    /// rest of it.
-    ///
-    /// The vehicle may equally have been parked for those minutes, in which case
-    /// nothing was missed. The route cannot tell the two apart, so this counts
-    /// them the same way and the interface says the distance may be incomplete
-    /// rather than claiming it is not.
-    private func uncoveredEdgeCount(of ordered: [RoutePoint], in window: ClosedRange<Date>?) -> Int {
-        guard let window else { return 0 }
-        guard let first = ordered.first, let last = ordered.last else {
-            // Nothing at all was recorded. That is one uncovered stretch, unless
-            // the shift was too short to have recorded anything.
-            return window.upperBound.timeIntervalSince(window.lowerBound) > maximumSampleInterval ? 1 : 0
-        }
-
-        var count = 0
-        if first.timestamp.timeIntervalSince(window.lowerBound) > maximumSampleInterval { count += 1 }
-        if window.upperBound.timeIntervalSince(last.timestamp) > maximumSampleInterval { count += 1 }
-        return count
-    }
-
-    // MARK: Ordering
-
-    /// The positions the calculation will walk: usable, in a deterministic
-    /// order, with no two sharing a timestamp.
-    ///
-    /// Sorting by timestamp alone is not a total order, so positions recorded at
-    /// the same instant would be walked in whatever order the store happened to
-    /// return them and the total would depend on it. Coordinates break the tie,
-    /// and then only the first position at any instant is kept: two different
-    /// positions at one instant contradict each other, and using both would add
-    /// a jump between them that no vehicle drove.
-    private func orderedUsablePoints(in points: [RoutePoint]) -> [RoutePoint] {
-        let sorted = points.filter(Self.isUsable).sorted { lhs, rhs in
-            if lhs.timestamp != rhs.timestamp { return lhs.timestamp < rhs.timestamp }
-            if lhs.latitude != rhs.latitude { return lhs.latitude < rhs.latitude }
-            return lhs.longitude < rhs.longitude
-        }
-
-        var deduplicated: [RoutePoint] = []
-        deduplicated.reserveCapacity(sorted.count)
-        for point in sorted where point.timestamp != deduplicated.last?.timestamp {
-            deduplicated.append(point)
-        }
-        return deduplicated
-    }
-
-    /// Whether a stored position describes somewhere the Earth has, at a moment
-    /// the clock can express.
-    ///
-    /// The same coordinate rule the capture filter applies, for the same reason:
-    /// `(0, 0)` is the value a zeroed coordinate takes, and no delivery happens
-    /// in the Gulf of Guinea.
-    private static func isUsable(_ point: RoutePoint) -> Bool {
-        guard point.timestamp.timeIntervalSinceReferenceDate.isFinite else { return false }
-        guard point.latitude.isFinite, point.longitude.isFinite else { return false }
-        guard abs(point.latitude) <= 90, abs(point.longitude) <= 180 else { return false }
-        return !(point.latitude == 0 && point.longitude == 0)
+        var walk = RouteMileageAccumulator(maximumSampleInterval: maximumSampleInterval)
+        walk.append(points)
+        return walk.distance(covering: window)
     }
 }
