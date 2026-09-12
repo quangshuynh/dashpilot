@@ -1055,11 +1055,223 @@ enum DashPilotSchemaV9: VersionedSchema {
 /// and it has migrated the store. The surviving foreign key is exactly the
 /// thing that makes it tempting to call this no change at all.
 ///
-/// This version reuses the file-scope models rather than freezing copies,
-/// because it *is* the current shape. It gets frozen copies of its own the
-/// first time v11 moves them on, exactly as v9 did above.
+/// This version is **frozen** with copies of all six of its models, forced the
+/// way v9's freeze was: v11 adds an attribute to `Delivery`, so reusing the
+/// file-scope type here would describe every pre-v11 store as one that already
+/// held a column for what a delivery was expected to pay. It did not, and a
+/// version that claims otherwise cannot be used to prove a migration preserved
+/// anything.
 enum DashPilotSchemaV10: VersionedSchema {
     static var versionIdentifier: Schema.Version { Schema.Version(10, 0, 0) }
+
+    static var models: [any PersistentModel.Type] {
+        [Shift.self, RouteSample.self, Delivery.self, PickupPlace.self, Expense.self, ShiftPause.self]
+    }
+
+    /// The v10 shift: unchanged from v9 except that it no longer holds its
+    /// route as a collection, which is the whole of what v10 was.
+    @Model
+    nonisolated final class Shift {
+        @Attribute(.unique) private(set) var id: UUID
+        private(set) var startedAt: Date
+        private(set) var endedAt: Date?
+
+        @Relationship(deleteRule: .cascade, inverse: \Delivery.shift)
+        private(set) var deliveries: [Delivery] = []
+
+        @Relationship(deleteRule: .cascade, inverse: \ShiftPause.shift)
+        private(set) var pauses: [ShiftPause] = []
+
+        private(set) var grossEarningsAmount: Decimal?
+
+        init(
+            id: UUID = UUID(),
+            startedAt: Date,
+            endedAt: Date? = nil,
+            grossEarningsAmount: Decimal? = nil
+        ) {
+            self.id = id
+            self.startedAt = startedAt
+            self.endedAt = endedAt
+            self.grossEarningsAmount = grossEarningsAmount
+        }
+    }
+
+    /// The v10 route sample, unchanged in shape since v3 and unchanged by v11.
+    @Model
+    nonisolated final class RouteSample {
+        private(set) var timestamp: Date
+        private(set) var latitude: Double
+        private(set) var longitude: Double
+        private(set) var horizontalAccuracy: Double
+        private(set) var captureSessionID: UUID?
+        private(set) var shift: Shift?
+
+        init(
+            shift: Shift,
+            timestamp: Date,
+            latitude: Double,
+            longitude: Double,
+            horizontalAccuracy: Double,
+            captureSessionID: UUID?
+        ) {
+            self.timestamp = timestamp
+            self.latitude = latitude
+            self.longitude = longitude
+            self.horizontalAccuracy = horizontalAccuracy
+            self.captureSessionID = captureSessionID
+            self.shift = shift
+        }
+    }
+
+    /// The v10 delivery: **one** monetary column, and it is the recorded gross.
+    ///
+    /// This is the shape v11 moves, and the reason this version had to be
+    /// frozen. A v10 store holds no record of what any delivery was expected to
+    /// pay, because no build that wrote one could ask.
+    @Model
+    nonisolated final class Delivery {
+        @Attribute(.unique) private(set) var id: UUID
+        private(set) var acceptedAt: Date
+        private(set) var arrivedAtPickupAt: Date?
+        private(set) var pickedUpAt: Date?
+        private(set) var deliveredAt: Date?
+        private(set) var cancelledAt: Date?
+        private(set) var shift: Shift?
+        private(set) var pickupPlace: PickupPlace?
+        private(set) var grossEarningsAmount: Decimal?
+
+        init(
+            id: UUID = UUID(),
+            shift: Shift,
+            acceptedAt: Date,
+            arrivedAtPickupAt: Date? = nil,
+            pickedUpAt: Date? = nil,
+            deliveredAt: Date? = nil,
+            cancelledAt: Date? = nil,
+            pickupPlace: PickupPlace? = nil,
+            grossEarningsAmount: Decimal? = nil
+        ) {
+            self.id = id
+            self.acceptedAt = acceptedAt
+            self.arrivedAtPickupAt = arrivedAtPickupAt
+            self.pickedUpAt = pickedUpAt
+            self.deliveredAt = deliveredAt
+            self.cancelledAt = cancelledAt
+            self.shift = shift
+            self.pickupPlace = pickupPlace
+            self.grossEarningsAmount = grossEarningsAmount
+        }
+    }
+
+    /// The v10 pickup place, unchanged from v6.
+    @Model
+    nonisolated final class PickupPlace {
+        @Attribute(.unique) private(set) var id: UUID
+        private(set) var displayName: String
+        private(set) var normalizedName: String
+        private(set) var createdAt: Date
+
+        @Relationship(deleteRule: .nullify, inverse: \Delivery.pickupPlace)
+        private(set) var deliveries: [Delivery] = []
+
+        init(id: UUID = UUID(), displayName: String, normalizedName: String, createdAt: Date) {
+            self.id = id
+            self.displayName = displayName
+            self.normalizedName = normalizedName
+            self.createdAt = createdAt
+        }
+    }
+
+    /// The v10 expense, unchanged from v8.
+    @Model
+    nonisolated final class Expense {
+        @Attribute(.unique) private(set) var id: UUID
+        private(set) var occurredAt: Date
+        private(set) var amountValue: Decimal
+        private(set) var categoryRawValue: String
+        private(set) var note: String?
+
+        init(
+            id: UUID = UUID(),
+            occurredAt: Date,
+            amountValue: Decimal,
+            categoryRawValue: String,
+            note: String? = nil
+        ) {
+            self.id = id
+            self.occurredAt = occurredAt
+            self.amountValue = amountValue
+            self.categoryRawValue = categoryRawValue
+            self.note = note
+        }
+    }
+
+    /// The v10 shift pause, unchanged from v9.
+    @Model
+    nonisolated final class ShiftPause {
+        @Attribute(.unique) private(set) var id: UUID
+        private(set) var startedAt: Date
+        private(set) var endedAt: Date?
+        private(set) var shift: Shift?
+
+        init(id: UUID = UUID(), shift: Shift, startedAt: Date, endedAt: Date? = nil) {
+            self.id = id
+            self.startedAt = startedAt
+            self.endedAt = endedAt
+            self.shift = shift
+        }
+    }
+}
+
+/// Version 11 of the persisted schema: a delivery can record what it is
+/// **expected** to pay, beside what it was recorded as having paid.
+///
+/// One new optional attribute on one existing entity:
+/// `Delivery.expectedEarningsAmount`. Nothing else anywhere changes shape. No
+/// attribute is renamed, retyped or removed, no entity is added, and not one
+/// stored value moves, so every shift, route sample, capture session, delivery,
+/// pickup place, recorded amount, pause and expense carries over untouched.
+///
+/// ## Why a second column rather than a flag on the first
+///
+/// `grossEarningsAmount` means one thing: the finalized amount the driver
+/// recorded a terminal delivery as having paid. It is what every total, rate,
+/// period figure and export summary in the app is built from. An expectation is
+/// a different fact with a different lifetime — entered while the delivery is
+/// still running, never confirmed by anything, and counted by nothing.
+///
+/// Overloading the existing column and marking it provisional was the obvious
+/// cheaper option and is the one thing this version must not do. Every existing
+/// reader of that attribute — the period calculator, the shift metrics, both
+/// export encoders, the history screen — would have to be taught to check the
+/// flag, and each one that was missed would silently report an expectation as
+/// earnings. A separate column fails the other way: a reader that has not been
+/// taught about expectations cannot see them at all, which is exactly the
+/// behaviour every existing aggregate wants.
+///
+/// ## What migrating must not do
+///
+/// **Every migrated delivery keeps `nil`**, which the app reads as "no
+/// expectation recorded" and never as `0.00`. A v10 store records what
+/// deliveries paid and nothing about what they were thought to be worth
+/// beforehand, and DashPilot has no source from which a past expectation could
+/// be recovered: it reads no delivery platform, sees no offer and keeps no
+/// history of one.
+///
+/// Copying each delivery's recorded gross into the new column is the inference
+/// this stage refuses, and it is the tempting one, because for most deliveries
+/// the two numbers really would have matched. It would assert that the driver
+/// looked at an offer and agreed with it, which is a claim about their judgement
+/// that the store holds no evidence for, and it would fill a column whose whole
+/// purpose is to be distinguishable from the one beside it with copies of that
+/// one.
+///
+/// This version reuses the file-scope models rather than freezing copies,
+/// because it *is* the current shape. It gets frozen copies of its own the first
+/// time v12 moves them on, exactly as v10 did above.
+enum DashPilotSchemaV11: VersionedSchema {
+    static var versionIdentifier: Schema.Version { Schema.Version(11, 0, 0) }
 
     static var models: [any PersistentModel.Type] {
         [Shift.self, RouteSample.self, Delivery.self, PickupPlace.self, Expense.self, ShiftPause.self]
@@ -1083,12 +1295,13 @@ enum DashPilotMigrationPlan: SchemaMigrationPlan {
             DashPilotSchemaV7.self,
             DashPilotSchemaV8.self,
             DashPilotSchemaV9.self,
-            DashPilotSchemaV10.self
+            DashPilotSchemaV10.self,
+            DashPilotSchemaV11.self
         ]
     }
 
     static var stages: [MigrationStage] {
-        [v1ToV2, v2ToV3, v3ToV4, v4ToV5, v5ToV6, v6ToV7, v7ToV8, v8ToV9, v9ToV10]
+        [v1ToV2, v2ToV3, v3ToV4, v4ToV5, v5ToV6, v6ToV7, v7ToV8, v8ToV9, v9ToV10, v10ToV11]
     }
 
     /// V1 → V2 is lightweight.
@@ -1268,5 +1481,35 @@ enum DashPilotMigrationPlan: SchemaMigrationPlan {
     static let v9ToV10 = MigrationStage.lightweight(
         fromVersion: DashPilotSchemaV9.self,
         toVersion: DashPilotSchemaV10.self
+    )
+
+    /// V10 → V11 is lightweight.
+    ///
+    /// One new optional attribute on an existing entity, which SwiftData can add
+    /// without being told how. It is the same shape as v3 → v4 and v6 → v7, and
+    /// it has the same nothing to derive: a delivery recorded before the app
+    /// could ask what an order was expected to pay has no expectation, because
+    /// none was ever entered. Every migrated delivery keeps `nil`, which the app
+    /// reads as "not recorded" and never as `0.00`.
+    ///
+    /// The inference this stage refuses is the one sitting in plain sight. A v10
+    /// store often holds a delivered delivery with a recorded gross amount, and
+    /// copying that figure into the new column would produce, for most
+    /// deliveries, exactly the number the driver would have typed. It would also
+    /// be the app asserting on its own authority that the driver expected what
+    /// they were paid, in the one column whose entire purpose is to be
+    /// distinguishable from the amount beside it. Nothing afterwards could tell
+    /// an invented expectation from one they entered, and the first screen to
+    /// show "expected $8.50 · recorded $8.50" would be stating a coincidence the
+    /// migration manufactured.
+    ///
+    /// **No figure a driver has already recorded changes, and no figure derived
+    /// from one moves.** The new attribute is read by nothing that aggregates:
+    /// shift gross, period gross, every rate, the delivery-earnings subtotal and
+    /// every exported summary are built from `grossEarningsAmount` alone, before
+    /// this version and after it.
+    static let v10ToV11 = MigrationStage.lightweight(
+        fromVersion: DashPilotSchemaV10.self,
+        toVersion: DashPilotSchemaV11.self
     )
 }
