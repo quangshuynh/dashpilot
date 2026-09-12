@@ -6,9 +6,18 @@ and one they cannot.
 
 ## Route capture
 
-- **Foreground only.** No background location mode, no Always authorization, no
-  significant-location-change or region monitoring, and no background task. Capture stops whenever
-  DashPilot is not in front, and iOS guarantees no background execution in any case.
+- **Recording continues off screen, and is still not guaranteed.** A session started with the app
+  open carries on while the driver is in another app or the phone is locked. iOS may suspend or end
+  the app at any time, and DashPilot does nothing to be relaunched: no significant-location-change
+  monitoring, no region monitoring, no background task. iOS guarantees no background execution in
+  any case.
+- **A recording can only be started with DashPilot open.** When In Use authorization continues a
+  session that began in the foreground; it does not deliver one that did not. A shift begun by voice
+  with the app off screen records nothing until the app is opened.
+- **Nothing is verified on hardware yet.** The background behaviour is proved against a stubbed
+  Core Location in the domain and UI suites. A simulator cannot lock a screen, be driven, or have
+  its app evicted under memory pressure, so how long a real shift keeps recording, and what it costs
+  in battery, are unmeasured.
 - **Recorded mileage is a floor with no upper bound.** Nothing states how much is missing, because
   nothing can.
 - **Gaps have counts but no location in the shift.** DashPilot says a route has two gaps, not
@@ -27,8 +36,9 @@ and one they cannot.
 - **A spoken delivery step needs exactly one delivery in progress.** With two or more, nothing is
   recorded and the refusal names the count. This is a refusal, not a gap: a sentence names no
   particular order, and guessing one would write an event into a delivery the driver did not mean.
-- **A shift started by voice records no route until the app is opened**, because capture is
-  foreground-only. The shift's own times are recorded exactly as they would be from the screen.
+- **A shift started by voice records no route until the app is opened**, because a recording can
+  only be started in the foreground. The shift's own times are recorded exactly as they would be
+  from the screen.
 - **No cancellation, no amount, no cost, no pickup name and nothing about location** can be asked for
   by voice. Every one of them either cannot be undone or would have to be dictated.
 - **Nothing is read back.** No summary, rate or total is spoken; a confirmation states only what was

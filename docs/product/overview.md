@@ -18,11 +18,12 @@ switch and full versus reduced accuracy. The root screen shows the current state
 recovery that actually applies to it. Permission is requested only when the driver taps, and only
 at the When In Use scope.
 
-**Foreground route capture.** While a shift is running and DashPilot is open, accepted positions
-are recorded against that shift and stored on device. Capture starts and stops with the shift,
-resumes for a shift that was still running when the app was terminated, and stops when permission
-is lost without ending the shift. The running shift shows whether capture is active, paused because
-the app is in the background, or unavailable.
+**Route capture.** While a shift is running, accepted positions are recorded against that shift and
+stored on device, and recording started with DashPilot open carries on while the driver is in
+another app or the phone is locked. Capture starts and stops with the shift, resumes for a shift
+that was still running when the app was terminated, and stops when permission is lost without ending
+the shift. The running shift shows whether recording is active, paused, or unavailable, and says
+that recording is not guaranteed.
 
 **Sample filtering.** One acceptance policy judges every candidate position: invalid coordinates,
 invalid or poor accuracy, cached stale fixes, duplicate and out-of-order timestamps, movement too
@@ -137,11 +138,12 @@ the wording the app itself uses.
 
 !!! warning "Recorded mileage is what was recorded, not what was driven"
 
-    Capture is foreground-only, so a shift's route has a gap whenever DashPilot was not open.
-    Distance across a gap is left out rather than guessed at with a straight line, which means the
-    figure is normally lower than the miles actually driven. A shift with known gaps is labelled a
-    partial route. It is not a tax or deduction figure, no mileage is separated per delivery, and
-    nothing here is calibrated against real driving yet.
+    Recording carries on off screen, but iOS can still suspend or end the app, permission can be
+    lost, and a shift started by voice records nothing until the app is opened. Distance across a
+    gap is left out rather than guessed at with a straight line, which means the figure can be lower
+    than the miles actually driven. A shift with known gaps is labelled a partial route. It is not a
+    tax or deduction figure, no mileage is separated per delivery, and nothing here is calibrated
+    against real driving yet.
 
 !!! warning "The rates are gross, and each says what it divides by"
 
@@ -161,12 +163,16 @@ the wording the app itself uses.
     there only because the driver typed it for that delivery, and no restaurant, customer or address
     is stored at all.
 
-!!! warning "Route capture is foreground only"
+!!! warning "Recording continues off screen, and is still not guaranteed"
 
-    There is no background location mode, no Always authorization, no significant-location-change
-    or region monitoring and no background task. When DashPilot is not in the foreground, capture
-    stops and the route has a gap in it. iOS does not guarantee uninterrupted background execution,
-    and the app does not claim it: the running shift says plainly when capture is paused.
+    A recording started with DashPilot open carries on while the driver is in another app or the
+    phone is locked. That is what When In Use authorization plus the location background mode
+    permits, and it is all DashPilot asks for. It does not make recording continuous: iOS may
+    suspend or end the app at any time and there is no significant-location-change or region
+    monitoring to relaunch it, so a route can still have a gap in it. A recording can only be
+    *started* with DashPilot open, so a shift begun by voice with the app off screen records nothing
+    until it is opened. iOS does not guarantee uninterrupted background execution, and the app does
+    not claim it.
 
 ## Boundaries the project will not cross
 

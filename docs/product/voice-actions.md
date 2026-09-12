@@ -61,12 +61,15 @@ delivery whose number could not be resolved is confirmed as "Delivery", never as
 
 No confirmation states an amount, a distance, a rate or a total.
 
-## Route capture still needs the app open
+## Recording still has to be started with the app open
 
-Route capture is foreground-only, and that has not changed. **A shift started by voice records no
-route until DashPilot is opened**, which is why every start says so out loud, and why the intent's
-description in the Shortcuts app says it too. The shift's own times are recorded exactly as they
-would be from the screen; the recorded mileage is the part that waits.
+Recording carries on once it is running, in another app or behind a locked screen. It cannot
+**begin** there: When In Use authorization continues a session started in the foreground and does
+not deliver one that did not start there. **A shift started by voice therefore records no route
+until DashPilot is opened**, which is why every start says "Open DashPilot to start recording your
+route" out loud, and why the intent's description in the Shortcuts app says it too. The shift's own
+times are recorded exactly as they would be from the screen; the recorded mileage is the part that
+waits.
 
 ## What is deliberately not offered
 

@@ -262,9 +262,9 @@ reasons an expense is dated rather than attached to work.
 
 The period's mileage is the sum of the distances its shifts' routes measured.
 
-**It is recorded mileage, not miles driven.** Capture is foreground-only and the
-distance across a gap is left out rather than guessed at, so the total is a floor
-in exactly the way a single shift's is — see
+**It is recorded mileage, not miles driven.** The distance across a gap is left
+out rather than guessed at, so the total is a floor in exactly the way a single
+shift's is — see
 [Recorded mileage](recorded-mileage.md).
 
 A shift whose route measured nothing contributes **no distance at all**. It is
