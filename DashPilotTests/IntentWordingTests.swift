@@ -18,6 +18,10 @@ struct IntentWordingTests {
             IntentLifecycleOutcome.shiftStarted(at: start),
             .shiftEnded(duration: 5_400),
             .shiftEnded(duration: nil),
+            .shiftPaused(workingDuration: 5_400),
+            .shiftPaused(workingDuration: nil),
+            .shiftResumed(pausedDuration: 1_800),
+            .shiftResumed(pausedDuration: nil),
             .deliveryStarted(number: 1, inProgress: 1),
             .deliveryStarted(number: 2, inProgress: 2),
             .deliveryStarted(number: nil, inProgress: nil),
@@ -41,11 +45,51 @@ struct IntentWordingTests {
         )
     }
 
-    @Test("Ending a shift says how long it ran, in the spoken duration wording")
+    /// The figure is the shift's **working** time, so the sentence says so. A
+    /// driver who paused for an hour did not work that hour, and a confirmation
+    /// reporting the elapsed length would give them a number the app itself will
+    /// not use again.
+    @Test("Ending a shift says how long it was worked, in the spoken duration wording")
     func shiftEndNamesTheDuration() {
         #expect(
             IntentLifecycleOutcome.shiftEnded(duration: 5_400).confirmation
-                == "Shift ended after \(DurationText.spoken(5_400))."
+                == "Shift ended after \(DurationText.spoken(5_400)) of working time."
+        )
+    }
+
+    @Test("Pausing says how long was worked and that recording has stopped")
+    func shiftPauseNamesWorkingTimeAndStopsRecording() {
+        let confirmation = IntentLifecycleOutcome.shiftPaused(workingDuration: 5_400).confirmation
+
+        #expect(confirmation.hasPrefix("Shift paused after \(DurationText.spoken(5_400)) of working time."))
+        #expect(
+            confirmation.contains("Route recording is stopped until you resume"),
+            "There is no screen to notice a stopped recording on"
+        )
+    }
+
+    @Test("A pause with no measurable working time still says recording stopped")
+    func shiftPauseWithoutADurationStillWarns() {
+        let confirmation = IntentLifecycleOutcome.shiftPaused(workingDuration: nil).confirmation
+
+        #expect(confirmation == "Shift paused. Route recording is stopped until you resume.")
+    }
+
+    /// The same caution a spoken start carries, and for the same reason: a
+    /// capture session can only be *started* with the app on screen.
+    @Test("Resuming says how long was paused and that the route needs the app open")
+    func shiftResumeNamesThePauseAndTheRouteLimit() {
+        let confirmation = IntentLifecycleOutcome.shiftResumed(pausedDuration: 1_800).confirmation
+
+        #expect(confirmation.hasPrefix("Shift resumed after \(DurationText.spoken(1_800)) paused."))
+        #expect(confirmation.contains("Open DashPilot to start recording your route again"))
+    }
+
+    @Test("A resume with no measurable pause still carries the route caution")
+    func shiftResumeWithoutADurationStillWarns() {
+        #expect(
+            IntentLifecycleOutcome.shiftResumed(pausedDuration: nil).confirmation
+                == "Shift resumed. Open DashPilot to start recording your route again."
         )
     }
 
