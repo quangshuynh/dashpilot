@@ -213,13 +213,14 @@ delivery, which is neither what the wait measures nor something the app can supp
 
 ### The per-mile rate divides by recorded mileage
 
-Capture is foreground-only and distance across a gap is excluded rather than guessed, so the
-denominator is normally lower than the miles actually driven. That makes the rate normally
-**higher** than earnings per mile driven. The word "recorded" is in the visible text, not only in
-this documentation, and it is spelled out in full for VoiceOver.
+Distance across a gap is excluded rather than guessed, so the denominator can be lower than the
+miles actually driven. That makes the rate at least as high as earnings per mile driven, and usually
+higher. The word "recorded" is in the visible text, not only in this documentation, and it is
+spelled out in full for VoiceOver.
 
-The figure is honest about its own denominator, but it is not comparable to a per-mile figure from
-an app that records in the background.
+The figure is honest about its own denominator. Recording now continues while DashPilot is off
+screen, which narrows the gap between the two numbers, but it does not close it: iOS can still
+suspend or end the app, and a shift started by voice records nothing until the app is opened.
 
 ## When a rate cannot be derived
 

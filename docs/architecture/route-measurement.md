@@ -9,8 +9,9 @@ improves every historical shift and the store never holds two answers to the sam
 !!! abstract "A gap in capture is never counted as driven distance."
 
 A position, an interruption, then another position is not a straight line somebody drove. It is two
-pieces of route with an unknown amount of driving between them. Foreground-only capture means those
-interruptions are the normal case, so this is the rule the whole calculation is built around.
+pieces of route with an unknown amount of driving between them. Capture that iOS can suspend or end,
+and that cannot be started off screen, means those interruptions happen, so this is the rule the
+whole calculation is built around.
 
 `RouteMileageCalculator` splits a route into continuous segments, sums the distance between adjacent
 positions *within* each segment, and reports what it left out. Two positions are continuous when
@@ -18,9 +19,14 @@ both of the following hold.
 
 **They share a capture session.** `LocationTrackingService` mints a `captureSessionID` whenever
 updates start and clears it whenever they stop, so a change of identifier is direct evidence that
-capture was interrupted: backgrounding, a lost permission, a failed save, a new process. This is the
-fact timestamps cannot supply, because twenty seconds in another app and twenty seconds at a red
-light look identical in a list of timestamps.
+capture was interrupted: a lost permission, a failed save, a new process, or a session that could
+not be started because the app was off screen. This is the fact timestamps cannot supply, because
+twenty seconds with capture stopped and twenty seconds at a red light look identical in a list of
+timestamps.
+
+The converse is as important. Leaving the foreground with a session running does **not** end it, so
+the driving done in the delivery app is inside one session and its distance is counted. Nothing is
+invented by that: those positions were recorded.
 
 **They are no more than `maximumSampleInterval` apart.** The identifier proves the app kept
 recording, not that positions kept arriving. Two minutes is the initial value: while a vehicle is
@@ -72,8 +78,8 @@ evidence of anything. Idle measurement gets its own data when it gets its own fe
 ## The wording is a tested type
 
 `RouteQuality` holds the vocabulary for a measured route, next to `RouteDistance`, which holds the
-measurement. Wording is the part that is easy to get wrong here, because a foreground-only capture
-is a floor on the distance driven and almost every natural phrase for it claims more. The phrasing
+measurement. Wording is the part that is easy to get wrong here, because a recorded route is a
+floor on the distance driven and almost every natural phrase for it claims more. The phrasing
 is therefore one tested type rather than strings spread across two views that can drift apart.
 
 Only what the stored data supports is stated: recorded mileage, how many unbroken stretches of

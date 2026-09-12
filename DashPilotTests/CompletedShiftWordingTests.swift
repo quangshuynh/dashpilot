@@ -6,8 +6,8 @@ import Testing
 ///
 /// Wording is tested rather than eyeballed because the failure mode is a claim,
 /// not a crash: `12.4 mi` written as "total mileage" or "miles driven" would be
-/// wrong about a foreground-only capture in a way no arithmetic test would ever
-/// catch. A fixed locale is used throughout so the assertions describe the
+/// wrong about a route recording can have been interrupted in, in a way no
+/// arithmetic test would ever catch. A fixed locale is used throughout so the assertions describe the
 /// wording rather than the reader's region.
 @Suite("Route quality wording")
 struct RouteQualityTests {

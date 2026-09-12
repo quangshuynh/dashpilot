@@ -31,11 +31,16 @@ nonisolated enum RouteCaptureState: Equatable, Sendable {
     case idle
     /// Samples are being collected and retained.
     case tracking
-    /// A shift is running but DashPilot is not in the foreground.
+    /// A shift is running, DashPilot is not in the foreground, and no capture
+    /// session is running to continue.
     ///
-    /// Capture is foreground-only, so this is a normal, expected state rather
-    /// than a failure. It is named rather than hidden because the route has a
-    /// gap in it.
+    /// Not a failure, and **not** what an ordinary backgrounding produces: a
+    /// session already running continues across that and stays ``tracking``.
+    /// This is the case where there was nothing to continue, which is reached
+    /// when a shift begins while the app is already behind another one, because
+    /// a session can only be started in the foreground.
+    ///
+    /// It is named rather than hidden because the route has a gap in it.
     case pausedInBackground
     /// A shift is running and capture cannot proceed.
     case unavailable(RouteCaptureUnavailableReason)

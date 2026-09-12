@@ -2,7 +2,7 @@ import Foundation
 import OSLog
 import SwiftData
 
-/// Captures a shift's route while DashPilot is in the foreground.
+/// Captures a running shift's route.
 ///
 /// The service coordinates three things that are deliberately kept apart
 /// elsewhere: ``LocationAuthorizationService`` decides what the app is allowed
@@ -25,18 +25,38 @@ import SwiftData
 /// Each stretch of capture is stamped with a capture session identifier, minted
 /// when updates start and cleared when they stop. It is the only record the
 /// stored route keeps of its own gaps, and the mileage calculation refuses to
-/// measure across a change of it. Every way capture can stop — backgrounding, a
-/// lost permission, a failed save, a new process — therefore ends a session, and
+/// measure across a change of it. Every way capture can stop, including a lost
+/// permission, a failed save and a new process, therefore ends a session, and
 /// nothing resumes one.
 ///
-/// ## Foreground only
+/// The corollary matters as much: a transition that does **not** stop capture
+/// must not end a session either, or the route would carry a gap where nothing
+/// was actually missed. Leaving the foreground with a session running is that
+/// case.
 ///
-/// This is the whole of the current behaviour. No background location mode, no
-/// Always authorization, no significant-change or region monitoring, no
-/// background task. When the app leaves the foreground, capture stops and the
-/// route has a gap; ``enterBackground()`` makes that the app's own decision
-/// rather than a side effect of being suspended, and the state says so. iOS
-/// does not guarantee background execution, and nothing here pretends otherwise.
+/// ## Where capture may run
+///
+/// A session can only be **started** while the app is in the foreground, and
+/// once started it **continues** when the driver switches to another app or
+/// locks the phone. That is exactly what When In Use authorization plus the
+/// `location` background mode permits, and it is why the app asks for nothing
+/// more: Always authorization buys the ability to begin a session from the
+/// background and to be relaunched into one, neither of which is implemented.
+///
+/// The consequences are deliberate and are stated rather than smoothed over:
+///
+/// - Leaving the foreground with capture running is **not** a gap. One capture
+///   session spans the transition, nothing is stopped and nothing is restarted,
+///   so the route across it is a route that was genuinely recorded.
+/// - Leaving the foreground with capture *not* running leaves it not running.
+///   A shift started by voice while the app is behind another one records
+///   nothing until the driver opens DashPilot, and ``RouteCaptureState`` says
+///   `pausedInBackground` for exactly that.
+/// - iOS may still suspend or terminate the process, and nothing here relaunches
+///   it. That ends the capture session like any other interruption, so the route
+///   carries the gap and the mileage calculation refuses to measure across it.
+///
+/// iOS guarantees no background execution, and nothing here pretends otherwise.
 ///
 /// `@MainActor` because it drives visible state and shares the main context with
 /// ``ShiftService``. Every operation runs to completion without suspending, so a
@@ -121,6 +141,13 @@ final class LocationTrackingService {
         provider.onFailure = { [weak self] failure in
             self?.receive(failure)
         }
+        // Permission can be revoked while the app is behind another one, which
+        // is where a driver changing it in Settings necessarily does it. Capture
+        // now runs there, so it reconciles on the platform's report rather than
+        // waiting for a screen to notice.
+        authorization.onAuthorizationChange = { [weak self] _ in
+            self?.synchronize()
+        }
     }
 
     // MARK: Reconciling with the shift
@@ -159,12 +186,9 @@ final class LocationTrackingService {
 
         adopt(shift)
 
-        guard !isBackgrounded else {
-            stopCapturing()
-            transition(to: .pausedInBackground)
-            return
-        }
-
+        // Permission is judged before the app's own position, because it
+        // outranks it: a shift that cannot be recorded at all should say why,
+        // not report a pause it would not come back from anyway.
         if let reason = RouteCaptureUnavailableReason(authorization.authorization) {
             stopCapturing()
             transition(to: .unavailable(reason))
@@ -172,6 +196,14 @@ final class LocationTrackingService {
         }
 
         if !provider.isUpdating {
+            // A session may only *begin* in the foreground. When In Use lets a
+            // running stream continue into the background; it does not deliver
+            // one that was not already running, so starting here would leave the
+            // app claiming to record a route no position will arrive for.
+            guard !isBackgrounded else {
+                transition(to: .pausedInBackground)
+                return
+            }
             retainedSampleCount = 0
             captureSessionID = UUID()
             provider.startUpdates()
@@ -193,21 +225,43 @@ final class LocationTrackingService {
 
     /// Records that the app has left the foreground.
     ///
-    /// Capture stops here rather than being left to iOS suspending the process,
-    /// so the pause is deliberate, pending samples are written, and the state
-    /// the driver sees on return is honest about the gap.
+    /// What happens next is decided by whether a session is already running and
+    /// whether this build may keep one running outside the foreground. A running
+    /// session is left **untouched**: stopping and restarting it around the
+    /// transition would mint a second capture session and put a gap in a route
+    /// that was never interrupted.
+    ///
+    /// Pending samples are written either way. Once the app is off screen iOS
+    /// may suspend or terminate it at any moment and promises no later chance,
+    /// so what is only in memory is written while there is still a process to
+    /// write it.
     func enterBackground() {
         guard !isBackgrounded else { return }
         isBackgrounded = true
-        stopCapturing()
-        if state.accompaniesActiveShift {
-            transition(to: .pausedInBackground)
+
+        flush()
+
+        if provider.isUpdating, provider.supportsBackgroundUpdates {
+            AppLog.routeCapture.info("Left the foreground; route capture continues")
+            return
         }
-        AppLog.routeCapture.info("Left the foreground; route capture paused")
+
+        // Read after the flush, which can itself have stopped capture and said
+        // why. A store that cannot be written to is a better answer than a
+        // pause, so the reason already on the state is not overwritten here.
+        let wasTracking = state == .tracking
+        stopCapturing()
+        if wasTracking {
+            transition(to: .pausedInBackground)
+            AppLog.routeCapture.info("Left the foreground; route capture paused")
+        }
     }
 
-    /// Records that the app is in the foreground again and resumes capture if a
-    /// shift is still running and location is still usable.
+    /// Records that the app is in the foreground again.
+    ///
+    /// Reconciling is all that is needed in either direction: a session that
+    /// continued through the background is still running and is left alone, and
+    /// one that stopped starts again as a new capture session.
     func enterForeground() {
         isBackgrounded = false
         synchronize()

@@ -6,10 +6,11 @@ implementation is described under [Architecture](../architecture/overview.md).
 ```mermaid
 flowchart TD
     A[Root screen] -->|Start shift| B[Shift running]
-    B --> C{DashPilot in the foreground?}
-    C -->|Yes, and location usable| D[Positions recorded]
-    C -->|No| E[Capture paused, shift keeps running]
-    C -->|Permission lost| F[Capture unavailable, shift keeps running]
+    B --> C{Recording started with DashPilot open?}
+    C -->|Yes, and location usable| D[Positions recorded, in the app and off screen]
+    C -->|Started off screen| E[Recording paused, shift keeps running]
+    C -->|Permission lost| F[Recording unavailable, shift keeps running]
+    D -->|iOS suspends or ends the app| E
     D --> J[Record deliveries, one tap per event]
     E --> J
     F --> J
@@ -29,8 +30,8 @@ against the store, so the absence of the button is presentation and not the prot
 
 A shift can also be started by voice, without opening the app: see
 [Voice and system actions](voice-actions.md). The rule is the same either way, because the same
-service enforces it, and the spoken confirmation states that the route is recorded only while the app
-is open.
+service enforces it, and the spoken confirmation states that recording begins when the app is
+opened.
 
 If the app is terminated while a shift is running, the next launch finds the same unfinished shift
 and resumes it with its original start time. Nothing synthesises a replacement shift, and no
@@ -43,10 +44,14 @@ route capture:
 
 | State | What it means |
 | --- | --- |
-| Tracking active | DashPilot is in the foreground and positions are being recorded |
-| Foreground tracking paused | The app left the foreground, so capture stopped and the route has a gap |
+| Location tracking active | Positions are being recorded, and go on being recorded in another app or behind a locked screen |
+| Route recording paused | The shift began with DashPilot off screen, so there is nothing recording yet |
 | Permission required | Location permission has not been granted, so nothing is being recorded |
 | Unavailable | Location Services is off, access is restricted, or the store refused a write |
+
+The active line carries a sentence of its own rather than a green label and silence. Recording
+continuing off screen is the useful half; that iOS can still stop it, and that it does not restart
+on its own once DashPilot is closed, is the half a driver has to know before trusting the total.
 
 Losing location never ends a shift. Capture becomes unavailable, the shift keeps running, and the
 driver decides when it ends.
@@ -61,8 +66,12 @@ Permission is never requested at launch. iOS shows the prompt once, and a prompt
 before the driver has any reason to grant it is the surest way to have it declined permanently, so
 the request is always a tap.
 
-DashPilot asks for **When In Use** only, and capture is foreground-only precisely so that stays
-honest. The authorization panel states the current condition and offers only a recovery that
+DashPilot asks for **When In Use** only. That is not a restriction it works around: paired with the
+location background mode, it is exactly what lets recording started with the app open carry on while
+the driver is elsewhere. Always would buy starting a recording from the background and being
+relaunched into one, and DashPilot does neither.
+
+The authorization panel states the current condition and offers only a recovery that
 actually works: the prompt when permission has not been decided, the app's Settings page when it
 was denied, a description of where the Location Services switch lives when the system-wide switch
 is off, and nothing at all when access is restricted or already granted.

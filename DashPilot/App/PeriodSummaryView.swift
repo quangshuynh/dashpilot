@@ -511,8 +511,8 @@ struct PeriodSummaryView: View {
         } footer: {
             Text(
                 """
-                Recorded mileage is what the routes measured, not the miles driven: capture is \
-                foreground-only, and the distance across a gap is left out rather than guessed at. \
+                Recorded mileage is what the routes measured, not the miles driven: recording can \
+                be interrupted, and the distance across a gap is left out rather than guessed at. \
                 A shift whose route measured nothing contributes no distance at all — it is never \
                 counted as zero miles.
                 """

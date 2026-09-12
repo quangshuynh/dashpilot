@@ -29,7 +29,7 @@ monetary precision and honest wording seriously.
 
 ```mermaid
 flowchart LR
-    A[Start shift] --> B[Foreground route capture]
+    A[Start shift] --> B[Route capture, in the app and off screen]
     B --> C[Record deliveries, one tap per event]
     C --> D[End shift]
     D --> E[Enter gross earnings]
@@ -37,8 +37,9 @@ flowchart LR
 ```
 
 One shift runs at a time, and as many deliveries within it as the driver is actually working. While
-the shift runs and DashPilot is in the foreground, accepted positions are recorded against it, and
-each delivery in progress gets its own large control offering only its own next step. When the shift ends, the driver may type what it paid, and the completed
+the shift runs, accepted positions are recorded against it, and recording started with DashPilot
+open carries on while the driver is in another app or the phone is locked. Each delivery in progress
+gets its own large control offering only its own next step. When the shift ends, the driver may type what it paid, and the completed
 shift's detail screen states what each delivery recorded, how much of the shift a delivery was
 active for, the shift's recorded mileage, the shape of its route, and three derived rates together
 with the reason any of them could not be derived.
@@ -69,8 +70,9 @@ with the reason any of them could not be derived.
 
 - No delivery-platform account, credential, import, scraping or automation of any kind.
 - No accounts, no sync, no analytics, no telemetry, no advertising and no network code at all.
-- No background route capture. Capture is foreground-only, so a route has a gap whenever the app
-  was not open, and DashPilot says so instead of guessing across it.
+- No guaranteed continuous recording. A recording can only be started with the app open, iOS may
+  suspend or end the app at any time, and nothing relaunches it, so a route can still have a gap in
+  it. DashPilot says so instead of guessing across it.
 - No claim that recorded mileage equals the miles driven, and no tax or deduction figure.
 - No profit, take-home or net earnings. Gross earnings are one number the driver typed, and the one
   place a cost is subtracted, a period's *net after recorded expenses*, is one recorded subtotal less
