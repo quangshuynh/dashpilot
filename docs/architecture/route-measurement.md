@@ -115,7 +115,7 @@ usable, so a whole-route measurement and an extended one cannot drift apart.
 `ActiveRouteMeasurement` is the open walk plus the bookkeeping that keeps it honest against the
 store, and `ActiveShiftRouteService` turns it into queries: a **count** of the shift's route rows,
 and — only when the count has moved — a **fetch of the rows after the last position already
-measured**. Neither loads `shift.routeSamples`, which would fault in the whole route to look at the
+measured**. Neither loads the shift's whole route, which would read every position to look at the
 end of it.
 
 Three rules make the shortcut safe.

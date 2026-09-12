@@ -182,8 +182,8 @@ struct ExpensePersistenceTests {
         #expect(paid.startedAt == start)
         #expect(paid.endedAt == at(4 * 3600))
         #expect(paid.grossEarnings == Money(exact: "86.25"), "The exact decimal survives the migration")
-        #expect(paid.routeSamples.count == 3)
-        #expect(paid.routeSamples.allSatisfy { $0.captureSessionID == captureSession })
+        #expect(paid.routeSamples().count == 3)
+        #expect(paid.routeSamples().allSatisfy { $0.captureSessionID == captureSession })
         #expect(paid.deliveries.count == 2)
 
         let unpaid = try #require(shifts.first { $0.id == unpaidShiftID })

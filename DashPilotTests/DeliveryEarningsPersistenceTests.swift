@@ -577,7 +577,7 @@ struct DeliveryEarningsPersistenceTests {
 
         #expect(shift.id == shiftID)
         #expect(shift.completedDuration == 3_600)
-        #expect(shift.routeSamples.count == (fromVersion == 1 ? 0 : 1))
+        #expect(shift.routeSamples().count == (fromVersion == 1 ? 0 : 1))
         #expect(shift.grossEarnings == (fromVersion >= 4 ? Money(exact: "86.25") : nil))
         #expect(shift.deliveries.count == (fromVersion >= 5 ? 1 : 0), "No version step fabricates a delivery")
         #expect(

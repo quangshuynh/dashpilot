@@ -575,7 +575,7 @@ struct PickupPlacePersistenceTests {
 
         #expect(shift.id == shiftID)
         #expect(shift.completedDuration == 3_600)
-        #expect(shift.routeSamples.count == (fromVersion == 1 ? 0 : 1))
+        #expect(shift.routeSamples().count == (fromVersion == 1 ? 0 : 1))
         #expect(shift.grossEarnings == (fromVersion == 4 ? Money(exact: "86.25") : nil))
         #expect(shift.deliveries.isEmpty, "No version step fabricates a delivery")
         #expect(
@@ -583,10 +583,10 @@ struct PickupPlacePersistenceTests {
             "And no version step fabricates a pickup place"
         )
         if fromVersion == 2 {
-            #expect(shift.routeSamples.first?.captureSessionID == nil, "A v2 sample's continuity stays unproven")
+            #expect(shift.routeSamples().first?.captureSessionID == nil, "A v2 sample's continuity stays unproven")
         }
         if fromVersion >= 3 {
-            #expect(shift.routeSamples.first?.captureSessionID == session)
+            #expect(shift.routeSamples().first?.captureSessionID == session)
         }
     }
 }

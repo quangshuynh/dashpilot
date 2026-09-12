@@ -434,11 +434,26 @@ struct ShiftService {
     /// screen happens to show, so a wrong navigation state cannot destroy a
     /// running shift.
     ///
-    /// The shift's route samples and its deliveries go with it. That is the
-    /// relationships' `.cascade` delete rule doing its job rather than a loop
-    /// here — a shift's positions and deliveries describe that shift and
-    /// nothing else, and the orphans would be exactly the sensitive rows the
-    /// app promises to keep accountable to a shift.
+    /// The shift's deliveries and pauses go with it through their `.cascade`
+    /// delete rules. **Its route samples are deleted here, explicitly**, and
+    /// that is the substantive part of this method rather than an
+    /// implementation detail: `Shift` holds no collection of its route, so
+    /// there is no cascade to carry the positions away, and nothing else in the
+    /// app would. The orphans would be exactly the sensitive rows the app
+    /// promises to keep accountable to a shift, so leaving them is the one
+    /// outcome this method exists to prevent. ``DashPilotSchemaV10`` says why
+    /// the collection is gone.
+    ///
+    /// **It is one transaction.** The route rows are marked deleted, then the
+    /// shift, then a single save. A store that refuses the write leaves the
+    /// shift *and* its whole route, and there is no ordering in which a shift
+    /// disappears while its positions survive or the reverse. Deleting the rows
+    /// in their own save first would create exactly that window.
+    ///
+    /// The rows are fetched and deleted rather than removed with a batch
+    /// delete. A batch delete runs in the store beneath the context, so it
+    /// cannot be rolled back and cannot be part of the same transaction as
+    /// removing the shift, which is the whole guarantee above.
     ///
     /// - Throws: ``ShiftLifecycleError/cannotDeleteActiveShift`` if the shift has
     ///   not finished, or ``ShiftLifecycleError/storeUnavailable(underlying:)``
@@ -447,6 +462,21 @@ struct ShiftService {
         guard !shift.isActive else {
             AppLog.shift.notice("Refused to delete a shift: it is still running")
             throw ShiftLifecycleError.cannotDeleteActiveShift
+        }
+
+        let shiftID = shift.id
+        do {
+            let route = try context.fetch(
+                FetchDescriptor<RouteSample>(predicate: #Predicate { $0.shift?.id == shiftID })
+            )
+            for sample in route { context.delete(sample) }
+        } catch {
+            // Nothing has been marked deleted yet, so there is nothing to roll
+            // back. Refusing is the only safe answer: deleting the shift now
+            // would leave its positions behind with no shift to account for
+            // them.
+            AppLog.shift.error("Failed to read a completed shift's route before deleting it: \(error)")
+            throw ShiftLifecycleError.storeUnavailable(underlying: error)
         }
 
         context.delete(shift)

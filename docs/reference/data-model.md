@@ -1,7 +1,7 @@
 # Data model
 
 Six persisted entities, and a small set of value types derived from them. Current schema
-version: **v9**.
+version: **v10**.
 
 ## `Shift`
 
@@ -10,7 +10,6 @@ version: **v9**.
 | `id` | `UUID` | Unique attribute |
 | `startedAt` | `Date` | Recorded when the shift starts, and never rewritten |
 | `endedAt` | `Date?` | `nil` means the shift is still running. This is the only definition of "active" |
-| `routeSamples` | `[RouteSample]` | Cascade delete, inverse of `RouteSample.shift` |
 | `deliveries` | `[Delivery]` | Cascade delete, inverse of `Delivery.shift` |
 | `pauses` | `[ShiftPause]` | Cascade delete, inverse of `ShiftPause.shift` |
 | `grossEarningsAmount` | `Decimal?` | Private. `nil` means no amount recorded, which is not zero |
@@ -32,6 +31,8 @@ Derived, never stored:
 | `completedPausedTime` | The same for a finished shift, `nil` while unfinished |
 | `workingDuration(asOf:)` | `elapsed − paused`, clamped at zero. Stops growing while paused |
 | `completedWorkingDuration` | The same for a finished shift, `nil` while unfinished |
+| `routeSamples()` | This shift's retained positions, fetched, oldest first. Not a stored collection |
+| `routeSampleCount` | How many positions the route holds, counted rather than loaded |
 | `recordedDistance(...)` | A `RouteDistance` measured from the retained route |
 | `grossEarnings` | The stored decimal as a `Money`, or `nil` |
 | `activeDeliveries` | This shift's deliveries that are neither delivered nor cancelled, in acceptance order |
@@ -57,7 +58,7 @@ amount, which is a distinct operation from recording zero.
 | `id` | `UUID` | Unique attribute |
 | `startedAt` | `Date` | When the driver recorded pausing |
 | `endedAt` | `Date?` | `nil` while the driver has not resumed. An open pause is what "paused" means |
-| `shift` | `Shift?` | Optional only because SwiftData models the inverse that way. The initializer requires a shift |
+| `shift` | `Shift?` | The only place the relationship is declared; `Shift` holds no matching collection. Optional only because SwiftData models a reference that way. The initializer requires a shift. Carries no delete rule, so `ShiftService.deleteCompletedShift(_:)` removes a shift's positions explicitly |
 
 A row rather than a flag on `Shift`. A boolean could say a shift is paused now but not for how long
 or how many times; an accumulated "paused seconds" would be a running sum the app had to keep correct
@@ -77,7 +78,7 @@ across every crash and failed save, which is the kind of derived value this proj
 | `longitude` | `Double` | Degrees |
 | `horizontalAccuracy` | `Double` | Radius of uncertainty in metres, as reported when the fix was taken |
 | `captureSessionID` | `UUID?` | The uninterrupted period of capture this sample belongs to. `nil` for samples written before v3 |
-| `shift` | `Shift?` | Optional only because SwiftData models the inverse that way. The initializer requires a shift |
+| `shift` | `Shift?` | The only place the relationship is declared; `Shift` holds no matching collection. Optional only because SwiftData models a reference that way. The initializer requires a shift. Carries no delete rule, so `ShiftService.deleteCompletedShift(_:)` removes a shift's positions explicitly |
 
 Nothing else is stored. Core Location also reports speed, course, altitude and their accuracies;
 none are kept, because nothing implemented reads them.
@@ -92,7 +93,7 @@ none are kept, because nothing implemented reads them.
 | `pickedUpAt` | `Date?` | `nil` until the driver records collecting the order |
 | `deliveredAt` | `Date?` | Terminal |
 | `cancelledAt` | `Date?` | Terminal. Set without erasing the events that preceded it |
-| `shift` | `Shift?` | Optional only because SwiftData models the inverse that way. The initializer requires a shift |
+| `shift` | `Shift?` | The only place the relationship is declared; `Shift` holds no matching collection. Optional only because SwiftData models a reference that way. The initializer requires a shift. Carries no delete rule, so `ShiftService.deleteCompletedShift(_:)` removes a shift's positions explicitly |
 | `pickupPlace` | `PickupPlace?` | Optional and often absent. A reference, so two deliveries from one place share a row. Nullify on delete |
 | `grossEarningsAmount` | `Decimal?` | Private. What this one delivery paid, as the driver typed it. `nil` means no amount recorded, which is not zero. Unrelated to `Shift.grossEarningsAmount` |
 
@@ -204,13 +205,15 @@ shifts, deliveries, days or miles. See [Recorded expenses](../product/expenses.m
 | Version | Change |
 | --- | --- |
 | 1.0.0 | `Shift`: id, start, optional end |
-| 2.0.0 | Adds `RouteSample` and `Shift.routeSamples` |
+| 2.0.0 | Adds `RouteSample` and `Shift.routeSamples`, removed again in 10.0.0 |
 | 3.0.0 | Adds `RouteSample.captureSessionID` |
 | 4.0.0 | Adds `Shift.grossEarningsAmount` |
 | 5.0.0 | Adds `Delivery` and `Shift.deliveries` |
 | 6.0.0 | Adds `PickupPlace` and `Delivery.pickupPlace` |
 | 7.0.0 | Adds `Delivery.grossEarningsAmount` |
 | 8.0.0 | Adds `Expense`. No existing entity changes, and no relationship is added |
+| 9.0.0 | Adds `ShiftPause` and `Shift.pauses` |
+| 10.0.0 | Removes `Shift.routeSamples`. `RouteSample.shift` is unchanged, and no stored value moves |
 
 Every step so far is a lightweight stage, and none backfills a value. See
 [Migrations](../architecture/migrations.md).
