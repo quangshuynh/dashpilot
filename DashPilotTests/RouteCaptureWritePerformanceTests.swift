@@ -147,6 +147,45 @@ struct RouteCaptureWritePerformanceTests {
         }
     }
 
+    /// What deleting a long route costs, now that no cascade carries it away.
+    ///
+    /// The other half of the acceptance measurement. Recording got cheaper by
+    /// removing the collection; this is the check that the cost did not simply
+    /// move to the one operation that used to walk it.
+    @Test("What deleting an eight-hour route costs")
+    func deletingALongRoute() async throws {
+        let harness = try RouteCaptureWriteProbe.Harness(inMemory: false, start: start)
+        defer { harness.tearDown() }
+
+        let run = await RouteCaptureWriteProbe.capture(
+            longShift,
+            into: harness,
+            from: start,
+            label: "Eight-hour shift, recorded before deleting it",
+            cadence: .perRunLoopTurn,
+            bucketSize: 7_200
+        )
+        #expect(run.storedRowCount == longShift)
+
+        harness.tracking.prepareForShiftEnd()
+        try harness.shift.end(at: start.addingTimeInterval(Double(longShift) + 1))
+        try harness.context.save()
+
+        let deletion = RouteCaptureWriteProbe.time {
+            try? ShiftService(context: harness.context).deleteCompletedShift(harness.shift)
+        }
+        let remaining = try harness.context.fetchCount(FetchDescriptor<RouteSample>())
+
+        RouteCaptureWriteProbe.say("")
+        RouteCaptureWriteProbe.say(
+            "Deleting the \(longShift)-position shift took "
+            + "**\(RouteCaptureWriteProbe.format(deletion * 1000, 0)) ms** on the main actor "
+            + "and left **\(remaining)** coordinate-bearing rows."
+        )
+
+        #expect(remaining == 0)
+    }
+
     /// What the cheapest stored shape actually is, measured on test-only
     /// models before anything is proposed for the app's own schema. See
     /// ``RouteCaptureWriteShapes``.
