@@ -216,6 +216,33 @@ struct LocationAuthorizationServiceTests {
         #expect(provider.requestCount == 0, "Returning to the app must never trigger the prompt")
     }
 
+    // MARK: Reporting a change onwards
+
+    @Test("A change is reported to the one service that acts on permission")
+    func reportsChangesToItsObserver() {
+        let (service, provider) = makeService(status: .authorizedWhenInUse)
+        var reported: [LocationAuthorization] = []
+        service.onAuthorizationChange = { reported.append($0) }
+
+        provider.update(status: .denied)
+
+        #expect(reported.count == 1)
+        #expect(reported.last?.status == .denied)
+        #expect(reported.last == service.authorization, "Reported after the property is settled, not before")
+    }
+
+    @Test("A platform report that changes nothing is not passed on")
+    func doesNotReportAnUnchangedAuthorization() {
+        let (service, provider) = makeService(status: .authorizedWhenInUse)
+        var reportCount = 0
+        service.onAuthorizationChange = { _ in reportCount += 1 }
+
+        provider.update(status: .authorizedWhenInUse)
+        provider.update(to: service.authorization)
+
+        #expect(reportCount == 0, "Reconciling capture on a non-event would restart it for nothing")
+    }
+
     // MARK: Settings recovery
 
     @Test("The Settings recovery offered for a denied app resolves to a real URL")
