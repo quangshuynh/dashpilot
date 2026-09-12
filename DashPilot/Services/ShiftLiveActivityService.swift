@@ -48,7 +48,7 @@ protocol ShiftActivityReconciling: AnyObject {
 /// `@Observable` for one reason only: it is put in the SwiftUI environment the
 /// way ``LocationTrackingService`` is, so any screen that writes to the store
 /// can ask it to catch up. **Nothing on it is readable state**, and no view
-/// should ever draw from it — what is on the Lock Screen is derived from the
+/// should ever draw from it. What is on the Lock Screen is derived from the
 /// store, and a screen reading it back would be reading a picture of the store
 /// instead of the store.
 @MainActor
@@ -114,8 +114,8 @@ final class ShiftLiveActivityService: ShiftActivityReconciling {
 
         guard presenter.isAvailable else {
             // Live Activities are off for DashPilot or for the device. Nothing
-            // to end — the system has already removed whatever there was — and
-            // nothing to start.
+            // to end, because the system has already removed whatever there
+            // was, and nothing to start.
             forgetActivity()
             return
         }
@@ -134,10 +134,10 @@ final class ShiftLiveActivityService: ShiftActivityReconciling {
     /// relaunch during a shift would leave the previous card behind and add a
     /// second.
     ///
-    /// Anything describing a different shift is ended. That is how an activity
-    /// survives a termination that happened between a shift ending and the
-    /// activity being removed, which is the one way this app can leave a stale
-    /// card on a Lock Screen.
+    /// Anything describing a different shift is ended. That is what clears a
+    /// card left behind by a termination between a shift ending and the activity
+    /// being removed, which is the one way this app can leave a Lock Screen
+    /// claiming work that had stopped.
     private func adoptOrCleanUp(for shift: Shift) {
         let visible = presenter.activities()
 

@@ -81,9 +81,13 @@ struct ShiftLiveActivity: Widget {
                 .accessibilityLabel("Deliveries in progress")
                 .accessibilityValue(state.compactDeliveryCount)
         } minimal: {
+            // One glyph, and nothing to read it by. The whole snapshot is the
+            // spoken value here, because this is the presentation where a
+            // listener has no other line to fall back on.
             Image(systemName: state.statusSymbolName)
                 .foregroundStyle(state.isPaused ? .orange : .red)
                 .accessibilityLabel(state.statusTitle)
+                .accessibilityValue(state.spokenSummary)
         }
         .keylineTint(state.isPaused ? .orange : .red)
     }
