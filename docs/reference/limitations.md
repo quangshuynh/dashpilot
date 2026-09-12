@@ -69,6 +69,9 @@ and one they cannot.
   shift is paused.
 - **Paused time is not broken out in a period summary.** A period reports the working time of its
   shifts; how much of the span was paused is on each shift rather than aggregated.
+- **The completed-shift detail's paused and working rows are not covered by a UI journey**, because
+  no launch fixture seeds a finished shift that was paused. Their values are covered at domain level,
+  and the running and paused shift panel is covered end to end.
 
 ## Deliveries
 
