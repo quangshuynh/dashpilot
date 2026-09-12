@@ -17,24 +17,25 @@ rather than a store reset.
 | 7.0.0 | Adds `Delivery.grossEarningsAmount`, an optional `Decimal` holding manually entered per-delivery earnings |
 | 8.0.0 | Adds the `Expense` entity. No existing entity changes, and no relationship is added |
 | 9.0.0 | Adds the `ShiftPause` entity and a `Shift.pauses` relationship. No existing attribute changes |
+| 10.0.0 | Removes the `Shift.routeSamples` relationship. `RouteSample.shift` is unchanged, and no stored value moves |
 
-The current version is **v9**. Field-level detail is on [Data model](../reference/data-model.md).
+The current version is **v10**. Field-level detail is on [Data model](../reference/data-model.md).
 
-`DashPilotSchemaV1` through `DashPilotSchemaV8` hold frozen copies of their models rather than
+`DashPilotSchemaV1` through `DashPilotSchemaV9` hold frozen copies of their models rather than
 reusing the file-scope types, which have moved on. The plan then describes where a store is coming
 from as truthfully as where it is going, and the copies are never used at runtime outside
 migration.
 
-`DashPilotSchemaV8` was frozen in the interval that added v9, and this time the freeze was forced
-rather than early: v9 gives `Shift` a relationship to its pauses, so the file-scope `Shift` has moved
-on and reusing it under v8 would describe every pre-v9 shift as one that could be paused. Each
-version gets its copies as the plan moves past it, exactly as v7 got its own when v8 added the
-expense table.
+`DashPilotSchemaV9` was frozen in the interval that added v10, and the freeze was forced for the
+same reason v8's was: v10 takes the route collection off `Shift`, so the file-scope `Shift` has moved
+on and reusing it under v9 would describe every pre-v10 store as one that never held the collection,
+which is the one thing v9 is a record of. Each version gets its copies as the plan moves past it.
 
 ## Every stage so far is lightweight, deliberately
 
-Each step has been purely additive, and each time the decision not to backfill was the substantive
-one.
+Every step up to v9 was purely additive, and each time the decision not to backfill was the
+substantive one. v10 is the first that removes anything, and it removes a relationship rather than
+any stored value.
 
 ### v1 to v2
 
@@ -147,6 +148,28 @@ DashPilot observes nothing about why a driver was not moving, so reading any of 
 shorten a shift the driver recorded as whole, raise every rate derived from it, and leave no way
 afterwards to tell an invented pause from one they tapped. See
 [Pausing a shift](../product/shift-workflow.md#pausing-a-shift).
+
+### v9 to v10
+
+A relationship declared from one side instead of two, which SwiftData can apply without being told
+how. Nothing is added, removed, retyped or rewritten: the column saying which shift a position
+belongs to lives on `RouteSample` and is untouched, so every stored route keeps every one of its
+samples, every sample keeps its shift, its timestamp, its coordinate, its accuracy and its capture
+session identifier, and every recorded mileage figure measures exactly what it measured before.
+
+**This is a version rather than a quiet edit, and the distinction is worth stating.** A v9 store does
+open against the v10 models with every sample still resolving to its shift, because the foreign key
+never moves. That is not the same as the store being unchanged: reopening a v9 store under v10
+rewrites the recorded version hashes of both `Shift` and `RouteSample`, which is SwiftData saying the
+model is a different one and that it has migrated the store. The surviving foreign key is exactly
+what makes it tempting to treat this as no change at all.
+
+What the stage must **not** become is a cleanup. A route sample whose shift is missing is not
+something this version creates, and deleting rows here on the theory that some might be orphaned
+would destroy recorded history to tidy a table.
+
+Why the collection went at all is a performance finding, not a modelling preference. See
+[Persistence](persistence.md#a-shift-does-not-hold-its-route).
 
 It becomes a custom stage the first time a version step actually has to transform something.
 

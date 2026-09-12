@@ -265,7 +265,7 @@ struct ShiftEarningsPersistenceTests {
 
         #expect(shift.id == shiftID)
         #expect(shift.completedDuration == 3600)
-        #expect(shift.routeSamples.isEmpty)
+        #expect(shift.routeSamples().isEmpty)
         #expect(shift.grossEarnings == nil)
     }
 }

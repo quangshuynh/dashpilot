@@ -565,7 +565,7 @@ struct CompletedShiftDetailView: View {
     /// least likely to have in mind and the part they cannot re-enter by hand,
     /// and a count is a fact about the shift rather than a location.
     private var deletionWarning: String {
-        let sampleCount = shift.routeSamples.count
+        let sampleCount = shift.routeSampleCount
         // One phrase for both amounts: deleting a shift takes the figure
         // recorded on the shift itself *and* every figure recorded against one
         // of its deliveries, and a warning that named only the first would

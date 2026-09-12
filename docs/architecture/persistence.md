@@ -53,12 +53,53 @@ session it was recorded in, and nothing else. `CLLocation` also reports speed, c
 their accuracies, but nothing implemented reads them, and a coordinate history is sensitive enough
 that each field needs a reason rather than an availability.
 
+## A shift does not hold its route
+
+`RouteSample.shift` is a to-one relationship, and it is the **only** place the relationship between a
+shift and its route is declared. `Shift` holds no matching collection. A shift's route is fetched,
+through `Shift.routeSamples()`, which owns the predicate and the ordering; `Shift.routeSampleCount`
+counts without loading one.
+
+That is a performance finding rather than a modelling preference, and it was measured rather than
+guessed. Up to v9 the shift held `routeSamples`, and maintaining that collection cost time
+proportional to the number of positions already attached to the shift. Driving the shipping capture
+path at one accepted position a second, on the iPhone 17 simulator against an on-disk store, writing
+one position cost 6.7 ms at the start of a shift and 178 ms seven hours in, about 7.3 µs per stored
+row, all of it on the main actor once a second. Recording a shift was quadratic in its length.
+
+The cause was isolated rather than assumed: rebuilding the context made no difference, fetching the
+shift rather than creating it made no difference, changing the delete rule made no difference, and
+the size of the table made no difference. Starting a new shift every nine hundred positions made the
+cost flat, and so did removing the collection while keeping the to-one relationship. A `Set`-typed
+collection is not an alternative, because SwiftData requires `Codable` for one and will not compile
+it.
+
+After the change an eight-hour shift records at a flat 24 to 29 µs per position from the first to the
+28,800th, and the whole shift costs 4.5 s of main-actor time instead of tens of minutes. Memory does
+not move. The figures are reproduced by the gated `RouteCaptureWritePerformanceTests`.
+
+Nothing is cached to buy this. Recorded mileage is still measured from the route on demand, for the
+reason it always was: the cost was in recording a position, not in measuring one.
+
 ## The delete rules
 
-`Shift.routeSamples` uses `deleteRule: .cascade`, and has since v2. `Shift.deliveries` uses it too,
-since v5, and `Shift.pauses` since v9. A shift's route, its deliveries and its pauses describe that
-shift and nothing else, so deleting the shift takes all three with it. The orphans would otherwise be
-exactly the sensitive rows the app promises to keep accountable to a shift.
+`Shift.deliveries` uses `deleteRule: .cascade`, since v5, and `Shift.pauses` since v9. A shift's
+deliveries and its pauses describe that shift and nothing else, so deleting the shift takes both with
+it. The orphans would otherwise be exactly the sensitive rows the app promises to keep accountable to
+a shift.
+
+**A shift's route is deleted explicitly**, because a relationship declared from one side carries no
+delete rule and there is no cascade left to carry the positions away.
+`ShiftService.deleteCompletedShift(_:)` fetches the shift's route rows, deletes them, deletes the
+shift, and saves **once**. One transaction is the point: a store that refuses the write leaves the
+shift *and* its whole route, and there is no ordering in which a shift disappears while its
+coordinates survive. The rows are fetched and deleted rather than removed with a batch delete, which
+would run beneath the context, could not be rolled back with it, and so could not be part of the same
+transaction.
+
+Removing the cascade made deletion faster rather than slower, by removing the same quadratic on the
+way out: the cascade walked the collection and took 35.6 s for a 7,200-position route, where the
+explicit delete takes 484 ms, and an eight-hour route now deletes in about 2 s.
 
 A delivery's own optional amount, added in v7, is an attribute rather than a relationship, so it
 goes with the delivery under the same cascade — which is why the delete confirmation names every
@@ -72,11 +113,10 @@ left referenced by nothing is kept rather than collected: it stops being *recent
 name again finds it. Deleting a driver's own vocabulary as a side effect of deleting a shift would
 widen the one operation this project keeps deliberately narrow.
 
-When a driver deletes a completed shift, all of this goes through the existing rules rather than
-through a loop in the service. Tests assert that the deleted shift's positions and deliveries are
-gone, that another shift's rows and recorded amount are untouched, that no delivery is left without a
-shift, that a pickup place another delivery still names survives, and that a refused delete changes
-nothing at all.
+Tests assert that the deleted shift's positions and deliveries are gone, that another shift's rows and
+recorded amount are untouched, that no delivery is left without a shift, that a pickup place another
+delivery still names survives, that a rolled back deletion leaves the shift and its whole route, and
+that a refused delete changes nothing at all.
 
 ## Earnings are stored as a decimal
 
@@ -147,8 +187,8 @@ samples that cannot be kept.
 
 When capture is pointed at a shift again, the newest already-stored sample is read back with a
 one-row fetch, so capture resumed after a relaunch, a backgrounding or a permission interruption
-still judges candidates against the route as it stands. Walking `shift.routeSamples` to find it
-would load an entire shift's route to look at one row.
+still judges candidates against the route as it stands. Fetching the whole route to find it would load
+an entire shift's positions to look at one row.
 
 ## Schema evolution
 
