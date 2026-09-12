@@ -330,6 +330,7 @@ struct ShiftActivityContentTests {
         let printed = [
             state.statusTitle,
             state.formattedWorkingTime,
+            state.spokenWorkingTime,
             state.mileageLine,
             state.spokenMileageLine,
             state.deliveryLine,
@@ -398,5 +399,40 @@ struct ShiftActivityContentTests {
         #expect(atPause.workingDuration == 600)
         #expect(muchLater.workingDuration == 600, "An hour on a break is not an hour worked")
         #expect(muchLater.formattedWorkingTime == atPause.formattedWorkingTime)
+    }
+
+    /// The paused figure sits where the running clock sat, so it has to be
+    /// written the way the system writes that clock: minutes and seconds under
+    /// an hour, and the hour field only once there is one.
+    @Test("The paused figure is written the way the system's own timer is")
+    func writesThePausedFigureLikeTheSystemTimer() throws {
+        let context = try makeContext()
+        let service = ShiftService(context: context)
+        let shift = try service.startShift(at: start)
+        try service.pauseActiveShift(at: at(51))
+
+        #expect(shift.activityContentState(for: .none, asOf: at(60), locale: locale).formattedWorkingTime == "0:51")
+
+        try service.resumeActiveShift(at: at(60))
+        try service.pauseActiveShift(at: at(3_660))
+        // 51 seconds worked before the break, then an hour after it.
+        let long = shift.activityContentState(for: .none, asOf: at(3_700), locale: locale)
+        #expect(long.workingDuration == 3_651)
+        #expect(long.formattedWorkingTime == "1:00:51")
+    }
+
+    @Test("The spoken working figure is words rather than a clock string")
+    func speaksTheWorkingFigureInWords() throws {
+        let context = try makeContext()
+        let service = ShiftService(context: context)
+        let shift = try service.startShift(at: start)
+        try service.pauseActiveShift(at: at(3_661))
+
+        let spoken = shift.activityContentState(for: .none, asOf: at(3_700), locale: locale).spokenWorkingTime
+
+        #expect(spoken.contains("hour"))
+        #expect(spoken.contains("minute"))
+        #expect(spoken.contains("second"))
+        #expect(!spoken.contains(":"), "A colon is heard as punctuation, not as a time")
     }
 }

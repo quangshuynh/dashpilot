@@ -40,28 +40,32 @@ struct ShiftLiveActivity: Widget {
     /// the only place a fact appears.
     private func dynamicIsland(for state: ShiftActivityAttributes.ContentState) -> DynamicIsland {
         DynamicIsland {
-            DynamicIslandExpandedRegion(.leading) {
-                ShiftActivityWorkingTime(state: state, style: .compact)
-            }
-            DynamicIslandExpandedRegion(.trailing) {
-                Label(state.statusTitle, systemImage: state.statusSymbolName)
-                    .font(.caption)
-                    .labelStyle(.iconOnly)
-                    .foregroundStyle(state.isPaused ? .orange : .red)
-                    .accessibilityLabel(state.statusTitle)
-            }
+            // Centre and bottom only. The leading and trailing regions are a few
+            // points wide beside the camera housing, and a working figure put in
+            // one of them loses its first digit at the rounded corner, which on
+            // this surface means a driver reads eight minutes as one hour and
+            // eight. The two wide regions carry everything instead.
             DynamicIslandExpandedRegion(.center) {
-                Text(state.mileageLine)
-                    .font(.caption)
-                    .monospacedDigit()
-                    .accessibilityLabel("Recorded mileage")
-                    .accessibilityValue(state.spokenMileageLine)
+                HStack(alignment: .firstTextBaseline) {
+                    Label(state.statusTitle, systemImage: state.statusSymbolName)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(state.isPaused ? .orange : .red)
+                    Spacer(minLength: 8)
+                    ShiftActivityWorkingTime(state: state)
+                }
             }
             DynamicIslandExpandedRegion(.bottom) {
                 VStack(alignment: .leading, spacing: 8) {
+                    Text(state.mileageLine)
+                        .font(.subheadline)
+                        .monospacedDigit()
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityLabel("Recorded mileage")
+                        .accessibilityValue(state.spokenMileageLine)
                     ShiftActivityDeliveryLine(state: state)
                     ShiftActivityControls(state: state)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
         } compactLeading: {
             Image(systemName: state.statusSymbolName)
@@ -91,16 +95,17 @@ struct ShiftActivityLockScreenView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
+            // Deliberately two elements rather than one combined one. Combining
+            // them would freeze the running shift's clock into a fixed spoken
+            // value, and a driver would be told the working time the snapshot
+            // was built with rather than the one on screen.
             HStack(alignment: .firstTextBaseline) {
                 Label(state.statusTitle, systemImage: state.statusSymbolName)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(state.isPaused ? .orange : .red)
                 Spacer(minLength: 8)
-                ShiftActivityWorkingTime(state: state, style: .headline)
+                ShiftActivityWorkingTime(state: state)
             }
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel(state.statusTitle)
-            .accessibilityValue("\(state.formattedWorkingTime) worked so far")
 
             Text(state.mileageLine)
                 .font(.subheadline)
@@ -126,35 +131,27 @@ struct ShiftActivityLockScreenView: View {
 /// it is drawn once. That is the whole reason this surface needs no per-second
 /// update cadence.
 struct ShiftActivityWorkingTime: View {
-    enum Style {
-        case headline
-        case compact
-    }
-
     let state: ShiftActivityAttributes.ContentState
-    let style: Style
 
     var body: some View {
         Group {
             if state.isPaused {
+                // A figure that is not moving is named and read out exactly,
+                // which is what the app's own panel does while paused.
                 Text(state.formattedWorkingTime)
+                    .accessibilityLabel("Working time, paused")
+                    .accessibilityValue(state.spokenWorkingTime)
             } else {
+                // Left unlabelled on purpose. The system draws and speaks this
+                // one from its anchor, so any label of ours would replace a live
+                // figure with the one this snapshot happened to carry.
                 Text(timerInterval: state.workingTimerRange, countsDown: false)
             }
         }
-        .font(font)
+        .font(.title3.weight(.semibold))
         .monospacedDigit()
         .lineLimit(1)
         .foregroundStyle(state.isPaused ? .secondary : .primary)
-        .accessibilityLabel(state.isPaused ? "Working time, paused" : "Working time")
-        .accessibilityValue(state.formattedWorkingTime)
-    }
-
-    private var font: Font {
-        switch style {
-        case .headline: .title3.weight(.semibold)
-        case .compact: .caption.monospacedDigit()
-        }
     }
 }
 
