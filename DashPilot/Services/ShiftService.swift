@@ -259,6 +259,12 @@ struct ShiftService {
             }
             try shift.end(at: endDate)
         } catch let error as ShiftError {
+            // The end is two mutations now, so a refusal between them would
+            // otherwise leave a closed pause in memory that the store does not
+            // hold, and the shift reading as resumed rather than paused. Both
+            // steps are unreachable through this path, which is exactly why the
+            // rollback is cheap insurance rather than a cost.
+            context.rollback()
             AppLog.shift.error("Shift rejected the end transition: \(String(describing: error), privacy: .public)")
             throw ShiftLifecycleError.invalidTransition(error)
         }
@@ -341,6 +347,7 @@ struct ShiftService {
         do {
             pause = try shift.beginPause(at: pauseDate)
         } catch let error as ShiftError {
+            context.rollback()
             AppLog.shift.error("Shift rejected the pause transition: \(String(describing: error), privacy: .public)")
             throw ShiftLifecycleError.invalidTransition(error)
         }
@@ -395,6 +402,7 @@ struct ShiftService {
         do {
             try shift.endOpenPause(at: resumeDate)
         } catch let error as ShiftError {
+            context.rollback()
             AppLog.shift.error("Shift rejected the resume transition: \(String(describing: error), privacy: .public)")
             throw ShiftLifecycleError.invalidTransition(error)
         }
