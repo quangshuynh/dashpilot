@@ -1238,13 +1238,13 @@ enum DashPilotSchemaV10: VersionedSchema {
 /// `grossEarningsAmount` means one thing: the finalized amount the driver
 /// recorded a terminal delivery as having paid. It is what every total, rate,
 /// period figure and export summary in the app is built from. An expectation is
-/// a different fact with a different lifetime — entered while the delivery is
+/// a different fact with a different lifetime: entered while the delivery is
 /// still running, never confirmed by anything, and counted by nothing.
 ///
 /// Overloading the existing column and marking it provisional was the obvious
 /// cheaper option and is the one thing this version must not do. Every existing
-/// reader of that attribute — the period calculator, the shift metrics, both
-/// export encoders, the history screen — would have to be taught to check the
+/// reader of that attribute (the period calculator, the shift metrics, both
+/// export encoders, the history screen) would have to be taught to check the
 /// flag, and each one that was missed would silently report an expectation as
 /// earnings. A separate column fails the other way: a reader that has not been
 /// taught about expectations cannot see them at all, which is exactly the

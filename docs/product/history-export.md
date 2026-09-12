@@ -42,9 +42,9 @@ therefore carries none, because no expense belongs to a shift. See
 
 ## Export format version
 
-Every file states `formatVersion: 2`.
+Every file states `formatVersion: 3`.
 
-**This is not the SwiftData schema version**, which is currently v8. The two describe different
+**This is not the SwiftData schema version**, which is currently v11. The two describe different
 things and are free to move independently:
 
 - The schema version describes how a database is laid out on one device. Nothing outside the app has
@@ -57,9 +57,30 @@ a change to what the file says does not pretend the store changed. The version i
 an existing field's meaning changes or a field is removed; adding a field is additive, and a reader
 that ignores unknown keys keeps working.
 
-Exports are never called "v9".
+Exports are never called "v11".
 
 ### Version history
+
+#### Still 3: what a delivery was expected to pay
+
+A driver can now record [what they expect a delivery in progress to
+pay](delivery-lifecycle.md#expected-pay), and that figure survives the delivery finishing. JSON
+gains one field for it, `shifts[].deliveries[].expectedEarnings`. The version was **evaluated and
+deliberately not moved**:
+
+- **Nothing existing changed meaning.** `deliveries[].grossEarnings` is the same finalized recorded
+  gross it always was, and every figure derived from it is derived from exactly what it was before.
+  Not one previously exported value would differ.
+- **No field was removed or renamed**, and no enumeration gained a value.
+- **The new field is always present**, as an explicit `null` where no expectation was recorded, so a
+  reader never has to tell "none recorded" from "an older build".
+
+It is in the file because an export is the only way anything leaves DashPilot: there is no import,
+no backup and no sync, so a fact the driver typed and can see on screen would otherwise be
+unreachable from outside the app.
+
+**It is in JSON only. The CSV stays at 35 columns**, for the same reason expenses are not in it: see
+[CSV](#csv) below.
 
 #### 3: shift pause and resume
 
@@ -276,7 +297,14 @@ the full key set, and so every record in an array is the same shape.
 deliveries still gets a row, with the delivery columns empty. Records end `\r\n`, per RFC 4180, and
 the file is UTF-8.
 
-Two things are **not** in the CSV.
+Three things are **not** in the CSV.
+
+**What a delivery was expected to pay.** A spreadsheet column is a thing people sum, and an amount
+that is explicitly *not* earnings sitting one column from one that is, in a table whose whole
+purpose is to be totalled, is the most likely way a driver ends up reporting money nobody paid them.
+The JSON form can carry the field with the paragraph saying what it is not; a column heading cannot.
+Inserting a column would also break a positional reader, which would have moved the format version
+on its own.
 
 The **recorded expenses**, for a reason that comes from the model rather than the format: this
 table's unit is a delivery, and an expense belongs to a date rather than to a delivery, so there is

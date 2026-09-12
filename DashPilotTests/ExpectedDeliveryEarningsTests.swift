@@ -13,8 +13,8 @@ private struct RefusedExpectedSave: Error {}
 /// The claim under test is a negative one and it is the whole feature: recording
 /// an expectation moves **nothing**. No delivery becomes paid, no shift figure
 /// changes, no period total or rate moves, no export summary shifts, and nothing
-/// reaches the Lock Screen. The positive claims — that the amount is stored,
-/// edited, cleared and offered back — are the easy half.
+/// reaches the Lock Screen. The positive claims, that the amount is stored,
+/// edited, cleared and offered back, are the easy half.
 ///
 /// Every amount, offset and place name below is invented.
 @MainActor

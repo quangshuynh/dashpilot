@@ -17,8 +17,8 @@ import SwiftUI
 /// it down while they are waiting for a bag either reconstructs it from memory
 /// hours later or never records it at all. The interaction is entered from a
 /// small secondary control, is skippable on every delivery, and the delivery
-/// advances identically without it — exactly the shape ``PickupPlaceEditor``
-/// already has for the same reason.
+/// advances identically without it, which is exactly the shape
+/// ``PickupPlaceEditor`` already has for the same reason.
 ///
 /// ## What it does not do
 ///

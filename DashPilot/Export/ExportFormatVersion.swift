@@ -19,7 +19,7 @@ import Foundation
 ///
 /// ## Version history
 ///
-/// ### Still 3 — what a delivery was expected to pay
+/// ### Still 3: what a delivery was expected to pay
 ///
 /// A driver can now record what they expect a delivery in progress to pay, and
 /// that figure survives the delivery finishing. JSON gains one field for it,
@@ -28,8 +28,8 @@ import Foundation
 ///
 /// - **Nothing existing changed meaning.** `deliveries[].grossEarnings` is the
 ///   same finalized recorded gross it has always been, and every figure derived
-///   from it — the delivery's own rate, the shift's rates, every period total,
-///   the whole `summary` block — is derived from exactly what it was derived
+///   from it (the delivery's own rate, the shift's rates, every period total,
+///   the whole `summary` block) is derived from exactly what it was derived
 ///   from before. Not one previously exported value would differ.
 /// - **No field was removed or renamed**, and no enumeration gained a value.
 /// - **The new field is always present**, as an explicit `null` where no

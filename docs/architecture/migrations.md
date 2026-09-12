@@ -18,24 +18,26 @@ rather than a store reset.
 | 8.0.0 | Adds the `Expense` entity. No existing entity changes, and no relationship is added |
 | 9.0.0 | Adds the `ShiftPause` entity and a `Shift.pauses` relationship. No existing attribute changes |
 | 10.0.0 | Removes the `Shift.routeSamples` relationship. `RouteSample.shift` is unchanged, and no stored value moves |
+| 11.0.0 | Adds `Delivery.expectedEarningsAmount`, an optional `Decimal` holding what the driver expects an active delivery to pay |
 
-The current version is **v10**. Field-level detail is on [Data model](../reference/data-model.md).
+The current version is **v11**. Field-level detail is on [Data model](../reference/data-model.md).
 
-`DashPilotSchemaV1` through `DashPilotSchemaV9` hold frozen copies of their models rather than
+`DashPilotSchemaV1` through `DashPilotSchemaV10` hold frozen copies of their models rather than
 reusing the file-scope types, which have moved on. The plan then describes where a store is coming
 from as truthfully as where it is going, and the copies are never used at runtime outside
 migration.
 
-`DashPilotSchemaV9` was frozen in the interval that added v10, and the freeze was forced for the
-same reason v8's was: v10 takes the route collection off `Shift`, so the file-scope `Shift` has moved
-on and reusing it under v9 would describe every pre-v10 store as one that never held the collection,
-which is the one thing v9 is a record of. Each version gets its copies as the plan moves past it.
+`DashPilotSchemaV10` was frozen in the interval that added v11, and the freeze was forced the way
+v9's was: v11 adds an attribute to `Delivery`, so reusing the file-scope type under v10 would
+describe every pre-v11 store as one that already held a column for what a delivery was expected to
+pay. It did not, and a version that claims otherwise cannot be used to prove a migration preserved
+anything. Each version gets its copies as the plan moves past it.
 
 ## Every stage so far is lightweight, deliberately
 
-Every step up to v9 was purely additive, and each time the decision not to backfill was the
-substantive one. v10 is the first that removes anything, and it removes a relationship rather than
-any stored value.
+Every step but one is purely additive, and each time the decision not to backfill was the
+substantive one. v10 is the only one that removes anything, and it removes a relationship rather
+than any stored value.
 
 ### v1 to v2
 
@@ -170,6 +172,27 @@ would destroy recorded history to tidy a table.
 
 Why the collection went at all is a performance finding, not a modelling preference. See
 [Persistence](persistence.md#a-shift-does-not-hold-its-route).
+
+### v10 to v11
+
+One new optional attribute on an existing entity, which SwiftData can add without being told how. It
+is the same shape as v3 to v4 and v6 to v7, and it has the same nothing to derive: a delivery
+recorded before the app could ask what an order was expected to pay has no expectation, because none
+was ever entered. Every migrated delivery keeps `nil`, which the app reads as "not recorded" and
+never as `0.00`.
+
+**The inference this stage refuses is sitting in plain sight.** A v10 store often holds a delivered
+delivery with a recorded gross amount, and copying that figure into the new column would produce,
+for most deliveries, exactly the number the driver would have typed. It would also be the app
+asserting on its own authority that they expected what they were paid, in the one column whose whole
+purpose is to be distinguishable from the amount beside it. Nothing afterwards could tell an
+invented expectation from an entered one, and the first screen to show *expected $8.50 · recorded
+$8.50* would be stating a coincidence the migration manufactured.
+
+No figure a driver has already recorded changes value, and nothing derived from one moves: shift
+gross, period gross, every rate, the delivery-earnings subtotal and every exported summary are built
+from `grossEarningsAmount` alone, before this version and after it. See
+[Expected pay](../product/delivery-lifecycle.md#expected-pay).
 
 It becomes a custom stage the first time a version step actually has to transform something.
 

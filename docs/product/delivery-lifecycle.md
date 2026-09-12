@@ -239,6 +239,36 @@ The shift's own amount and a delivery's amount are **independent facts**. Nothin
 the other, adds one up from the other, or reports a difference between them as a problem. The full
 rules are on [Earnings and metrics](earnings-and-metrics.md#per-delivery-gross-earnings).
 
+### Expected pay
+
+A delivery **still in progress** may also carry what the driver expects it to pay. It is entered
+from a small secondary control on the delivery's card, in the same place and the same shape as the
+pickup-place control, because the moment the figure is available is while the driver is standing
+still at a pickup and the moment it is gone is that evening.
+
+**It is not earnings**, and DashPilot keeps the two apart everywhere:
+
+- It is stored in its own column, and only ever set while the delivery is active. Once a delivery is
+  delivered or cancelled the app refuses a new expected amount, because the fact worth recording
+  then is what it paid.
+- No total, rate, period figure, export summary or comparison anywhere in the app is derived from
+  it. A delivery with an expected amount and no recorded amount has earned nothing DashPilot knows
+  about.
+- The distinction holds even when the two numbers are identical. Nothing turns one into the other.
+- It is labelled *expected pay* wherever it is printed and is spoken with a sentence saying it is
+  not what was recorded, because a listener has no column heading to read that from.
+
+**Marking a delivery delivered records no earnings by itself.** A delivery that carries an expected
+amount raises a confirmation once it is delivered: the expected figure is stated, the amount to
+record starts from it, and the driver either records what the delivery actually paid or dismisses
+the sheet. Dismissing leaves the delivery with the expectation it had and no gross earnings, and the
+completed shift's history offers the same confirmation again. A delivery with no expected amount
+raises nothing, so the flow is unchanged for a driver who does not use this.
+
+Expected pay is in the JSON export, on the delivery that carries it and nowhere else. It is
+deliberately **not** in the CSV export: see
+[History export](history-export.md) for that decision.
+
 ### Pickup place
 
 A delivery may optionally name the place it was collected from. It is typed by the driver, entirely
