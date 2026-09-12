@@ -5,9 +5,9 @@ import Testing
 
 /// A presenter that records what it was asked to draw.
 ///
-/// It answers the way ActivityKit answers — a list of live activities, a handle
-/// per request, nothing left behind once ended — so the reconciliation under
-/// test is the shipping one rather than a version written for a test. What it
+/// It answers the way ActivityKit answers: a list of live activities, a handle
+/// per request, nothing left behind once ended. So the reconciliation under test
+/// is the shipping one rather than a version written for a test. What it
 /// does not do is draw, which is the only part of the feature a unit test could
 /// not reach anyway.
 @MainActor

@@ -21,12 +21,12 @@ nonisolated struct ShiftActivityHandle: Equatable, Sendable {
 ///
 /// ActivityKit cannot run in a unit test: there is no Lock Screen, no
 /// authorization to grant, and `Activity.request` refuses outside a real app
-/// process. Everything this interval actually has to get right — that a shift
-/// paused and resumed produces one activity that says the right thing, that a
-/// relaunch adopts the activity it already has rather than adding a second, that
-/// a shift ending ends it, that an activity left behind by a shift that is gone
-/// is cleaned up — is reconciliation logic, and it is testable against a
-/// recorder that answers the same way.
+/// process. Everything this interval actually has to get right is
+/// reconciliation logic: that a shift paused and resumed produces one activity
+/// that says the right thing, that a relaunch adopts the activity it already has
+/// rather than adding a second, that a shift ending ends it, and that an
+/// activity left behind by a shift that is gone is cleaned up. All of it is
+/// testable against a recorder that answers the way ActivityKit answers.
 ///
 /// The second reason: a **throwaway store must never reach a real system
 /// surface**. The UI journeys run over synthetic in-memory fixtures, and a
@@ -152,8 +152,8 @@ final class LiveShiftActivityPresenter: ShiftActivityPresenting {
 /// Used by the debug launches that run over a throwaway store: their data is
 /// synthetic, and a Live Activity is a real system surface that outlives the
 /// process which requested it. Nothing about it is a stub of the reconciliation
-/// — that runs exactly as it does in a shipping build, over the same rules, and
-/// simply has nowhere to draw.
+/// runs exactly as it does in a shipping build, over the same rules, and simply
+/// has nowhere to draw.
 @MainActor
 final class SuppressedShiftActivityPresenter: ShiftActivityPresenting {
     var isAvailable: Bool { false }

@@ -56,7 +56,7 @@ enum ShiftActivityIntentBridge {
     ///
     /// The outcome's confirmation sentence is discarded on purpose: a Lock
     /// Screen button has no dialog to say it in, and the surface it updates is
-    /// the report. A **refusal** is not discarded — it is thrown, and the
+    /// the report. A **refusal** is not discarded: it is thrown, and the
     /// service layer's own sentence is what the driver is shown.
     static func perform(_ action: ShiftActivityAction) throws {
         let service = try IntentLifecycleService.forIntent()

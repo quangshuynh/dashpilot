@@ -147,8 +147,8 @@ refused by the same rule, with the same sentence, as one paused by voice or by t
 
 `ShiftLiveActivityService` keeps the card in step, and has one entry point: `reconcile()`, which
 derives what should be on screen from the store rather than from what happened last. That is the
-shape `LocationTrackingService.synchronize()` has, and for the same reason — a missed call costs a
-delay and never a wrong state — so every caller is one line and no caller has to know which
+shape `LocationTrackingService.synchronize()` has, and for the same reason: a missed call costs a
+delay and never a wrong state, so every caller is one line and no caller has to know which
 transition it is in the middle of. **Nothing is read back from ActivityKit to decide what happened**;
 the only thing asked of it is which cards exist and which shift each says it is about, which is what
 lets a relaunch adopt the card its shift already has and lets a card left behind by a finished shift

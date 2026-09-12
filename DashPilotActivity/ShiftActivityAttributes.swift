@@ -18,7 +18,7 @@ import Foundation
 /// remains the only authority on whether a shift is running, paused or ended;
 /// this type is what the app hands the system to draw, and nothing ever reads it
 /// back to decide what happened. A snapshot that disagrees with the store is a
-/// stale snapshot, and reconciling it against the store is the app's job — see
+/// stale snapshot, and reconciling it against the store is the app's job. See
 /// `ShiftLiveActivityService`.
 ///
 /// ## Shared source, two modules
@@ -53,9 +53,10 @@ nonisolated struct ShiftActivityAttributes: ActivityAttributes, Sendable {
     /// shift is paused, how the deliveries stand, and the one or two controls
     /// that apply.
     ///
-    /// It carries **no money in any form** — no recorded gross, no hourly figure,
-    /// no per-mile figure, no total, no projection — **no recommendation, no
-    /// goal, no place name, no address and no coordinate**. Half of those are
+    /// It carries **no money in any form**: no recorded gross, no hourly figure,
+    /// no per-mile figure, no total and no projection. It carries **no
+    /// recommendation, no goal, no place name, no address and no coordinate**
+    /// either. Half of those are
     /// facts DashPilot does not have; the rest are a driver's earnings and
     /// whereabouts, printed on a surface anyone standing beside them can read.
     struct ContentState: Codable, Hashable, Sendable {
@@ -109,8 +110,8 @@ nonisolated struct ShiftActivityAttributes: ActivityAttributes, Sendable {
         /// counted here and are not shown on this surface at all.
         let completedDeliveryCount: Int
 
-        /// What the one delivery in progress is doing — `"Waiting at the
-        /// pickup"` — or `nil`.
+        /// What the one delivery in progress is doing (`"Waiting at the
+        /// pickup"`), or `nil`.
         ///
         /// `nil` whenever the answer would be ambiguous: with two orders in the
         /// car there is no "the delivery", and a status line naming one of them
