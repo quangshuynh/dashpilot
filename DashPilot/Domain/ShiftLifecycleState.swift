@@ -5,7 +5,7 @@ import Foundation
 /// ## Derived, never stored as a word
 ///
 /// This is the same rule ``DeliveryState`` keeps. A shift's state is read from
-/// the facts the store holds — its end timestamp and its recorded pauses — and
+/// the facts the store holds, its end timestamp and its recorded pauses, and
 /// never from a status column the app would then have to keep in step with
 /// them. A stored word can disagree with the timestamps beside it after a
 /// crash, a failed save or a migration; a derived one cannot.

@@ -123,16 +123,27 @@ A cancelled delivery contributes from acceptance to cancellation. The driver rea
 delivery until it fell through, and dropping the interval would erase time they spent. It is still
 not counted as a *completed* delivery anywhere — the two facts are separate.
 
+### Working time
+
+`Working time = elapsed shift time − the stretches the driver paused the shift`, clamped at zero.
+
+A shift the driver never paused has a working time identical to its elapsed time, which is what
+every shift recorded before [pausing](shift-workflow.md#pausing-a-shift) existed truthfully has.
+Working time is still not driving time, delivery time or productive time: it holds waiting for an
+offer, repositioning, and any break the driver did not pause for. All it excludes is the stretches
+they told the app they had stopped.
+
 ### Non-delivery time
 
-`Non-delivery time = elapsed shift time − delivery active time`, clamped at zero.
+`Non-delivery time = working shift time − delivery active time`, clamped at zero.
 
 !!! warning "Non-delivery time is not idle time"
 
-    It is the part of the shift no recorded delivery covers, and it routinely holds real work:
-    waiting for an offer, repositioning, breaks, a delivery the driver never recorded, and any
-    stretch the app was simply not told about. DashPilot does not know which, so it names the
-    duration for what it is and derives nothing from it.
+    It is the part of the shift's working time no recorded delivery covers, and it routinely holds
+    real work: waiting for an offer, repositioning, unpaused breaks, a delivery the driver never
+    recorded, and any stretch the app was simply not told about. DashPilot does not know which, so
+    it names the duration for what it is and derives nothing from it. Paused time is not in it: that
+    is reported on its own.
 
 Both durations are shown only for **completed** shifts, and only when the shift has a delivery
 interval that can be measured. A shift with no deliveries recorded shows neither, because "no
@@ -142,7 +153,7 @@ deliveries were recorded" is not the same statement as "no time was spent on del
 
 | Metric | Definition | Shown as |
 | --- | --- | --- |
-| Gross earnings per shift hour | The recorded amount divided by the shift's elapsed wall-clock hours | `$28.75/hr` |
+| Gross earnings per working hour | The recorded amount divided by the shift's working hours | `$28.75/hr` |
 | Gross earnings per active delivery hour | The recorded amount divided by the shift's delivery active hours | `$79.62 per active delivery hour` |
 | Gross earnings per recorded mile | The recorded amount divided by the miles the shift's route measured | `$19.30 / recorded mi` |
 
@@ -150,20 +161,25 @@ All three are recomputed from the stored amount, timestamps, deliveries and rout
 shown. None is stored, so improving a calculation improves every historical shift and the store never
 holds a stale second answer.
 
-### The hourly rate divides by elapsed time
+### The hourly rate divides by working time
 
-The denominator is the whole shift: waiting at a restaurant, waiting between offers, a break, and
-every stretch a delivery was open. This figure is never called an active, working or delivery hourly
-rate — the rate below is the one with a delivery-time denominator, and neither of them is a wage.
+The denominator is the whole shift less the stretches the driver paused it: waiting at a restaurant,
+waiting between offers, an unpaused break, and every stretch a delivery was open are all still in
+it. This figure is never called an active or delivery hourly rate: the rate below is the one with a
+delivery-time denominator, and neither of them is a wage.
+
+Dividing by elapsed time instead would report a driver who paused for an hour as having earned less
+per hour for taking the break, which is a claim about their work the app has no business making. For
+a shift that was never paused, the denominator is exactly what it always was.
 
 For a driver who waits a lot between offers, this rate reads lower than the delivery work itself
 did. It is kept because it is the figure that does not depend on how diligently the driver recorded
-their deliveries: a shift with half its deliveries unrecorded still has a truthful elapsed hourly
+their deliveries: a shift with half its deliveries unrecorded still has a truthful working hourly
 rate, and would have a badly inflated active-hour one.
 
 ### The active-hour rate divides by unioned delivery time
 
-The same shift can therefore show `$28.75/hr` over its elapsed time and `$79.62 per active delivery
+The same shift can therefore show `$28.75/hr` over its working time and `$79.62 per active delivery
 hour` over the time a delivery was open. They are not competing answers — they divide by different
 denominators and answer different questions.
 
@@ -233,7 +249,7 @@ detail screen states the reason:
 | No earnings recorded | No amount has been entered, on the shift or on the delivery. This is not an amount of zero |
 | Delivery not completed | The delivery was cancelled, or is still running, so there is no accepted-to-delivered interval to divide by |
 | Zero delivery duration | A delivery was accepted and delivered in the same moment |
-| No elapsed time | The shift covers no measurable time, including one clamped to zero by a backwards device clock |
+| No working time | The shift recorded no working time: one covering no measurable time at all, one clamped to zero by a backwards device clock, or one the driver kept paused throughout |
 | No deliveries recorded | No delivery was recorded during the shift. This is not a delivery active time of zero |
 | Delivery active time not measurable | Deliveries exist, but none describes a usable interval within the shift |
 | Zero delivery active time | Delivery intervals *were* measured, and they covered no time |

@@ -31,9 +31,16 @@ derived legitimately from device sensors and stored history is typed by the driv
 
 - **Shift lifecycle** with a single-active-shift rule enforced against the store, refusals reported
   rather than swallowed, and relaunch recovery for a shift that was still running.
+- **Pause and resume**, so a driver can stop for a meal or an errand without ending the shift.
+  Paused time is a recorded row rather than a screen state, it survives termination, it is excluded
+  from the shift's working duration and from every hourly figure derived from it, and route
+  recording stops for its whole length. Resuming starts a new recording, so no distance is measured
+  across the break. Pausing is refused while a delivery is in progress; ending a paused shift is
+  allowed and closes the pause at the end time.
 - **Route capture** that starts and stops with the shift, carries on while the driver is in another
-  app or the phone is locked, states whether it is active, paused or unavailable, and never ends a
-  shift because location was lost.
+  app or the phone is locked, states whether it is active, stopped because the shift is paused,
+  paused because a session could not start off screen, or unavailable, and never ends a shift
+  because location was lost.
 - **Sample filtering** with one acceptance policy covering invalid coordinates, poor accuracy, stale
   fixes, duplicate and out-of-order timestamps, negligible movement and implausible jumps.
 - **Recorded mileage** derived from the retained route, summing only what was captured continuously
@@ -42,9 +49,9 @@ derived legitimately from device sensors and stored history is typed by the driv
   one primary control per delivery, **several deliveries recordable at once** for stacked orders,
   every event targeted at one delivery, transitions enforced against the store, relaunch recovery for
   each of them, and a shift end refused while any delivery is running.
-- **Voice and system actions** for the four short lifecycle steps (start a shift, end it, start a
-  delivery, record that delivery's next event) through App Intents, with the app never coming to the
-  screen. Each calls the same service the button calls, and a spoken delivery step is recorded only
+- **Voice and system actions** for the six short lifecycle steps (start a shift, pause it, resume it,
+  end it, start a delivery, record that delivery's next event) through App Intents, with the app
+  never coming to the screen. Each calls the same service the button calls, and a spoken delivery step is recorded only
   while exactly one delivery is in progress; with more, DashPilot records nothing and says so. No
   intent takes a dictated value.
 - **Optional pickup identity**: a delivery can name the place it was collected from, typed by the
@@ -57,7 +64,7 @@ derived legitimately from device sensors and stored history is typed by the driv
   reconciled against them.
 - **Delivery active time**: the union of a shift's delivery intervals, so deliveries worked at the
   same time are counted once rather than summed, plus the non-delivery time left over.
-- **Completed-shift metrics and detail**: gross earnings per shift hour, per active delivery hour and
+- **Completed-shift metrics and detail**: gross earnings per working hour, per active delivery hour and
   per recorded mile, with the reason stated whenever a rate cannot be derived, its deliveries listed
   with their recorded events and any amount recorded against them, and a confirmed delete that
   removes the shift's route positions and deliveries with it.
@@ -153,7 +160,7 @@ The short version, with the full list in [`docs/reference/limitations.md`](docs/
   not one that cost nothing. Net after recorded expenses is one recorded subtotal less another: it is
   not profit, not take-home pay and not a tax figure, and there is no cost per shift, per delivery,
   per hour or per mile anywhere.
-- **All three rates are gross.** The per-shift-hour rate divides by elapsed time; the
+- **All three rates are gross.** The per-working-hour rate divides by working time; the
   per-active-delivery-hour rate divides by the time a recorded delivery was open, which is not a
   measure of work and not a wage; the per-mile rate divides by recorded miles, which makes it
   normally higher than earnings per mile driven.
@@ -161,7 +168,7 @@ The short version, with the full list in [`docs/reference/limitations.md`](docs/
   amount on a delivery is there only because the driver typed it for that delivery. Delivery active
   time is only as good as the tapping, overlapping deliveries are unioned rather than summed, their
   hourly figures are never added together, and non-delivery time is not idle time.
-- **Voice actions cover four lifecycle steps and nothing else.** No cancelling, no amounts, no costs,
+- **Voice actions cover six lifecycle steps and nothing else.** No cancelling, no amounts, no costs,
   no pickup names, nothing read back, and a shift started by voice records no route until the app is
   opened.
 - **No delivery-platform integration**, permanently and by design.

@@ -1068,7 +1068,7 @@ struct LocationTrackingServiceTests {
     }
 
     /// Capture and the persisted lifecycle must not end up disagreeing. The
-    /// order is: stop capture, try to persist, reconcile from the store — so a
+    /// order is: stop capture, try to persist, reconcile from the store. So a
     /// pause the store refused leaves capture running against a shift that is
     /// still running.
     @Test("A pause that was never persisted leaves capture recording the running shift")

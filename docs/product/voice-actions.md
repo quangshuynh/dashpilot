@@ -1,6 +1,6 @@
 # Voice and system actions
 
-The four shortest actions in DashPilot can be performed without looking at the phone: by voice, from
+The six shortest actions in DashPilot can be performed without looking at the phone: by voice, from
 the Shortcuts app, from Spotlight, or from anywhere else iOS offers an App Shortcut. This is the
 driving-safety case the app is designed around. A start time recorded when the driver says so is more
 accurate than one recorded three minutes later, once the phone has been picked up, unlocked and
@@ -14,14 +14,18 @@ every rule that refuses a tap refuses a sentence.
 | Action | What it records | When it is refused |
 | --- | --- | --- |
 | Start Shift | A shift, starting now | A shift is already running |
-| End Shift | The end of the running shift | No shift is running, or a delivery on it is still in progress |
-| Start Delivery | A delivery accepted now, alongside any already running | No shift is running |
+| End Shift | The end of the running shift, paused or not | No shift is running, or a delivery on it is still in progress |
+| Pause Shift | A pause starting now, so the paused time is not counted as working time | No shift is running, it is already paused, or a delivery on it is still in progress |
+| Resume Shift | The end of the pause | No shift is running, or it is not paused |
+| Start Delivery | A delivery accepted now, alongside any already running | No shift is running, or the shift is paused |
 | Record Delivery Progress | The next event of the delivery in progress: arrived at the pickup, then picked up, then delivered | No shift is running, no delivery is in progress, or **more than one delivery is in progress** |
 
 Suggested phrases, offered by the system as soon as the app is installed:
 
 - "Start a shift in DashPilot", "Start my DashPilot shift"
 - "End my shift in DashPilot"
+- "Pause my shift in DashPilot", "Take a break in DashPilot"
+- "Resume my shift in DashPilot", "Start working again in DashPilot"
 - "Start a delivery in DashPilot"
 - "Record delivery progress in DashPilot"
 
@@ -50,10 +54,19 @@ step reaches the one that is left.
 
 There is no screen to glance at afterwards, so the confirmation is the whole report:
 
-- "Shift started at 5:12 PM. DashPilot records your route only while the app is open."
-- "Shift ended after 4 hours, 12 minutes."
+- "Shift started at 5:12 PM. Open DashPilot to start recording your route."
+- "Shift ended after 4 hours, 12 minutes of working time."
+- "Shift paused after 2 hours, 30 minutes of working time. Route recording is stopped until you
+  resume."
+- "Shift resumed after 45 minutes paused. Open DashPilot to start recording your route again."
 - "Delivery 2 started. 2 deliveries in progress."
 - "Delivery 1 recorded as picked up."
+
+Two of those carry a caution rather than only a fact, because a driver acting by voice has no screen
+to notice the difference on. Pausing says recording has stopped; resuming says a recording can only
+be *started* with the app open, so a shift resumed from behind another app records nothing until
+DashPilot is opened. Ending reports the shift's **working** time, which is the figure the app will
+go on using.
 
 The event named is read back from the delivery after the write, so a confirmation cannot describe an
 event the store did not record. A fact DashPilot does not have is left out rather than filled in: a
@@ -82,7 +95,7 @@ waits.
 | Anything about location | Nothing about position is asked for or reported here |
 | Reading back a summary, a rate or a total | A figure heard without its coverage and its wording is a figure misread |
 
-None of the four intents takes a parameter, so nothing a driver says is stored, and no shortcut,
+None of the six intents takes a parameter, so nothing a driver says is stored, and no shortcut,
 suggestion or tile carries a value.
 
 ## Privacy
@@ -90,7 +103,7 @@ suggestion or tile carries a value.
 - **Nothing is donated.** DashPilot does not donate performed intents to the system. App Shortcuts
   are offered from installation, which is all the discovery this needs; a donation would additionally
   feed the system's prediction of what a driver does and when, and a model of somebody's working
-  pattern is not a side effect worth accepting for four voice commands.
+  pattern is not a side effect worth accepting for six voice commands.
 - **The intents run on a locked device**, because a phone in a cradle is locked for most of a shift.
   What they write is a timestamp the driver just witnessed, and what they say back is that same fact.
 - **The log records which action ran and which rule refused it**, and never a timestamp, a count of
@@ -98,7 +111,7 @@ suggestion or tile carries a value.
 
 ## Where the rules live
 
-`IntentLifecycleService` is the only type the four intents call. It owns no lifecycle logic: it calls
+`IntentLifecycleService` is the only type the six intents call. It owns no lifecycle logic: it calls
 `ShiftService` and `DeliveryService`, carries their refusals through word for word, and adds the one
 rule above. If a rule there disagreed with the app, the app would be right, so there is no rule there
 to disagree with. See [Architecture overview](../architecture/overview.md#system-surfaces-app-intents).

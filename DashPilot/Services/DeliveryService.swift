@@ -14,8 +14,9 @@ nonisolated enum DeliveryLifecycleError: Error {
     /// Pausing says the driver stopped working; accepting a delivery says they
     /// had not. Recording both would produce a shift whose delivery active time
     /// runs through time the app is also reporting as not worked, so the start
-    /// is refused and the driver is told to resume first. The converse rule —
-    /// a shift with a delivery open cannot be paused — lives in ``ShiftService``.
+    /// is refused and the driver is told to resume first. The converse rule,
+    /// that a shift with a delivery open cannot be paused, lives in
+    /// ``ShiftService``.
     case shiftPaused
     /// A transition was requested for a delivery that is not attached to a
     /// shift that is still running.

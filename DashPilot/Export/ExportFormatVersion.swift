@@ -19,11 +19,11 @@ import Foundation
 ///
 /// ## Version history
 ///
-/// ### 3 — shift pause and resume
+/// ### 3: shift pause and resume
 ///
 /// A driver can now pause a shift and resume it later, and a shift's **working
-/// duration** — elapsed time less the stretches it was paused — became the
-/// denominator of every hourly figure. Evaluated against the rule above and
+/// duration**, which is elapsed time less the stretches it was paused, became
+/// the denominator of every hourly figure. Evaluated against the rule above and
 /// bumped, because two of its three parts are exactly what the rule bumps for:
 ///
 /// - **A field was renamed.** `shifts[].grossPerElapsedHour` is now
@@ -38,14 +38,14 @@ import Foundation
 /// - **`shifts[].nonDeliverySeconds` changed meaning.** It is now the working
 ///   time no recorded delivery was open for, where it was the elapsed time.
 ///   The two are the same number for every shift that was never paused, so no
-///   previously exported file would have differed — but the field's definition
-///   did change, and a version number that only moved when values changed would
-///   be describing this build rather than the contract.
+///   previously exported file would have differed. The field's definition did
+///   change, though, and a version number that only moved when values changed
+///   would be describing this build rather than the contract.
 ///
 /// Three fields were **added**, which on their own would not have bumped it:
 /// `shifts[].pausedSeconds`, `shifts[].workingSeconds` and
 /// `shifts[].pauseCount`. `shifts[].elapsedSeconds` keeps exactly the meaning it
-/// had — the wall-clock length of the shift, pauses included — and is not
+/// had, the wall-clock length of the shift with pauses included, and is not
 /// redefined.
 ///
 /// **The CSV form moves with it**, from 32 columns to 34:

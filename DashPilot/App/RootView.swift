@@ -344,9 +344,10 @@ private struct ActiveShiftPanel: View {
     /// The working figure, ticking only while the shift is actually running.
     ///
     /// While paused it is rendered once rather than on a timeline. The
-    /// subtraction already holds it still — the open pause grows exactly as fast
-    /// as elapsed time — so a per-second refresh would redraw an unchanged
-    /// number every second for as long as the driver is on their break.
+    /// subtraction already holds it still, because the open pause grows exactly
+    /// as fast as elapsed time, so a per-second refresh would redraw an
+    /// unchanged number every second for as long as the driver is on their
+    /// break.
     @ViewBuilder
     private var workingTime: some View {
         if isPaused {

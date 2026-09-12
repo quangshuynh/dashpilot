@@ -198,7 +198,7 @@ final class LocationTrackingService {
         // The driver's own decision outranks everything below it. A paused shift
         // is not recording because they said so, and reporting a permission
         // problem or a background pause instead would explain a stop they
-        // already know the reason for — and would imply that fixing it would
+        // already know the reason for, and would imply that fixing it would
         // resume recording, which it would not.
         guard !shift.isPaused else {
             stopCapturing()
@@ -250,7 +250,7 @@ final class LocationTrackingService {
     /// pause is recorded, so no candidate can be judged against a shift the
     /// store has already paused, and no position recorded after the driver
     /// tapped Pause is retained. If the pause then fails to save,
-    /// ``synchronize()`` restarts capture in a new session — nothing is latched,
+    /// ``synchronize()`` restarts capture in a new session. Nothing is latched,
     /// and the few seconds of route that stop cost are honestly reported as a
     /// break rather than measured across.
     func prepareForShiftPause() {

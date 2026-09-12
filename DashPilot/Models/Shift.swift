@@ -302,8 +302,8 @@ extension Shift {
     /// Where this shift is in its life, derived from its own stored facts.
     ///
     /// An ended shift is ended whatever its pause rows say. A store holding an
-    /// open pause on a finished shift is an anomaly the app cannot write —
-    /// ending closes the pause first — and reporting it as paused would leave a
+    /// open pause on a finished shift is an anomaly the app cannot write, since
+    /// ending closes the pause first, and reporting it as paused would leave a
     /// finished shift looking live.
     var lifecycleState: ShiftLifecycleState {
         if endedAt != nil { return .ended }

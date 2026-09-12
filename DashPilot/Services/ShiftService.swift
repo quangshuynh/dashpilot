@@ -101,7 +101,7 @@ nonisolated extension ShiftLifecycleError: LocalizedError {
     }
 }
 
-/// The driver's shift lifecycle — start, pause, resume and end — and the
+/// The driver's shift lifecycle, start through pause, resume and end, and the
 /// recorded amounts that hang from a finished one.
 ///
 /// The service owns one invariant: **at most one shift may be unfinished at a
@@ -196,7 +196,7 @@ struct ShiftService {
     /// resume a shift they are not working in order to end it would record a
     /// stretch of work that did not happen. So the open pause is closed **at the
     /// same instant the shift ends**, which is the truthful reading of what
-    /// happened — they were paused right up to the moment they stopped.
+    /// happened: they were paused right up to the moment they stopped.
     ///
     /// Two consequences, both asserted rather than assumed: the pause
     /// contributes its full length to the shift's paused time, and the shift's
@@ -297,9 +297,9 @@ struct ShiftService {
     /// a terminal state says they had not. Recording both at once would produce
     /// a shift whose delivery active time overlaps time the app is also claiming
     /// nobody worked, and every figure derived from the pair would be arguing
-    /// with itself. The driver resolves each delivery — delivered or cancelled —
-    /// first, exactly as they do before ending a shift, and the refusal names
-    /// how many are open.
+    /// with itself. The driver resolves each delivery first, delivered or
+    /// cancelled, exactly as they do before ending a shift, and the refusal
+    /// names how many are open.
     ///
     /// The check is against the shift's own persisted deliveries rather than
     /// against whichever buttons a screen happens to show.
