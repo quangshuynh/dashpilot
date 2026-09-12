@@ -103,14 +103,19 @@ struct LocationAuthorizationPanel: View {
     }
 
     /// Copy describes what the permission allows, and says plainly what the app
-    /// does with it: it records the route of a running shift while the app is
-    /// open, and nothing at any other time. Permission granted is not the same
-    /// as a route being captured — whether capture is actually running is shown
+    /// does with it: it records the route of a running shift, carries on while
+    /// the driver is in another app or the phone is locked, and records nothing
+    /// at any other time.
+    ///
+    /// The authorized copy states the limitation this scope actually has,
+    /// because it is the one a driver can be caught by: recording has to be
+    /// started with DashPilot on screen. Permission granted is still not the
+    /// same as a route being captured, and whether capture is running is shown
     /// on the running shift itself, not here.
     private var explanation: String {
         switch authorization.condition {
         case .notDetermined:
-            "DashPilot needs your permission before it can record where you drive during a shift."
+            "DashPilot needs your permission before it can record where you drive during a shift. It asks for location while in use, not for always."
         case .denied:
             "Location access is off for DashPilot, so it cannot record your route during a shift. You can turn it back on in Settings."
         case .restricted:
@@ -118,7 +123,7 @@ struct LocationAuthorizationPanel: View {
         case .servicesDisabled:
             "Location Services is off for this device, so no app can use location. Turn it on in Settings, under Privacy & Security."
         case .authorized(_, .full):
-            "DashPilot can use precise location while a shift is running and the app is open. Your route is stored on this device only."
+            "DashPilot can use precise location while a shift is running, including when you are in another app or the screen is locked. Recording has to be started with DashPilot open. Your route is stored on this device only."
         case .authorized(_, .reduced):
             "DashPilot has approximate location only, which is usually too imprecise to record a useful route. Precise Location can be turned on in Settings."
         case .authorized(_, .unrecognised):

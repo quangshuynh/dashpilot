@@ -8,8 +8,13 @@ import SwiftUI
 /// capability the app does not have.
 ///
 /// It is shown because the alternative is worse. A driver who assumes their
-/// route is being recorded, while permission is off or the app spent the shift
-/// in the background, loses the shift's data and only finds out afterwards.
+/// route is being recorded, while permission is off or the recording stopped,
+/// loses the shift's data and only finds out afterwards.
+///
+/// Recording now continues while the driver is in another app or the phone is
+/// locked, which makes the opposite mistake possible: believing capture is
+/// guaranteed. So the active state carries a line of its own saying what that
+/// does and does not promise, rather than a green label and silence.
 struct RouteCaptureStatusView: View {
     let state: RouteCaptureState
 
@@ -33,7 +38,7 @@ struct RouteCaptureStatusView: View {
     private var title: String {
         switch state {
         case .idle, .tracking: "Location tracking active"
-        case .pausedInBackground: "Foreground tracking paused"
+        case .pausedInBackground: "Route recording paused"
         case .unavailable(.permissionRequired): "Location permission required"
         case .unavailable: "Location unavailable"
         }
@@ -58,9 +63,12 @@ struct RouteCaptureStatusView: View {
     private var detail: String? {
         switch state {
         case .idle, .tracking:
-            nil
+            """
+            Recording continues while you use other apps or the screen is locked. \
+            iOS can still stop it, and it does not restart on its own if DashPilot is closed.
+            """
         case .pausedInBackground:
-            "DashPilot records your route only while it is open. Return to the app to continue."
+            "Recording starts when DashPilot is open. Open the app to record the rest of this shift."
         case .unavailable(.permissionRequired), .unavailable(.permissionDenied):
             "Turn on location access for DashPilot to record this shift's route."
         case .unavailable(.permissionRestricted):
