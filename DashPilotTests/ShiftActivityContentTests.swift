@@ -321,6 +321,9 @@ struct ShiftActivityContentTests {
         try record(40, from: 0, for: shift, in: UUID(), context: context)
         let deliveries = DeliveryService(context: context)
         let delivery = try deliveries.startDelivery(at: at(10))
+        // Both amounts a delivery can carry, because a Lock Screen is readable
+        // by whoever is standing beside the phone and neither belongs there.
+        try deliveries.setExpectedEarnings(try #require(Money(exact: "8.50")), on: delivery)
         try deliveries.markArrivedAtPickup(delivery, at: at(20))
         _ = try PickupPlaceService(context: context).assignPlace(named: "Corner Cafe", to: delivery, at: at(25))
 
@@ -343,6 +346,8 @@ struct ShiftActivityContentTests {
 
         for line in printed {
             #expect(!line.contains("$"), "No amount reaches a Lock Screen: \(line)")
+            #expect(!line.contains("8.50"), "Not an expected amount either: \(line)")
+            #expect(!line.lowercased().contains("expect"), "No expectation vocabulary: \(line)")
             #expect(!line.lowercased().contains("earn"), "No earnings vocabulary: \(line)")
             #expect(!line.lowercased().contains("per hour"), "No rate: \(line)")
             #expect(!line.lowercased().contains("per mile"), "No rate: \(line)")

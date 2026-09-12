@@ -72,11 +72,13 @@ struct RouteSampleRelationshipTests {
     @Test("Version 10 is current, and it is the version that drops the route collection")
     func schemaVersion() throws {
         #expect(DashPilotSchemaV10.versionIdentifier == Schema.Version(10, 0, 0))
-        #expect(DashPilotMigrationPlan.schemas.count == 10)
-        #expect(DashPilotMigrationPlan.stages.count == 9)
-        #expect(DashPilotMigrationPlan.schemas.last is DashPilotSchemaV10.Type)
+        #expect(DashPilotMigrationPlan.schemas.contains { $0 is DashPilotSchemaV10.Type })
 
-        let entities = Set(ModelContainerFactory.currentSchema.entities.map(\.name))
+        // The plan's own shape — how many versions and stages it has, and which
+        // one is current — is asserted in the suite belonging to whichever
+        // version is current, so it is updated in one place. It moved to
+        // `ExpectedDeliveryEarningsPersistenceTests` when v11 was added.
+        let entities = Set(Schema(versionedSchema: DashPilotSchemaV10.self).entities.map(\.name))
         #expect(entities == ["Shift", "RouteSample", "Delivery", "PickupPlace", "Expense", "ShiftPause"])
     }
 
