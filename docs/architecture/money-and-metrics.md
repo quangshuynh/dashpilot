@@ -8,7 +8,7 @@ demand rather than stored.
 
 `Money` wraps `Decimal`, stores amounts unrounded, and rounds only when a caller asks. Division
 returns an optional because a zero divisor is a normal state for rate calculations: a shift may have
-no elapsed time or no recorded distance, and the app must show "no rate" rather than invent one.
+no working time or no recorded distance, and the app must show "no rate" rather than invent one.
 
 `Money.formatted(currencyCode:locale:)` is the only place a monetary string is built. No view
 assembles one from a symbol and a number, and no view configures a formatter. It rounds to
@@ -114,7 +114,7 @@ the value and lose the reason, and the reasons are the point of the type.
 | --- | --- |
 | `shiftNotCompleted` | The shift is still running; finalised rates describe finished shifts |
 | `earningsNotRecorded` | No amount has been entered. **Not** an amount of zero |
-| `noElapsedTime` | The shift covers no measurable time, including one clamped to zero by a backwards device clock |
+| `noWorkingTime` | The shift recorded no working time: none at all, one clamped to zero by a backwards device clock, or one the driver kept paused throughout |
 | `noDeliveriesRecorded` | No delivery was recorded. **Not** a delivery active time of zero |
 | `deliveryActiveTimeNotMeasurable` | Deliveries exist, but none describes a usable interval within the shift |
 | `zeroDeliveryActiveTime` | Delivery intervals *were* measured, and they covered no time |
@@ -169,11 +169,11 @@ can be made exact afterwards. Each therefore crosses into `Decimal` exactly once
 a duration to the millisecond, a distance to a millionth of a mile, which is under two millimetres
 against positions carrying error radii of up to 100 m.
 
-Every hourly rate in the app — over a shift's elapsed time, over its delivery active time, and over
+Every hourly rate in the app, over a shift's working time, over its delivery active time, and over
 one delivery's own lifecycle — divides through one shared function,
 `ShiftMetricsCalculator.grossPerHour(of:over:)`, so they cannot drift apart in the last cent. A
 unioned active duration and a single delivery's duration cross the boundary by exactly the same rule
-an elapsed one does. That function answers `nil`, never zero, for a duration that cannot be a
+a working one does. That function answers `nil`, never zero, for a duration that cannot be a
 denominator; naming what the absence *means* is the caller's job, because the same zero denominator
 is "this shift covered no time" in one place and "this delivery's lifecycle covered no time" in
 another.
@@ -206,7 +206,7 @@ earnings for Delivery 2", "Edit gross earnings for Delivery 1", "Remove gross ea
 Delivery 3".
 
 The three durations on a completed shift are told apart in words rather than by position —
-"3 hours elapsed shift time", "1 hour, 5 minutes delivery active time", "1 hour, 55 minutes
+"3 hours working shift time", "1 hour, 5 minutes delivery active time", "1 hour, 55 minutes
 non-delivery time". `CompletedShiftDetailView.durationText(_:width:)` takes a unit width for the
 reason `RouteDistance.formattedMiles(width:)` does: `hr` reads well and hears badly, so the spoken
 form asks for `.wide` and gets its words from the same units and the same rule. Nothing rewrites the
@@ -216,4 +216,4 @@ sound wrong:
 
 > Saturday, August 23, 2025. 5:46 PM to 8:46 PM. 3 hr. $86.25 gross earnings recorded. 4.5 miles
 > recorded. Partial route: DashPilot was not recording for part of this shift, so more miles were
-> driven than were recorded. $28.75 gross earnings per shift hour.
+> driven than were recorded. $28.75 gross earnings per working hour.

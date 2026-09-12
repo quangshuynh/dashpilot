@@ -172,7 +172,7 @@ struct ExpenseExportTests {
         let summary = try #require(document.summary)
 
         #expect(summary.earnings.recordedGrossEarnings?.string == "100.00", "Gross stays gross")
-        #expect(summary.grossPerElapsedHour.amount?.string == "20.00")
+        #expect(summary.grossPerWorkingHour.amount?.string == "20.00")
         #expect(document.shifts.first?.grossEarnings?.string == "100.00")
         // Nothing anywhere in the file reports a difference as a shortfall, and
         // no shift-level net exists at all.
@@ -260,8 +260,12 @@ struct ExpenseExportTests {
 
     // MARK: The format version
 
-    @Test("Adding expenses was additive, so the format version is still 2")
-    func versionDidNotMove() throws {
+    /// Expenses did not move the version; shift pause and resume did, to 3.
+    /// What this test still proves is the part that has not changed: the
+    /// top-level shape expenses arrived in is the shape it is still in, and
+    /// `expenses` is still the only key it added.
+    @Test("Expenses added one top-level key and redefined none")
+    func expensesWereAdditiveAtTheTopLevel() throws {
         let fixture = try ExportFixture()
         try fixture.completedShift(earnings: "86.25")
         try fixture.expense("42.10", hoursAfterStart: 9.5)
@@ -271,12 +275,13 @@ struct ExpenseExportTests {
             .document(for: .period(try day(fixture)), exportedAt: ExportFixture.start)
         let object = try object(document)
 
-        #expect(ExportFormat.version == 2)
-        #expect(object["formatVersion"] as? Int == 2)
+        #expect(ExportFormat.version == 3)
+        #expect(object["formatVersion"] as? Int == 3)
 
         // The version-2 top-level keys are all still there and still mean what
-        // they meant: `expenses` was added beside them, and nothing was renamed,
-        // removed or redefined. That is the whole reason the number did not move.
+        // they meant: `expenses` was added beside them, and nothing at this level
+        // was renamed, removed or redefined. Version 3 changed fields *inside*
+        // `shifts[]` and `summary`, and nothing here.
         let versionTwoKeys: Set<String> = [
             "formatVersion", "producer", "exportedAt", "scope", "shiftCount", "shifts", "summary"
         ]
@@ -305,9 +310,9 @@ struct ExpenseExportTests {
         let summary = try #require(object["summary"] as? [String: Any])
 
         let versionTwoKeys: Set<String> = [
-            "completedShiftCount", "elapsed", "deliveryActive", "nonDelivery", "earnings",
+            "completedShiftCount", "working", "deliveryActive", "nonDelivery", "earnings",
             "deliveryEarnings", "route", "deliveries",
-            "grossPerElapsedHour", "grossPerDeliveryActiveHour", "grossPerRecordedMile"
+            "grossPerWorkingHour", "grossPerDeliveryActiveHour", "grossPerRecordedMile"
         ]
         #expect(versionTwoKeys.isSubset(of: Set(summary.keys)))
         #expect(Set(summary.keys).subtracting(versionTwoKeys) == ["expenses", "netAfterRecordedExpenses"])
@@ -325,7 +330,7 @@ struct ExpenseExportTests {
 
     // MARK: CSV
 
-    @Test("The CSV is unchanged: the same 32 delivery columns, and no expense in them")
+    @Test("The CSV carries no expense, whatever its column count")
     func csvIsUnchanged() throws {
         let fixture = try ExportFixture()
         let shift = try fixture.completedShift(earnings: "86.25")
@@ -338,7 +343,11 @@ struct ExpenseExportTests {
         let csv = String(decoding: try encoder.data(for: document, as: .csv), as: UTF8.self)
         let lines = csv.split(separator: "\r\n", omittingEmptySubsequences: false).filter { !$0.isEmpty }
 
-        #expect(ExportDocumentEncoder.columns.count == 32)
+        // The count moved to 35 in format version 3, which added the two paused
+        // and working columns and the pause count. What this test asserts is the
+        // part expenses did not change: the table is still one row per delivery
+        // and holds no cost.
+        #expect(ExportDocumentEncoder.columns.count == 35)
         #expect(lines.count == 2, "A header and one delivery row: no second table was appended")
         #expect(lines.first?.contains("expense") == false)
         // The row shape a spreadsheet parses stays one shape all the way down.

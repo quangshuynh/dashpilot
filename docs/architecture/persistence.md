@@ -28,11 +28,17 @@ device.
 
 ## What is stored
 
-Five entities. Their fields are listed under [Data model](../reference/data-model.md).
+Six entities. Their fields are listed under [Data model](../reference/data-model.md).
 
 `Shift` holds a start timestamp, an optional end timestamp and an optional gross earnings amount.
-Everything else about a shift, including its duration, its distance and its rates, is derived when
-it is asked for.
+Everything else about a shift, including its lifecycle state, its durations, its distance and its
+rates, is derived when it is asked for.
+
+`ShiftPause` stores when the driver recorded pausing and, once they resume, when they recorded
+resuming. It is a row rather than a flag on `Shift` because a boolean could say a shift is paused now
+but not for how long or how many times, and an accumulated "paused seconds" would be a running sum
+the app had to keep correct across every crash and failed save. Whether a shift is paused is a pause
+with no end; how long it was paused is the union of its rows.
 
 `Delivery` stores five timestamps and its shift. Its state is derived from which of those
 timestamps exist rather than stored beside them, so nothing in the store can disagree with the
@@ -50,9 +56,9 @@ that each field needs a reason rather than an availability.
 ## The delete rules
 
 `Shift.routeSamples` uses `deleteRule: .cascade`, and has since v2. `Shift.deliveries` uses it too,
-since v5. A shift's route and its deliveries describe that shift and nothing else, so deleting the
-shift takes both with it. The orphans would otherwise be exactly the sensitive rows the app promises
-to keep accountable to a shift.
+since v5, and `Shift.pauses` since v9. A shift's route, its deliveries and its pauses describe that
+shift and nothing else, so deleting the shift takes all three with it. The orphans would otherwise be
+exactly the sensitive rows the app promises to keep accountable to a shift.
 
 A delivery's own optional amount, added in v7, is an attribute rather than a relationship, so it
 goes with the delivery under the same cascade — which is why the delete confirmation names every

@@ -688,7 +688,7 @@ struct MonthAndRangeMetricsTests {
         PeriodShiftRecord(
             startedAt: startedAt,
             isCompleted: isCompleted,
-            elapsedDuration: elapsed,
+            workingDuration: elapsed,
             grossEarnings: earnings,
             recordedDistance: recordedDistance,
             deliveryActiveTime: active,
@@ -725,8 +725,8 @@ struct MonthAndRangeMetricsTests {
         )
         let locale = Locale(identifier: "en_US")
         let weeklyRates = [
-            calculator.metrics(of: [firstWeek], in: firstWeekPeriod).grossPerElapsedHour.amount,
-            calculator.metrics(of: [thirdWeek], in: thirdWeekPeriod).grossPerElapsedHour.amount
+            calculator.metrics(of: [firstWeek], in: firstWeekPeriod).grossPerWorkingHour.amount,
+            calculator.metrics(of: [thirdWeek], in: thirdWeekPeriod).grossPerWorkingHour.amount
         ].compactMap { $0 }
         #expect(weeklyRates.map { $0.formatted(locale: locale) } == ["$100.00", "$11.11"])
 
@@ -737,12 +737,12 @@ struct MonthAndRangeMetricsTests {
         #expect(meanOfWeeklyRates.formatted(locale: locale) == "$55.56")
 
         let metrics = calculator.metrics(of: [firstWeek, thirdWeek], in: month)
-        let monthRate = try #require(metrics.grossPerElapsedHour.amount)
+        let monthRate = try #require(metrics.grossPerWorkingHour.amount)
 
         #expect(monthRate.formatted(locale: locale) == "$20.00")
         #expect(monthRate != meanOfWeeklyRates)
         #expect(metrics.recordedGrossEarnings == (try money("200.00")))
-        #expect(metrics.elapsedDuration == 10 * 3600.0)
+        #expect(metrics.workingDuration == 10 * 3600.0)
     }
 
     @Test("A chosen range's rate is its own amounts over its own hours, not a mean of its days'")
@@ -752,10 +752,10 @@ struct MonthAndRangeMetricsTests {
         let long = try record(startedAt: date(2026, 9, 5), elapsed: 9 * 3600, earnings: try money("100.00"))
 
         let metrics = calculator.metrics(of: [short, long], in: period)
-        let rate = try #require(metrics.grossPerElapsedHour.amount)
+        let rate = try #require(metrics.grossPerWorkingHour.amount)
 
         #expect(rate.formatted(locale: Locale(identifier: "en_US")) == "$20.00")
-        #expect(metrics.elapsedDuration == 10 * 3600.0)
+        #expect(metrics.workingDuration == 10 * 3600.0)
     }
 
     /// Five ten-minute waits on one day and one forty-minute wait on another are
@@ -952,7 +952,7 @@ struct MonthAndRangeMetricsTests {
 
         #expect(inSeptember.completedShiftCount == 1)
         #expect(inSeptember.recordedGrossEarnings == (try money("75.00")))
-        #expect(inSeptember.elapsedDuration == 3 * 3600.0)
+        #expect(inSeptember.workingDuration == 3 * 3600.0)
         #expect(abs(inSeptember.recordedDistance.miles - 18) < 0.0001)
         #expect(inSeptember.deliverySummary.completed == 4)
 
@@ -1007,7 +1007,7 @@ struct MonthAndRangeMetricsTests {
         #expect(byMonth.earningsCoverage == byRange.earningsCoverage)
         #expect(byMonth.recordedDistance == byRange.recordedDistance)
         #expect(byMonth.routeCoverage == byRange.routeCoverage)
-        #expect(byMonth.grossPerElapsedHour == byRange.grossPerElapsedHour)
+        #expect(byMonth.grossPerWorkingHour == byRange.grossPerWorkingHour)
         #expect(byMonth.grossPerRecordedMile == byRange.grossPerRecordedMile)
     }
 }

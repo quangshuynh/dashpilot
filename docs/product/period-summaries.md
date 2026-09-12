@@ -15,7 +15,7 @@ therefore shown with the count of shifts it came from.
 ## Which shifts are counted
 
 **Only completed shifts.** A running shift is excluded from every figure. Its
-elapsed time is still growing and its amount is not final, so including it would
+working time is still growing and its amount is not final, so including it would
 make a historical total change every second the driver worked.
 
 **A shift belongs to the period containing its `startedAt`.** That is the whole
@@ -29,7 +29,7 @@ invent a division the records do not contain.
 
 The same holds at a month or a range boundary. A shift starting at 23:00 on
 30 September and ending at 02:00 on 1 October is **September's, entirely**. It
-does not appear in October at all, and no part of its earnings, mileage, elapsed
+does not appear in October at all, and no part of its earnings, mileage, working
 time or delivery count is moved across.
 
 ## Calendar semantics
@@ -150,7 +150,7 @@ The same rule runs through every figure:
 | Figure | What is excluded | What is counted |
 | --- | --- | --- |
 | Gross earnings | Shifts with no amount recorded | Shifts with an amount, `$0.00` included |
-| Elapsed time | Shifts with no usable duration | Completed shifts with one |
+| Working time | Shifts with no usable duration | Completed shifts with one |
 | Delivery active time | Shifts whose deliveries describe no usable interval | Shifts with a measurable union |
 | Non-delivery time | Shifts missing either half of the subtraction | Shifts with both |
 | Recorded mileage | Shifts whose route measured nothing | Shifts whose route measured a distance, partial ones included |
@@ -201,7 +201,7 @@ carrying both halves of it.
 
 | Rate | Uses shifts with |
 | --- | --- |
-| Gross per elapsed hour | An amount **and** a positive elapsed duration |
+| Gross per working hour | An amount **and** a positive working duration |
 | Gross per delivery active hour | An amount **and** a positive measurable delivery active time |
 | Gross per recorded mile | An amount **and** a positive measurable recorded route |
 
@@ -294,11 +294,11 @@ shifts instead of leaving the anomaly visible.
 
 ### Non-delivery time
 
-Non-delivery time is derived **per shift** (`elapsed − delivery active`, clamped
+Non-delivery time is derived **per shift** (`working − delivery active`, clamped
 at zero) and then summed.
 
-It is deliberately not `period elapsed − period active`. Those two sums can come
-from different sets of shifts — a shift can contribute elapsed time while having
+It is deliberately not `period working − period active`. Those two sums can come
+from different sets of shifts: a shift can contribute working time while having
 no measurable active time — and subtracting one from the other would produce a
 duration belonging to neither.
 
@@ -405,7 +405,7 @@ manufacture a fall.
 
 ### What is compared
 
-Completed shifts, elapsed time, delivery active time, recorded gross earnings, the three rates,
+Completed shifts, working time, delivery active time, recorded gross earnings, the three rates,
 recorded expenses, recorded mileage and deliveries delivered.
 
 Two figures are deliberately left out:

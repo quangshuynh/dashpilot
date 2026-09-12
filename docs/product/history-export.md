@@ -57,9 +57,41 @@ a change to what the file says does not pretend the store changed. The version i
 an existing field's meaning changes or a field is removed; adding a field is additive, and a reader
 that ignores unknown keys keeps working.
 
-Exports are never called "v8".
+Exports are never called "v9".
 
 ### Version history
+
+#### 3: shift pause and resume
+
+A driver can now [pause a shift](shift-workflow.md#pausing-a-shift), and a shift's **working
+duration**, which is elapsed time less the stretches it was paused, became the denominator of every
+hourly figure. Two of the three changes are exactly what the rule above bumps for:
+
+- **A field was renamed.** `shifts[].grossPerElapsedHour` is now `shifts[].grossPerWorkingHour`, and
+  `summary.grossPerElapsedHour` is now `summary.grossPerWorkingHour`. `summary.elapsed` became
+  `summary.working`. A rename is a removal to a reader looking for the old key, and it is a rename
+  rather than a silent redefinition on purpose: leaving the name and moving the denominator
+  underneath it would hand a reader a figure that no longer means what its name says.
+- **A field changed meaning.** `shifts[].nonDeliverySeconds` is now the *working* time no recorded
+  delivery covered, where it was the elapsed time. Every previously exported file would have carried
+  the same number, because a shift that was never paused has no pauses to subtract. The definition
+  did change, though, and a version number that only moved when values changed would be describing
+  one build rather than the contract.
+
+Three fields were **added**, which alone would not have moved the number:
+`shifts[].pausedSeconds`, `shifts[].workingSeconds` and `shifts[].pauseCount`. `pausedSeconds` is
+`0` rather than `null` for a shift that was never paused, because that is a measurement.
+`shifts[].elapsedSeconds` keeps exactly the meaning it had: the wall-clock length of the shift,
+pauses included.
+
+**The CSV moved with it, from 32 columns to 35.** `shiftPausedSeconds`, `shiftWorkingSeconds` and
+`shiftPauseCount` were added, and `shiftGrossPerElapsedHour` became `shiftGrossPerWorkingHour`. An
+insertion breaks a spreadsheet reading by column position wherever it happens, which is the other
+half of why this is a version rather than an addition.
+
+Nothing about a shift recorded before this release changes value: it has no pauses, so its paused
+seconds are `0`, its working seconds equal its elapsed seconds, and every rate derived from it is the
+figure it always was.
 
 #### Still 2: recorded expenses
 
@@ -79,7 +111,7 @@ by the rule above:
 A reader that ignores unknown keys keeps working unchanged, which is the whole of what the version
 number promises. A file produced before expenses existed simply has no such keys.
 
-The CSV is unchanged, and its columns are the same 32.
+The CSV was unchanged by that release, and its columns stayed at 32 until version 3 above.
 
 #### 2 — month and chosen ranges
 
@@ -107,9 +139,9 @@ Shift, day, week and all-history scopes, in JSON and CSV.
 
 ### Per shift
 
-Its start and end, elapsed time, the amount recorded on it, what its route measured and how far that
-can be trusted, delivery active and non-delivery time, the three derived rates, the delivered and
-cancelled counts, and its deliveries.
+Its start and end, elapsed time, paused time, working time, how many times it was paused, the amount
+recorded on it, what its route measured and how far that can be trusted, delivery active and
+non-delivery time, the three derived rates, the delivered and cancelled counts, and its deliveries.
 
 ### Per delivery
 
@@ -192,7 +224,10 @@ is exactly where they get lost.
   against its deliveries are independent fields. Nothing adds one to the other, and **no file
   contains a difference, shortfall, discrepancy or unallocated figure** — that difference is
   ordinary, and naming it would call it an error.
-- **Elapsed time is not delivery active time**, and non-delivery time is never called idle time.
+- **Elapsed time is not working time.** A shift the driver paused covers more wall clock than it
+  records as worked, and the two are separate fields with the paused total beside them rather than
+  one figure that could mean either. A shift that was never paused exports the same number for both.
+- **Working time is not delivery active time**, and non-delivery time is never called idle time.
   Active time is the already-unioned figure, so deliveries worked at once are counted once; adding up
   the delivery rows gives a larger number, and that one is not a duration of anything.
 - **A recorded pickup wait is not a predicted one.** `pickupWaitSeconds` exists only when both ends
@@ -213,7 +248,7 @@ is exactly where they get lost.
 | Money | A decimal string at two fraction digits, e.g. `"86.25"`, `"0.00"`. No symbol, no grouping, no locale. |
 | Currency | A `currencyCode` field, always `USD`. Stated rather than implied; DashPilot converts nothing. |
 | Timestamps | ISO 8601 in UTC to the second, e.g. `2026-09-05T13:04:05Z`. The same string in both formats. |
-| Durations | Whole seconds, in fields named for it: `elapsedSeconds`, `pickupWaitSeconds`. |
+| Durations | Whole seconds, in fields named for it: `elapsedSeconds`, `workingSeconds`, `pausedSeconds`, `pickupWaitSeconds`. |
 | Distance | `recordedDistanceMetres` is authoritative; `recordedDistanceMiles` is derived from it. |
 | Missing | JSON `null`, CSV empty cell. Never `0`. |
 

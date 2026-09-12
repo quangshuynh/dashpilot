@@ -190,8 +190,136 @@ struct AppIntentTests {
         #expect(description.contains("records no mileage until you open it"))
     }
 
-    @Test("Four shortcuts are offered, and they are the four lifecycle actions")
+    // MARK: Pausing and resuming
+
+    @Test("Pausing by intent pauses the shift without ending it")
+    func pauseShiftIntentPausesTheShift() async throws {
+        try await withStore { context in
+            _ = try await StartShiftIntent().perform()
+            _ = try await PauseShiftIntent().perform()
+
+            let shift = try #require(try context.fetch(FetchDescriptor<Shift>()).first)
+            #expect(shift.lifecycleState == .paused)
+            #expect(shift.endedAt == nil, "A pause is not an end")
+            #expect(shift.pauses.count == 1)
+        }
+    }
+
+    @Test("Resuming by intent closes the pause")
+    func resumeShiftIntentResumesTheShift() async throws {
+        try await withStore { context in
+            _ = try await StartShiftIntent().perform()
+            _ = try await PauseShiftIntent().perform()
+            _ = try await ResumeShiftIntent().perform()
+
+            let shift = try #require(try context.fetch(FetchDescriptor<Shift>()).first)
+            #expect(shift.lifecycleState == .running)
+            #expect(shift.openPause == nil)
+            #expect(shift.pauses.count == 1)
+        }
+    }
+
+    /// The intents hold no rule of their own: this is ``ShiftService``'s
+    /// refusal, reaching a system surface unchanged.
+    @Test("Pausing by intent is refused while a delivery is in progress")
+    func pauseShiftIntentRefusesOverAnOpenDelivery() async throws {
+        try await withStore { context in
+            _ = try await StartShiftIntent().perform()
+            _ = try await StartDeliveryIntent().perform()
+
+            await #expect(throws: IntentLifecycleError.shift(.activeDeliveriesBlockPause(count: 1))) {
+                _ = try await PauseShiftIntent().perform()
+            }
+
+            let shift = try #require(try context.fetch(FetchDescriptor<Shift>()).first)
+            #expect(shift.pauses.isEmpty)
+            #expect(shift.lifecycleState == .running)
+        }
+    }
+
+    @Test("Pausing an already paused shift is refused, and resuming a running one is too")
+    func pauseAndResumeIntentsRefuseTheirOwnNoOps() async throws {
+        try await withStore { context in
+            _ = try await StartShiftIntent().perform()
+
+            await #expect(throws: IntentLifecycleError.shift(.shiftNotPaused)) {
+                _ = try await ResumeShiftIntent().perform()
+            }
+
+            _ = try await PauseShiftIntent().perform()
+
+            await #expect(throws: IntentLifecycleError.self) {
+                _ = try await PauseShiftIntent().perform()
+            }
+
+            let shift = try #require(try context.fetch(FetchDescriptor<Shift>()).first)
+            #expect(shift.pauses.count == 1)
+        }
+    }
+
+    @Test("Pausing or resuming with nothing running is refused")
+    func pauseAndResumeRefuseWithNoShift() async throws {
+        try await withStore { _ in
+            await #expect(throws: IntentLifecycleError.shift(.noActiveShift)) {
+                _ = try await PauseShiftIntent().perform()
+            }
+            await #expect(throws: IntentLifecycleError.shift(.noActiveShift)) {
+                _ = try await ResumeShiftIntent().perform()
+            }
+        }
+    }
+
+    @Test("A delivery started by intent is refused while the shift is paused")
+    func startDeliveryIntentRefusesWhilePaused() async throws {
+        try await withStore { context in
+            _ = try await StartShiftIntent().perform()
+            _ = try await PauseShiftIntent().perform()
+
+            await #expect(throws: IntentLifecycleError.delivery(.shiftPaused)) {
+                _ = try await StartDeliveryIntent().perform()
+            }
+
+            #expect(try context.fetch(FetchDescriptor<Delivery>()).isEmpty)
+        }
+    }
+
+    @Test("Ending a paused shift by intent ends it and closes the pause")
+    func endShiftIntentEndsAPausedShift() async throws {
+        try await withStore { context in
+            _ = try await StartShiftIntent().perform()
+            _ = try await PauseShiftIntent().perform()
+            _ = try await EndShiftIntent().perform()
+
+            let shift = try #require(try context.fetch(FetchDescriptor<Shift>()).first)
+            #expect(shift.lifecycleState == .ended)
+            #expect(shift.openPause == nil)
+        }
+    }
+
+    /// The pair run in the background and on a locked phone, like the four that
+    /// came before them: a driver pausing at a kerb must not have to unlock the
+    /// phone first, or they will not record the break at all.
+    @Test("Pause and Resume run without opening the app, on a locked device")
+    func pauseAndResumeRunInTheBackground() {
+        #expect(PauseShiftIntent.supportedModes == .background)
+        #expect(ResumeShiftIntent.supportedModes == .background)
+        #expect(PauseShiftIntent.authenticationPolicy == .alwaysAllowed)
+        #expect(ResumeShiftIntent.authenticationPolicy == .alwaysAllowed)
+    }
+
+    @Test("The pause description says what stops, and the resume description what restarts")
+    func pauseAndResumeDescriptionsStateTheirEffects() throws {
+        let pause = String(localized: try #require(PauseShiftIntent.description?.descriptionText))
+        let resume = String(localized: try #require(ResumeShiftIntent.description?.descriptionText))
+
+        #expect(pause.lowercased().contains("not counted as working time"))
+        #expect(pause.lowercased().contains("route recording stops"))
+        #expect(resume.lowercased().contains("not counted"), "The distance across the pause is named")
+        #expect(resume.lowercased().contains("open dashpilot"), "A session can only be started in the foreground")
+    }
+
+    @Test("Six shortcuts are offered, and they are the six lifecycle actions")
     func shortcutsCoverTheLifecycleActionsOnly() {
-        #expect(DashPilotShortcuts.appShortcuts.count == 4)
+        #expect(DashPilotShortcuts.appShortcuts.count == 6)
     }
 }

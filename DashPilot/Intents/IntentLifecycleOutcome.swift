@@ -27,6 +27,16 @@ nonisolated enum IntentLifecycleOutcome: Equatable, Sendable {
     /// report, and zero is a different claim from "not known".
     case shiftEnded(duration: TimeInterval?)
 
+    /// A shift was paused, having been worked for `workingDuration` so far.
+    ///
+    /// Working time, not elapsed: a driver who paused for an hour earlier did
+    /// not work that hour, and the figure said back has to be the one the app
+    /// will go on using.
+    case shiftPaused(workingDuration: TimeInterval?)
+
+    /// A shift was resumed, having been paused for `pausedDuration` in total.
+    case shiftResumed(pausedDuration: TimeInterval?)
+
     /// A delivery began, alongside however many were already running.
     case deliveryStarted(number: Int?, inProgress: Int?)
 
@@ -49,9 +59,33 @@ nonisolated enum IntentLifecycleOutcome: Equatable, Sendable {
             """
         case let .shiftEnded(duration):
             if let duration {
-                "Shift ended after \(DurationText.spoken(duration))."
+                "Shift ended after \(DurationText.spoken(duration)) of working time."
             } else {
                 "Shift ended."
+            }
+        case let .shiftPaused(workingDuration):
+            // Recording is named because there is no screen to notice it on. A
+            // driver who thought the route was still being kept would find the
+            // break in it only after the shift.
+            if let workingDuration {
+                """
+                Shift paused after \(DurationText.spoken(workingDuration)) of working time. \
+                Route recording is stopped until you resume.
+                """
+            } else {
+                "Shift paused. Route recording is stopped until you resume."
+            }
+        case let .shiftResumed(pausedDuration):
+            // The same caution a spoken start carries, for the same reason: a
+            // capture session can only be started with the app on screen, so a
+            // shift resumed by voice records no route until DashPilot is opened.
+            if let pausedDuration {
+                """
+                Shift resumed after \(DurationText.spoken(pausedDuration)) paused. \
+                Open DashPilot to start recording your route again.
+                """
+            } else {
+                "Shift resumed. Open DashPilot to start recording your route again."
             }
         case let .deliveryStarted(number, inProgress):
             [Self.started(number), Self.inProgressStatement(inProgress)]

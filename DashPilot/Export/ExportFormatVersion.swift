@@ -4,7 +4,7 @@ import Foundation
 ///
 /// ## Why this is not the schema version
 ///
-/// The store is at schema v7 and will move on. That number describes how
+/// The store is at schema v9 and will move on. That number describes how
 /// SwiftData lays out a database on one device, and nothing outside the app has
 /// ever seen it. This one describes a **file a driver has already taken
 /// somewhere else** — a spreadsheet, a folder, an accountant's inbox — and the
@@ -18,6 +18,46 @@ import Foundation
 /// keeps working.
 ///
 /// ## Version history
+///
+/// ### 3: shift pause and resume
+///
+/// A driver can now pause a shift and resume it later, and a shift's **working
+/// duration**, which is elapsed time less the stretches it was paused, became
+/// the denominator of every hourly figure. Evaluated against the rule above and
+/// bumped, because two of its three parts are exactly what the rule bumps for:
+///
+/// - **A field was renamed.** `shifts[].grossPerElapsedHour` is now
+///   `shifts[].grossPerWorkingHour`, and `summary.grossPerElapsedHour` is now
+///   `summary.grossPerWorkingHour`. A rename is a removal to a reader looking
+///   for the old key. It is a rename rather than a silent redefinition on
+///   purpose: leaving the name and changing the denominator underneath it would
+///   hand a reader a figure that no longer means what its name says, and no
+///   reader could detect that.
+/// - **`summary.elapsed` became `summary.working`**, for the same reason and
+///   with the same effect on a reader.
+/// - **`shifts[].nonDeliverySeconds` changed meaning.** It is now the working
+///   time no recorded delivery was open for, where it was the elapsed time.
+///   The two are the same number for every shift that was never paused, so no
+///   previously exported file would have differed. The field's definition did
+///   change, though, and a version number that only moved when values changed
+///   would be describing this build rather than the contract.
+///
+/// Three fields were **added**, which on their own would not have bumped it:
+/// `shifts[].pausedSeconds`, `shifts[].workingSeconds` and
+/// `shifts[].pauseCount`. `shifts[].elapsedSeconds` keeps exactly the meaning it
+/// had, the wall-clock length of the shift with pauses included, and is not
+/// redefined.
+///
+/// **The CSV form moves with it**, from 32 columns to 34:
+/// `shiftPausedSeconds`, `shiftWorkingSeconds` and `shiftPauseCount` are added,
+/// and `shiftGrossPerElapsedHour` becomes `shiftGrossPerWorkingHour`. A
+/// spreadsheet reading by column position is broken by an insertion wherever it
+/// happens, which is the other half of why this is a version rather than an
+/// addition.
+///
+/// Nothing about a shift recorded before this build changes value. Such a shift
+/// has no pauses, so its paused seconds are `0`, its working seconds equal its
+/// elapsed seconds, and every rate derived from it is the figure it always was.
 ///
 /// ### Still 2 — recorded expenses
 ///
@@ -45,8 +85,9 @@ import Foundation
 /// file produced *before* expenses existed will find the keys absent, which is
 /// how it can tell that build had no such field.
 ///
-/// The CSV form is unchanged, and its columns are the same 32. Expenses are not
-/// in it: see ``ExportFileFormat/explanation``.
+/// The CSV form was unchanged by that version, and its columns were the same 32
+/// until version 3 above. Expenses are still not in it: see
+/// ``ExportFileFormat/explanation``.
 ///
 /// ### 2 — month and custom reporting periods
 ///
@@ -71,8 +112,8 @@ import Foundation
 nonisolated enum ExportFormat {
     /// The current format version, written into every export.
     ///
-    /// Not the store's schema version, which is unrelated and currently 7.
-    static let version = 2
+    /// Not the store's schema version, which is unrelated and currently 9.
+    static let version = 3
 
     /// What produced the file. A product name and nothing more — no build, no
     /// device, no identifier of any kind.

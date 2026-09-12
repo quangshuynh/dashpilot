@@ -11,6 +11,14 @@ nonisolated enum ShiftError: Error, Equatable {
     case shiftNotCompleted
     /// A negative amount was recorded as gross earnings.
     case negativeEarnings
+    /// A pause was requested on a shift that already has one open.
+    case alreadyPaused
+    /// A resume was requested on a shift with no open pause.
+    case notPaused
+    /// A lifecycle transition was requested on a shift that has already ended.
+    case shiftAlreadyEnded
+    /// The pause model rejected the transition.
+    case invalidPause(ShiftPauseError)
 }
 
 /// A single period of delivery work.
@@ -55,6 +63,16 @@ nonisolated final class Shift {
     @Relationship(deleteRule: .cascade, inverse: \Delivery.shift)
     private(set) var deliveries: [Delivery] = []
 
+    /// The stretches of this shift the driver recorded as paused, in no
+    /// guaranteed order.
+    ///
+    /// The delete rule is `.cascade`, for the reason the route's and the
+    /// deliveries' are: a pause is a statement about one shift and means nothing
+    /// apart from it, so deleting the shift must take its pauses rather than
+    /// leaving rows describing a shift that no longer exists.
+    @Relationship(deleteRule: .cascade, inverse: \ShiftPause.shift)
+    private(set) var pauses: [ShiftPause] = []
+
     /// Gross earnings for this shift, exactly as entered, or `nil` if none were.
     ///
     /// Stored as a `Decimal` rather than as a ``Money``: SwiftData persists a
@@ -75,6 +93,13 @@ nonisolated final class Shift {
         self.endedAt = nil
     }
 
+    /// Whether the shift has not finished.
+    ///
+    /// The direct reading of `endedAt == nil`, and deliberately still that: a
+    /// paused shift is unfinished, so pausing does not change this, does not
+    /// change which shift ``ShiftService/activeShift()`` returns, and does not
+    /// change which row a relaunch recovers. Ask ``lifecycleState`` for the
+    /// distinction between running and paused.
     var isActive: Bool { endedAt == nil }
 
     /// Duration of a finished shift, or `nil` while it is still running.
@@ -240,5 +265,141 @@ extension Shift {
     /// How many deliveries this shift recorded, and how they ended.
     var deliverySummary: DeliverySummary {
         DeliverySummary(states: deliveries.map(\.state))
+    }
+}
+
+// MARK: Pausing
+
+extension Shift {
+    /// The pause the driver has not ended, or `nil` when the shift is not paused.
+    ///
+    /// Read from the store's own rows rather than from a flag, for the reason
+    /// ``activeDeliveries`` is: the rows are the authority, and the rule that a
+    /// paused shift records no route depends on that being true after a relaunch
+    /// as much as during a session.
+    ///
+    /// The newest open row wins. Pausing an already paused shift is refused, so
+    /// there is never more than one; taking the newest means a store that
+    /// somehow holds two produces the state a driver would expect rather than an
+    /// arbitrary one, and ``ShiftService`` reports the anomaly.
+    var openPause: ShiftPause? {
+        pauses.filter(\.isOpen).max { $0.startedAt < $1.startedAt }
+    }
+
+    /// This shift's pauses in the order they began.
+    var pausesInOrder: [ShiftPause] {
+        pauses.sorted { $0.startedAt < $1.startedAt }
+    }
+
+    /// The interval each of this shift's pauses describes.
+    var pauseIntervals: [ShiftPauseInterval] {
+        pausesInOrder.map(\.interval)
+    }
+
+    /// Whether the driver has this shift paused right now.
+    var isPaused: Bool { lifecycleState == .paused }
+
+    /// Where this shift is in its life, derived from its own stored facts.
+    ///
+    /// An ended shift is ended whatever its pause rows say. A store holding an
+    /// open pause on a finished shift is an anomaly the app cannot write, since
+    /// ending closes the pause first, and reporting it as paused would leave a
+    /// finished shift looking live.
+    var lifecycleState: ShiftLifecycleState {
+        if endedAt != nil { return .ended }
+        return openPause == nil ? .running : .paused
+    }
+
+    /// The stretch of this shift being measured, as of `referenceDate`.
+    ///
+    /// A completed shift's own window; an unfinished shift's window up to the
+    /// moment it is being read at. The upper bound is never allowed below the
+    /// start, so a device clock that moved backwards produces a zero-length
+    /// window rather than a reversed one.
+    func measuredWindow(asOf referenceDate: Date) -> ClosedRange<Date> {
+        startedAt...max(startedAt, endedAt ?? referenceDate)
+    }
+
+    /// How much of this shift the driver had it paused, as of `referenceDate`.
+    ///
+    /// The adapter between the model and ``ShiftPausedTimeCalculator``, holding
+    /// no rule of its own. Nothing is stored: the figure is recomputed from the
+    /// pause rows every time it is asked for.
+    func pausedTime(
+        asOf referenceDate: Date,
+        using calculator: ShiftPausedTimeCalculator = ShiftPausedTimeCalculator()
+    ) -> ShiftPausedTime {
+        guard !pauses.isEmpty else { return .none }
+        return calculator.pausedTime(of: pauseIntervals, within: measuredWindow(asOf: referenceDate))
+    }
+
+    /// The paused time of a finished shift, or `nil` while it is unfinished.
+    var completedPausedTime: ShiftPausedTime? {
+        endedAt.map { pausedTime(asOf: $0) }
+    }
+
+    /// Time the driver was not paused, measured against `referenceDate` while
+    /// the shift is unfinished.
+    ///
+    /// **The definition of working duration in DashPilot**, and the denominator
+    /// of every hourly figure derived from a shift. It is elapsed time less the
+    /// time the shift was paused, and nothing else: it is not driving time,
+    /// delivery time or productive time, and it still includes waiting for an
+    /// offer, repositioning and any unpaused break.
+    ///
+    /// While a shift is paused this stops growing, because the open pause grows
+    /// at exactly the rate elapsed time does. That is a property of the
+    /// subtraction rather than a special case written for the screen.
+    ///
+    /// A shift with no pauses has a working duration identical to its elapsed
+    /// duration, which is what makes every shift recorded before pausing existed
+    /// keep the duration it has always had.
+    func workingDuration(asOf referenceDate: Date) -> TimeInterval {
+        max(0, elapsed(asOf: referenceDate) - pausedTime(asOf: referenceDate).duration)
+    }
+
+    /// Working duration of a finished shift, or `nil` while it is unfinished.
+    var completedWorkingDuration: TimeInterval? {
+        guard let completedDuration, let completedPausedTime else { return nil }
+        return max(0, completedDuration - completedPausedTime.duration)
+    }
+
+    /// Opens a pause.
+    ///
+    /// The model keeps the invariants a screen, a test or a future caller must
+    /// not be able to break: a shift that has ended cannot be paused, and one
+    /// already paused cannot be paused again. The refusal for deliveries still
+    /// in progress lives in ``ShiftService``, because it is a rule about the
+    /// shift's other records rather than about this one.
+    ///
+    /// - Throws: ``ShiftError/shiftAlreadyEnded``, ``ShiftError/alreadyPaused``
+    ///   or ``ShiftError/endPrecedesStart`` when `date` precedes the shift start.
+    @discardableResult
+    func beginPause(at date: Date) throws -> ShiftPause {
+        guard endedAt == nil else { throw ShiftError.shiftAlreadyEnded }
+        guard openPause == nil else { throw ShiftError.alreadyPaused }
+        guard date >= startedAt else { throw ShiftError.endPrecedesStart }
+
+        // The inverse relationship is what attaches it, exactly as a new
+        // `Delivery` attaches to its shift. Inserting it into the context is
+        // the caller's, so that a refused or failed write leaves nothing in the
+        // store the model does not also hold.
+        return ShiftPause(shift: self, startedAt: date)
+    }
+
+    /// Closes the open pause.
+    ///
+    /// - Throws: ``ShiftError/shiftAlreadyEnded``, ``ShiftError/notPaused``, or
+    ///   ``ShiftError/invalidPause(_:)`` when the pause refuses the timestamp.
+    @discardableResult
+    func endOpenPause(at date: Date) throws -> ShiftPause {
+        guard endedAt == nil else { throw ShiftError.shiftAlreadyEnded }
+        guard let pause = openPause else { throw ShiftError.notPaused }
+        do {
+            try pause.end(at: date)
+        } catch let error as ShiftPauseError {
+            throw ShiftError.invalidPause(error)
+        }
+        return pause
     }
 }

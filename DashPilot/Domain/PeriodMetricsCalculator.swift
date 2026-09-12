@@ -21,10 +21,14 @@ nonisolated struct PeriodShiftRecord: Equatable, Sendable {
     /// period total.
     let isCompleted: Bool
 
-    /// The shift's elapsed wall-clock length, or `nil` when it has none to
-    /// contribute — a running shift, or a stored row whose duration is not a
-    /// usable measurement.
-    let elapsedDuration: TimeInterval?
+    /// The shift's working length, meaning elapsed time less the time the driver
+    /// had it paused, or `nil` when it has none to contribute: a running shift,
+    /// or a stored row whose duration is not a usable measurement.
+    ///
+    /// Working rather than elapsed, so that a period's hours and the hourly rate
+    /// over them describe time the driver was working. A shift with no pauses
+    /// contributes exactly what it always did.
+    let workingDuration: TimeInterval?
 
     /// What the driver recorded the shift paid, or `nil` if they have not.
     /// Never read as zero.
@@ -60,7 +64,7 @@ nonisolated struct PeriodShiftRecord: Equatable, Sendable {
     init(
         startedAt: Date,
         isCompleted: Bool = true,
-        elapsedDuration: TimeInterval?,
+        workingDuration: TimeInterval?,
         grossEarnings: Money? = nil,
         recordedDistance: RouteDistance = .none,
         deliveryActiveTime: DeliveryActiveTime = .none,
@@ -72,7 +76,7 @@ nonisolated struct PeriodShiftRecord: Equatable, Sendable {
     ) {
         self.startedAt = startedAt
         self.isCompleted = isCompleted
-        self.elapsedDuration = elapsedDuration
+        self.workingDuration = workingDuration
         self.grossEarnings = grossEarnings
         self.recordedDistance = recordedDistance
         self.deliveryActiveTime = deliveryActiveTime
@@ -83,15 +87,15 @@ nonisolated struct PeriodShiftRecord: Equatable, Sendable {
         self.terminalDeliveryCount = terminalDeliveryCount
     }
 
-    /// The shift's elapsed time, but only when it is a usable measurement.
+    /// The shift's working time, but only when it is a usable measurement.
     ///
     /// A duration that is not finite, or is negative, describes a stored row the
     /// app cannot have written. It is excluded rather than clamped to zero: a
-    /// zero would enter the period's elapsed total as a real shift of no length
-    /// and would drag every rate derived from it.
-    var usableElapsedDuration: TimeInterval? {
-        guard let elapsedDuration, elapsedDuration.isFinite, elapsedDuration >= 0 else { return nil }
-        return elapsedDuration
+    /// zero would enter the period's total as a real shift of no length and would
+    /// drag every rate derived from it.
+    var usableWorkingDuration: TimeInterval? {
+        guard let workingDuration, workingDuration.isFinite, workingDuration >= 0 else { return nil }
+        return workingDuration
     }
 
     /// The shift's delivery active time, when it was measurable at all.
@@ -103,7 +107,7 @@ nonisolated struct PeriodShiftRecord: Equatable, Sendable {
     /// The part of the shift no recorded delivery covers, by the one rule that
     /// defines it.
     var nonDeliveryDuration: TimeInterval? {
-        deliveryActiveTime.nonDeliveryDuration(inElapsed: usableElapsedDuration)
+        deliveryActiveTime.nonDeliveryDuration(inElapsed: usableWorkingDuration)
     }
 
     /// The shift's recorded miles, when its route measured a positive distance.
@@ -188,7 +192,7 @@ nonisolated struct PeriodMetricsCalculator: Equatable, Sendable {
 
         let shiftCount = shifts.count
 
-        let elapsed = total(of: shifts, using: \.usableElapsedDuration, eligibleCount: shiftCount)
+        let working = total(of: shifts, using: \.usableWorkingDuration, eligibleCount: shiftCount)
         let active = total(of: shifts, using: \.measuredDeliveryActiveDuration, eligibleCount: shiftCount)
         let nonDelivery = total(of: shifts, using: \.nonDeliveryDuration, eligibleCount: shiftCount)
 
@@ -207,8 +211,8 @@ nonisolated struct PeriodMetricsCalculator: Equatable, Sendable {
         return PeriodMetrics(
             period: period,
             completedShiftCount: shiftCount,
-            elapsedDuration: elapsed.value,
-            elapsedCoverage: elapsed.coverage,
+            workingDuration: working.value,
+            workingCoverage: working.coverage,
             // The sum of the amounts that were recorded, over the count that
             // recorded them. Absent — not zero — when nobody recorded one.
             recordedGrossEarnings: recordedGrossEarnings,
@@ -237,10 +241,10 @@ nonisolated struct PeriodMetricsCalculator: Equatable, Sendable {
                 coverage: earningsCoverage,
                 after: expenses
             ),
-            grossPerElapsedHour: Self.hourlyRate(
+            grossPerWorkingHour: Self.hourlyRate(
                 of: shifts,
                 eligibleCount: shiftCount,
-                seconds: \.usableElapsedDuration
+                seconds: \.usableWorkingDuration
             ),
             grossPerDeliveryActiveHour: Self.hourlyRate(
                 of: shifts,
@@ -377,7 +381,7 @@ extension Shift {
         return PeriodShiftRecord(
             startedAt: startedAt,
             isCompleted: !isActive,
-            elapsedDuration: completedDuration,
+            workingDuration: completedWorkingDuration,
             grossEarnings: grossEarnings,
             recordedDistance: recordedDistance,
             deliveryActiveTime: deliveryActiveTime(),

@@ -14,7 +14,14 @@ flowchart TD
     D --> J[Record deliveries, one tap per event]
     E --> J
     F --> J
-    J --> K{Delivery in progress?}
+    J --> M{Pause shift?}
+    M -->|Delivery in progress| N[Pause refused: deliver or cancel it first]
+    N --> J
+    M -->|Yes| P[Shift paused: recording stopped, working time held]
+    P -->|Resume| Q[New recording session, shift running again]
+    Q --> J
+    P -->|End| G
+    M -->|No| K{Delivery in progress?}
     K -->|Yes| L[End refused: deliver or cancel it first]
     L --> J
     K -->|No| G[End shift]
@@ -39,12 +46,13 @@ recovery step is asked of the driver.
 
 ## While a shift runs
 
-The running shift shows an elapsed timer derived from the start timestamp, and one line describing
-route capture:
+The running shift shows a working timer derived from the recorded timestamps, and one line
+describing route capture:
 
 | State | What it means |
 | --- | --- |
 | Location tracking active | Positions are being recorded, and go on being recorded in another app or behind a locked screen |
+| Route recording stopped | The driver paused the shift, so nothing is being recorded until they resume |
 | Route recording paused | The shift began with DashPilot off screen, so there is nothing recording yet |
 | Permission required | Location permission has not been granted, so nothing is being recorded |
 | Unavailable | Location Services is off, access is restricted, or the store refused a write |
@@ -56,9 +64,46 @@ on its own once DashPilot is closed, is the half a driver has to know before tru
 Losing location never ends a shift. Capture becomes unavailable, the shift keeps running, and the
 driver decides when it ends.
 
+The timer counts **working** time, which is the whole shift less the stretches the driver paused it.
+For a shift that was never paused that is the same figure the timer always showed. It is the number
+every rate the shift produces divides by, so the figure watched during the shift and the figure read
+afterwards are the same one.
+
 Deliberately absent from a running shift: a map, coordinates, a sample count, a live distance and a
 live rate. A figure changing under a driver while they drive is not what these numbers are for, and
 the useful moment for them is when the shift is finished.
+
+## Pausing a shift
+
+A driver who stops for a meal, an errand or the end of a busy block can **pause** the shift instead
+of ending it. Pausing is a real recorded state rather than something the screen remembers: it is a
+row with a start timestamp, it survives the app being terminated, and the shift stays the unfinished
+shift throughout.
+
+Three things happen, and nothing else:
+
+- **Working time stops accumulating.** The timer holds at whatever it read, and the paused stretch
+  is excluded from the shift's working duration and from every hourly figure derived from it. The
+  shift's elapsed duration still covers the whole span, and both are shown on the finished shift.
+- **Route recording stops immediately.** Nothing is recorded for as long as the shift is paused.
+- **Deliveries cannot be started.** The delivery control is replaced by the reason.
+
+**Pausing is refused while a delivery is in progress**, with a message naming how many. Pausing says
+the driver stopped working and an open delivery says they had not, and a shift holding both would
+report delivery active time running through hours it also reports as not worked.
+
+Resuming closes the pause and starts a **new** recording session. The distance between where the
+driver paused and where they resumed is never counted: nothing was recorded across that stretch, so
+nothing is measured across it. The shift's route carries the break, and the mileage is a floor as it
+always is.
+
+Pause and Resume can also be spoken, without opening the app: see
+[Voice and system actions](voice-actions.md). A shift resumed by voice records no route until
+DashPilot is opened, for the same reason a shift started by voice does not, and the spoken
+confirmation says so.
+
+A shift left paused when the app is terminated is still paused on the next launch, with its pause
+intact and nothing recording.
 
 ## Location permission
 
@@ -89,13 +134,20 @@ is typed and nothing is detected. The full lifecycle, its rules and its limits a
 message saying to mark the delivery delivered or cancel it first — silently completing it would
 record a delivery the driver never made, and silently discarding it would erase one they did.
 
+**A paused shift can be ended without resuming it first.** The pause is closed at the same instant
+the shift ends, which is the truthful reading of what happened: the driver was paused right up to
+the moment they stopped. Its full length therefore stays out of the working duration, and a shift
+paused and then ended can have a working duration well short of its elapsed one. Refusing would make
+a driver who has finished resume a shift they are not working in order to end it, which would record
+work that did not happen.
+
 Ending records an end timestamp. Capture is stopped and any pending positions are written before
 the end is recorded, so no position is judged against a shift the store has already closed. If
 ending fails, capture restarts rather than staying off.
 
-If the device clock has moved behind the recorded start, the end is clamped to the start. Recording
-a zero-length shift is preferable to leaving a driver unable to end their shift until the clock
-catches up.
+If the device clock has moved behind the recorded start, the end is clamped to the start, and to an
+open pause's start if there is one. Recording a zero-length shift or a zero-length pause is
+preferable to leaving a driver unable to end their shift until the clock catches up.
 
 ## History
 
@@ -106,6 +158,10 @@ Sat, Aug 23                              $86.25
 5:46 PM - 8:46 PM · 3 hr
 4.5 mi recorded · partial route · $28.75/hr
 ```
+
+The duration on the second line is the **working** time, so it multiplies out against the rate on
+the third. A shift that was paused says so on the same line (`· 1 pause`), and the shorter figure is
+then not read as a mistake.
 
 Three lines, no controls. Only figures that exist appear: an unavailable rate leaves nothing behind,
 no dash and no `$0.00`. At accessibility text sizes the date and the amount stack rather than share
@@ -120,7 +176,7 @@ numbers*.
 
 | Section | What it holds |
 | --- | --- |
-| Shift | Start time, end time, elapsed duration |
+| Shift | Start time, end time, elapsed duration, and, for a shift that was paused, its paused and working durations |
 | Earnings | The recorded amount or "No amount recorded", and Add or Edit Earnings |
 | Route | Recorded mileage, capture segments, capture gaps, and what qualifies them |
 | Performance | Both derived rates, or the reason each could not be derived |
@@ -157,6 +213,6 @@ likely to have in mind and cannot re-enter by hand.
 
 !!! danger "Deletion is permanent"
 
-    A deleted shift is removed from the device's store together with its route positions and its
-    recorded amount. There is no undo, no trash, no archive and no copy anywhere else. A shift that
+    A deleted shift is removed from the device's store together with its route positions, its
+    recorded pauses and its recorded amount. There is no undo, no trash, no archive and no copy anywhere else. A shift that
     is still running cannot be deleted at all.
