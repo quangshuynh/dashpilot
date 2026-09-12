@@ -4,8 +4,8 @@ import Foundation
 ///
 /// ``RouteDistance`` is the measurement; this is the vocabulary for it. The two
 /// are separate because the wording is the part that is easy to get wrong: a
-/// route measured from foreground-only capture is a *floor* on the distance
-/// driven, and almost every natural phrase for it — total mileage, miles driven,
+/// recorded route is a *floor* on the distance driven, since recording can be
+/// interrupted, and almost every natural phrase for it — total mileage, miles driven,
 /// trip distance, coverage — claims more than that. Keeping the phrasing in one
 /// tested type means the history row and the detail screen cannot drift into
 /// saying different things about the same route, and a claim can be checked by a

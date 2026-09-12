@@ -155,8 +155,8 @@ nonisolated struct ShiftMetrics: Equatable, Sendable {
 
     /// Gross earnings divided by the miles the route actually **recorded**.
     ///
-    /// The denominator is recorded mileage, which is normally less than the
-    /// mileage driven: capture is foreground-only and distance across a gap is
+    /// The denominator is recorded mileage, which can be less than the mileage
+    /// driven: recording can be interrupted, and distance across a gap is
     /// excluded rather than guessed. A caller presenting this rate must not
     /// describe it as earnings per mile driven — see ``isRoutePartial``.
     let grossPerRecordedMile: ShiftRate

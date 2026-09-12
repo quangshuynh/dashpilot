@@ -165,9 +165,10 @@ nonisolated struct RouteMileageCalculator: Equatable, Sendable {
     /// A shift whose first position arrives long after it started, or whose last
     /// position is long before it ended, was not being recorded for part of its
     /// length. That is the same kind of unmeasured stretch as a gap in the
-    /// middle, and it is the shape a foreground-only route usually takes: the
-    /// driver switches to another app and DashPilot stops recording until they
-    /// come back, which for the last leg of a shift may be never.
+    /// middle, and it is the shape an interrupted route takes: a shift started
+    /// by voice records nothing until the app is opened, and a process iOS ends
+    /// records nothing afterwards, which for the last leg of a shift may be the
+    /// rest of it.
     ///
     /// The vehicle may equally have been parked for those minutes, in which case
     /// nothing was missed. The route cannot tell the two apart, so this counts
