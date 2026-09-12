@@ -50,13 +50,15 @@ struct ActiveShiftPanel: View {
     /// exists, and it is far longer than the reading costs.
     ///
     /// The reading is a count and, when the count moved, a fetch of the rows
-    /// after the last one measured. On a route of 28,800 positions — eight hours
-    /// at a position a second, longer than any real shift's usable route — the
-    /// count answers in tens of microseconds and extending by the handful of
-    /// positions two seconds produces is of the same order. Measuring the whole
-    /// route instead costs four orders of magnitude more, which is the reason
-    /// this panel does not simply call ``Shift/recordedDistance(using:)`` in its
-    /// body. The figures behind that are in `context.md`.
+    /// after the last one measured. Measured on the simulator against a stored
+    /// route of 8,000 positions, that costs 1.1 ms when nothing has arrived and
+    /// 2.3 ms when four positions have, and it barely moves with the length of
+    /// the route. Measuring the whole route instead costs **247 ms** at the same
+    /// length and grows with it, which is the reason this panel does not simply
+    /// call ``Shift/recordedDistance(using:)`` in its body: a quarter of a second
+    /// on the main actor, repeated for every reason a body is re-evaluated,
+    /// would stall the one screen a driver looks at while driving. The figures
+    /// are in `context.md`.
     private static let refreshInterval: TimeInterval = 2
 
     /// The open measurement of this shift's route.
