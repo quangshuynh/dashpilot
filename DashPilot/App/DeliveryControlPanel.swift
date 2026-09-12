@@ -33,6 +33,10 @@ struct DeliveryControlPanel: View {
     let shift: Shift
 
     @Environment(\.modelContext) private var modelContext
+    /// Write-only from here, like ``RootView``'s: a delivery starting or
+    /// advancing changes what the shift's Live Activity should say, including
+    /// whether it may offer a step control at all.
+    @Environment(ShiftLiveActivityService.self) private var liveActivity
 
     /// Every unfinished delivery in the store.
     ///
@@ -186,6 +190,12 @@ struct DeliveryControlPanel: View {
         } catch {
             lifecycleError = .storeUnavailable(underlying: error)
         }
+
+        // After every outcome, refused or not. Reconciling reads the store, so a
+        // refusal costs one pass that finds nothing changed, and the alternative
+        // — reconciling only on success — would be this screen deciding what the
+        // store now holds.
+        liveActivity.reconcile()
     }
 
     private var isConfirmingCancellation: Binding<Bool> {

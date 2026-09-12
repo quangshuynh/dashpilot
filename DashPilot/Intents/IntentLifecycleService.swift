@@ -37,8 +37,21 @@ import SwiftData
 struct IntentLifecycleService {
     private let context: ModelContext
 
-    init(context: ModelContext) {
+    /// The shift's Live Activity, told to catch up after every successful write.
+    ///
+    /// An intent can run with no screen at all, so there is nothing else to
+    /// notice that a shift was paused from Siri or from a Lock Screen button. It
+    /// is asked to **reconcile**, never told what changed: it reads the store
+    /// itself, which is what keeps a presentation surface from ever becoming a
+    /// second account of what happened.
+    ///
+    /// Optional because a test points this service at its own store, and a
+    /// throwaway store must not drive a real system surface.
+    private let activity: (any ShiftActivityReconciling)?
+
+    init(context: ModelContext, activity: (any ShiftActivityReconciling)? = nil) {
         self.context = context
+        self.activity = activity
     }
 
     #if DEBUG
@@ -49,6 +62,12 @@ struct IntentLifecycleService {
     /// arguments, so there is nowhere for a test to hand it a context. Debug
     /// builds only, so a shipped intent has exactly one store it can reach.
     static var testContext: ModelContext?
+
+    /// The Live Activity ``forIntent()`` reconciles while ``testContext`` is set.
+    ///
+    /// Nothing by default, so a test that only cares about what was written
+    /// reaches no system surface at all. Debug builds only.
+    static var testActivity: (any ShiftActivityReconciling)?
     #endif
 
     /// The service an intent performs with, over the process's own container.
@@ -58,14 +77,28 @@ struct IntentLifecycleService {
     ///   reporting a success it did not achieve.
     static func forIntent() throws -> IntentLifecycleService {
         #if DEBUG
-        if let testContext { return IntentLifecycleService(context: testContext) }
+        if let testContext {
+            return IntentLifecycleService(context: testContext, activity: testActivity)
+        }
         #endif
         do {
-            return IntentLifecycleService(context: try AppModelContainer.shared.get().mainContext)
+            return IntentLifecycleService(
+                context: try AppModelContainer.shared.get().mainContext,
+                activity: AppShiftLiveActivity.shared
+            )
         } catch {
             AppLog.intents.error("An intent could not open the local store: \(error)")
             throw IntentLifecycleError.storeUnavailable
         }
+    }
+
+    /// Brings the Live Activity back into line with the store.
+    ///
+    /// Called **after** a write and never before one, so a refused transition
+    /// leaves the surface saying what the store still holds. A refusal writes
+    /// nothing, so there is nothing for the activity to catch up with.
+    private func reconcileActivity() {
+        activity?.reconcile()
     }
 
     // MARK: Shift
@@ -73,6 +106,7 @@ struct IntentLifecycleService {
     /// Starts a shift.
     func startShift(at date: Date = .now) throws -> IntentLifecycleOutcome {
         let shift = try shiftRefusal { try ShiftService(context: context).startShift(at: date) }
+        reconcileActivity()
         AppLog.intents.info("Intent started a shift")
         // The recorded timestamp, not the one that was asked for: the service
         // is free to clamp it, and the confirmation reports what was stored.
@@ -88,6 +122,7 @@ struct IntentLifecycleService {
     /// nothing that rule does not already provide.
     func endShift(at date: Date = .now) throws -> IntentLifecycleOutcome {
         let shift = try shiftRefusal { try ShiftService(context: context).endActiveShift(at: date) }
+        reconcileActivity()
         AppLog.intents.info("Intent ended a shift")
         // Working, not elapsed: the confirmation says how long the driver
         // worked, and a shift they paused for an hour did not work that hour.
@@ -104,6 +139,7 @@ struct IntentLifecycleService {
     /// being kept would lose the difference without being told.
     func pauseShift(at date: Date = .now) throws -> IntentLifecycleOutcome {
         let shift = try shiftRefusal { try ShiftService(context: context).pauseActiveShift(at: date) }
+        reconcileActivity()
         AppLog.intents.info("Intent paused a shift")
         // Read from the shift after the write, at the instant the pause was
         // recorded, so the figure is the working time the store now holds rather
@@ -120,6 +156,7 @@ struct IntentLifecycleService {
     /// records no route until it is opened.
     func resumeShift(at date: Date = .now) throws -> IntentLifecycleOutcome {
         let shift = try shiftRefusal { try ShiftService(context: context).resumeActiveShift(at: date) }
+        reconcileActivity()
         AppLog.intents.info("Intent resumed a shift")
         return .shiftResumed(pausedDuration: shift.pausedTime(asOf: date).duration)
     }
@@ -132,6 +169,7 @@ struct IntentLifecycleService {
     /// record: it creates one.
     func startDelivery(at date: Date = .now) throws -> IntentLifecycleOutcome {
         let delivery = try deliveryRefusal { try DeliveryService(context: context).startDelivery(at: date) }
+        reconcileActivity()
         AppLog.intents.info("Intent started a delivery")
         return .deliveryStarted(
             number: number(of: delivery),
@@ -155,7 +193,9 @@ struct IntentLifecycleService {
         }
 
         let running = try deliveryRefusal { try service.activeDeliveries(for: shift) }
-        guard running.count == 1, let delivery = running.first else {
+        // The same rule the shift's Live Activity applies when it decides
+        // whether to offer a step control at all. One definition, two surfaces.
+        guard let delivery = UnambiguousDelivery.target(among: running) else {
             AppLog.intents.notice(
                 "Refused a delivery event: \(running.count, privacy: .public) deliveries in progress"
             )
@@ -180,6 +220,7 @@ struct IntentLifecycleService {
             throw IntentLifecycleError.noDeliveryInProgress
         }
 
+        reconcileActivity()
         AppLog.intents.info("Intent recorded a delivery event")
         // Read back from the delivery rather than from what was asked for, so
         // the confirmation cannot name an event the store did not record.
