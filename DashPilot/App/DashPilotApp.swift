@@ -24,18 +24,51 @@ struct DashPilotApp: App {
         // side may be the first to touch it: iOS can launch the process to run
         // an intent with no scene at all.
         let container = AppModelContainer.shared
-        let locationAuthorization = LocationAuthorizationService()
+        let locationAuthorization = Self.makeAuthorizationService()
 
         self.container = container
         _locationAuthorization = State(initialValue: locationAuthorization)
         _routeCapture = State(
             initialValue: (try? container.get()).map { container in
-                LocationTrackingService(
+                Self.makeTrackingService(
                     context: container.mainContext,
                     authorization: locationAuthorization
                 )
             }
         )
+    }
+
+    /// Core Location, or the stub a UI test asked for.
+    ///
+    /// The seam is here rather than inside the services because it is the same
+    /// decision the store fixtures make in ``AppModelContainer``: which
+    /// dependency this launch is built over. Debug builds only, so a release
+    /// has one path and no way to reach another.
+    private static func makeAuthorizationService() -> LocationAuthorizationService {
+        #if DEBUG
+        if LaunchArgument.isPresent(LaunchArgument.stubbedLocation) {
+            return LocationAuthorizationService(
+                provider: StubLocationAuthorizationProvider(status: .authorizedWhenInUse)
+            )
+        }
+        #endif
+        return LocationAuthorizationService()
+    }
+
+    private static func makeTrackingService(
+        context: ModelContext,
+        authorization: LocationAuthorizationService
+    ) -> LocationTrackingService {
+        #if DEBUG
+        if LaunchArgument.isPresent(LaunchArgument.stubbedLocation) {
+            return LocationTrackingService(
+                context: context,
+                authorization: authorization,
+                provider: StubLocationTrackingProvider()
+            )
+        }
+        #endif
+        return LocationTrackingService(context: context, authorization: authorization)
     }
 
     var body: some Scene {

@@ -69,6 +69,21 @@ nonisolated enum LaunchArgument {
     /// store.
     static let seededPeriodComparison = "-dashpilot-seeded-period-comparison"
 
+    /// Runs with Core Location replaced by the stub the tests and previews use,
+    /// reporting When In Use with full accuracy and producing no positions.
+    ///
+    /// A UI test cannot grant location permission or feed a route, so without
+    /// this the running shift's status line is only ever reachable in its
+    /// "permission required" state, and the journeys that matter here cannot be
+    /// written: what a driver reads while a route is being recorded, and whether
+    /// leaving the app and returning still says the same thing.
+    ///
+    /// It stubs permission and the position feed and nothing else. The scene
+    /// phase, ``RootView``'s reaction to it and ``LocationTrackingService``'s own
+    /// decisions are the real ones, which is the whole point of reaching them
+    /// from a journey rather than a unit test. Debug builds only.
+    static let stubbedLocation = "-dashpilot-stubbed-location"
+
     static func isPresent(_ argument: String, in processInfo: ProcessInfo = .processInfo) -> Bool {
         processInfo.arguments.contains(argument)
     }
