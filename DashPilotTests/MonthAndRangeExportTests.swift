@@ -365,18 +365,22 @@ struct ExportFormatVersionTests {
         )
     }
 
-    @Test("Every new document states version 2")
-    func newDocumentsAreVersionTwo() throws {
+    /// The version this suite's period scopes forced was 2; shift pause and
+    /// resume has since taken it to 3. What is asserted is that every document
+    /// states the **current** version, whatever it is, rather than a number
+    /// frozen into one exporter.
+    @Test("Every new document states the current format version")
+    func newDocumentsStateTheCurrentVersion() throws {
         let fixture = try ExportFixture()
         let shift = try fixture.completedShift(startedAfter: 9)
 
         let document = try service(fixture).document(for: .shift(shift.id), exportedAt: ExportFixture.start)
 
-        #expect(document.formatVersion == 2)
-        #expect(ExportFormat.version == 2)
+        #expect(document.formatVersion == ExportFormat.version)
+        #expect(ExportFormat.version == 3)
         // The file version and the store's schema version are different numbers
         // describing different things, and must never be assumed equal.
-        #expect(ExportFormat.version != DashPilotSchemaV7.versionIdentifier.major)
+        #expect(ExportFormat.version != DashPilotSchemaV9.versionIdentifier.major)
     }
 
     /// Reason one for the bump: `scope.kind` can now say two things version 1

@@ -302,10 +302,10 @@ struct ShiftExportRecordTests {
         // Rounded to the cents the app displays. A rate is kept at six fraction
         // digits internally so the display rounds the exact quotient once; a
         // file carrying those six digits would show a figure no screen ever did.
-        #expect(record.grossPerElapsedHour?.money == metrics.grossPerElapsedHour.amount?.rounded())
+        #expect(record.grossPerWorkingHour?.money == metrics.grossPerWorkingHour.amount?.rounded())
         #expect(record.grossPerRecordedMile?.money == metrics.grossPerRecordedMile.amount?.rounded())
         // $90.00 over 3 hours.
-        #expect(record.grossPerElapsedHour?.string == "30.00")
+        #expect(record.grossPerWorkingHour?.string == "30.00")
         // No deliveries, so there is no active-hour rate to export.
         #expect(record.grossPerDeliveryActiveHour == nil)
     }
@@ -318,7 +318,7 @@ struct ShiftExportRecordTests {
 
         let record = try fixture.exportRecord(of: shift)
 
-        #expect(record.grossPerElapsedHour == nil)
+        #expect(record.grossPerWorkingHour == nil)
         #expect(record.grossPerDeliveryActiveHour == nil)
         #expect(record.grossPerRecordedMile == nil)
     }

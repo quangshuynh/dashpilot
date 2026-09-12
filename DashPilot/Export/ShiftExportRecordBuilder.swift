@@ -24,6 +24,7 @@ nonisolated extension Shift {
         guard let endedAt else { throw ShiftExportError.shiftNotCompleted }
 
         let activeTime = deliveryActiveTime()
+        let pausedTime = completedPausedTime ?? .none
         let metrics = metrics(for: recordedDistance)
         let summary = deliverySummary
 
@@ -32,6 +33,9 @@ nonisolated extension Shift {
             startedAt: startedAt,
             endedAt: endedAt,
             elapsedSeconds: ExportDuration.seconds(completedDuration),
+            pausedSeconds: ExportDuration.seconds(pausedTime.duration),
+            workingSeconds: ExportDuration.seconds(completedWorkingDuration),
+            pauseCount: pausedTime.intervalCount,
             currencyCode: Money.displayCurrencyCode,
             grossEarnings: ExportAmount.recorded(grossEarnings),
             route: ShiftRouteExport(recordedDistance),
@@ -41,10 +45,12 @@ nonisolated extension Shift {
             deliveryActiveSeconds: ExportDuration.seconds(
                 activeTime.isAvailable ? activeTime.duration : nil
             ),
+            // Within working time rather than elapsed, so a pause does not
+            // reappear as time the driver spent not delivering.
             nonDeliverySeconds: ExportDuration.seconds(
-                activeTime.nonDeliveryDuration(inElapsed: completedDuration)
+                activeTime.nonDeliveryDuration(inElapsed: completedWorkingDuration)
             ),
-            grossPerElapsedHour: ExportAmount.recorded(metrics.grossPerElapsedHour.amount),
+            grossPerWorkingHour: ExportAmount.recorded(metrics.grossPerWorkingHour.amount),
             grossPerDeliveryActiveHour: ExportAmount.recorded(metrics.grossPerDeliveryActiveHour.amount),
             grossPerRecordedMile: ExportAmount.recorded(metrics.grossPerRecordedMile.amount),
             deliveredCount: summary.completed,

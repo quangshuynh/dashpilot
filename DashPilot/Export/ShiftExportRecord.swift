@@ -26,7 +26,10 @@ import Foundation
 ///   ``grossEarnings`` is the amount recorded on the shift; the amounts recorded
 ///   on ``deliveries`` are their own. Nothing here adds one to the other,
 ///   subtracts them, or exports a difference between them.
-/// - **Elapsed time is not delivery active time**, and non-delivery time is not
+/// - **Elapsed time is not working time.** A shift the driver paused covers more
+///   wall clock than it records as worked, and the two are separate fields with
+///   the paused total beside them rather than one figure that could mean either.
+/// - **Working time is not delivery active time**, and non-delivery time is not
 ///   idle time.
 ///
 /// ## What is deliberately absent
@@ -50,9 +53,28 @@ nonisolated struct ShiftExportRecord: Equatable, Sendable, Codable {
     /// Always present: a running shift is never exported as history.
     let endedAt: Date
 
-    /// The whole wall-clock length of the shift, waiting and repositioning
-    /// included.
+    /// The whole wall-clock length of the shift, waiting, repositioning and any
+    /// pause included.
     let elapsedSeconds: Int?
+
+    /// How long the driver had the shift paused, in total.
+    ///
+    /// `0` here is a measurement and not a missing value: a shift that was never
+    /// paused was paused for no time. Absent only for a shift whose stored
+    /// timestamps do not describe a duration at all.
+    let pausedSeconds: Int?
+
+    /// ``elapsedSeconds`` less ``pausedSeconds``: the time the shift was
+    /// running and not paused.
+    ///
+    /// **The denominator of ``grossPerWorkingHour``**, and the figure to use
+    /// when asking how long a shift was worked. It is not driving time or
+    /// delivery time: it still includes waiting for an offer, repositioning and
+    /// any break the driver did not pause for.
+    let workingSeconds: Int?
+
+    /// How many separate stretches the driver paused the shift for.
+    let pauseCount: Int
 
     /// The currency every amount on this shift is in.
     ///
@@ -75,11 +97,15 @@ nonisolated struct ShiftExportRecord: Equatable, Sendable, Codable {
     /// larger number, and this is the one that is a duration of something.
     let deliveryActiveSeconds: Int?
 
-    /// The rest of the shift. **Not idle time**: it holds waiting for an offer,
-    /// repositioning, breaks and any work the driver did not record.
+    /// The rest of the shift's **working** time. **Not idle time**: it holds
+    /// waiting for an offer, repositioning, unpaused breaks and any work the
+    /// driver did not record. Paused time is not in it; that is
+    /// ``pausedSeconds``.
     let nonDeliverySeconds: Int?
 
-    let grossPerElapsedHour: ExportAmount?
+    /// Gross earnings per **working** hour, so a driver who paused mid-shift is
+    /// not reported as having earned less per hour for pausing.
+    let grossPerWorkingHour: ExportAmount?
     let grossPerDeliveryActiveHour: ExportAmount?
 
     /// Gross earnings per **recorded** mile. The denominator is what the route
@@ -94,9 +120,10 @@ nonisolated struct ShiftExportRecord: Equatable, Sendable, Codable {
     let deliveries: [DeliveryExportRecord]
 
     private enum CodingKeys: String, CodingKey {
-        case id, startedAt, endedAt, elapsedSeconds, currencyCode, grossEarnings, route
+        case id, startedAt, endedAt, elapsedSeconds, pausedSeconds, workingSeconds, pauseCount
+        case currencyCode, grossEarnings, route
         case deliveryActiveSeconds, nonDeliverySeconds
-        case grossPerElapsedHour, grossPerDeliveryActiveHour, grossPerRecordedMile
+        case grossPerWorkingHour, grossPerDeliveryActiveHour, grossPerRecordedMile
         case deliveredCount, cancelledCount, deliveries
     }
 
@@ -107,12 +134,15 @@ nonisolated struct ShiftExportRecord: Equatable, Sendable, Codable {
         try container.encode(startedAt, forKey: .startedAt)
         try container.encode(endedAt, forKey: .endedAt)
         try container.encodeAlways(elapsedSeconds, forKey: .elapsedSeconds)
+        try container.encodeAlways(pausedSeconds, forKey: .pausedSeconds)
+        try container.encodeAlways(workingSeconds, forKey: .workingSeconds)
+        try container.encode(pauseCount, forKey: .pauseCount)
         try container.encode(currencyCode, forKey: .currencyCode)
         try container.encodeAlways(grossEarnings, forKey: .grossEarnings)
         try container.encode(route, forKey: .route)
         try container.encodeAlways(deliveryActiveSeconds, forKey: .deliveryActiveSeconds)
         try container.encodeAlways(nonDeliverySeconds, forKey: .nonDeliverySeconds)
-        try container.encodeAlways(grossPerElapsedHour, forKey: .grossPerElapsedHour)
+        try container.encodeAlways(grossPerWorkingHour, forKey: .grossPerWorkingHour)
         try container.encodeAlways(grossPerDeliveryActiveHour, forKey: .grossPerDeliveryActiveHour)
         try container.encodeAlways(grossPerRecordedMile, forKey: .grossPerRecordedMile)
         try container.encode(deliveredCount, forKey: .deliveredCount)

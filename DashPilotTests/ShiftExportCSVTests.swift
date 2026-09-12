@@ -128,7 +128,7 @@ struct ShiftExportCSVTests {
         #expect(row["shiftGrossEarnings"] == "90.00")
         #expect(row["deliveryGrossEarnings"] == "14.75")
         #expect(row["currencyCode"] == "USD")
-        #expect(row["shiftGrossPerElapsedHour"] == "30.00")
+        #expect(row["shiftGrossPerWorkingHour"] == "30.00")
     }
 
     @Test("A missing value is an empty cell, never a zero")
@@ -142,7 +142,7 @@ struct ShiftExportCSVTests {
         for column in [
             "shiftGrossEarnings",
             "shiftRecordedDistanceMetres", "shiftRecordedDistanceMiles",
-            "shiftGrossPerElapsedHour", "shiftGrossPerDeliveryActiveHour", "shiftGrossPerRecordedMile",
+            "shiftGrossPerWorkingHour", "shiftGrossPerDeliveryActiveHour", "shiftGrossPerRecordedMile",
             "deliveryPickupWaitSeconds", "deliveryDeliveredAt",
             "deliveryGrossEarnings", "deliveryGrossPerDeliveryHour"
         ] {
