@@ -11,6 +11,7 @@ bootstrap script. Cloning it and opening it is the whole setup.
 | iOS deployment target | 26.5 |
 | Swift | Swift 5 language mode, with `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` |
 | Dependencies | None |
+| Targets | `DashPilot`, plus the `DashPilotWidgets` extension it embeds |
 
 Xcode 26.6 is required because the project's deployment target is iOS 26.5, and an Xcode without the
 iOS 26.5 SDK refuses to build it.
@@ -18,7 +19,10 @@ iOS 26.5 SDK refuses to build it.
 ## In Xcode
 
 Open `DashPilot.xcodeproj`, choose the `DashPilot` scheme and an iOS simulator, then build and run.
-The scheme covers the app, the `DashPilotTests` domain suite and the `DashPilotUITests` journeys.
+The scheme covers the app, the `DashPilotWidgets` extension it embeds, the `DashPilotTests` domain
+suite and the `DashPilotUITests` journeys. There is a `DashPilotWidgets` scheme too, and it is only
+useful for previews: the extension cannot run on its own, and the Live Activity it draws is requested
+by the app.
 
 ## From the command line
 
