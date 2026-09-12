@@ -162,8 +162,8 @@ enum PreviewSupport {
     ///
     /// Both measured routes are partial, and that is not an accident of the
     /// fixture: a short synthetic route inside a multi-hour shift leaves the rest
-    /// of the shift unaccounted for, which is exactly what foreground-only
-    /// capture does to a real one.
+    /// of the shift unaccounted for, which is exactly what an interrupted
+    /// recording does to a real one.
     ///
     /// So the day shows an amount over **1 of 2** shifts and the week over
     /// **2 of 3** — coverage that is visibly incomplete, which is the state the
