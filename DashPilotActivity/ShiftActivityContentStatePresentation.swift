@@ -30,12 +30,30 @@ nonisolated extension ShiftActivityAttributes.ContentState {
 
     /// The working figure as a fixed string, for a shift that is paused.
     ///
-    /// A paused shift's working time does not move — the open pause grows
-    /// exactly as fast as elapsed time — so it is drawn once rather than
-    /// counted. The clock pattern is the one the app's own panel uses for the
-    /// same figure.
+    /// A paused shift's working time does not move, because the open pause grows
+    /// exactly as fast as elapsed time, so it is drawn once rather than counted.
+    ///
+    /// The hour field is dropped below an hour **to match what the system's own
+    /// timer draws** for the running shift. It is the one place this surface
+    /// deviates from the app's panel, which always shows `0:00:51`, and the
+    /// reason is that the two figures sit in the same place on the same card: a
+    /// number that gains a leading `0:` at the moment the driver pauses reads as
+    /// a different number rather than as the same one held still.
     var formattedWorkingTime: String {
-        Duration.seconds(workingDuration).formatted(.time(pattern: .hourMinuteSecond))
+        let duration = Duration.seconds(workingDuration)
+        return workingDuration < 3_600
+            ? duration.formatted(.time(pattern: .minuteSecond))
+            : duration.formatted(.time(pattern: .hourMinuteSecond))
+    }
+
+    /// The working figure as VoiceOver should hear it.
+    ///
+    /// Spelled-out units, to the second, for the reason the app speaks a paused
+    /// shift's figure to the second: a clock string is heard as punctuation, and
+    /// a figure that is not changing is worth being told exactly.
+    var spokenWorkingTime: String {
+        Duration.seconds(workingDuration)
+            .formatted(.units(allowed: [.hours, .minutes, .seconds], width: .wide))
     }
 
     /// `"Shift Paused"` or `"Shift in Progress"`, matching the app's own heading.
@@ -89,7 +107,7 @@ nonisolated extension ShiftActivityAttributes.ContentState {
     /// a single element.
     var spokenSummary: String {
         var sentences = [statusTitle]
-        sentences.append("\(formattedWorkingTime) worked so far")
+        sentences.append("\(spokenWorkingTime) worked so far")
         sentences.append(spokenMileageLine)
         sentences.append(spokenDeliveryLine)
         if let deliveryStatus { sentences.append(deliveryStatus) }
