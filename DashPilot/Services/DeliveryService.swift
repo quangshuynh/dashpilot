@@ -9,6 +9,14 @@ import SwiftData
 nonisolated enum DeliveryLifecycleError: Error {
     /// A delivery was requested while no shift was running.
     case noActiveShift
+    /// A delivery was requested while the shift was paused.
+    ///
+    /// Pausing says the driver stopped working; accepting a delivery says they
+    /// had not. Recording both would produce a shift whose delivery active time
+    /// runs through time the app is also reporting as not worked, so the start
+    /// is refused and the driver is told to resume first. The converse rule —
+    /// a shift with a delivery open cannot be paused — lives in ``ShiftService``.
+    case shiftPaused
     /// A transition was requested for a delivery that is not attached to a
     /// shift that is still running.
     ///
@@ -29,6 +37,7 @@ nonisolated extension DeliveryLifecycleError: Equatable {
     static func == (lhs: Self, rhs: Self) -> Bool {
         switch (lhs, rhs) {
         case (.noActiveShift, .noActiveShift): true
+        case (.shiftPaused, .shiftPaused): true
         case (.deliveryNotOnARunningShift, .deliveryNotOnARunningShift): true
         case let (.invalidTransition(lhsError), .invalidTransition(rhsError)): lhsError == rhsError
         case (.storeUnavailable, .storeUnavailable): true
@@ -42,6 +51,8 @@ nonisolated extension DeliveryLifecycleError: LocalizedError {
         switch self {
         case .noActiveShift:
             "Start a shift before recording a delivery."
+        case .shiftPaused:
+            "This shift is paused. Resume it before recording a delivery."
         case .deliveryNotOnARunningShift:
             "That delivery belongs to a shift that has already ended, so it cannot be changed."
         case .invalidTransition(.alreadyFinished(.delivered)):
@@ -208,6 +219,11 @@ struct DeliveryService {
         guard let shift = try activeShift() else {
             AppLog.delivery.notice("Refused to start a delivery: no shift is running")
             throw DeliveryLifecycleError.noActiveShift
+        }
+
+        guard !shift.isPaused else {
+            AppLog.delivery.notice("Refused to start a delivery: the shift is paused")
+            throw DeliveryLifecycleError.shiftPaused
         }
 
         // A delivery cannot have been accepted before the shift it belongs to
