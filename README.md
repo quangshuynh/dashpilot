@@ -31,8 +31,9 @@ derived legitimately from device sensors and stored history is typed by the driv
 
 - **Shift lifecycle** with a single-active-shift rule enforced against the store, refusals reported
   rather than swallowed, and relaunch recovery for a shift that was still running.
-- **Foreground route capture** that starts and stops with the shift, states whether it is active,
-  paused or unavailable, and never ends a shift because location was lost.
+- **Route capture** that starts and stops with the shift, carries on while the driver is in another
+  app or the phone is locked, states whether it is active, paused or unavailable, and never ends a
+  shift because location was lost.
 - **Sample filtering** with one acceptance policy covering invalid coordinates, poor accuracy, stale
   fixes, duplicate and out-of-order timestamps, negligible movement and implausible jumps.
 - **Recorded mileage** derived from the retained route, summing only what was captured continuously
@@ -141,9 +142,10 @@ Start with [`docs/index.md`](docs/index.md), or go straight to
 
 The short version, with the full list in [`docs/reference/limitations.md`](docs/reference/limitations.md):
 
-- **Route capture is foreground only.** A route has a gap whenever the app was not open, so
-  **recorded mileage is a floor**, normally lower than the miles actually driven. It is not a tax or
-  deduction figure.
+- **Recording is not guaranteed.** It continues off screen, but iOS may suspend or end the app and
+  nothing relaunches it, and a recording can only be started with the app open. A route can still
+  have a gap, so **recorded mileage is a floor** that can be lower than the miles actually driven.
+  It is not a tax or deduction figure.
 - **Gross earnings are what the driver typed.** Nothing is imported, no amount is a profit,
   take-home or taxable figure, and no amount recorded is a different state from `$0.00`.
 - **Recorded expenses are only what the driver entered.** DashPilot observes no purchase and

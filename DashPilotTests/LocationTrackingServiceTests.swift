@@ -413,11 +413,31 @@ struct LocationTrackingServiceTests {
         #expect(!harness.provider.isUpdating)
     }
 
-    // MARK: Foreground lifecycle
+    // MARK: Leaving and returning to the foreground
 
-    @Test("Leaving the foreground pauses capture and says so")
-    func pausesInBackground() throws {
+    @Test("A running capture session keeps running when the app leaves the foreground")
+    func continuesCapturingInTheBackground() throws {
         let harness = try makeHarness()
+        try harness.shifts.startShift(at: shiftStart)
+        harness.tracking.synchronize()
+
+        harness.tracking.enterBackground()
+
+        #expect(harness.tracking.state == .tracking)
+        #expect(harness.provider.isUpdating)
+        #expect(harness.provider.stopCount == 0, "Stopping and restarting would record a break that did not happen")
+        #expect(harness.provider.allowsBackgroundUpdates)
+
+        // And positions that arrive there are retained, against the same shift.
+        harness.provider.emit(sample(harness, secondsAfterStart: 10))
+        harness.provider.emit(sample(harness, secondsAfterStart: 20, northMetres: 200))
+        #expect(try harness.storedSamples().count == 2)
+    }
+
+    @Test("A build without the location background mode pauses instead, and says so")
+    func pausesInBackgroundWithoutTheCapability() throws {
+        let harness = try makeHarness()
+        harness.provider.supportsBackgroundUpdates = false
         try harness.shifts.startShift(at: shiftStart)
         harness.tracking.synchronize()
 
@@ -426,11 +446,45 @@ struct LocationTrackingServiceTests {
         #expect(harness.tracking.state == .pausedInBackground)
         #expect(!harness.provider.isUpdating)
         #expect(harness.provider.stopCount == 1)
+        #expect(!harness.provider.allowsBackgroundUpdates)
     }
 
-    @Test("Returning to the foreground resumes capture for the shift still running")
+    @Test("The background grant is held only while a session is running")
+    func holdsTheBackgroundGrantOnlyWhileCapturing() throws {
+        let harness = try makeHarness()
+        #expect(!harness.provider.allowsBackgroundUpdates, "No shift, nothing to record")
+
+        try harness.shifts.startShift(at: shiftStart)
+        harness.tracking.synchronize()
+        #expect(harness.provider.allowsBackgroundUpdates)
+
+        harness.tracking.prepareForShiftEnd()
+        try harness.shifts.endActiveShift(at: shiftStart.addingTimeInterval(60))
+        harness.tracking.synchronize()
+
+        #expect(harness.tracking.state == .idle)
+        #expect(!harness.provider.allowsBackgroundUpdates, "A finished shift must not leave the grant open")
+    }
+
+    @Test("Returning to the foreground does not restart a session that never stopped")
+    func returningDoesNotRestartAContinuedSession() throws {
+        let harness = try makeHarness()
+        try harness.shifts.startShift(at: shiftStart)
+        harness.tracking.synchronize()
+        harness.provider.emit(sample(harness, secondsAfterStart: 10))
+        harness.tracking.enterBackground()
+
+        harness.tracking.enterForeground()
+
+        #expect(harness.tracking.state == .tracking)
+        #expect(harness.provider.startCount == 1)
+        #expect(harness.provider.stopCount == 0)
+    }
+
+    @Test("Returning to the foreground resumes capture that had stopped")
     func resumesOnForegroundReturn() throws {
         let harness = try makeHarness()
+        harness.provider.supportsBackgroundUpdates = false
         try harness.shifts.startShift(at: shiftStart)
         harness.tracking.synchronize()
         harness.provider.emit(sample(harness, secondsAfterStart: 10))
@@ -456,18 +510,45 @@ struct LocationTrackingServiceTests {
         #expect(harness.provider.startCount == 0)
     }
 
-    @Test("Returning to the foreground without permission does not claim to be capturing")
-    func doesNotResumeWithoutPermission() throws {
+    @Test("A shift that begins while the app is already behind another one records nothing yet")
+    func doesNotStartASessionFromTheBackground() throws {
+        let harness = try makeHarness()
+        harness.tracking.enterBackground()
+
+        // Started by voice, with DashPilot not on screen. When In Use continues
+        // a stream that began in front; it does not deliver one that did not, so
+        // starting here would be a claim no position would arrive for.
+        try harness.shifts.startShift(at: shiftStart)
+        harness.tracking.synchronize()
+
+        #expect(harness.tracking.state == .pausedInBackground)
+        #expect(harness.provider.startCount == 0)
+        #expect(!harness.provider.allowsBackgroundUpdates)
+
+        harness.tracking.enterForeground()
+        #expect(harness.tracking.state == .tracking)
+        #expect(harness.provider.startCount == 1)
+    }
+
+    @Test("Permission revoked while the app is behind another one stops capture there")
+    func stopsWhenPermissionIsRevokedInTheBackground() throws {
         let harness = try makeHarness()
         try harness.shifts.startShift(at: shiftStart)
         harness.tracking.synchronize()
         harness.tracking.enterBackground()
+        #expect(harness.tracking.state == .tracking)
 
+        // Turned off in Settings, which is somewhere the driver necessarily is
+        // while DashPilot is not on screen. Nothing may go on recording, and
+        // nothing may go on saying it is.
         harness.authorizationProvider.update(status: .denied)
-        harness.tracking.enterForeground()
 
         #expect(harness.tracking.state == .unavailable(.permissionDenied))
         #expect(!harness.provider.isUpdating)
+        #expect(!harness.provider.allowsBackgroundUpdates)
+
+        harness.tracking.enterForeground()
+        #expect(harness.tracking.state == .unavailable(.permissionDenied))
     }
 
     @Test("Pending samples are written before the app leaves the foreground")
@@ -641,9 +722,30 @@ struct LocationTrackingServiceTests {
         #expect(sessions.first != nil, "A sample recorded now is not a legacy sample")
     }
 
-    @Test("Returning to the foreground starts a new capture session")
-    func opensANewSessionAfterBackgrounding() throws {
+    @Test("Capture that continued through a backgrounding stays in one session")
+    func keepsOneSessionAcrossABackgrounding() throws {
         let harness = try makeHarness()
+        try harness.shifts.startShift(at: shiftStart)
+        harness.tracking.synchronize()
+        harness.provider.emit(sample(harness, secondsAfterStart: 10))
+
+        harness.tracking.enterBackground()
+        harness.provider.emit(sample(harness, secondsAfterStart: 40, northMetres: 800))
+        harness.tracking.enterForeground()
+        harness.provider.emit(sample(harness, secondsAfterStart: 70, northMetres: 1_600))
+
+        let stored = try harness.storedSamples()
+        #expect(stored.count == 3)
+        #expect(
+            Set(stored.map(\.captureSessionID)).count == 1,
+            "Nothing stopped, so the route must not claim a break"
+        )
+    }
+
+    @Test("Capture that stopped at the foreground boundary starts a new session")
+    func opensANewSessionAfterAPause() throws {
+        let harness = try makeHarness()
+        harness.provider.supportsBackgroundUpdates = false
         try harness.shifts.startShift(at: shiftStart)
         harness.tracking.synchronize()
         harness.provider.emit(sample(harness, secondsAfterStart: 10))
@@ -660,8 +762,8 @@ struct LocationTrackingServiceTests {
         )
     }
 
-    @Test("The distance covered while DashPilot was backgrounded is not counted as driving")
-    func doesNotCountDistanceAcrossABackgroundedPause() throws {
+    @Test("Distance driven while DashPilot was behind another app is counted, because it was recorded")
+    func countsDistanceRecordedInTheBackground() throws {
         let harness = try makeHarness()
         let shift = try harness.shifts.startShift(at: shiftStart)
         harness.tracking.synchronize()
@@ -672,7 +774,44 @@ struct LocationTrackingServiceTests {
             )
         }
 
-        // A minute in another app, two kilometres of driving. The pause is
+        // The driver opens the delivery app and keeps driving. Capture never
+        // stopped, so this is not a gap and the distance is not invented.
+        harness.tracking.enterBackground()
+        for step in 3...5 {
+            harness.provider.emit(
+                sample(harness, secondsAfterStart: TimeInterval(step) * 10, northMetres: Double(step) * 100)
+            )
+        }
+        harness.tracking.enterForeground()
+
+        harness.tracking.prepareForShiftEnd()
+        try harness.shifts.endActiveShift(at: shiftStart.addingTimeInterval(60))
+
+        let distance = shift.recordedDistance()
+
+        #expect(shift.routeSamples.count == 6)
+        #expect(
+            SyntheticRoute.isCloseEnough(distance.metres, to: 500),
+            "measured \(distance.metres) m over five hundred metres of recorded movement"
+        )
+        #expect(distance.segmentCount == 1)
+        #expect(distance.gapCount == 0)
+    }
+
+    @Test("The distance covered while capture was paused is not counted as driving")
+    func doesNotCountDistanceAcrossAPause() throws {
+        let harness = try makeHarness()
+        harness.provider.supportsBackgroundUpdates = false
+        let shift = try harness.shifts.startShift(at: shiftStart)
+        harness.tracking.synchronize()
+
+        for step in 0...2 {
+            harness.provider.emit(
+                sample(harness, secondsAfterStart: TimeInterval(step) * 10, northMetres: Double(step) * 100)
+            )
+        }
+
+        // A minute with capture stopped, two kilometres of driving. The pause is
         // deliberately shorter than the mileage calculation's gap threshold, so
         // only the recorded break in capture can exclude it.
         harness.tracking.enterBackground()
@@ -696,7 +835,7 @@ struct LocationTrackingServiceTests {
         #expect(shift.routeSamples.count == 6)
         #expect(
             SyntheticRoute.isCloseEnough(distance.metres, to: 400),
-            "measured \(distance.metres) m; the two kilometres driven in the background must not be counted"
+            "measured \(distance.metres) m; the two kilometres driven while paused must not be counted"
         )
         #expect(distance.segmentCount == 2)
         #expect(distance.gapCount == 1)

@@ -18,6 +18,20 @@ final class LocationAuthorizationService {
     /// The current permission facts. Read by the interface; never set from it.
     private(set) var authorization: LocationAuthorization
 
+    /// Invoked after ``authorization`` changes, with the new value.
+    ///
+    /// SwiftUI observation is enough for a screen, and was enough while capture
+    /// only ran with one on screen. It is not enough now: a driver who revokes
+    /// location in Settings does it with DashPilot behind another app, and a
+    /// view's `onChange` is not something to rely on there. Route capture sets
+    /// this so it hears about a revocation at the moment the platform reports
+    /// it, rather than at the next return to the foreground, and stops claiming
+    /// to record a route it is no longer allowed to.
+    ///
+    /// One consumer, deliberately: this is a notification for the service that
+    /// acts on permission, not a general event bus.
+    @ObservationIgnored var onAuthorizationChange: ((LocationAuthorization) -> Void)?
+
     @ObservationIgnored private let provider: any LocationAuthorizationProviding
 
     /// The shipping configuration, backed by Core Location.
@@ -67,6 +81,7 @@ final class LocationAuthorizationService {
         let previous = authorization
         guard updated != previous else { return }
         authorization = updated
+        defer { onAuthorizationChange?(updated) }
 
         if updated.status != previous.status {
             AppLog.location.info(

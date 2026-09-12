@@ -97,10 +97,19 @@ nothing at all is kept once a shift has ended. None of that can be demonstrated 
 location feed, which delivers whatever it likes when it likes.
 
 `LocationTrackingService` also takes its clock and its save batch size, so staleness and batching are
-decided by the test rather than by how long the test took to run. The capture tests drive two
-kilometres of route through a sixty-second backgrounding, which is shorter than the mileage gap
-threshold, so only the recorded break in capture can exclude it, and then assert the distance is not
-counted.
+decided by the test rather than by how long the test took to run.
+
+The stub also reports whether the build may keep updates running off screen, which is settable, and
+that is what makes both halves of the background behaviour provable. With it on, a route driven
+through a backgrounding is one capture session and its distance is counted, because it was recorded.
+With it off, the capture tests drive two kilometres through a sixty-second interruption that is
+shorter than the mileage gap threshold, so only the recorded break in capture can exclude it, and
+then assert the distance is not counted.
+
+`RealWorldRecoveryTests` reads the app bundle a hosted unit test runs inside, which is how the
+shipped capability itself is asserted: the location background mode is declared and is the only one,
+and neither Always usage description exists, which is the structural reason the app cannot ask for
+that scope whatever its code does.
 
 **`StubLocationAuthorizationProvider`** (debug builds only) satisfies `LocationAuthorizationProviding`
 with caller-supplied state, so every authorization, accuracy and services combination is exercised
@@ -113,7 +122,7 @@ a period locale and a comma locale side by side.
 
 ## Launch arguments
 
-Debug builds accept six arguments, all used only by UI tests and screenshots:
+Debug builds accept seven arguments, all used only by UI tests and screenshots:
 
 | Argument | Effect |
 | --- | --- |
@@ -123,6 +132,7 @@ Debug builds accept six arguments, all used only by UI tests and screenshots:
 | `-dashpilot-seeded-pickup-history` | Opens an in-memory store holding one completed shift whose deliveries give two pickup places deliberately different amounts of recorded history |
 | `-dashpilot-seeded-period-summary` | Opens an in-memory store holding a week of synthetic completed shifts and three synthetic expenses, anchored to today rather than to a fixed instant, so the period summary opens on a period that holds something |
 | `-dashpilot-seeded-period-comparison` | Opens an in-memory store holding three consecutive days, also anchored to today: a today still in progress with one of two shifts unpaid, two complete days before it, and nothing before those |
+| `-dashpilot-stubbed-location` | Replaces Core Location with the stub providers, reporting When In Use at full accuracy and producing no positions |
 
 A UI test cannot make a simulator record a route, so a measured, partial route and the
 per-recorded-mile rate over it would otherwise be unreachable end to end. Nor can it terminate and
@@ -131,6 +141,17 @@ launch instead; that the *store* recovers one is proved against a real reopened 
 `DeliveryPersistenceTests`. The fixture is invented
 amounts and offsets from a round-number origin, the same data `SyntheticRoute` builds for the unit
 tests.
+
+The location stub is the one argument that is not a store fixture. A simulator cannot be told to
+grant location from a journey, so without it the running shift's status line is only ever reachable
+in its "permission required" state, and every existing journey asserts its presence and nothing
+else. With it, three journeys read what a driver actually reads: that recording is active, that the
+line says recording continues off screen *and* that iOS can still stop it, that the permission panel
+names the limit of the scope, and that returning from the home screen does not come back describing
+a pause. It stubs permission and the position feed and nothing else, so the scene phase, `RootView`'s
+reaction to it and `LocationTrackingService`'s own decisions are the real ones. Whether a capture
+session was continuous across the transition is a fact about stored samples and stays in the domain
+suites, where it can be read.
 
 Pickup-wait history needs its own fixture rather than a fourth delivery on the general one: the
 seeded history's three deliveries are pinned by the journeys asserting exact active-time and rate

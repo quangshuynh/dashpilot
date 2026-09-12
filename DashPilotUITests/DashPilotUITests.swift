@@ -19,6 +19,9 @@ final class DashPilotUITests: XCTestCase {
     /// Must match `LaunchArgument.seededPeriodComparison`, for the same reason.
     private static let seededPeriodComparisonArgument = "-dashpilot-seeded-period-comparison"
 
+    /// Must match `LaunchArgument.stubbedLocation`, for the same reason.
+    private static let stubbedLocationArgument = "-dashpilot-stubbed-location"
+
     override func setUpWithError() throws {
         continueAfterFailure = false
     }
@@ -76,6 +79,22 @@ final class DashPilotUITests: XCTestCase {
     private func launchWithPickupHistory() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments.append(Self.seededPickupHistoryArgument)
+        app.launch()
+        return app
+    }
+
+    /// Launches against a throwaway store with Core Location stubbed as granted.
+    ///
+    /// A simulator cannot be told to grant location from a journey, so the
+    /// running shift's status line would otherwise only ever be reachable in its
+    /// "permission required" state. The stub reports When In Use and produces no
+    /// positions; everything else, including the scene phase and what the app
+    /// does about it, is real.
+    @MainActor
+    private func launchWithStubbedLocation() -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments.append(Self.inMemoryStoreArgument)
+        app.launchArguments.append(Self.stubbedLocationArgument)
         app.launch()
         return app
     }
@@ -2712,6 +2731,98 @@ final class DashPilotUITests: XCTestCase {
 
         let status = app.descendants(matching: .any)["locationAuthorizationStatus"]
         XCTAssertTrue(status.waitForExistence(timeout: 10))
+    }
+
+    // MARK: What a running shift says about recording
+
+    /// The status line states what recording promises, rather than a green label
+    /// and silence.
+    @MainActor
+    func testRunningShiftSaysWhatRecordingDoesAndDoesNotPromise() throws {
+        let app = launchWithStubbedLocation()
+
+        let startButton = app.buttons["startShiftButton"]
+        XCTAssertTrue(startButton.waitForExistence(timeout: 10))
+        startButton.tap()
+
+        let status = app.descendants(matching: .any)["routeCaptureStatus"]
+        XCTAssertTrue(status.waitForExistence(timeout: 5))
+
+        let label = status.label
+        XCTAssertTrue(
+            label.contains("Location tracking active"),
+            "With permission granted and a shift running, capture is running: \(label)"
+        )
+        // The two halves of the honest claim: it carries on off screen, and it
+        // is not guaranteed. Neither may be dropped for a tidier line.
+        XCTAssertTrue(
+            label.lowercased().contains("other apps") && label.lowercased().contains("locked"),
+            "The line has to say recording continues off screen: \(label)"
+        )
+        XCTAssertTrue(
+            label.lowercased().contains("ios can still stop it"),
+            "The line must not imply guaranteed recording: \(label)"
+        )
+    }
+
+    /// Leaving the app and coming back leaves the screen saying it is recording.
+    ///
+    /// What this reaches that a unit test cannot is the real chain: an actual
+    /// scene phase, `RootView`'s reaction to it, and a status line rebuilt from
+    /// whatever the capture service decided. What it deliberately does **not**
+    /// claim is that the capture session was continuous across the transition:
+    /// that is a fact about stored samples, and it is asserted where it can be
+    /// read, in `LocationTrackingServiceTests` and `RealWorldRecoveryTests`.
+    @MainActor
+    func testRecordingSurvivesLeavingAndReturningToTheApp() throws {
+        let app = launchWithStubbedLocation()
+
+        let startButton = app.buttons["startShiftButton"]
+        XCTAssertTrue(startButton.waitForExistence(timeout: 10))
+        startButton.tap()
+
+        let status = app.descendants(matching: .any)["routeCaptureStatus"]
+        XCTAssertTrue(status.waitForExistence(timeout: 5))
+        XCTAssertTrue(status.label.contains("Location tracking active"))
+
+        XCUIDevice.shared.press(.home)
+        app.activate()
+
+        XCTAssertTrue(app.buttons["endShiftButton"].waitForExistence(timeout: 10))
+        let returned = app.descendants(matching: .any)["routeCaptureStatus"]
+        XCTAssertTrue(returned.waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            returned.label.contains("Location tracking active"),
+            "A session that was never stopped must not come back describing a pause: \(returned.label)"
+        )
+        XCTAssertFalse(
+            returned.label.contains("Route recording paused"),
+            "Returning claimed a break that did not happen: \(returned.label)"
+        )
+    }
+
+    /// The permission panel says which scope is asked for and what it limits.
+    @MainActor
+    func testLocationPanelStatesTheScopeAndItsLimit() throws {
+        let app = launchWithStubbedLocation()
+
+        let panel = app.descendants(matching: .any)["locationAuthorizationPanel"]
+        XCTAssertTrue(panel.waitForExistence(timeout: 10))
+        XCTAssertTrue(scrollTo(panel, in: app))
+
+        let text = panel.descendants(matching: .staticText).allElementsBoundByIndex
+            .map(\.label)
+            .joined(separator: " ")
+            .lowercased()
+
+        XCTAssertTrue(
+            text.contains("another app") || text.contains("screen is locked"),
+            "An authorized driver should be told recording carries on off screen: \(text)"
+        )
+        XCTAssertTrue(
+            text.contains("started with dashpilot open"),
+            "The limit of this scope is the thing a driver can be caught by: \(text)"
+        )
     }
 
     @MainActor
