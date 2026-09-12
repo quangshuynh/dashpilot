@@ -18,8 +18,8 @@ struct StartShiftIntent: AppIntent {
     static let description: IntentDescription? = IntentDescription(
         """
         Starts a shift and records its start time on this device. \
-        DashPilot records your route only while the app is open, so a shift started this way \
-        records no mileage until you open it.
+        Route recording begins when you open DashPilot and then continues while you use other \
+        apps, so a shift started this way records no mileage until you open it.
         """,
         categoryName: "Shift",
         searchKeywords: ["shift", "start", "driving", "work"]

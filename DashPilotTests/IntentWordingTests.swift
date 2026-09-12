@@ -36,7 +36,7 @@ struct IntentWordingTests {
         #expect(confirmation.hasPrefix("Shift started at "))
         #expect(confirmation.contains(start.formatted(date: .omitted, time: .shortened)))
         #expect(
-            confirmation.contains("records your route only while the app is open"),
+            confirmation.contains("Open DashPilot to start recording your route"),
             "A shift started without opening the app records no route, and the driver has no screen to notice it on"
         )
     }

@@ -38,13 +38,14 @@ nonisolated enum IntentLifecycleOutcome: Equatable, Sendable {
     var confirmation: String {
         switch self {
         case let .shiftStarted(date):
-            // The route caution travels with every start. Capture runs only
-            // while DashPilot is on screen, so a shift started by voice and
-            // driven with the phone locked records no mileage at all, and the
-            // driver has no screen in front of them to notice.
+            // The route caution travels with every start, and says the thing
+            // that is actually true: recording carries on once it is running,
+            // but it can only be *started* with the app on screen. A shift
+            // started by voice and driven with the phone locked records no
+            // mileage at all, and the driver has no screen to notice it on.
             """
             Shift started at \(date.formatted(date: .omitted, time: .shortened)). \
-            DashPilot records your route only while the app is open.
+            Open DashPilot to start recording your route.
             """
         case let .shiftEnded(duration):
             if let duration {
