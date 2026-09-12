@@ -65,6 +65,13 @@ nonisolated enum AppLog {
     /// and tells a reader of the log nothing they can act on.
     static let export = Logger(subsystem: subsystem, category: "export")
 
+    /// The shift's Live Activity: that one was started, adopted, ended or
+    /// refused, and that a reading failed. **Never a figure it displayed** — not
+    /// the working time, not the recorded mileage, not a delivery count — and
+    /// never when any of it happened. The surface exists to tell one driver
+    /// about their own shift, and the log is not a second copy of it.
+    static let activity = Logger(subsystem: subsystem, category: "live-activity")
+
     /// Route sample capture: when it starts and stops, why it cannot run, how
     /// many samples were kept, and which rule rejected a candidate. Records the
     /// behaviour of the pipeline, never a coordinate that went through it.

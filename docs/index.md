@@ -50,8 +50,8 @@ with the reason any of them could not be derived.
 
 ## Engineering characteristics
 
-- **First-party frameworks only.** SwiftUI, SwiftData, Core Location, App Intents, OSLog, Swift
-  Testing and XCUITest. There are no third-party runtime dependencies.
+- **First-party frameworks only.** SwiftUI, SwiftData, Core Location, App Intents, ActivityKit,
+  WidgetKit, OSLog, Swift Testing and XCUITest. There are no third-party runtime dependencies.
 - **Versioned persistence.** The schema has been versioned since v1 and carries a migration plan
   exercised by tests that open stores written under every older version. See
   [Migrations](architecture/migrations.md).
@@ -96,7 +96,7 @@ The full list, including the parts that are simply not built yet, is on
 
 !!! note "Documentation status"
 
-    This site documents schema v8 and the shift, route, earnings, metrics, detail, delivery
-    lifecycle, pickup identity, pickup wait, per-delivery earnings, period summary, history export
-    and recorded expense work completed so far. Every amount, coordinate, route, note and business
-    name in it is synthetic.
+    This site documents schema v10 and the shift, route, earnings, metrics, detail, delivery
+    lifecycle, pickup identity, pickup wait, per-delivery earnings, period summary, period
+    comparison, history export, recorded expense, shift pause and Live Activity work completed so
+    far. Every amount, coordinate, route, note and business name in it is synthetic.

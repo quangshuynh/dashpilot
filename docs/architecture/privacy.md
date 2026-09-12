@@ -20,12 +20,21 @@ there is nothing to configure, disable or trust.
 - Deletion is local and permanent. A deleted shift is removed from the device's store, and there is
   no copy anywhere else to remove it from.
 - Location permission is requested at the When In Use scope only, and only when the driver taps.
-- **The voice and Shortcuts actions carry no values and are not donated.** None of the four intents
+- **The voice and Shortcuts actions carry no values and are not donated.** None of the six intents
   takes a parameter, so nothing dictated is stored and no shortcut, suggestion or tile holds an
-  amount, a place or a position. DashPilot does not donate performed intents to the system either:
+  amount, a place or a position. The four the shift's Live Activity performs take none either, and
+  they are not discoverable: Siri and Shortcuts already offer those actions, and a second tile would
+  be one more place for the vocabulary to drift. DashPilot does not donate performed intents to the system either:
   App Shortcuts are offered from installation, and a donation would additionally feed the system's
   prediction of what a driver does and when. See
   [Voice and system actions](../product/voice-actions.md).
+- **The Lock Screen carries no money, no place and no position.** A Live Activity is readable by
+  whoever is standing beside the phone without unlocking it, so the shift's card carries the working
+  time, what the route has recorded, how the deliveries stand and the controls that apply, and
+  nothing else: no amount, no rate, no total, no recommendation, no address, no pickup place and no
+  coordinate. The card is a picture of the store the app requested; there is no push token, no remote
+  update and nothing that leaves the device. See
+  [The shift on the Lock Screen](../product/live-activity.md).
 - **Export is the one way data leaves, and it is a user action.** DashPilot writes a JSON or CSV file
   into a temporary directory on the device when the driver taps an export control, and hands it to
   the system share sheet. Nothing exports on a schedule, on shift end or at launch, and there is
@@ -62,6 +71,7 @@ counts and errors. Coordinates, addresses and earnings amounts are never logged.
 | `pickup-place` | That a place was assigned, changed, removed, reused, created, renamed or merged; that a name, rename or merge was refused, by rule; that a save failed | The name typed, the normalised key derived from it, and how many deliveries a merge moved |
 | `expenses` | That an expense was recorded, updated or deleted, which **category** it was, whether a note exists, and that a write was refused by rule or failed | The amount, the date the money was spent, and any word of the note |
 | `intents` | Which action a system surface asked for, that it started or ended a shift, started a delivery or recorded an event, and which rule refused it | When any of it happened, and anything the driver said: the intents take no dictated value at all |
+| `live-activity` | That the shift's card was started, adopted, ended or refused by the system, and that a reading for it failed | Any figure it displayed (the working time, the recorded mileage, a delivery count), and when any of it happened |
 | `export` | That a file was written, for which scope and in which format, and how many shifts went into it; that an export was refused, by rule; that a write failed | Anything in the file — a date worked, an amount, a place, a distance — and the path it was written to |
 
 Eight deliberate silences are worth stating.
@@ -98,6 +108,10 @@ normal result rather than a failure, exactly as a rate is.
 **An action performed by voice records no time.** The log says a shift was started from an intent,
 not when. When a driver starts and stops work is their schedule, and a category that exists partly to
 make an off-screen write auditable would otherwise become the most convenient place to read one off.
+
+**The Live Activity's log holds none of the card's contents.** It says a card was started, adopted or
+ended, which is what makes the surface auditable, and never what was on it. A category recording the
+figure a driver was shown would be a second copy of their shift, arriving once every time it changed.
 
 **A merge records nothing about what it moved.** The log says two pickup places were merged, and not
 which two or how many deliveries changed hands. A count of a driver's pickups at one place is work

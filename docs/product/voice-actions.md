@@ -50,6 +50,10 @@ step reaches the one that is left.
 
 `Start Delivery` is not affected, because it names no existing delivery: it creates one.
 
+The shift's Live Activity applies the same rule from the same place in the code, and shows it rather
+than only saying it: with two deliveries open the card offers no step control at all. See
+[The shift on the Lock Screen](live-activity.md#the-refusal-that-is-the-point).
+
 ## What the driver hears back
 
 There is no screen to glance at afterwards, so the confirmation is the whole report:
@@ -108,6 +112,17 @@ suggestion or tile carries a value.
   What they write is a timestamp the driver just witnessed, and what they say back is that same fact.
 - **The log records which action ran and which rule refused it**, and never a timestamp, a count of
   what was said, or anything else. See [Privacy and logging](../architecture/privacy.md).
+
+## The Live Activity's four controls are these actions again
+
+Pause, Resume, End and the delivery step can also be pressed on the shift's Lock Screen card. They are
+declared as separate intents, because a Live Activity button has to be a `LiveActivityIntent` and has
+to exist in the widget extension, and they are **not discoverable**: Siri and the Shortcuts app
+already offer these actions, and two tiles doing the same thing would be two things to learn.
+
+What they are not is a second implementation. Each one calls `IntentLifecycleService`, exactly as the
+spoken actions do, so a shift paused from the Lock Screen is refused by the same rule with the same
+sentence. See [The shift on the Lock Screen](live-activity.md).
 
 ## Where the rules live
 

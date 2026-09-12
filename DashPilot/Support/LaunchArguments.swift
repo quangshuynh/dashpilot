@@ -104,4 +104,28 @@ nonisolated enum LaunchArgument {
     static func isPresent(_ argument: String, in processInfo: ProcessInfo = .processInfo) -> Bool {
         processInfo.arguments.contains(argument)
     }
+
+    /// Every argument that replaces the driver's own store with a throwaway one.
+    ///
+    /// Listed once, so that anything which must not act on synthetic data has a
+    /// single question to ask. Adding a fixture means adding it here too.
+    static let throwawayStoreArguments = [
+        inMemoryStore,
+        seededHistory,
+        seededActiveDelivery,
+        seededPickupHistory,
+        seededPeriodSummary,
+        seededPeriodComparison
+    ]
+
+    /// Whether this launch is running over synthetic, in-memory data.
+    ///
+    /// Asked by anything whose effects reach **outside** the store, because those
+    /// effects outlive the process and a fixture's data must not produce them.
+    /// The Live Activity is the first such surface: a card requested from a
+    /// throwaway store would sit on a real Lock Screen describing a shift that
+    /// never happened.
+    static func isUsingThrowawayStore(in processInfo: ProcessInfo = .processInfo) -> Bool {
+        throwawayStoreArguments.contains { isPresent($0, in: processInfo) }
+    }
 }

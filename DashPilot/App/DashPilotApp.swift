@@ -18,6 +18,15 @@ struct DashPilotApp: App {
     /// put samples, and that failure is already the whole screen.
     @State private var routeCapture: LocationTrackingService?
 
+    /// The shift's Live Activity, over the same container and the same main
+    /// context. `nil` for the same reason capture is: with no store there is no
+    /// shift to describe.
+    ///
+    /// Taken from ``AppShiftLiveActivity`` rather than built here, because an
+    /// App Intent performed with no scene has to reach the same coordinator this
+    /// scene does. Two over one activity would race each other into two cards.
+    @State private var liveActivity: ShiftLiveActivityService?
+
     init() {
         // Opened through `AppModelContainer` rather than here, so that the App
         // Intents perform against the same container this scene reads. Either
@@ -26,16 +35,26 @@ struct DashPilotApp: App {
         let container = AppModelContainer.shared
         let locationAuthorization = Self.makeAuthorizationService()
 
+        let liveActivity = AppShiftLiveActivity.shared
+        let routeCapture = (try? container.get()).map { container in
+            Self.makeTrackingService(
+                context: container.mainContext,
+                authorization: locationAuthorization
+            )
+        }
+
+        // Route capture is the only thing that knows a shift's recorded mileage
+        // has moved while the app is off screen, which is where most of a shift
+        // is recorded. The activity is asked to *reconcile*, never told what
+        // changed: it reads the store itself.
+        routeCapture?.onRoutePersisted = { [weak liveActivity] in
+            liveActivity?.reconcile()
+        }
+
         self.container = container
         _locationAuthorization = State(initialValue: locationAuthorization)
-        _routeCapture = State(
-            initialValue: (try? container.get()).map { container in
-                Self.makeTrackingService(
-                    context: container.mainContext,
-                    authorization: locationAuthorization
-                )
-            }
-        )
+        _routeCapture = State(initialValue: routeCapture)
+        _liveActivity = State(initialValue: liveActivity)
     }
 
     /// Core Location, or the stub a UI test asked for.
@@ -85,11 +104,12 @@ struct DashPilotApp: App {
         WindowGroup {
             switch container {
             case .success(let container):
-                if let routeCapture {
+                if let routeCapture, let liveActivity {
                     RootView()
                         .modelContainer(container)
                         .environment(locationAuthorization)
                         .environment(routeCapture)
+                        .environment(liveActivity)
                 }
             case .failure(let error):
                 PersistenceUnavailableView(error: error)
