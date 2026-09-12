@@ -46,7 +46,10 @@ struct DashPilotApp: App {
     /// has one path and no way to reach another.
     private static func makeAuthorizationService() -> LocationAuthorizationService {
         #if DEBUG
-        if LaunchArgument.isPresent(LaunchArgument.stubbedLocation) {
+        // The simulated route implies the permission stub: a fed route with no
+        // grant would be refused before the filter ever saw it.
+        if LaunchArgument.isPresent(LaunchArgument.stubbedLocation)
+            || LaunchArgument.isPresent(LaunchArgument.simulatedRoute) {
             return LocationAuthorizationService(
                 provider: StubLocationAuthorizationProvider(status: .authorizedWhenInUse)
             )
@@ -60,6 +63,13 @@ struct DashPilotApp: App {
         authorization: LocationAuthorizationService
     ) -> LocationTrackingService {
         #if DEBUG
+        if LaunchArgument.isPresent(LaunchArgument.simulatedRoute) {
+            return LocationTrackingService(
+                context: context,
+                authorization: authorization,
+                provider: SimulatedRouteLocationProvider()
+            )
+        }
         if LaunchArgument.isPresent(LaunchArgument.stubbedLocation) {
             return LocationTrackingService(
                 context: context,

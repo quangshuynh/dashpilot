@@ -22,6 +22,9 @@ final class DashPilotUITests: XCTestCase {
     /// Must match `LaunchArgument.stubbedLocation`, for the same reason.
     private static let stubbedLocationArgument = "-dashpilot-stubbed-location"
 
+    /// Must match `LaunchArgument.simulatedRoute`, for the same reason.
+    private static let simulatedRouteArgument = "-dashpilot-simulated-route"
+
     override func setUpWithError() throws {
         continueAfterFailure = false
     }
@@ -97,6 +100,56 @@ final class DashPilotUITests: XCTestCase {
         app.launchArguments.append(Self.stubbedLocationArgument)
         app.launch()
         return app
+    }
+
+    /// Launches against a throwaway store with a synthetic vehicle feeding the
+    /// real capture pipeline.
+    ///
+    /// The only way a journey can watch a live mileage figure move. Permission,
+    /// the filter, the capture sessions, the store writes and the measurement
+    /// are all the shipping ones; only the source of the positions is synthetic.
+    /// The vehicle keeps moving while capture is stopped, which is what makes
+    /// the distance covered during a pause a real thing that must not be
+    /// recorded.
+    @MainActor
+    private func launchWithSimulatedRoute() -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments.append(Self.inMemoryStoreArgument)
+        app.launchArguments.append(Self.simulatedRouteArgument)
+        app.launch()
+        return app
+    }
+
+    /// The recorded mileage the running shift's panel is showing, in miles, or
+    /// `nil` when it is not showing a measured one.
+    ///
+    /// Read from the spoken value rather than the visible one because that is
+    /// where the unit is a word: `"1.2 miles recorded. 1 capture segment…"`. A
+    /// panel saying "No route recorded" has no figure, and answers `nil` rather
+    /// than zero — the distinction this whole screen exists to keep.
+    @MainActor
+    private func recordedMiles(in app: XCUIApplication) -> Double? {
+        let element = app.descendants(matching: .any)["liveRecordedMileage"]
+        guard element.exists, let spoken = element.value as? String else { return nil }
+        guard let unit = spoken.range(of: " mile") else { return nil }
+        // The digits immediately before the unit, back to whatever is not part
+        // of a number. Written without a regex literal so the test target does
+        // not depend on the bare-slash syntax being enabled.
+        let digits = spoken[spoken.startIndex..<unit.lowerBound]
+            .reversed()
+            .prefix { $0.isNumber || $0 == "." || $0 == "," }
+        return Double(String(digits.reversed()).replacingOccurrences(of: ",", with: ""))
+    }
+
+    /// Waits until the panel is showing a measured mileage, and answers it.
+    @MainActor
+    private func waitForRecordedMiles(in app: XCUIApplication, timeout: TimeInterval = 30) -> Double? {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if let miles = recordedMiles(in: app), miles > 0 { return miles }
+            _ = app.descendants(matching: .any)["liveRecordedMileage"].waitForExistence(timeout: 0.5)
+        }
+        return recordedMiles(in: app)
     }
 
     /// The app launches into the shift screen rather than the persistence failure state.
@@ -240,6 +293,248 @@ final class DashPilotUITests: XCTestCase {
             rows(in: app).firstMatch.waitForExistence(timeout: 5),
             "The shift that was paused still finishes as one shift in history"
         )
+    }
+
+    // MARK: Live shift figures
+
+    /// The running shift reports the miles its route has actually recorded, and
+    /// the figure grows while positions are being accepted.
+    ///
+    /// The whole point of the panel: a driver mid-shift can see what has been
+    /// recorded so far without ending the shift to find out. The word "recorded"
+    /// is asserted with the figure, because a mileage read as "miles I drove" is
+    /// the one claim this app must not make.
+    @MainActor
+    func testRecordedMileageGrowsWhileAShiftIsRecording() throws {
+        let app = launchWithSimulatedRoute()
+
+        let startButton = app.buttons["startShiftButton"]
+        XCTAssertTrue(startButton.waitForExistence(timeout: 10))
+        startButton.tap()
+
+        let mileage = app.descendants(matching: .any)["liveRecordedMileage"]
+        XCTAssertTrue(mileage.waitForExistence(timeout: 10))
+
+        let first = try XCTUnwrap(
+            waitForRecordedMiles(in: app),
+            "The panel never reported a measured distance while the route was being recorded"
+        )
+        XCTAssertGreaterThan(first, 0)
+
+        // Long enough for the synthetic vehicle to cover well over a tenth of a
+        // mile, which is the resolution the figure is written at.
+        let deadline = Date().addingTimeInterval(30)
+        var grown: Double?
+        while Date() < deadline, grown == nil {
+            if let miles = recordedMiles(in: app), miles > first { grown = miles }
+            _ = mileage.waitForExistence(timeout: 0.5)
+        }
+        XCTAssertNotNil(grown, "Recorded mileage did not grow while the route was being recorded")
+
+        let spoken = try XCTUnwrap(mileage.value as? String)
+        XCTAssertTrue(spoken.contains("recorded"), "The figure has to say what it is: \(spoken)")
+        XCTAssertFalse(spoken.lowercased().contains("total"), "Recorded mileage is not a total: \(spoken)")
+    }
+
+    /// Pausing stops the mileage and the working figure, and neither moves again
+    /// until the driver resumes.
+    ///
+    /// Both are the same claim from two directions: a driver on a break is not
+    /// working and is not recording, so a shift that kept either number moving
+    /// would be reporting work that did not happen.
+    @MainActor
+    func testRecordedMileageAndWorkingTimeFreezeWhilePaused() throws {
+        let app = launchWithSimulatedRoute()
+
+        let startButton = app.buttons["startShiftButton"]
+        XCTAssertTrue(startButton.waitForExistence(timeout: 10))
+        startButton.tap()
+
+        let beforePause = try XCTUnwrap(waitForRecordedMiles(in: app))
+
+        let pauseButton = app.buttons["pauseShiftButton"]
+        XCTAssertTrue(pauseButton.waitForExistence(timeout: 10))
+        pauseButton.tap()
+        XCTAssertTrue(app.buttons["resumeShiftButton"].waitForExistence(timeout: 10))
+
+        // Read after the pause has settled: pausing flushes the positions
+        // captured up to the tap, so the figure may move once more and then stop.
+        let workingTime = app.descendants(matching: .any)["workingTime"]
+        XCTAssertTrue(workingTime.waitForExistence(timeout: 5))
+        _ = workingTime.waitForExistence(timeout: 3)
+
+        let pausedMiles = try XCTUnwrap(recordedMiles(in: app))
+        let pausedWorking = try XCTUnwrap(workingTime.value as? String)
+        XCTAssertGreaterThanOrEqual(pausedMiles, beforePause)
+
+        // Fifteen seconds during which the synthetic vehicle keeps driving. A
+        // shift that measured it would be several tenths of a mile further on,
+        // and a working figure that kept ticking would be fifteen seconds later.
+        let waited = expectation(description: "the shift stays paused")
+        waited.isInverted = true
+        wait(for: [waited], timeout: 15)
+
+        XCTAssertEqual(
+            recordedMiles(in: app),
+            pausedMiles,
+            "Recorded mileage must not move while the shift is paused"
+        )
+        XCTAssertEqual(
+            workingTime.value as? String,
+            pausedWorking,
+            "Working time must not move while the shift is paused"
+        )
+        // And the shift is still paused rather than having resumed by itself.
+        XCTAssertTrue(app.buttons["resumeShiftButton"].exists)
+    }
+
+    /// Resuming does not add the distance covered during the break, and the
+    /// route says it is partial.
+    ///
+    /// The synthetic vehicle keeps driving while capture is stopped, exactly as
+    /// a driver who takes a break somewhere and resumes somewhere else does.
+    /// Resuming mints a new capture session, so the stretch between the two is
+    /// a gap and the distance across it is left out rather than guessed at.
+    @MainActor
+    func testResumingDoesNotRecordTheDistanceCoveredWhilePaused() throws {
+        let app = launchWithSimulatedRoute()
+
+        let startButton = app.buttons["startShiftButton"]
+        XCTAssertTrue(startButton.waitForExistence(timeout: 10))
+        startButton.tap()
+
+        _ = try XCTUnwrap(waitForRecordedMiles(in: app))
+
+        app.buttons["pauseShiftButton"].tap()
+        let resumeButton = app.buttons["resumeShiftButton"]
+        XCTAssertTrue(resumeButton.waitForExistence(timeout: 10))
+
+        let settling = expectation(description: "the pause settles")
+        settling.isInverted = true
+        wait(for: [settling], timeout: 3)
+        let pausedMiles = try XCTUnwrap(recordedMiles(in: app))
+
+        // Twenty seconds of driving nobody recorded: around half a kilometre,
+        // which is several times what the first seconds after resuming add.
+        let break_ = expectation(description: "the driver takes a break")
+        break_.isInverted = true
+        wait(for: [break_], timeout: 20)
+
+        resumeButton.tap()
+        XCTAssertTrue(app.buttons["pauseShiftButton"].waitForExistence(timeout: 10))
+
+        // Wait for the first reading that shows the route growing again, and
+        // check what it added. Bridging the break would have added the whole
+        // half kilometre at once.
+        let mileage = app.descendants(matching: .any)["liveRecordedMileage"]
+        let deadline = Date().addingTimeInterval(30)
+        var afterResume: Double?
+        while Date() < deadline, afterResume == nil {
+            if let miles = recordedMiles(in: app), miles > pausedMiles { afterResume = miles }
+            _ = mileage.waitForExistence(timeout: 0.3)
+        }
+
+        let resumedMiles = try XCTUnwrap(afterResume, "Recording did not restart after the shift was resumed")
+        XCTAssertLessThan(
+            resumedMiles - pausedMiles,
+            0.25,
+            """
+            Resuming added \(resumedMiles - pausedMiles) mi at once.             The distance covered while the shift was paused was not recorded and must not be measured.
+            """
+        )
+
+        let spoken = try XCTUnwrap(mileage.value as? String)
+        XCTAssertTrue(
+            spoken.contains("Partial route") || spoken.contains("partial route"),
+            "A route with a break in it says so while the shift is still running: \(spoken)"
+        )
+    }
+
+    /// A shift recording nothing says there is no route, rather than showing no
+    /// miles.
+    ///
+    /// The stubbed provider grants permission and produces no positions, which
+    /// is the shape of a shift whose capture has not produced a usable fix yet.
+    /// "No route recorded" and "0.0 mi" are different statements and the panel
+    /// must make the first one.
+    @MainActor
+    func testARunningShiftWithNoRouteSaysSoRatherThanShowingNoMiles() throws {
+        let app = launchWithStubbedLocation()
+
+        let startButton = app.buttons["startShiftButton"]
+        XCTAssertTrue(startButton.waitForExistence(timeout: 10))
+        startButton.tap()
+
+        let mileage = app.descendants(matching: .any)["liveRecordedMileage"]
+        XCTAssertTrue(mileage.waitForExistence(timeout: 10))
+
+        let spoken = try XCTUnwrap(mileage.value as? String)
+        XCTAssertTrue(spoken.contains("No route recorded"), "Expected an absent route, read: \(spoken)")
+        XCTAssertFalse(spoken.contains("0.0"), "An absent route is not a distance of zero: \(spoken)")
+        XCTAssertNil(recordedMiles(in: app))
+    }
+
+    /// A running shift shows no earnings and no rates, and says why.
+    ///
+    /// Shift gross earnings cannot be recorded until the shift has finished, so
+    /// every rate derived from them is withheld. The panel states the reason
+    /// once rather than showing a dash, a zero, or a figure worked out from the
+    /// amounts recorded against individual deliveries.
+    @MainActor
+    func testARunningShiftShowsNoEarningsOrRates() throws {
+        let app = launchWithSimulatedRoute()
+
+        let startButton = app.buttons["startShiftButton"]
+        XCTAssertTrue(startButton.waitForExistence(timeout: 10))
+        startButton.tap()
+
+        let notice = app.descendants(matching: .any)["liveRateNotice"]
+        XCTAssertTrue(notice.waitForExistence(timeout: 10))
+        XCTAssertTrue(
+            notice.label.contains("still running"),
+            "The reason has to name the shift's state, not imply a missing amount: \(notice.label)"
+        )
+
+        XCTAssertFalse(
+            app.descendants(matching: .any)["liveRecordedGross"].exists,
+            "A running shift cannot carry an amount, so none may be shown"
+        )
+
+        // Nothing on the running panel may read as money. A currency symbol here
+        // would be a figure the shift does not have.
+        let deliveries = app.descendants(matching: .any)["liveDeliveryCounts"]
+        XCTAssertTrue(deliveries.waitForExistence(timeout: 5))
+        for element in [notice, deliveries, app.descendants(matching: .any)["liveRecordedMileage"]] {
+            let text = element.label + ((element.value as? String) ?? "")
+            XCTAssertFalse(text.contains("$"), "A running shift states no amount: \(text)")
+            XCTAssertFalse(text.contains("/hr"), "A running shift derives no rate: \(text)")
+        }
+    }
+
+    /// The running shift counts the deliveries that are open and the ones it has
+    /// finished, and the counts follow what the driver actually records.
+    @MainActor
+    func testTheRunningShiftCountsItsDeliveries() throws {
+        let app = launchWithEmptyStore()
+
+        let startButton = app.buttons["startShiftButton"]
+        XCTAssertTrue(startButton.waitForExistence(timeout: 10))
+        startButton.tap()
+
+        let counts = app.descendants(matching: .any)["liveDeliveryCounts"]
+        XCTAssertTrue(counts.waitForExistence(timeout: 10))
+        XCTAssertEqual(counts.label, "Deliveries")
+        XCTAssertEqual(counts.value as? String, "No delivery in progress")
+
+        let startDelivery = app.buttons["startDeliveryButton"]
+        XCTAssertTrue(startDelivery.waitForExistence(timeout: 5))
+        startDelivery.tap()
+
+        let settling = expectation(description: "the count follows the record")
+        settling.isInverted = true
+        wait(for: [settling], timeout: 2)
+
+        XCTAssertEqual(counts.value as? String, "1 delivery in progress")
     }
 
     // MARK: Detail
