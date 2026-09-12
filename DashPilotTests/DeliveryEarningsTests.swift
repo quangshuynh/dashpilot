@@ -772,6 +772,6 @@ struct DeliveryEarningsRateTests {
         // The same amount over the same 45 minutes, once as a shift and once as
         // a delivery: one definition of an amount per hour, so one answer.
         let metrics = fixture.shift.metrics(for: .none)
-        #expect(delivery.grossPerDeliveryHour.amount == metrics.grossPerElapsedHour.amount)
+        #expect(delivery.grossPerDeliveryHour.amount == metrics.grossPerWorkingHour.amount)
     }
 }

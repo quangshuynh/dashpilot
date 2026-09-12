@@ -133,8 +133,8 @@ nonisolated struct PeriodComparisonCalculator: Equatable, Sendable {
         switch metric {
         case .completedShifts:
             return .count(metrics.completedShiftCount)
-        case .elapsedTime:
-            return metrics.elapsedDuration.map(PeriodComparisonValue.duration)
+        case .workingTime:
+            return metrics.workingDuration.map(PeriodComparisonValue.duration)
         case .deliveryActiveTime:
             return metrics.deliveryActiveDuration.map(PeriodComparisonValue.duration)
         case .recordedGrossEarnings:
@@ -159,8 +159,8 @@ nonisolated struct PeriodComparisonCalculator: Equatable, Sendable {
         switch metric {
         case .completedShifts, .deliveriesCompleted:
             return .exactCount
-        case .elapsedTime:
-            return .coverage(metrics.elapsedCoverage)
+        case .workingTime:
+            return .coverage(metrics.workingCoverage)
         case .deliveryActiveTime:
             return .coverage(metrics.deliveryActiveCoverage)
         case .recordedGrossEarnings:

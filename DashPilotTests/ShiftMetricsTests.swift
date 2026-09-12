@@ -42,7 +42,7 @@ struct ShiftMetricsTests {
             recordedDistance: .none
         )
 
-        #expect(metrics.grossPerElapsedHour == .available(try money("28.75")))
+        #expect(metrics.grossPerWorkingHour == .available(try money("28.75")))
     }
 
     @Test("A shift of exactly one hour earns its whole amount per hour")
@@ -53,7 +53,7 @@ struct ShiftMetricsTests {
             recordedDistance: .none
         )
 
-        #expect(metrics.grossPerElapsedHour == .available(try money("24.80")))
+        #expect(metrics.grossPerWorkingHour == .available(try money("24.80")))
     }
 
     @Test("A fractional hour divides by the fraction, not by a rounded hour")
@@ -64,7 +64,7 @@ struct ShiftMetricsTests {
             recordedDistance: .none
         )
 
-        #expect(metrics.grossPerElapsedHour == .available(try money("24.80")))
+        #expect(metrics.grossPerWorkingHour == .available(try money("24.80")))
     }
 
     @Test("A shift of a few seconds is a real rate, however large")
@@ -75,7 +75,7 @@ struct ShiftMetricsTests {
             recordedDistance: .none
         )
 
-        #expect(metrics.grossPerElapsedHour == .available(try money("500.00")))
+        #expect(metrics.grossPerWorkingHour == .available(try money("500.00")))
     }
 
     @Test("A long shift divides by all of its hours")
@@ -86,7 +86,7 @@ struct ShiftMetricsTests {
             recordedDistance: .none
         )
 
-        #expect(metrics.grossPerElapsedHour == .available(try money("37.50")))
+        #expect(metrics.grossPerWorkingHour == .available(try money("37.50")))
     }
 
     @Test("A shift recorded as paying nothing has a rate of zero, not an absent one")
@@ -97,8 +97,8 @@ struct ShiftMetricsTests {
             recordedDistance: .none
         )
 
-        #expect(metrics.grossPerElapsedHour == .available(.zero))
-        #expect(metrics.grossPerElapsedHour.amount?.isZero == true)
+        #expect(metrics.grossPerWorkingHour == .available(.zero))
+        #expect(metrics.grossPerWorkingHour.amount?.isZero == true)
     }
 
     @Test("A shift with no amount recorded has no hourly rate, and is not treated as zero")
@@ -109,8 +109,8 @@ struct ShiftMetricsTests {
             recordedDistance: .none
         )
 
-        #expect(metrics.grossPerElapsedHour == .unavailable(.earningsNotRecorded))
-        #expect(metrics.grossPerElapsedHour.amount == nil)
+        #expect(metrics.grossPerWorkingHour == .unavailable(.earningsNotRecorded))
+        #expect(metrics.grossPerWorkingHour.amount == nil)
     }
 
     @Test("A completed shift covering no time has no hourly rate")
@@ -121,7 +121,7 @@ struct ShiftMetricsTests {
             recordedDistance: .none
         )
 
-        #expect(metrics.grossPerElapsedHour == .unavailable(.noElapsedTime))
+        #expect(metrics.grossPerWorkingHour == .unavailable(.noWorkingTime))
     }
 
     @Test("A duration that is not a number is refused rather than divided by")
@@ -133,7 +133,7 @@ struct ShiftMetricsTests {
                 recordedDistance: .none
             )
 
-            #expect(metrics.grossPerElapsedHour == .unavailable(.noElapsedTime))
+            #expect(metrics.grossPerWorkingHour == .unavailable(.noWorkingTime))
         }
     }
 
@@ -145,7 +145,7 @@ struct ShiftMetricsTests {
             recordedDistance: measuredRoute(miles: 10)
         )
 
-        #expect(metrics.grossPerElapsedHour == .unavailable(.shiftNotCompleted))
+        #expect(metrics.grossPerWorkingHour == .unavailable(.shiftNotCompleted))
         #expect(metrics.grossPerRecordedMile == .unavailable(.shiftNotCompleted))
         #expect(metrics.hasAnyRate == false)
     }
@@ -175,7 +175,7 @@ struct ShiftMetricsTests {
             elapsedDuration: 360,
             recordedDistance: .none
         )
-        #expect(hourly.grossPerElapsedHour == .available(try money("3.00")))
+        #expect(hourly.grossPerWorkingHour == .available(try money("3.00")))
 
         let perMile = calculator.metrics(
             grossEarnings: try money("0.30"),
@@ -194,7 +194,7 @@ struct ShiftMetricsTests {
             recordedDistance: .none
         )
 
-        let rate = try #require(metrics.grossPerElapsedHour.amount)
+        let rate = try #require(metrics.grossPerWorkingHour.amount)
         #expect(rate.amount == Decimal(string: "33.333333"))
         #expect(rate.rounded().amount == Decimal(string: "33.33"))
     }
@@ -404,7 +404,7 @@ struct ShiftMetricsTests {
             recordedDistance: measuredRoute(miles: 10)
         )
 
-        #expect(metrics.grossPerElapsedHour == .available(try money("28.75")))
+        #expect(metrics.grossPerWorkingHour == .available(try money("28.75")))
         #expect(metrics.grossPerRecordedMile == .available(try money("8.625")))
         #expect(metrics.hasAnyRate)
         #expect(metrics.isRoutePartial == false)
@@ -418,7 +418,7 @@ struct ShiftMetricsTests {
             recordedDistance: .none
         )
 
-        #expect(metrics.grossPerElapsedHour.isAvailable)
+        #expect(metrics.grossPerWorkingHour.isAvailable)
         #expect(metrics.grossPerRecordedMile.isAvailable == false)
         #expect(metrics.hasAnyRate)
     }
@@ -431,7 +431,7 @@ struct ShiftMetricsTests {
             recordedDistance: measuredRoute(miles: 10)
         )
 
-        #expect(metrics.grossPerElapsedHour == .unavailable(.earningsNotRecorded))
+        #expect(metrics.grossPerWorkingHour == .unavailable(.earningsNotRecorded))
         #expect(metrics.grossPerRecordedMile == .unavailable(.earningsNotRecorded))
         #expect(metrics.hasAnyRate == false)
     }
@@ -444,7 +444,7 @@ struct ShiftMetricsTests {
             recordedDistance: measuredRoute(miles: 10)
         )
 
-        #expect(metrics.grossPerElapsedHour == .available(.zero))
+        #expect(metrics.grossPerWorkingHour == .available(.zero))
         #expect(metrics.grossPerRecordedMile == .available(.zero))
     }
 
@@ -572,7 +572,7 @@ struct ShiftMetricsTests {
         )
 
         #expect(metrics.grossPerDeliveryActiveHour == .unavailable(.noDeliveriesRecorded))
-        #expect(metrics.grossPerElapsedHour == .available(try money("12.00")), "The elapsed rate is unaffected")
+        #expect(metrics.grossPerWorkingHour == .available(try money("12.00")), "The elapsed rate is unaffected")
     }
 
     @Test("Deliveries that describe no usable interval are not the same as no deliveries")
@@ -633,7 +633,7 @@ struct ShiftMetricsTests {
             deliveryActiveTime: activeTime(minutes: 7 * 60)
         )
 
-        #expect(metrics.grossPerDeliveryActiveHour == metrics.grossPerElapsedHour)
+        #expect(metrics.grossPerDeliveryActiveHour == metrics.grossPerWorkingHour)
     }
 
     @Test("Rates are available whenever any denominator is")
@@ -645,7 +645,7 @@ struct ShiftMetricsTests {
             deliveryActiveTime: activeTime(minutes: 45)
         )
 
-        #expect(metrics.grossPerElapsedHour == .unavailable(.noElapsedTime))
+        #expect(metrics.grossPerWorkingHour == .unavailable(.noWorkingTime))
         #expect(metrics.grossPerDeliveryActiveHour == .available(try money("40.00")))
         #expect(metrics.hasAnyRate)
     }
@@ -738,7 +738,7 @@ struct ShiftMetricsModelTests {
         #expect(metrics.grossEarnings == Money(exact: "86.25"))
         #expect(metrics.elapsedDuration == TimeInterval(3 * 3600))
         let hourly = try #require(Money(exact: "28.75"))
-        #expect(metrics.grossPerElapsedHour == .available(hourly))
+        #expect(metrics.grossPerWorkingHour == .available(hourly))
         // No route was recorded, so there is nothing to divide miles into.
         #expect(metrics.grossPerRecordedMile == .unavailable(.noRouteRecorded))
     }
@@ -750,7 +750,7 @@ struct ShiftMetricsModelTests {
         let metrics = shift.metrics(for: shift.recordedDistance())
 
         #expect(metrics.elapsedDuration == nil)
-        #expect(metrics.grossPerElapsedHour == .unavailable(.shiftNotCompleted))
+        #expect(metrics.grossPerWorkingHour == .unavailable(.shiftNotCompleted))
         #expect(metrics.grossPerRecordedMile == .unavailable(.shiftNotCompleted))
     }
 
@@ -767,8 +767,8 @@ struct ShiftMetricsModelTests {
 
         #expect(shift.completedDuration == 0)
         let metrics = shift.metrics(for: shift.recordedDistance())
-        #expect(metrics.grossPerElapsedHour == .unavailable(.noElapsedTime))
-        #expect(metrics.grossPerElapsedHour.amount == nil, "A clamped shift must not produce an infinite rate")
+        #expect(metrics.grossPerWorkingHour == .unavailable(.noWorkingTime))
+        #expect(metrics.grossPerWorkingHour.amount == nil, "A clamped shift must not produce an infinite rate")
     }
 
     @Test("A shift whose stored route is measurable earns a per-recorded-mile rate")
@@ -834,7 +834,7 @@ struct ShiftMetricsModelTests {
         let metrics = shift.metrics(for: shift.recordedDistance())
 
         let hourly = try #require(Money(exact: "50.00"))
-        #expect(metrics.grossPerElapsedHour == .available(hourly))
+        #expect(metrics.grossPerWorkingHour == .available(hourly))
         #expect(metrics.grossPerRecordedMile.amount == nil, "Nothing measurable must not become a rate")
         #expect(metrics.grossPerRecordedMile == .unavailable(.noRouteRecorded))
     }

@@ -50,7 +50,7 @@ struct PeriodComparisonTests {
     ) -> PeriodShiftRecord {
         PeriodShiftRecord(
             startedAt: start,
-            elapsedDuration: hours.map { $0 * 3600 },
+            workingDuration: hours.map { $0 * 3600 },
             grossEarnings: earnings,
             recordedDistance: miles.map { miles in
                 RouteDistance(
@@ -247,7 +247,7 @@ struct PeriodComparisonTests {
             asOf: now,
             calendar: calendar
         )
-        let entry = try #require(comparison.entry(.rate(.perElapsedHour)))
+        let entry = try #require(comparison.entry(.rate(.perWorkingHour)))
 
         #expect(entry.current == .money(try money("20.00")))
         #expect(entry.previous == .money(try money("10.00")))
@@ -357,7 +357,7 @@ struct PeriodComparisonTests {
         #expect(comparison.entry(.recordedExpenses) == nil)
         // The counts are always there: a count of records is never missing.
         #expect(comparison.entry(.completedShifts) != nil)
-        #expect(comparison.entry(.elapsedTime) != nil)
+        #expect(comparison.entry(.workingTime) != nil)
     }
 
     // MARK: Percentages
@@ -786,7 +786,7 @@ struct PeriodComparisonTests {
             calendar: calendar
         )
         let total = try #require(comparison.entry(.recordedGrossEarnings))
-        let rate = try #require(comparison.entry(.rate(.perElapsedHour)))
+        let rate = try #require(comparison.entry(.rate(.perWorkingHour)))
 
         #expect(total.changeStatement(locale: locale) == "$40.00 more recorded")
         #expect(rate.changeStatement(locale: locale) == "$10.00 higher")
