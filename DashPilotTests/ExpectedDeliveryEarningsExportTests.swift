@@ -155,7 +155,7 @@ struct ExpectedDeliveryEarningsExportTests {
         }
 
         // The recorded amount is there, and the expectation is nowhere in the
-        // file at all — not as a column and not as a stray value.
+        // file at all, neither as a column nor as a stray value.
         #expect(text.contains("6.25"))
         #expect(!text.contains("8.50"), "The expected figure does not reach a spreadsheet")
 

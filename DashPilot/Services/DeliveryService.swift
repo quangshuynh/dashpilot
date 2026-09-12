@@ -111,10 +111,10 @@ nonisolated extension DeliveryLifecycleError: LocalizedError {
 /// - A **gross** amount may only be recorded against a **finished** delivery,
 ///   and only ever the amount the driver typed for that one delivery. Nothing
 ///   here reads the shift's own recorded amount, and no total is ever divided
-///   among deliveries — see ``setGrossEarnings(_:on:)``.
+///   among deliveries. See ``setGrossEarnings(_:on:)``.
 /// - An **expected** amount may only be recorded against an **active**
 ///   delivery, is stored in its own column, and never becomes a gross amount
-///   here or anywhere else — see ``setExpectedEarnings(_:on:)``. Finishing a
+///   here or anywhere else. See ``setExpectedEarnings(_:on:)``. Finishing a
 ///   delivery leaves its expectation exactly as it was and records no gross.
 ///
 /// ## Timestamps

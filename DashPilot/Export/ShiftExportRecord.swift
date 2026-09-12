@@ -301,8 +301,8 @@ nonisolated struct DeliveryExportRecord: Equatable, Sendable, Codable {
     /// figure.
     ///
     /// It is in the file so that a fact the driver entered is not silently
-    /// dropped on the way out — an export is the only way anything leaves
-    /// DashPilot — and it appears **only here, on the delivery that carries
+    /// dropped on the way out, since an export is the only way anything leaves
+    /// DashPilot, and it appears **only here, on the delivery that carries
     /// it**. Nothing sums it, no shift field includes it, no summary figure is
     /// derived from it, and there is no expected counterpart to any total or
     /// rate anywhere in this format. A consumer adding this column to an

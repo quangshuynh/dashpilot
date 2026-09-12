@@ -107,6 +107,13 @@ and one they cannot.
   because the driver typed one against it, after the delivery finished. DashPilot never splits a
   shift total between deliveries, never adds a shift total up from them, and never reads a missing
   amount as zero.
+- **Expected pay may only be recorded while a delivery is in progress**, and cannot be added
+  afterwards. Once a delivery is delivered or cancelled the fact worth recording is what it paid, so
+  the model refuses a late expectation; an existing one can still be removed. A delivery that
+  finished before this existed has none and will never have one.
+- **An expected amount is never turned into earnings.** Marking a delivery delivered records no
+  gross amount, and neither does cancelling one. The app offers the figure back for confirmation and
+  writes nothing unless the driver presses the control that says it will.
 - **The shift total and the delivery amounts are not reconciled.** They may differ in either
   direction — unrecorded deliveries, stacked orders paid together, shift-level adjustments — and the
   app reports no shortfall, warning or error about the difference. It also offers no screen that
@@ -222,9 +229,22 @@ and one they cannot.
   no all-time total, no best or worst shift, no chart and no sorting. A period may be read beside the
   equivalent period immediately before it, and no further back than that.
   See [Period summaries](../product/period-summaries.md).
+- **Expected pay is entered by the driver too, and nothing checks it.** DashPilot reads no offer,
+  so an expected amount is what the driver typed and no more. It is never counted into any figure,
+  and a delivery carrying one has recorded no earnings.
+- **There is no expected total on a running shift, by decision.** Each delivery shows its own
+  expected amount and nothing sums them. A shift-level total would read every delivery with no
+  expected amount as one expected to pay nothing, which is the same mistake as summing recorded
+  delivery amounts into a shift figure. There is also no expected-versus-recorded difference
+  anywhere: the app states both amounts and draws no conclusion from the gap.
+- **Confirming an expected amount is a driver action and can be missed.** Nothing chases an
+  unconfirmed one. A delivery can sit in history indefinitely with an expected amount and no gross
+  recorded, which the screen says plainly rather than resolving, and which every earnings figure
+  correctly treats as a delivery that recorded nothing.
 - **A running shift shows recorded mileage, working time and delivery counts, and nothing derived
   from money.** Shift gross earnings cannot be recorded until a shift has finished, so no rate is
-  derived for one in progress and the screen says so. Delivery active time is finalised only once a
+  derived for one in progress and the screen says so. The expected amounts on a shift's own delivery
+  cards are the one place money appears on that screen, and no figure is derived from them. Delivery active time is finalised only once a
   shift ends, and is not shown live either.
 - **Live mileage is a reading, not a second record.** It is measured from the same stored positions,
   by the same calculation, and nothing derived from it is written to the store. A route that already
@@ -317,6 +337,10 @@ and one they cannot.
   There is no GPX, KML or GeoJSON output, and no way to export positions at all.
 - **The CSV carries neither the period summary nor the recorded expenses**, and a single shift's
   file carries no expenses at all because no expense belongs to a shift.
+- **The CSV carries no expected pay either.** It is in the JSON form only. A spreadsheet column is
+  something people sum, and an amount that is explicitly not earnings sitting beside one that is
+  would be summed as though it were. Deliberate, and it is also why the format version did not move:
+  a new JSON key is additive, an inserted CSV column would not be.
 - **The CSV carries no period summary.** Each of a summary's figures is paired with the count of
   shifts behind it, and a flat table cannot keep that pairing, so the summary is JSON-only. This is a
   deliberate refusal rather than a gap to be filled by flattening it.

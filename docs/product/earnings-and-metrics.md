@@ -88,6 +88,43 @@ had answered.
   can state without guessing.
 - **No reconciliation screen**, for the reasons above.
 
+## Expected pay is not earnings
+
+A delivery **in progress** may carry a second, separate amount: what the driver expects it to pay.
+It is entered from the delivery's card on the running shift, usually while waiting at a pickup,
+because that is the one moment the figure is in front of them.
+
+It is a different fact from the gross amount above, and the app never treats the two as
+interchangeable, including when the numbers happen to match.
+
+| | Expected pay | Gross earnings |
+| --- | --- | --- |
+| What it is | What the driver expects an order to pay | What they recorded it as having paid |
+| When it can be recorded | Only while the delivery is **active** | Only once the delivery is **terminal** |
+| What confirms it | Nothing | The driver recording it |
+| What counts it | Nothing at all | Every delivery-earnings figure in the app |
+
+**No figure anywhere is derived from an expected amount.** Not a shift total, not a rate, not a
+period's delivery-earnings subtotal or its coverage, not a comparison, not an export summary. A
+delivery with an expected amount and no recorded amount has earned nothing DashPilot knows about,
+and it is counted as a delivery that recorded no amount, because that is what it is.
+
+**Finishing a delivery finalizes nothing.** The expected amount survives the delivery becoming
+delivered or cancelled, exactly as it was, and no gross amount appears. What happens instead is that
+the app *offers* the figure back: a delivery that carries one raises a confirmation when it is
+marked delivered, stating what was expected and starting the amount to record from it. Recording is
+a deliberate tap; dismissing leaves the delivery with no gross earnings and the expectation intact,
+and the completed shift's history offers the same confirmation again later. A cancelled delivery
+raises nothing and never gains a gross amount from an expectation.
+
+The same three states hold as for a recorded amount: an expected figure, no expected figure, and an
+expected `$0.00` are three different facts, and a missing one never becomes a zero.
+
+A delivery recorded before this existed has no expected amount. The migration that added the column
+deliberately does not copy each delivery's recorded gross into it, even though for most deliveries
+that would have produced the number the driver would have typed: it would be the app asserting on
+its own authority that they expected what they were paid.
+
 ## Delivery active time
 
 **Delivery active time is the part of a completed shift during which at least one recorded delivery
