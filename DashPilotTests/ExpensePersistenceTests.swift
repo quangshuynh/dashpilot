@@ -44,15 +44,17 @@ struct ExpensePersistenceTests {
     /// scattered over unrelated files is one that gets updated in four places
     /// and forgotten in the fifth. It moves here from the delivery-earnings
     /// suite, which added the previous version.
-    @Test("Version 8 is current, and it is the version that adds recorded expenses")
+    /// Version 8 is the version that added expenses, and it is now frozen.
+    ///
+    /// The plan's own version and stage counts moved to
+    /// ``ShiftPausePersistenceTests/schemaVersion()`` when v9 became current,
+    /// by the convention that they live in the suite for whichever version is.
+    /// What stays here is the part this interval owns: v8's identifier, and the
+    /// expense entity's shape, which v9 did not touch.
+    @Test("Version 8 is the version that adds recorded expenses, and it is frozen")
     func schemaVersion() throws {
         #expect(DashPilotSchemaV8.versionIdentifier == Schema.Version(8, 0, 0))
-        #expect(DashPilotMigrationPlan.schemas.count == 8)
-        #expect(DashPilotMigrationPlan.stages.count == 7)
-        #expect(DashPilotMigrationPlan.schemas.last is DashPilotSchemaV8.Type)
-
-        let entities = Set(ModelContainerFactory.currentSchema.entities.map(\.name))
-        #expect(entities == ["Shift", "RouteSample", "Delivery", "PickupPlace", "Expense"])
+        #expect(DashPilotSchemaV8.models.count == 5)
 
         let expense = try #require(ModelContainerFactory.currentSchema.entities.first { $0.name == "Expense" })
         let properties = Set(expense.properties.map(\.name))

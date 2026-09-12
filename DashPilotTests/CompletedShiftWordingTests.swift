@@ -270,13 +270,36 @@ struct ShiftRateUnavailabilityExplanationTests {
     /// The vocabulary the whole interval avoids. None of these sentences may
     /// describe the time as work, driving or productivity, because DashPilot
     /// does not know that it was any of them.
+    ///
+    /// **`noWorkingTime` is the one exemption, and only for "working time".** A
+    /// shift's working duration is a defined fact rather than a claim about what
+    /// the driver was doing: elapsed time less the stretches they told the app
+    /// they had stopped. The words it may not use are the ones that would claim
+    /// more than that, and it is held to those below like everything else.
     @Test("No explanation calls delivery active time working, driving or productive time")
     func noExplanationOverclaimsWhatActiveTimeMeans() {
         for reason in Self.allReasons {
             let explanation = reason.explanation.lowercased()
-            for claim in ["driving time", "working time", "productive", "billable", "idle"] {
+            var forbidden = ["driving time", "productive", "billable", "idle"]
+            if reason != .noWorkingTime {
+                forbidden.append("working time")
+            }
+            for claim in forbidden {
                 #expect(!explanation.contains(claim), "\(reason) describes the time as \(claim)")
             }
+        }
+    }
+
+    /// The exemption above, stated as its own expectation so it cannot widen by
+    /// accident: the sentence says what it measured and claims nothing about
+    /// what the driver did with the time.
+    @Test("The working-time reason names the measurement and claims nothing more")
+    func workingTimeReasonClaimsNothingAboutTheWork() {
+        let explanation = ShiftRateUnavailability.noWorkingTime.explanation
+
+        #expect(explanation.contains("no working time"))
+        for claim in ["driving", "productive", "billable", "idle", "effort", "paid"] {
+            #expect(!explanation.lowercased().contains(claim))
         }
     }
 }

@@ -2,14 +2,15 @@ import Foundation
 import OSLog
 import SwiftData
 
-/// The four lifecycle actions DashPilot will perform without a screen, and the
+/// The six lifecycle actions DashPilot will perform without a screen, and the
 /// one rule that is specific to performing them that way.
 ///
 /// ## It owns no lifecycle logic
 ///
 /// Every invariant still lives where it lived before: at most one shift
-/// running, no shift ending over deliveries in progress, events in order and
-/// once each, timestamps clamped rather than refused. This type calls
+/// running, no shift ending or pausing over deliveries in progress, no pausing
+/// a shift that is already paused, events in order and once each, timestamps
+/// clamped rather than refused. This type calls
 /// ``ShiftService`` and ``DeliveryService`` and adds nothing to them. If a rule
 /// here disagreed with the app, the app would be right, so there is no rule
 /// here to disagree with.
@@ -88,7 +89,39 @@ struct IntentLifecycleService {
     func endShift(at date: Date = .now) throws -> IntentLifecycleOutcome {
         let shift = try shiftRefusal { try ShiftService(context: context).endActiveShift(at: date) }
         AppLog.intents.info("Intent ended a shift")
-        return .shiftEnded(duration: shift.completedDuration)
+        // Working, not elapsed: the confirmation says how long the driver
+        // worked, and a shift they paused for an hour did not work that hour.
+        return .shiftEnded(duration: shift.completedWorkingDuration)
+    }
+
+    /// Pauses the shift in progress.
+    ///
+    /// Refused, with the count named, while any delivery is still running, by
+    /// ``ShiftService``'s own rule rather than by a second one here.
+    ///
+    /// The confirmation says that route recording has stopped, because there is
+    /// no screen to notice it on and a driver who believed the route was still
+    /// being kept would lose the difference without being told.
+    func pauseShift(at date: Date = .now) throws -> IntentLifecycleOutcome {
+        let shift = try shiftRefusal { try ShiftService(context: context).pauseActiveShift(at: date) }
+        AppLog.intents.info("Intent paused a shift")
+        // Read from the shift after the write, at the instant the pause was
+        // recorded, so the figure is the working time the store now holds rather
+        // than one that keeps growing while Siri speaks.
+        let pausedAt = shift.openPause?.startedAt ?? date
+        return .shiftPaused(workingDuration: shift.workingDuration(asOf: pausedAt))
+    }
+
+    /// Resumes the paused shift.
+    ///
+    /// The confirmation carries the same caution a spoken start carries, and for
+    /// the same reason: a capture session can only be **started** in the
+    /// foreground, so a shift resumed by voice with DashPilot behind another app
+    /// records no route until it is opened.
+    func resumeShift(at date: Date = .now) throws -> IntentLifecycleOutcome {
+        let shift = try shiftRefusal { try ShiftService(context: context).resumeActiveShift(at: date) }
+        AppLog.intents.info("Intent resumed a shift")
+        return .shiftResumed(pausedDuration: shift.pausedTime(asOf: date).duration)
     }
 
     // MARK: Delivery

@@ -13,8 +13,10 @@ nonisolated enum ShiftRateUnavailability: CaseIterable, Equatable, Sendable {
     case shiftNotCompleted
     /// The driver has not recorded what the shift paid. Not the same as `$0.00`.
     case earningsNotRecorded
-    /// The shift covered no measurable time, so there are no hours to divide by.
-    case noElapsedTime
+    /// The shift covered no measurable working time, so there are no hours to
+    /// divide by. Reached by a shift of no length, and by one the driver kept
+    /// paused for the whole of.
+    case noWorkingTime
     /// The shift recorded no deliveries, so there is no delivery active time.
     case noDeliveriesRecorded
     /// Deliveries were recorded, but none of them describes a usable interval
@@ -49,8 +51,8 @@ nonisolated extension ShiftRateUnavailability {
             "This shift is still running. Rates are worked out once it ends."
         case .earningsNotRecorded:
             "Add what this shift paid to see this rate."
-        case .noElapsedTime:
-            "This shift covered no measurable time, so there are no hours to divide by."
+        case .noWorkingTime:
+            "This shift recorded no working time, so there are no hours to divide by."
         case .noDeliveriesRecorded:
             "No deliveries were recorded during this shift, so there is no delivery active time to divide by."
         case .deliveryActiveTimeNotMeasurable:
@@ -118,10 +120,28 @@ nonisolated struct ShiftMetrics: Equatable, Sendable {
     /// The shift's elapsed wall-clock duration, or `nil` while it is running.
     ///
     /// Elapsed, not worked: this is the whole time between starting and ending
-    /// the shift, waiting and repositioning included. ``deliveryActiveTime``
-    /// says how much of it a recorded delivery was open for, which is a
-    /// different and much narrower claim.
+    /// the shift, waiting, repositioning **and any pause** included. It is the
+    /// length of the window the shift covers, and it is kept beside
+    /// ``workingDuration`` rather than replaced by it because the two answer
+    /// different questions and a driver reading a shift they paused needs both.
     let elapsedDuration: TimeInterval?
+
+    /// How much of the shift the driver had it paused, and how many times.
+    ///
+    /// ``ShiftPausedTime/none`` for a shift that was never paused, which is a
+    /// measurement rather than a missing value: it is what every shift recorded
+    /// before pausing existed truthfully has.
+    let pausedTime: ShiftPausedTime
+
+    /// Elapsed time less paused time, or `nil` while the shift is running.
+    ///
+    /// **The denominator of every hourly figure a shift derives.** It is not
+    /// driving time, delivery time or productive time: it still contains waiting
+    /// for an offer, repositioning and anything else the driver did without
+    /// pausing. All it excludes is the stretches they said they had stopped.
+    ///
+    /// Identical to ``elapsedDuration`` for a shift that was never paused.
+    let workingDuration: TimeInterval?
 
     /// What the shift's retained route measured, including how much of the
     /// shift it covers.
@@ -131,14 +151,18 @@ nonisolated struct ShiftMetrics: Equatable, Sendable {
     /// with deliveries worked at the same time counted once.
     let deliveryActiveTime: DeliveryActiveTime
 
-    /// Gross earnings divided by the shift's **elapsed** hours.
+    /// Gross earnings divided by the shift's **working** hours.
     ///
-    /// Waiting and idling included, because the denominator is the whole shift.
-    /// Deliberately kept alongside ``grossPerDeliveryActiveHour`` rather than
-    /// replaced by it: the two answer different questions, and this one is the
-    /// figure that does not depend on how diligently the driver recorded their
-    /// deliveries.
-    let grossPerElapsedHour: ShiftRate
+    /// Waiting and repositioning are included, because the denominator is the
+    /// whole shift less the stretches the driver paused it. Deliberately kept
+    /// alongside ``grossPerDeliveryActiveHour`` rather than replaced by it: the
+    /// two answer different questions, and this one is the figure that does not
+    /// depend on how diligently the driver recorded their deliveries.
+    ///
+    /// Dividing by elapsed time instead would report a driver who took an hour
+    /// off mid-shift as having earned less per hour for taking it, which is a
+    /// claim about their work that the app has no business making.
+    let grossPerWorkingHour: ShiftRate
 
     /// Gross earnings divided by the hours at least one delivery was active.
     ///
@@ -166,17 +190,25 @@ nonisolated struct ShiftMetrics: Equatable, Sendable {
 
     /// Whether any rate could be derived at all.
     var hasAnyRate: Bool {
-        grossPerElapsedHour.isAvailable
+        grossPerWorkingHour.isAvailable
             || grossPerDeliveryActiveHour.isAvailable
             || grossPerRecordedMile.isAvailable
     }
 
-    /// The shift's elapsed time that no recorded delivery was active for, or
-    /// `nil` when there is nothing to subtract from or nothing measured to
+    /// The shift's **working** time that no recorded delivery was active for,
+    /// or `nil` when there is nothing to subtract from or nothing measured to
     /// subtract. **Not idle time** — see
     /// ``DeliveryActiveTime/nonDeliveryDuration(inElapsed:)``, which is the one
     /// place the subtraction is defined.
+    ///
+    /// Measured within working time rather than elapsed time, so a pause does
+    /// not reappear here as time the driver spent not delivering. It could not
+    /// contain delivery time in any case: a shift cannot be paused while a
+    /// delivery is open, and a delivery cannot be started while it is paused.
     var nonDeliveryDuration: TimeInterval? {
-        deliveryActiveTime.nonDeliveryDuration(inElapsed: elapsedDuration)
+        deliveryActiveTime.nonDeliveryDuration(inElapsed: workingDuration)
     }
+
+    /// Whether the driver paused this shift at all.
+    var wasPaused: Bool { pausedTime.hasPauses }
 }

@@ -16,19 +16,20 @@ rather than a store reset.
 | 6.0.0 | Adds the `PickupPlace` entity and an optional `Delivery.pickupPlace` reference |
 | 7.0.0 | Adds `Delivery.grossEarningsAmount`, an optional `Decimal` holding manually entered per-delivery earnings |
 | 8.0.0 | Adds the `Expense` entity. No existing entity changes, and no relationship is added |
+| 9.0.0 | Adds the `ShiftPause` entity and a `Shift.pauses` relationship. No existing attribute changes |
 
-The current version is **v8**. Field-level detail is on [Data model](../reference/data-model.md).
+The current version is **v9**. Field-level detail is on [Data model](../reference/data-model.md).
 
-`DashPilotSchemaV1` through `DashPilotSchemaV7` hold frozen copies of their models rather than
+`DashPilotSchemaV1` through `DashPilotSchemaV8` hold frozen copies of their models rather than
 reusing the file-scope types, which have moved on. The plan then describes where a store is coming
 from as truthfully as where it is going, and the copies are never used at runtime outside
 migration.
 
-`DashPilotSchemaV7` was frozen in the interval that added v8. v8 adds an entity beside the four v7
-described rather than changing any of them, so the copies were not yet forced by a shape change.
-They were taken at the moment v7 stopped being current, before a later version moves a model on and
-leaves that enum quietly claiming a shape no store ever had. Each version gets its copies as the plan
-moves past it, exactly as v6 got its own when v7 added a per-delivery amount.
+`DashPilotSchemaV8` was frozen in the interval that added v9, and this time the freeze was forced
+rather than early: v9 gives `Shift` a relationship to its pauses, so the file-scope `Shift` has moved
+on and reusing it under v8 would describe every pre-v9 shift as one that could be paused. Each
+version gets its copies as the plan moves past it, exactly as v7 got its own when v8 added the
+expense table.
 
 ## Every stage so far is lightweight, deliberately
 
@@ -126,6 +127,27 @@ The absence of a relationship is itself the modelling decision, not a shortcut: 
 its own date, and a period contains it by that date. See
 [Recorded expenses](../product/expenses.md).
 
+### v8 to v9
+
+A new entity and a new empty relationship, which SwiftData can add without being told how. It is the
+same shape as v1 to v2 and v4 to v5. No existing attribute moves, and in particular `Shift.endedAt` is
+untouched, so `endedAt == nil` still means the shift has not finished and every fetch, invariant and
+relaunch-recovery path written against that definition keeps working.
+
+**Every migrated shift keeps the duration it has always had.** Working duration is elapsed time less
+recorded pause time, a shift with no pauses has zero pause time, and zero here is a measurement
+rather than a missing value: a build that could not pause a shift did not leave the question
+unanswered, it made the answer none. So a pre-v9 shift's working duration is exactly its elapsed
+duration, and every hourly rate, period total and exported figure derived from it is unchanged by
+this version.
+
+What this stage refuses is the inference that looks reasonable. A gap in a route, a long stretch with
+no delivery recorded, an unusually long shift: each resembles a break, and none is evidence of one.
+DashPilot observes nothing about why a driver was not moving, so reading any of them as a pause would
+shorten a shift the driver recorded as whole, raise every rate derived from it, and leave no way
+afterwards to tell an invented pause from one they tapped. See
+[Pausing a shift](../product/shift-workflow.md#pausing-a-shift).
+
 It becomes a custom stage the first time a version step actually has to transform something.
 
 ## Proving a migration rather than assuming it
@@ -153,6 +175,11 @@ That is how "a v1 store keeps its shifts" is proven. The suite covers each step:
   amounts and the derived results over them survive, and the new expense table is empty. One case
   presents a store holding an amount, a route and deliveries, which is everything a plausible cost
   could have been derived from, and asserts that no expense is fabricated from any of it.
+
+- A v8 store's shifts, samples, sessions, amounts, deliveries, pickup places and expenses survive
+  with **their durations unchanged**, and the new pause table is empty. One case drives a long shift
+  with a single early delivery and a route that stops after it, which is the shape that most
+  resembles a break, and asserts that it keeps a working duration equal to its elapsed one.
 
 Each step is also walked from every earlier version, so a device that skipped several releases is
 covered by the same suite rather than by assumption.

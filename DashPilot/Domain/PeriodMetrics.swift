@@ -125,15 +125,20 @@ nonisolated struct PeriodMetrics: Equatable, Sendable {
     /// Completed shifts whose `startedAt` falls in the period.
     let completedShiftCount: Int
 
-    /// The elapsed wall-clock time of those shifts, added up, or `nil` when none
-    /// of them has a usable duration.
+    /// The working time of those shifts, added up, or `nil` when none of them
+    /// has a usable duration.
     ///
-    /// Elapsed, not worked — the same claim ``ShiftMetrics/elapsedDuration``
-    /// makes, summed. It includes waiting, repositioning and breaks.
-    let elapsedDuration: TimeInterval?
+    /// The same claim ``ShiftMetrics/workingDuration`` makes, summed: elapsed
+    /// time less the stretches the driver paused. It still includes waiting,
+    /// repositioning and unpaused breaks, and it is not driving time or delivery
+    /// time.
+    ///
+    /// For every shift recorded before pausing existed this is the elapsed total
+    /// it always was, because such a shift has no pauses to subtract.
+    let workingDuration: TimeInterval?
 
-    /// The shifts behind ``elapsedDuration``.
-    let elapsedCoverage: MetricCoverage
+    /// The shifts behind ``workingDuration``.
+    let workingCoverage: MetricCoverage
 
     // MARK: Earnings
 
@@ -170,10 +175,10 @@ nonisolated struct PeriodMetrics: Equatable, Sendable {
     /// The shifts behind ``deliveryActiveDuration``.
     let deliveryActiveCoverage: MetricCoverage
 
-    /// The per-shift `elapsed − delivery active` durations, added up, or `nil`
+    /// The per-shift `working − delivery active` durations, added up, or `nil`
     /// when no shift in the period has both.
     ///
-    /// Summed per shift rather than derived as `period elapsed − period active`:
+    /// Summed per shift rather than derived as `period working − period active`:
     /// those two sums can come from different sets of shifts, and subtracting
     /// one from the other would produce a duration belonging to neither.
     ///
@@ -275,13 +280,13 @@ nonisolated struct PeriodMetrics: Equatable, Sendable {
 
     // MARK: Rates
 
-    /// Period gross earnings per elapsed shift hour.
+    /// Period gross earnings per working shift hour.
     ///
     /// Aggregate over aggregate: the amounts of the shifts that have both an
-    /// amount and a positive elapsed duration, divided by the elapsed time of
+    /// amount and a positive working duration, divided by the working time of
     /// **those same shifts**. Never the mean of the shifts' own hourly rates,
     /// which would weight a 30-minute shift the same as an eight-hour one.
-    let grossPerElapsedHour: PeriodRate
+    let grossPerWorkingHour: PeriodRate
 
     /// Period gross earnings per delivery active hour, over the shifts that have
     /// both an amount and a positive measurable delivery active time.
@@ -311,8 +316,8 @@ nonisolated struct PeriodMetrics: Equatable, Sendable {
         PeriodMetrics(
             period: period,
             completedShiftCount: 0,
-            elapsedDuration: nil,
-            elapsedCoverage: .none,
+            workingDuration: nil,
+            workingCoverage: .none,
             recordedGrossEarnings: nil,
             earningsCoverage: .none,
             deliveryActiveDuration: nil,
@@ -332,7 +337,7 @@ nonisolated struct PeriodMetrics: Equatable, Sendable {
                 earningsCoverage: .none,
                 expenseRecordCount: expenses.recordCount
             ),
-            grossPerElapsedHour: .unavailable(eligibleCount: 0),
+            grossPerWorkingHour: .unavailable(eligibleCount: 0),
             grossPerDeliveryActiveHour: .unavailable(eligibleCount: 0),
             grossPerRecordedMile: .unavailable(eligibleCount: 0)
         )
@@ -362,7 +367,7 @@ nonisolated struct PeriodMetrics: Equatable, Sendable {
 /// `basis` are the pair that keeps `$2.18` from reading as earnings per mile
 /// driven across the whole period, and neither is much use without the other.
 nonisolated enum PeriodRateKind: String, CaseIterable, Sendable, Hashable, Identifiable {
-    case perElapsedHour
+    case perWorkingHour
     case perDeliveryActiveHour
     case perRecordedMile
 
@@ -371,7 +376,7 @@ nonisolated enum PeriodRateKind: String, CaseIterable, Sendable, Hashable, Ident
     /// The printed label. Short, because three sit under one heading.
     var title: String {
         switch self {
-        case .perElapsedHour: "Per shift hour"
+        case .perWorkingHour: "Per working hour"
         case .perDeliveryActiveHour: "Per active delivery hour"
         case .perRecordedMile: "Per recorded mile"
         }
@@ -381,7 +386,7 @@ nonisolated enum PeriodRateKind: String, CaseIterable, Sendable, Hashable, Ident
     /// leave the numerator implied; a spoken one cannot.
     var spokenTitle: String {
         switch self {
-        case .perElapsedHour: "gross earnings per shift hour"
+        case .perWorkingHour: "gross earnings per working hour"
         case .perDeliveryActiveHour: "gross earnings per delivery active hour"
         case .perRecordedMile: "gross earnings per recorded mile"
         }
@@ -394,7 +399,7 @@ nonisolated enum PeriodRateKind: String, CaseIterable, Sendable, Hashable, Ident
     /// period at all.
     var basisNoun: String {
         switch self {
-        case .perElapsedHour: "shift with both earnings and elapsed time"
+        case .perWorkingHour: "shift with both earnings and working time"
         case .perDeliveryActiveHour: "shift with both earnings and measurable delivery active time"
         case .perRecordedMile: "shift with both earnings and a measurable route"
         }
@@ -402,7 +407,7 @@ nonisolated enum PeriodRateKind: String, CaseIterable, Sendable, Hashable, Ident
 
     var basisPluralNoun: String {
         switch self {
-        case .perElapsedHour: "shifts with both earnings and elapsed time"
+        case .perWorkingHour: "shifts with both earnings and working time"
         case .perDeliveryActiveHour: "shifts with both earnings and measurable delivery active time"
         case .perRecordedMile: "shifts with both earnings and a measurable route"
         }
@@ -411,8 +416,8 @@ nonisolated enum PeriodRateKind: String, CaseIterable, Sendable, Hashable, Ident
     /// Why there is no figure, stated as the fact it is rather than as a fault.
     var unavailableExplanation: String {
         switch self {
-        case .perElapsedHour:
-            "No completed shift in this period has both a recorded amount and measurable elapsed time."
+        case .perWorkingHour:
+            "No completed shift in this period has both a recorded amount and measurable working time."
         case .perDeliveryActiveHour:
             "No completed shift in this period has both a recorded amount and measurable delivery active time."
         case .perRecordedMile:
@@ -519,7 +524,7 @@ nonisolated extension PeriodMetrics {
     /// The rate of a given kind.
     func rate(_ kind: PeriodRateKind) -> PeriodRate {
         switch kind {
-        case .perElapsedHour: grossPerElapsedHour
+        case .perWorkingHour: grossPerWorkingHour
         case .perDeliveryActiveHour: grossPerDeliveryActiveHour
         case .perRecordedMile: grossPerRecordedMile
         }

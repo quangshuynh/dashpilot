@@ -67,6 +67,68 @@ struct EndShiftIntent: AppIntent {
     }
 }
 
+/// Pausing the shift in progress.
+///
+/// The driving-safety case is the same one starting a shift makes: a driver
+/// stopping for a meal or an errand should not have to find and unlock the phone
+/// to record it, because the alternative is that they do not record it at all
+/// and the shift reports an hour of work that did not happen.
+///
+/// Refused, with the count named, while any delivery is still running: that rule
+/// is ``ShiftService``'s and applies to a spoken request exactly as it applies
+/// to the button.
+struct PauseShiftIntent: AppIntent {
+    static let title: LocalizedStringResource = "Pause Shift"
+
+    static let description: IntentDescription? = IntentDescription(
+        """
+        Pauses the shift in progress without ending it. Paused time is not counted as working time, \
+        and route recording stops until you resume. A shift with deliveries still in progress is not \
+        paused.
+        """,
+        categoryName: "Shift",
+        searchKeywords: ["shift", "pause", "break", "stop"]
+    )
+
+    static let supportedModes: IntentModes = .background
+
+    static let authenticationPolicy = IntentAuthenticationPolicy.alwaysAllowed
+
+    @MainActor
+    func perform() async throws -> some IntentResult & ProvidesDialog {
+        .result(dialog: try IntentLifecycleService.forIntent().pauseShift().dialog)
+    }
+}
+
+/// Resuming a paused shift.
+///
+/// The confirmation says that recording has to be started with the app on
+/// screen, for the reason a spoken start says it: resuming by voice from behind
+/// another app leaves the shift running and the route unrecorded, and there is
+/// no screen in front of the driver to show them that.
+struct ResumeShiftIntent: AppIntent {
+    static let title: LocalizedStringResource = "Resume Shift"
+
+    static let description: IntentDescription? = IntentDescription(
+        """
+        Resumes a paused shift so its working time counts again. Route recording begins again when \
+        you open DashPilot, as a new recording: the distance between where you paused and where you \
+        resumed is not counted.
+        """,
+        categoryName: "Shift",
+        searchKeywords: ["shift", "resume", "continue", "unpause"]
+    )
+
+    static let supportedModes: IntentModes = .background
+
+    static let authenticationPolicy = IntentAuthenticationPolicy.alwaysAllowed
+
+    @MainActor
+    func perform() async throws -> some IntentResult & ProvidesDialog {
+        .result(dialog: try IntentLifecycleService.forIntent().resumeShift().dialog)
+    }
+}
+
 nonisolated extension IntentLifecycleOutcome {
     /// The confirmation as a system surface takes it.
     ///

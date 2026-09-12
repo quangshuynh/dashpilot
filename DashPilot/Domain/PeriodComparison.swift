@@ -35,7 +35,7 @@ nonisolated enum PeriodComparisonNature: String, Equatable, Sendable, Hashable {
 /// own or beside the period before it.
 nonisolated enum PeriodComparisonMetric: Equatable, Sendable, Hashable, Identifiable {
     case completedShifts
-    case elapsedTime
+    case workingTime
     case deliveryActiveTime
     case recordedGrossEarnings
     case recordedExpenses
@@ -57,10 +57,10 @@ nonisolated enum PeriodComparisonMetric: Equatable, Sendable, Hashable, Identifi
     /// out for the same kind of reason.
     static let allMetrics: [PeriodComparisonMetric] = [
         .completedShifts,
-        .elapsedTime,
+        .workingTime,
         .deliveryActiveTime,
         .recordedGrossEarnings,
-        .rate(.perElapsedHour),
+        .rate(.perWorkingHour),
         .rate(.perDeliveryActiveHour),
         .recordedExpenses,
         .recordedMileage,
@@ -71,7 +71,7 @@ nonisolated enum PeriodComparisonMetric: Equatable, Sendable, Hashable, Identifi
     var id: String {
         switch self {
         case .completedShifts: "completedShifts"
-        case .elapsedTime: "elapsedTime"
+        case .workingTime: "workingTime"
         case .deliveryActiveTime: "deliveryActiveTime"
         case .recordedGrossEarnings: "recordedGrossEarnings"
         case .recordedExpenses: "recordedExpenses"
@@ -86,7 +86,7 @@ nonisolated enum PeriodComparisonMetric: Equatable, Sendable, Hashable, Identifi
     var title: String {
         switch self {
         case .completedShifts: "Completed shifts"
-        case .elapsedTime: "Elapsed"
+        case .workingTime: "Working"
         case .deliveryActiveTime: "Delivery active"
         case .recordedGrossEarnings: "Recorded gross earnings"
         case .recordedExpenses: "Recorded expenses"
@@ -100,7 +100,7 @@ nonisolated enum PeriodComparisonMetric: Equatable, Sendable, Hashable, Identifi
     var spokenTitle: String {
         switch self {
         case .completedShifts: "completed shifts"
-        case .elapsedTime: "elapsed shift time"
+        case .workingTime: "working shift time"
         case .deliveryActiveTime: "delivery active time"
         case .recordedGrossEarnings: "recorded gross earnings"
         case .recordedExpenses: "recorded expenses"

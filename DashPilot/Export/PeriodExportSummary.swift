@@ -373,7 +373,9 @@ nonisolated struct PeriodExportSummary: Equatable, Sendable, Codable {
     /// past midnight is counted whole, on the day it began.
     let completedShiftCount: Int
 
-    let elapsed: PeriodDurationExport
+    /// Working time: elapsed less the stretches the driver paused. See
+    /// ``PeriodMetrics/workingDuration``.
+    let working: PeriodDurationExport
     let deliveryActive: PeriodDurationExport
 
     /// **Not idle time.** See ``PeriodMetrics/nonDeliveryDuration``.
@@ -392,13 +394,13 @@ nonisolated struct PeriodExportSummary: Equatable, Sendable, Codable {
     let route: PeriodRouteExport
     let deliveries: PeriodDeliveriesExport
 
-    let grossPerElapsedHour: PeriodRateExport
+    let grossPerWorkingHour: PeriodRateExport
     let grossPerDeliveryActiveHour: PeriodRateExport
     let grossPerRecordedMile: PeriodRateExport
 
     init(_ metrics: PeriodMetrics) {
         completedShiftCount = metrics.completedShiftCount
-        elapsed = PeriodDurationExport(metrics.elapsedDuration, coverage: metrics.elapsedCoverage)
+        working = PeriodDurationExport(metrics.workingDuration, coverage: metrics.workingCoverage)
         deliveryActive = PeriodDurationExport(
             metrics.deliveryActiveDuration,
             coverage: metrics.deliveryActiveCoverage
@@ -413,7 +415,7 @@ nonisolated struct PeriodExportSummary: Equatable, Sendable, Codable {
         netAfterRecordedExpenses = PeriodNetAfterExpensesExport(metrics.netAfterRecordedExpenses)
         route = PeriodRouteExport(metrics.recordedDistance, coverage: metrics.routeCoverage)
         deliveries = PeriodDeliveriesExport(metrics)
-        grossPerElapsedHour = PeriodRateExport(metrics.grossPerElapsedHour)
+        grossPerWorkingHour = PeriodRateExport(metrics.grossPerWorkingHour)
         grossPerDeliveryActiveHour = PeriodRateExport(metrics.grossPerDeliveryActiveHour)
         grossPerRecordedMile = PeriodRateExport(metrics.grossPerRecordedMile)
     }

@@ -49,7 +49,7 @@ struct PeriodExpenseMetricsTests {
     ) throws -> PeriodShiftRecord {
         PeriodShiftRecord(
             startedAt: date,
-            elapsedDuration: hours * 3600,
+            workingDuration: hours * 3600,
             grossEarnings: try earnings.map(money)
         )
     }
@@ -355,11 +355,11 @@ struct PeriodExpenseMetricsTests {
         let with = calculator.metrics(of: shifts, expenses: [try expense("42.10", at: today)], in: try day(today))
 
         #expect(with.recordedGrossEarnings == without.recordedGrossEarnings)
-        #expect(with.grossPerElapsedHour == without.grossPerElapsedHour)
+        #expect(with.grossPerWorkingHour == without.grossPerWorkingHour)
         #expect(with.grossPerDeliveryActiveHour == without.grossPerDeliveryActiveHour)
         #expect(with.grossPerRecordedMile == without.grossPerRecordedMile)
         #expect(with.recordedGrossEarnings == Money(exact: "100.00"))
-        #expect(with.grossPerElapsedHour.amount == Money(exact: "20.00"), "Gross per hour, still gross")
+        #expect(with.grossPerWorkingHour.amount == Money(exact: "20.00"), "Gross per hour, still gross")
     }
 
     // MARK: Wording

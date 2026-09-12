@@ -131,6 +131,30 @@ struct CompletedShiftDetailView: View {
                 )
             }
 
+            // Shown only for a shift that was actually paused. On every other
+            // shift the working figure is the elapsed one to the second, and two
+            // identical rows would invite a driver to look for a difference
+            // between them that does not exist.
+            if let pausedTime = shift.completedPausedTime, pausedTime.hasPauses {
+                durationRow(
+                    "Paused",
+                    spokenAs: pausedTime.intervalCount == 1
+                        ? "paused time, over 1 pause"
+                        : "paused time, over \(pausedTime.intervalCount) pauses",
+                    duration: pausedTime.duration,
+                    identifier: "shiftDetailPausedTime"
+                )
+
+                if let working = shift.completedWorkingDuration {
+                    durationRow(
+                        "Working",
+                        spokenAs: "working time",
+                        duration: working,
+                        identifier: "shiftDetailWorkingTime"
+                    )
+                }
+            }
+
             // Both are absent rather than zero when the shift recorded no
             // deliveries: a shift nobody recorded a delivery on is not a shift
             // that spent no time on deliveries, and the screen must not say it
@@ -143,7 +167,7 @@ struct CompletedShiftDetailView: View {
                     identifier: "shiftDetailDeliveryActiveTime"
                 )
 
-                if let nonDelivery = deliveryActiveTime.nonDeliveryDuration(inElapsed: shift.completedDuration) {
+                if let nonDelivery = deliveryActiveTime.nonDeliveryDuration(inElapsed: shift.completedWorkingDuration) {
                     durationRow(
                         "Non-delivery",
                         spokenAs: "non-delivery time",
@@ -167,17 +191,17 @@ struct CompletedShiftDetailView: View {
     /// for a shift with no stacked work would explain nothing.
     private var deliveryTimeExplanation: String {
         guard deliveryActiveTime.isAvailable else {
-            return """
-            Elapsed time is the whole shift, from starting it to ending it.
-            """
+            return ([elapsedSentence] + pauseSentences).joined(separator: " ")
         }
 
-        var sentences = [
+        var sentences = [elapsedSentence]
+        sentences.append(contentsOf: pauseSentences)
+        sentences.append(
             """
             Delivery active time is the part of the shift at least one recorded delivery was open \
             for, from accepting it until you marked it delivered or cancelled.
             """
-        ]
+        )
         if deliveryActiveTime.hasOverlappingDeliveries {
             sentences.append(
                 """
@@ -188,12 +212,34 @@ struct CompletedShiftDetailView: View {
         }
         sentences.append(
             """
-            Non-delivery time is the rest of the shift. It is not idle time: it includes waiting for \
-            an offer, repositioning, breaks, and any work you did not record. DashPilot does not know \
-            what you were doing during either.
+            Non-delivery time is the rest of the working time. It is not idle time: it includes \
+            waiting for an offer, repositioning, and any work you did not record. DashPilot does not \
+            know what you were doing during either.
             """
         )
         return sentences.joined(separator: " ")
+    }
+
+    private var elapsedSentence: String {
+        "Elapsed time is the whole shift, from starting it to ending it."
+    }
+
+    /// What pausing did to this shift's figures, said only when it was paused.
+    private var pauseSentences: [String] {
+        guard let pausedTime = shift.completedPausedTime, pausedTime.hasPauses else { return [] }
+        var sentences = [
+            """
+            Working time is the elapsed time less the time you had the shift paused, and it is what \
+            the hourly rate below divides by.
+            """
+        ]
+        sentences.append(
+            """
+            No route was recorded while the shift was paused, and the distance between where you \
+            paused and where you resumed is not counted.
+            """
+        )
+        return sentences
     }
 
     /// One duration, printed short and spoken in full.
@@ -327,7 +373,7 @@ struct CompletedShiftDetailView: View {
                 rateRow(
                     "Per shift hour",
                     spokenAs: "gross earnings per shift hour",
-                    rate: metrics.grossPerElapsedHour,
+                    rate: metrics.grossPerWorkingHour,
                     identifier: "shiftDetailHourlyRate"
                 )
                 rateRow(

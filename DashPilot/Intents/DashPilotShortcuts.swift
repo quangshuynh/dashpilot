@@ -3,7 +3,7 @@ import AppIntents
 /// The spoken phrases the system offers without the driver configuring
 /// anything.
 ///
-/// Four, and they are the four short lifecycle actions. Everything else
+/// Six, and they are the six short lifecycle actions. Everything else
 /// DashPilot does (an amount, a cost, a pickup name, a summary) either needs a
 /// value dictated or needs a screen read, and neither belongs in a sentence
 /// said while driving.
@@ -46,6 +46,26 @@ nonisolated struct DashPilotShortcuts: AppShortcutsProvider {
             ],
             shortTitle: "End Shift",
             systemImageName: "stop.circle"
+        )
+        AppShortcut(
+            intent: PauseShiftIntent(),
+            phrases: [
+                "Pause my shift in \(.applicationName)",
+                "Pause my \(.applicationName) shift",
+                "Take a break in \(.applicationName)"
+            ],
+            shortTitle: "Pause Shift",
+            systemImageName: "pause.circle"
+        )
+        AppShortcut(
+            intent: ResumeShiftIntent(),
+            phrases: [
+                "Resume my shift in \(.applicationName)",
+                "Resume my \(.applicationName) shift",
+                "Start working again in \(.applicationName)"
+            ],
+            shortTitle: "Resume Shift",
+            systemImageName: "play.circle"
         )
         AppShortcut(
             intent: StartDeliveryIntent(),

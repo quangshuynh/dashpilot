@@ -6,11 +6,19 @@ lives in the repository rather than here, so this page cannot quietly become a r
 
 ## Implemented
 
-**Shift lifecycle.** Start a shift, end the running shift, and at most one unfinished shift at a
-time. The rule is enforced in `ShiftService` against the store rather than by disabling a button,
-and a rejected or failed transition is reported to the driver instead of being swallowed. A shift
-still running when the app was terminated is picked up on the next launch with its original start
-time, because the store is the only place shift state lives.
+**Shift lifecycle.** Start a shift, pause it, resume it, end the running shift, and at most one
+unfinished shift at a time. The rule is enforced in `ShiftService` against the store rather than by
+disabling a button, and a rejected or failed transition is reported to the driver instead of being
+swallowed. A shift still running when the app was terminated is picked up on the next launch with
+its original start time, because the store is the only place shift state lives.
+
+**Pause and resume.** A pause is a recorded row with its own timestamps, not something a screen
+remembers, so a paused shift survives termination and is still the unfinished shift throughout. Time
+the driver paused is excluded from the shift's **working duration**, which is what every hourly
+figure divides by; route recording stops for the pause's whole length and resuming starts a new
+recording, so no distance is measured across the break. Pausing is refused while a delivery is in
+progress, and a delivery cannot be started while the shift is paused. See
+[Shift workflow](shift-workflow.md#pausing-a-shift).
 
 **Location authorization.** Core Location's permission and accuracy states are modelled separately:
 not determined, denied, restricted, When In Use, Always, plus the system-wide Location Services
@@ -22,8 +30,9 @@ at the When In Use scope.
 stored on device, and recording started with DashPilot open carries on while the driver is in
 another app or the phone is locked. Capture starts and stops with the shift, resumes for a shift
 that was still running when the app was terminated, and stops when permission is lost without ending
-the shift. The running shift shows whether recording is active, paused, or unavailable, and says
-that recording is not guaranteed.
+the shift. The running shift shows whether recording is active, stopped because the driver paused
+the shift, paused because a recording could not be started off screen, or unavailable, and says that
+recording is not guaranteed.
 
 **Sample filtering.** One acceptance policy judges every candidate position: invalid coordinates,
 invalid or poor accuracy, cached stale fixes, duplicate and out-of-order timestamps, movement too
@@ -71,7 +80,7 @@ shows gross per recorded delivery hour, over its own accepted-to-delivered inter
 is never summed across deliveries, because stacked lifecycles overlap. See
 [Earnings and metrics](earnings-and-metrics.md#per-delivery-gross-earnings).
 
-**Completed-shift metrics.** Gross earnings per elapsed shift hour, per active delivery hour and per
+**Completed-shift metrics.** Gross earnings per working shift hour, per active delivery hour and per
 recorded mile, all derived from what is already stored, alongside the delivery active time and
 non-delivery time the second of them divides by. A rate that cannot be derived is never shown as
 zero.
@@ -147,7 +156,7 @@ the wording the app itself uses.
 
 !!! warning "The rates are gross, and each says what it divides by"
 
-    The per-shift-hour figure is gross earnings over the shift's whole elapsed time, waiting
+    The per-working-hour figure is gross earnings over the shift's working time, waiting
     included. The per-active-delivery-hour figure is gross earnings over the time a recorded delivery
     was open, with deliveries worked at once counted once — it is not a wage, and it says nothing
     about what the driver was doing in that time. The per-mile figure is gross earnings over
