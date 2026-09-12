@@ -141,6 +141,13 @@ final class LocationTrackingService {
         provider.onFailure = { [weak self] failure in
             self?.receive(failure)
         }
+        // Permission can be revoked while the app is behind another one, which
+        // is where a driver changing it in Settings necessarily does it. Capture
+        // now runs there, so it reconciles on the platform's report rather than
+        // waiting for a screen to notice.
+        authorization.onAuthorizationChange = { [weak self] _ in
+            self?.synchronize()
+        }
     }
 
     // MARK: Reconciling with the shift
