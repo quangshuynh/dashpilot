@@ -127,10 +127,15 @@ struct ExportFixture {
         waitSeconds: TimeInterval? = 600,
         deliveredAfterPickup: TimeInterval = 900,
         place: PickupPlace? = nil,
-        earnings: String? = nil
+        earnings: String? = nil,
+        expected: String? = nil
     ) throws -> Delivery {
         let start = shift.startedAt
         let delivery = Delivery(shift: shift, acceptedAt: start.addingTimeInterval(accepted))
+        // Before the lifecycle runs, because the model refuses an expectation on
+        // a delivery that has finished. That refusal is the rule, not a detail
+        // of this helper.
+        if let expected { try delivery.setExpectedEarnings(try money(expected)) }
         if let waitSeconds {
             try delivery.markArrivedAtPickup(at: start.addingTimeInterval(accepted + 180))
             try delivery.markPickedUp(at: start.addingTimeInterval(accepted + 180 + waitSeconds))
@@ -155,10 +160,12 @@ struct ExportFixture {
         in shift: Shift,
         acceptedAfter accepted: TimeInterval,
         place: PickupPlace? = nil,
-        earnings: String? = nil
+        earnings: String? = nil,
+        expected: String? = nil
     ) throws -> Delivery {
         let start = shift.startedAt
         let delivery = Delivery(shift: shift, acceptedAt: start.addingTimeInterval(accepted))
+        if let expected { try delivery.setExpectedEarnings(try money(expected)) }
         try delivery.markArrivedAtPickup(at: start.addingTimeInterval(accepted + 180))
         try delivery.cancel(at: start.addingTimeInterval(accepted + 900))
         delivery.setPickupPlace(place)
