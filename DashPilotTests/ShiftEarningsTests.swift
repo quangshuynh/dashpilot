@@ -133,7 +133,7 @@ struct ShiftEarningsTests {
         #expect(shift.startedAt == start)
         #expect(shift.completedDuration == 3600)
         #expect(!shift.isActive)
-        #expect(shift.routeSamples.isEmpty)
+        #expect(shift.routeSamples().isEmpty)
     }
 
     // MARK: Through the service

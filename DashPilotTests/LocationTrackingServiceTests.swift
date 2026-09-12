@@ -105,7 +105,7 @@ struct LocationTrackingServiceTests {
         #expect(stored.count == 1)
         #expect(stored.first?.shift?.id == shift.id)
         #expect(stored.first?.timestamp == shiftStart.addingTimeInterval(10))
-        #expect(shift.routeSamples.count == 1)
+        #expect(shift.routeSamples().count == 1)
     }
 
     @Test("A run of moving samples is retained in order")
@@ -202,8 +202,8 @@ struct LocationTrackingServiceTests {
         harness.provider.emit(sample(harness, secondsAfterStart: 130, northMetres: 900))
         harness.provider.emit(sample(harness, secondsAfterStart: 140, northMetres: 1_100))
 
-        #expect(first.routeSamples.count == 1)
-        #expect(second.routeSamples.count == 2)
+        #expect(first.routeSamples().count == 1)
+        #expect(second.routeSamples().count == 2)
         let stored = try harness.storedSamples()
         #expect(stored.count == 3)
         #expect(Set(stored.compactMap(\.shift?.id)) == [first.id, second.id])
@@ -595,7 +595,7 @@ struct LocationTrackingServiceTests {
         provider.emit(SyntheticRoute.sample(at: shiftStart.addingTimeInterval(20)))
         let shifts = try context.fetch(FetchDescriptor<Shift>())
         #expect(shifts.count == 1)
-        #expect(shifts.first?.routeSamples.count == 1)
+        #expect(shifts.first?.routeSamples().count == 1)
     }
 
     @Test("A rebuilt service continues the stored route rather than restarting it")
@@ -789,7 +789,7 @@ struct LocationTrackingServiceTests {
 
         let distance = shift.recordedDistance()
 
-        #expect(shift.routeSamples.count == 6)
+        #expect(shift.routeSamples().count == 6)
         #expect(
             SyntheticRoute.isCloseEnough(distance.metres, to: 500),
             "measured \(distance.metres) m over five hundred metres of recorded movement"
@@ -832,7 +832,7 @@ struct LocationTrackingServiceTests {
 
         let distance = shift.recordedDistance()
 
-        #expect(shift.routeSamples.count == 6)
+        #expect(shift.routeSamples().count == 6)
         #expect(
             SyntheticRoute.isCloseEnough(distance.metres, to: 400),
             "measured \(distance.metres) m; the two kilometres driven while paused must not be counted"
@@ -857,8 +857,8 @@ struct LocationTrackingServiceTests {
         harness.tracking.synchronize()
         harness.provider.emit(sample(harness, secondsAfterStart: 130, northMetres: 3_000))
 
-        let firstSessions = Set(first.routeSamples.map(\.captureSessionID))
-        let secondSessions = Set(second.routeSamples.map(\.captureSessionID))
+        let firstSessions = Set(first.routeSamples().map(\.captureSessionID))
+        let secondSessions = Set(second.routeSamples().map(\.captureSessionID))
 
         #expect(firstSessions.count == 1)
         #expect(secondSessions.count == 1)
@@ -973,7 +973,7 @@ struct LocationTrackingServiceTests {
         harness.provider.emit(sample(harness, secondsAfterStart: 3_610, northMetres: 8_000))
         harness.provider.emit(sample(harness, secondsAfterStart: 3_620, northMetres: 8_100))
 
-        let sessions = shift.routeSamples.map(\.captureSessionID)
+        let sessions = shift.routeSamples().map(\.captureSessionID)
         #expect(Set(sessions).count == 2, "The pause is a break in capture, not a continuation")
 
         let distance = shift.recordedDistance()
@@ -1064,7 +1064,7 @@ struct LocationTrackingServiceTests {
         harness.provider.emit(sample(harness, secondsAfterStart: 30, northMetres: 400))
 
         #expect(harness.provider.startCount == 1)
-        #expect(Set(shift.routeSamples.map(\.captureSessionID)).count == 1)
+        #expect(Set(shift.routeSamples().map(\.captureSessionID)).count == 1)
     }
 
     /// Capture and the persisted lifecycle must not end up disagreeing. The

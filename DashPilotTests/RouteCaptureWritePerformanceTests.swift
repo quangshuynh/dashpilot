@@ -230,6 +230,6 @@ struct RouteCaptureWritePerformanceTests {
             )
         }
 
-        #expect(harness.shift.routeSamples.count == 7_260)
+        #expect(harness.shift.routeSamples().count == 7_260)
     }
 }

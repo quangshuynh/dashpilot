@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 import SwiftData
 
 /// Errors raised when a shift transition would violate the model's invariants.
@@ -41,16 +42,6 @@ nonisolated final class Shift {
 
     /// `nil` while the shift is still running.
     private(set) var endedAt: Date?
-
-    /// Positions retained while this shift was running, in no guaranteed order.
-    ///
-    /// The delete rule is `.cascade`: a shift's route describes that shift and
-    /// nothing else, so deleting the shift must take the samples with it rather
-    /// than leaving a table of coordinates belonging to a shift that no longer
-    /// exists. That matters more than usual here — the orphans would be exactly
-    /// the sensitive data the app promises to keep accountable to a shift.
-    @Relationship(deleteRule: .cascade, inverse: \RouteSample.shift)
-    private(set) var routeSamples: [RouteSample] = []
 
     /// Deliveries recorded during this shift, in no guaranteed order.
     ///
@@ -147,14 +138,75 @@ nonisolated final class Shift {
 }
 
 extension Shift {
+    /// This shift's retained positions, oldest first.
+    ///
+    /// **A shift does not hold its route as a collection**, and the reason is
+    /// measured rather than stylistic. A `Shift.routeSamples` inverse made
+    /// writing one position cost time proportional to the number of positions
+    /// already attached to the shift, so recording a long shift got steadily
+    /// slower as it went and deleting one walked the same collection. See
+    /// ``DashPilotSchemaV10`` for the figures and for what was ruled out.
+    ///
+    /// So the route is fetched. Every reader here went through the collection
+    /// before and goes through this query now, which keeps one definition of
+    /// "this shift's route" rather than scattering the predicate.
+    ///
+    /// The sort is the one the walk needs and is the order the relationship
+    /// never guaranteed: timestamp first, then coordinate, because a timestamp
+    /// alone is not a total order and two positions fixed at the same instant
+    /// would otherwise arrive in whatever order the store returned them. It is
+    /// the same order ``ActiveShiftRouteService`` reads a running shift in.
+    ///
+    /// An empty array is returned for a shift that is not in a store, which is
+    /// a shift with no recorded route because nothing could have recorded one.
+    func routeSamples() -> [RouteSample] {
+        guard let modelContext else { return [] }
+        let shiftID = id
+        let descriptor = FetchDescriptor<RouteSample>(
+            predicate: #Predicate { $0.shift?.id == shiftID },
+            sortBy: [
+                SortDescriptor(\.timestamp),
+                SortDescriptor(\.latitude),
+                SortDescriptor(\.longitude)
+            ]
+        )
+        do {
+            return try modelContext.fetch(descriptor)
+        } catch {
+            // A route that could not be read is not a route of zero miles, but
+            // this returns what it has rather than throwing into every caller.
+            // The reason names no position.
+            AppLog.routeCapture.error("Could not read a shift's stored route: \(error)")
+            return []
+        }
+    }
+
+    /// How many positions this shift's route holds.
+    ///
+    /// A count rather than a fetch, so a screen that only reports the size of a
+    /// route does not load one.
+    var routeSampleCount: Int {
+        guard let modelContext else { return 0 }
+        let shiftID = id
+        do {
+            return try modelContext.fetchCount(
+                FetchDescriptor<RouteSample>(predicate: #Predicate { $0.shift?.id == shiftID })
+            )
+        } catch {
+            AppLog.routeCapture.error("Could not count a shift's stored route: \(error)")
+            return 0
+        }
+    }
+
     /// Distance recorded for this shift, measured from its retained route.
     ///
     /// Derived on demand and never stored. A shift's mileage is a *reading* of
     /// its route, not a second fact about the shift that could drift away from
     /// it: caching the total would mean an improvement to the calculation left
     /// every historical shift showing the old number, and a store holding two
-    /// answers to the same question. If measuring a long route ever proves too
-    /// slow to do on demand, caching is a deliberate change to make then.
+    /// answers to the same question. Removing the route collection did not
+    /// change that and was not an excuse to revisit it: the write cost it fixed
+    /// was in recording a position, not in measuring one.
     ///
     /// Only this shift's samples are measured. Distance across a gap in capture
     /// is excluded rather than guessed, so the result is what the route can
@@ -164,7 +216,7 @@ extension Shift {
         using calculator: RouteMileageCalculator = RouteMileageCalculator()
     ) -> RouteDistance {
         calculator.distance(
-            of: routeSamples.map(\.routePoint),
+            of: routeSamples().map(\.routePoint),
             // A finished shift has a window the route can be checked against; a
             // running one does not. See ``completedWindow``.
             covering: completedWindow

@@ -126,7 +126,7 @@ struct CompletedShiftDeletionTests {
             try context.save()
 
             try ShiftService(context: context).deleteCompletedShift(removed)
-            #expect(kept.routeSamples.count == 2)
+            #expect(kept.routeSamples().count == 2)
         }
 
         let reopened = try ModelContainerFactory.makeContainer(at: url)

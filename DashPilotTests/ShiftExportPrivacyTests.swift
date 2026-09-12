@@ -50,7 +50,7 @@ struct ShiftExportPrivacyTests {
         // The route is real enough for the shift to report a measured distance,
         // which is what makes the absence below meaningful.
         #expect(shift.recordedDistance().isMeasured)
-        #expect(shift.routeSamples.count == 24)
+        #expect(shift.routeSamples().count == 24)
 
         // Every stored position, written out the two ways a leak would most
         // likely render it: full `Double` precision, and to the fifth decimal —
@@ -58,7 +58,7 @@ struct ShiftExportPrivacyTests {
         // because a coordinate that round (`40.0`) could collide with an
         // ordinary figure and would prove nothing either way.
         let forbidden = Set(
-            shift.routeSamples
+            shift.routeSamples()
                 .flatMap { [$0.latitude, $0.longitude] }
                 .flatMap { ["\($0)", String(format: "%.5f", $0)] }
                 .filter { $0.count >= 8 }
