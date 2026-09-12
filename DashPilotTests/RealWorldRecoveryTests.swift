@@ -546,4 +546,23 @@ struct RealWorldRecoveryTests {
         #expect(info["NSLocationAlwaysAndWhenInUseUsageDescription"] == nil)
         #expect(info["NSLocationAlwaysUsageDescription"] == nil)
     }
+
+    @Test("The built app declares Live Activity support, and carries the extension that draws one")
+    func theBundleSupportsLiveActivities() throws {
+        // The declaration is what makes `Activity.request` possible at all;
+        // without it the call fails at run time and nothing in the source says
+        // why. Read off the built bundle for the reason the background mode is:
+        // this is what shipped, not what a build setting claims.
+        #expect(Bundle.main.object(forInfoDictionaryKey: "NSSupportsLiveActivities") as? Bool == true)
+
+        // And the extension is embedded. A declared capability with nothing to
+        // draw the activity would leave a driver with a card the system cannot
+        // render.
+        let plugIns = try #require(Bundle.main.builtInPlugInsURL)
+        let extensions = try FileManager.default.contentsOfDirectory(
+            at: plugIns,
+            includingPropertiesForKeys: nil
+        )
+        #expect(extensions.contains { $0.lastPathComponent == "DashPilotWidgets.appex" })
+    }
 }

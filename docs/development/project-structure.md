@@ -5,11 +5,14 @@ DashPilot/
   App/            SwiftUI entry point, root screen, delivery controls, editors, shift detail, failure state, preview fixtures
   Domain/         Framework-independent value types and calculations
   Export/         The external file contract: export records, encoders, file writing
-  Intents/        App Intents: the four lifecycle actions performable with no screen
+  Intents/        App Intents: the six lifecycle actions performable with no screen
   Models/         SwiftData @Model types
   Persistence/    Versioned schema, migration plan, container construction
   Services/       Application services that own state transitions, and platform adapters
   Support/        Cross-cutting utilities: logging and launch arguments
+DashPilotActivity/ Value types shared by the app and the widget extension: the Live Activity snapshot,
+                   its control vocabulary and its four intent declarations
+DashPilotWidgets/ The widget extension: the Live Activity's Lock Screen and Dynamic Island views
 DashPilotTests/   Swift Testing suites
 DashPilotUITests/ XCUITest journeys
 docs/             This documentation site
@@ -25,6 +28,8 @@ docs/             This documentation site
 | Owns a state transition or talks to a platform framework | `Services/` |
 | Is part of the exported file contract | `Export/` |
 | Is an App Intent, or the wording one says back | `Intents/` |
+| Is drawn on the Lock Screen or in the Dynamic Island | `DashPilotWidgets/` |
+| Has to be understood by the app **and** the widget extension | `DashPilotActivity/` |
 | Is a screen or part of one | `App/` |
 | Is logging, a launch argument or similar plumbing | `Support/` |
 
@@ -37,6 +42,19 @@ measurement out of view bodies.
 about which delivery a spoken step meant. A rule written there that disagreed with the app would make
 the app wrong by voice and right by tap, so there is no rule there to disagree with. See
 [Voice and system actions](../product/voice-actions.md).
+
+`DashPilotActivity/` is compiled into the app **and** into the widget extension, which is how
+ActivityKit matches what one requests to what the other draws. It holds value types only: no
+SwiftData, no services, and nothing that would drag the model layer into the extension. A
+`LiveActivityIntent` is performed in the app's process, so the extension compiles the intent
+declarations and a body that cannot run, and refuses if it somehow does, rather than a body that
+would report success having written nothing.
+
+`DashPilotWidgets/` is a renderer, and that is the whole of its rule. It has no store, no services
+and no lifecycle logic: which controls a shift may offer is decided by the app from the shift's own
+rows, and pressing one runs `IntentLifecycleService`. A second copy of a lifecycle rule compiled into
+the extension is exactly the drift this project designs against. See
+[The shift on the Lock Screen](../product/live-activity.md).
 
 `Export/` is a layer rather than a folder of helpers, and it has one rule of its own: **no SwiftData
 model is ever encoded.** A file a driver keeps must not be tied to the store's shape, so the records,

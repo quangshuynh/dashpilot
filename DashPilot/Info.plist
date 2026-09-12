@@ -3,9 +3,9 @@
 <plist version="1.0">
 <dict>
 	<!--
-	  The one key this file exists for. Everything else DashPilot declares is
+	  The two keys this file exists for. Everything else DashPilot declares is
 	  generated from INFOPLIST_KEY_* build settings, which have no spelling for
-	  UIBackgroundModes, so this file carries it and the generated keys are
+	  either of these, so this file carries them and the generated keys are
 	  merged into it at build time.
 
 	  location: a route capture session started with the app on screen keeps
@@ -18,5 +18,13 @@
 	<array>
 		<string>location</string>
 	</array>
+	<!--
+	  NSSupportsLiveActivities: one card, describing the shift in progress,
+	  which the app starts and ends itself. There is no push token, no remote
+	  update and no notification; the app updates its own activity from its own
+	  store, and nothing about it leaves the device.
+	-->
+	<key>NSSupportsLiveActivities</key>
+	<true/>
 </dict>
 </plist>

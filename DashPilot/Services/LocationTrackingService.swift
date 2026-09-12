@@ -120,6 +120,21 @@ final class LocationTrackingService {
     /// Set while the app is not in the foreground.
     @ObservationIgnored private var isBackgrounded = false
 
+    /// Called after accepted samples reach the store.
+    ///
+    /// The one place that knows a shift's recorded mileage has actually moved,
+    /// and the only place that knows it **while the app is off screen**, which
+    /// is where most of a shift is recorded. The shift's Live Activity is driven
+    /// from here for that reason: a cadence owned by a view would stop at the
+    /// moment the driver locks the phone, which is the moment the surface starts
+    /// being the only thing they can see.
+    ///
+    /// It is a notification and never an instruction: what the callback does
+    /// with it is the caller's, capture does not wait on it, and a callback that
+    /// raised would be a bug in the caller rather than a reason to stop
+    /// recording.
+    @ObservationIgnored var onRoutePersisted: (() -> Void)?
+
     /// The shipping configuration, backed by Core Location.
     convenience init(context: ModelContext, authorization: LocationAuthorizationService) {
         self.init(
@@ -394,6 +409,7 @@ final class LocationTrackingService {
         do {
             try context.save()
             AppLog.routeCapture.debug("Persisted \(pending, privacy: .public) route samples")
+            onRoutePersisted?()
         } catch {
             // Same rule as the shift lifecycle: memory must not claim what the
             // store does not hold. `lastAccepted` is cleared with it, because

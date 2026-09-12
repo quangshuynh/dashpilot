@@ -40,6 +40,10 @@ A shift can also be started by voice, without opening the app: see
 service enforces it, and the spoken confirmation states that recording begins when the app is
 opened.
 
+Starting a shift also puts one Live Activity on the Lock Screen, which is where the rest of the shift
+can be watched and controlled without unlocking the phone. See
+[The shift on the Lock Screen](live-activity.md).
+
 If the app is terminated while a shift is running, the next launch finds the same unfinished shift
 and resumes it with its original start time. Nothing synthesises a replacement shift, and no
 recovery step is asked of the driver.
@@ -118,8 +122,9 @@ driver paused and where they resumed is never counted: nothing was recorded acro
 nothing is measured across it. The shift's route carries the break, and the mileage is a floor as it
 always is.
 
-Pause and Resume can also be spoken, without opening the app: see
-[Voice and system actions](voice-actions.md). A shift resumed by voice records no route until
+Pause and Resume can also be spoken, without opening the app, and both are on the shift's Lock Screen
+card: see [Voice and system actions](voice-actions.md) and
+[The shift on the Lock Screen](live-activity.md). A shift resumed by either records no route until
 DashPilot is opened, for the same reason a shift started by voice does not, and the spoken
 confirmation says so.
 

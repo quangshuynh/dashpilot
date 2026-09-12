@@ -21,6 +21,29 @@ struct AppIntentTests {
         try await body(context)
     }
 
+    /// The same, with the shift's Live Activity watched.
+    ///
+    /// A throwaway store must never drive a real system surface, so what the
+    /// intents reconcile here is a recorder. What is being asserted is that an
+    /// intent reconciles **at all**: an intent can run with no screen, so there
+    /// is nothing else to notice that a shift was paused from Siri or from a
+    /// Lock Screen button.
+    private func withStoreWatchingActivity(
+        _ body: (ModelContext, ReconcileRecorder) async throws -> Void
+    ) async throws {
+        let recorder = ReconcileRecorder()
+        IntentLifecycleService.testActivity = recorder
+        defer { IntentLifecycleService.testActivity = nil }
+        try await withStore { context in try await body(context, recorder) }
+    }
+
+    /// Counts the times an intent asked the Live Activity to catch up.
+    @MainActor
+    final class ReconcileRecorder: ShiftActivityReconciling {
+        private(set) var count = 0
+        func reconcile() { count += 1 }
+    }
+
     // MARK: Performing
 
     @Test("Starting a shift by intent records one")
@@ -321,5 +344,134 @@ struct AppIntentTests {
     @Test("Six shortcuts are offered, and they are the six lifecycle actions")
     func shortcutsCoverTheLifecycleActionsOnly() {
         #expect(DashPilotShortcuts.appShortcuts.count == 6)
+    }
+
+    // MARK: The Live Activity's own controls
+
+    /// The four Lock Screen controls, read the way the system reads them.
+    ///
+    /// They are separate intents from the four above because a Live Activity
+    /// button must be a ``LiveActivityIntent`` and must exist in the widget
+    /// extension, while Siri must not learn two ways to say the same sentence.
+    /// What they must not be is a second implementation: every one of them goes
+    /// through ``IntentLifecycleService``, and these tests perform them against
+    /// a real store to prove it.
+    @Test("Every Live Activity control runs in the background on a locked device")
+    func activityIntentsRunOnALockedDevice() {
+        #expect(PauseShiftFromActivityIntent.supportedModes == .background)
+        #expect(ResumeShiftFromActivityIntent.supportedModes == .background)
+        #expect(EndShiftFromActivityIntent.supportedModes == .background)
+        #expect(RecordDeliveryProgressFromActivityIntent.supportedModes == .background)
+
+        #expect(PauseShiftFromActivityIntent.authenticationPolicy == .alwaysAllowed)
+        #expect(ResumeShiftFromActivityIntent.authenticationPolicy == .alwaysAllowed)
+        #expect(EndShiftFromActivityIntent.authenticationPolicy == .alwaysAllowed)
+        #expect(RecordDeliveryProgressFromActivityIntent.authenticationPolicy == .alwaysAllowed)
+    }
+
+    @Test("No Live Activity control appears in Shortcuts beside the spoken action it repeats")
+    func activityIntentsAreNotDiscoverable() {
+        #expect(PauseShiftFromActivityIntent.isDiscoverable == false)
+        #expect(ResumeShiftFromActivityIntent.isDiscoverable == false)
+        #expect(EndShiftFromActivityIntent.isDiscoverable == false)
+        #expect(RecordDeliveryProgressFromActivityIntent.isDiscoverable == false)
+
+        #expect(PauseShiftIntent.isDiscoverable, "The spoken action is the discoverable one")
+        #expect(DashPilotShortcuts.appShortcuts.count == 6, "And the shortcut count is unchanged by them")
+    }
+
+    @Test("Pausing and resuming from the Live Activity writes what the app's own button writes")
+    func activityIntentsPauseAndResume() async throws {
+        try await withStore { context in
+            _ = try await StartShiftIntent().perform()
+            _ = try await PauseShiftFromActivityIntent().perform()
+
+            let shift = try #require(try context.fetch(FetchDescriptor<Shift>()).first)
+            #expect(shift.lifecycleState == .paused)
+            #expect(shift.isActive, "Pausing does not end a shift, whichever surface asked")
+
+            _ = try await ResumeShiftFromActivityIntent().perform()
+            #expect(shift.lifecycleState == .running)
+            #expect(shift.openPause == nil)
+        }
+    }
+
+    @Test("Ending from the Live Activity ends the shift")
+    func activityIntentEndsTheShift() async throws {
+        try await withStore { context in
+            _ = try await StartShiftIntent().perform()
+            _ = try await EndShiftFromActivityIntent().perform()
+
+            let shift = try #require(try context.fetch(FetchDescriptor<Shift>()).first)
+            #expect(shift.endedAt != nil)
+        }
+    }
+
+    @Test("A Live Activity control is refused by the same rule, with the same sentence")
+    func activityIntentsCarryTheServicesOwnRefusals() async throws {
+        try await withStore { context in
+            _ = try await StartShiftIntent().perform()
+            _ = try await StartDeliveryIntent().perform()
+
+            await #expect(throws: IntentLifecycleError.shift(.activeDeliveriesBlockPause(count: 1))) {
+                _ = try await PauseShiftFromActivityIntent().perform()
+            }
+            await #expect(throws: IntentLifecycleError.shift(.activeDeliveriesInProgress(count: 1))) {
+                _ = try await EndShiftFromActivityIntent().perform()
+            }
+
+            let shift = try #require(try context.fetch(FetchDescriptor<Shift>()).first)
+            #expect(shift.lifecycleState == .running, "A refused control writes nothing")
+        }
+    }
+
+    @Test("The step control refuses rather than guessing when two deliveries are in progress")
+    func activityStepIntentRefusesWhenAmbiguous() async throws {
+        try await withStore { context in
+            _ = try await StartShiftIntent().perform()
+            _ = try await StartDeliveryIntent().perform()
+            _ = try await StartDeliveryIntent().perform()
+
+            await #expect(throws: IntentLifecycleError.severalDeliveriesInProgress(count: 2)) {
+                _ = try await RecordDeliveryProgressFromActivityIntent().perform()
+            }
+
+            let deliveries = try context.fetch(FetchDescriptor<Delivery>())
+            #expect(deliveries.count == 2)
+            #expect(deliveries.allSatisfy { $0.state == .accepted }, "Neither delivery was advanced")
+        }
+    }
+
+    @Test("The step control advances the one delivery in progress")
+    func activityStepIntentAdvancesTheOneDelivery() async throws {
+        try await withStore { context in
+            _ = try await StartShiftIntent().perform()
+            _ = try await StartDeliveryIntent().perform()
+            _ = try await RecordDeliveryProgressFromActivityIntent().perform()
+
+            let delivery = try #require(try context.fetch(FetchDescriptor<Delivery>()).first)
+            #expect(delivery.state == .arrivedAtPickup)
+        }
+    }
+
+    @Test("Every write from a system surface asks the Live Activity to catch up, and a refusal does not")
+    func writesReconcileTheLiveActivity() async throws {
+        try await withStoreWatchingActivity { _, recorder in
+            _ = try await StartShiftIntent().perform()
+            #expect(recorder.count == 1)
+
+            _ = try await StartDeliveryIntent().perform()
+            #expect(recorder.count == 2)
+
+            _ = try await RecordDeliveryProgressIntent().perform()
+            #expect(recorder.count == 3)
+
+            // Refused: a shift cannot pause over a delivery in progress. Nothing
+            // was written, so there is nothing for the surface to catch up with.
+            await #expect(throws: IntentLifecycleError.self) {
+                _ = try await PauseShiftFromActivityIntent().perform()
+            }
+            #expect(recorder.count == 3)
+        }
     }
 }

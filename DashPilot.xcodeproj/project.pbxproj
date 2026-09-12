@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		CEA1000C304B519700E7E150 /* DashPilotWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = CEA10002304B519700E7E150 /* DashPilotWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		CE1982B4304B519700E7E150 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -21,12 +25,20 @@
 			remoteGlobalIDString = CE1982A5304B519200E7E150;
 			remoteInfo = DashPilot;
 		};
+		CEA1000D304B519700E7E150 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = CE19829E304B519200E7E150 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = CEA10001304B519700E7E150;
+			remoteInfo = DashPilotWidgets;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
 		CE1982A6304B519200E7E150 /* DashPilot.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DashPilot.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		CE1982B3304B519700E7E150 /* DashPilotTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DashPilotTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		CE1982BD304B519700E7E150 /* DashPilotUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DashPilotUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		CEA10002304B519700E7E150 /* DashPilotWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = DashPilotWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -36,6 +48,13 @@
 				Info.plist,
 			);
 			target = CE1982A5304B519200E7E150 /* DashPilot */;
+		};
+		CEA1000F304B519700E7E150 /* Exceptions for "DashPilotWidgets" folder in "DashPilotWidgets" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = CEA10001304B519700E7E150 /* DashPilotWidgets */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
@@ -56,6 +75,19 @@
 		CE1982C0304B519700E7E150 /* DashPilotUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = DashPilotUITests;
+			sourceTree = "<group>";
+		};
+		CEA10007304B519700E7E150 /* DashPilotActivity */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = DashPilotActivity;
+			sourceTree = "<group>";
+		};
+		CEA10006304B519700E7E150 /* DashPilotWidgets */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				CEA1000F304B519700E7E150 /* Exceptions for "DashPilotWidgets" folder in "DashPilotWidgets" target */,
+			);
+			path = DashPilotWidgets;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -82,6 +114,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		CEA10004304B519700E7E150 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -89,6 +128,8 @@
 			isa = PBXGroup;
 			children = (
 				CE1982A8304B519200E7E150 /* DashPilot */,
+				CEA10007304B519700E7E150 /* DashPilotActivity */,
+				CEA10006304B519700E7E150 /* DashPilotWidgets */,
 				CE1982B6304B519700E7E150 /* DashPilotTests */,
 				CE1982C0304B519700E7E150 /* DashPilotUITests */,
 				CE1982A7304B519200E7E150 /* Products */,
@@ -101,6 +142,7 @@
 				CE1982A6304B519200E7E150 /* DashPilot.app */,
 				CE1982B3304B519700E7E150 /* DashPilotTests.xctest */,
 				CE1982BD304B519700E7E150 /* DashPilotUITests.xctest */,
+				CEA10002304B519700E7E150 /* DashPilotWidgets.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -115,13 +157,16 @@
 				CE1982A2304B519200E7E150 /* Sources */,
 				CE1982A3304B519200E7E150 /* Frameworks */,
 				CE1982A4304B519200E7E150 /* Resources */,
+				CEA1000B304B519700E7E150 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				CEA1000E304B519700E7E150 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				CE1982A8304B519200E7E150 /* DashPilot */,
+				CEA10007304B519700E7E150 /* DashPilotActivity */,
 			);
 			name = DashPilot;
 			packageProductDependencies = (
@@ -176,6 +221,29 @@
 			productReference = CE1982BD304B519700E7E150 /* DashPilotUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
+		CEA10001304B519700E7E150 /* DashPilotWidgets */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = CEA10008304B519700E7E150 /* Build configuration list for PBXNativeTarget "DashPilotWidgets" */;
+			buildPhases = (
+				CEA10003304B519700E7E150 /* Sources */,
+				CEA10004304B519700E7E150 /* Frameworks */,
+				CEA10005304B519700E7E150 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				CEA10007304B519700E7E150 /* DashPilotActivity */,
+				CEA10006304B519700E7E150 /* DashPilotWidgets */,
+			);
+			name = DashPilotWidgets;
+			packageProductDependencies = (
+			);
+			productName = DashPilotWidgets;
+			productReference = CEA10002304B519700E7E150 /* DashPilotWidgets.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -197,6 +265,9 @@
 						CreatedOnToolsVersion = 26.6;
 						TestTargetID = CE1982A5304B519200E7E150;
 					};
+					CEA10001304B519700E7E150 = {
+						CreatedOnToolsVersion = 26.6;
+					};
 				};
 			};
 			buildConfigurationList = CE1982A1304B519200E7E150 /* Build configuration list for PBXProject "DashPilot" */;
@@ -216,9 +287,24 @@
 				CE1982A5304B519200E7E150 /* DashPilot */,
 				CE1982B2304B519700E7E150 /* DashPilotTests */,
 				CE1982BC304B519700E7E150 /* DashPilotUITests */,
+				CEA10001304B519700E7E150 /* DashPilotWidgets */,
 			);
 		};
 /* End PBXProject section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		CEA1000B304B519700E7E150 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				CEA1000C304B519700E7E150 /* DashPilotWidgets.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXResourcesBuildPhase section */
 		CE1982A4304B519200E7E150 /* Resources */ = {
@@ -236,6 +322,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		CE1982BB304B519700E7E150 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		CEA10005304B519700E7E150 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -266,6 +359,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		CEA10003304B519700E7E150 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -278,6 +378,11 @@
 			isa = PBXTargetDependency;
 			target = CE1982A5304B519200E7E150 /* DashPilot */;
 			targetProxy = CE1982BE304B519700E7E150 /* PBXContainerItemProxy */;
+		};
+		CEA1000E304B519700E7E150 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = CEA10001304B519700E7E150 /* DashPilotWidgets */;
+			targetProxy = CEA1000D304B519700E7E150 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -555,6 +660,66 @@
 			};
 			name = Release;
 		};
+		CEA10009304B519700E7E150 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = W785GN4X52;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = DashPilotWidgets/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = DashPilot;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = quang.DashPilot.Widgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DASHPILOT_WIDGET $(inherited)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		CEA1000A304B519700E7E150 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = W785GN4X52;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = DashPilotWidgets/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = DashPilot;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = quang.DashPilot.Widgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DASHPILOT_WIDGET $(inherited)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -590,6 +755,15 @@
 			buildConfigurations = (
 				CE1982CE304B519700E7E150 /* Debug */,
 				CE1982CF304B519700E7E150 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		CEA10008304B519700E7E150 /* Build configuration list for PBXNativeTarget "DashPilotWidgets" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CEA10009304B519700E7E150 /* Debug */,
+				CEA1000A304B519700E7E150 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

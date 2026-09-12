@@ -45,8 +45,8 @@ and one they cannot.
   just recorded.
 - **No performed intent is donated to the system**, so nothing suggests these actions at a time of
   day. App Shortcuts are the only discovery.
-- **No Live Activity, widget, control, watch app or notification.** The intents are the whole
-  off-screen surface.
+- **No widget, control, watch app or notification.** The intents and the shift's Live Activity are
+  the whole off-screen surface.
 
 ## Shift pause
 
@@ -65,13 +65,36 @@ and one they cannot.
 - **No pause is suggested, timed or limited.** Nothing prompts a driver to pause, nothing warns that
   a pause has run long, and there is no maximum. A pause open for nine hours is recorded as a pause
   open for nine hours.
-- **No Live Activity and no notification**, so a driver with the app closed is not reminded that a
-  shift is paused.
+- **Nothing reminds a driver of a pause.** The shift's Live Activity does show `Shift Paused` with a
+  figure that has stopped moving, which is more than the app could say before; but it never alerts,
+  never makes a sound and never nudges, so a driver who is not looking at the phone is not told.
 - **Paused time is not broken out in a period summary.** A period reports the working time of its
   shifts; how much of the span was paused is on each shift rather than aggregated.
 - **The completed-shift detail's paused and working rows are not covered by a UI journey**, because
   no launch fixture seeds a finished shift that was paused. Their values are covered at domain level,
   and the running and paused shift panel is covered end to end.
+
+## The shift's Live Activity
+
+- **It is a picture of the store, and it can be a moment out of date.** Pressing a control runs the
+  same service the app's own button runs, so a stale card costs a refusal sentence rather than a
+  wrong write; but a driver can see a control that the store would now refuse.
+- **A Lock Screen is a continuous surface and recording is not continuous.** The card reports what the
+  route has recorded, which is a floor as it is everywhere else, and it does not claim that recording
+  is running. If capture has stopped, the figure simply stops growing. The place that says whether
+  capture is running, and why it is not, is the app's own status line.
+- **Nothing is rendered by a test.** The card's contents, its controls, its refusals and its
+  synchronisation with the store are covered by unit tests over the same snapshot the extension
+  draws; what the extension makes of that snapshot is verified by running it, not by an assertion.
+  XCUITest cannot reach a Lock Screen.
+- **It has never run on a physical device.** The behaviour described here was verified on the iOS
+  26.5 simulator, which has no battery, cannot be carried and cannot evict an app under real memory
+  pressure.
+- **No pause, delivery cancellation, amount or expense can be reached from it**, and there is no
+  Home Screen or Lock Screen widget of any kind.
+- **A paused figure is written `19:57` where the app writes `0:19:57`.** The system draws the running
+  clock without an hour field until there is one, and the two figures share a place on the card, so
+  the paused one follows the system rather than the app.
 
 ## Deliveries
 

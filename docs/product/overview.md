@@ -62,13 +62,21 @@ delivery. Deliveries left in progress when the app was terminated are
 picked up on the next launch at the step it had reached. See
 [Delivery lifecycle](delivery-lifecycle.md).
 
-**Voice and system actions.** Starting a shift, ending it, starting a delivery and recording that
-delivery's next event can be performed by voice, from Shortcuts or from Spotlight, without the app
-coming to the screen. Each one calls the same service the on-screen control calls, so every rule that
+**Voice and system actions.** Starting a shift, ending it, pausing and resuming it, starting a
+delivery and recording that delivery's next event can be performed by voice, from Shortcuts or from
+Spotlight, without the app coming to the screen. Each one calls the same service the on-screen control calls, so every rule that
 refuses a tap refuses a sentence. A spoken delivery step is recorded only while exactly one delivery
 is in progress; with more, DashPilot records nothing and says which screen can say it unambiguously.
 No intent takes a dictated value, and nothing offers to cancel a delivery or record an amount. See
 [Voice and system actions](voice-actions.md).
+
+**The shift on the Lock Screen.** A running shift puts one Live Activity on the Lock Screen, and in
+the Dynamic Island on the hardware that has one. It shows the working time, what the route has
+recorded, how the deliveries stand and the one or two controls that apply, and it carries no amount,
+no rate, no place and no coordinate. Pressing a control runs the same service the app's own button
+runs, so a shift paused from the Lock Screen is refused by the same rule; with two deliveries open
+the card offers no step at all, because there is no "the delivery" to offer one for. See
+[The shift on the Lock Screen](live-activity.md).
 
 **Pickup identity.** A delivery can optionally name the place it was collected from. The name is
 typed by the driver — there is no geocoding, no place search and no address — and a name equivalent
@@ -122,7 +130,7 @@ Taxes and mileage deductions, estimated or recurring costs, receipts, a tips-ver
 per-delivery mileage, customer identity, merchant scoring, ranking or profitability, offer
 profitability, automatic delivery or pickup detection, geocoding, maps, route visualisation,
 quarterly, yearly or all-time totals, trends or comparisons across more than two periods, importing
-an exported file, backup, sync, Live Activities and recommendations.
+an exported file, backup, sync, home-screen widgets and recommendations.
 
 Deliveries are recorded, and three things are built on them. One is the shift time at least one
 delivery was active, with overlapping deliveries counted once, and gross earnings over it. Another
