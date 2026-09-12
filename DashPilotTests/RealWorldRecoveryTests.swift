@@ -4,9 +4,9 @@ import SwiftData
 import Testing
 @testable import DashPilot
 
-/// What a shift survives: being interrupted, being backgrounded, being
-/// terminated, being changed by a voice action while the screen is open, and
-/// running long enough to cross a midnight.
+/// What a shift survives: being interrupted, being driven with the app off
+/// screen, being terminated, being changed by a voice action while the screen is
+/// open, and running long enough to cross a midnight.
 ///
 /// Every other suite here tests one layer against synthetic input. This one
 /// tests the joins between them, because that is where a phone in a cradle
@@ -215,14 +215,46 @@ struct RealWorldRecoveryTests {
 
         harness.tracking.enterBackground()
 
+        // Written even though capture carries on: iOS may suspend or kill the
+        // process at any moment once it is off screen, and promises no later
+        // chance to save.
         #expect(try harness.storedSamples().count == 3)
-        #expect(harness.tracking.state == .pausedInBackground)
-        #expect(!harness.provider.isUpdating)
+        #expect(harness.tracking.state == .tracking)
+        #expect(harness.provider.isUpdating)
     }
 
-    @Test("A trip to another app and back leaves a gap rather than a straight line")
-    func returningFromBackgroundStartsANewStretch() throws {
+    @Test("A shift driven in the delivery app is one recorded route, not two")
+    func drivingInAnotherAppRecordsOneStretch() throws {
         let harness = try makeHarness()
+        try harness.shifts.startShift(at: shiftStart)
+        harness.tracking.synchronize()
+        emit(harness, secondsAfterStart: 10, northMetres: 0)
+        emit(harness, secondsAfterStart: 20, northMetres: 100)
+
+        // The driver accepts an offer, follows the route in Maps, and locks the
+        // phone at the kerb. The app is off screen for the whole of the drive.
+        harness.tracking.enterBackground()
+        #expect(harness.tracking.state == .tracking)
+        emit(harness, secondsAfterStart: 120, northMetres: 900)
+        emit(harness, secondsAfterStart: 220, northMetres: 1_700)
+
+        harness.tracking.enterForeground()
+        emit(harness, secondsAfterStart: 240, northMetres: 1_800)
+
+        let stored = try harness.storedSamples()
+        #expect(stored.count == 5)
+        #expect(Set(stored.map(\.captureSessionID)).count == 1)
+
+        let distance = RouteMileageCalculator().distance(of: stored.map(\.routePoint))
+        #expect(distance.segmentCount == 1)
+        #expect(distance.gapCount == 0)
+        #expect(SyntheticRoute.isCloseEnough(distance.metres, to: 1_800))
+    }
+
+    @Test("A build that cannot record off screen leaves a gap rather than a straight line")
+    func returningFromAPauseStartsANewStretch() throws {
+        let harness = try makeHarness()
+        harness.provider.supportsBackgroundUpdates = false
         try harness.shifts.startShift(at: shiftStart)
         harness.tracking.synchronize()
         emit(harness, secondsAfterStart: 10, northMetres: 0)
@@ -327,6 +359,12 @@ struct RealWorldRecoveryTests {
         harness.tracking.enterBackground()
         _ = try harness.intents.startShift(at: shiftStart)
         #expect(harness.tracking.state == .idle, "Nothing may claim to be recording while backgrounded")
+
+        // Even asked directly. A session can only begin in the foreground, so
+        // the honest answer is that this shift is not being recorded yet.
+        harness.tracking.synchronize()
+        #expect(harness.tracking.state == .pausedInBackground)
+        #expect(harness.provider.startCount == 0)
 
         harness.tracking.enterForeground()
         #expect(harness.tracking.state == .tracking)
@@ -467,10 +505,9 @@ struct RealWorldRecoveryTests {
 
         // The one that matters on a real shift. iOS pauses updates when it
         // decides a device has stopped moving, which on a shift is a driver
-        // parked at a pickup, and it does not resume them by itself. DashPilot
-        // has no background location mode to be woken by, so a pause would end
-        // the route for the rest of the shift while the screen still said
-        // tracking.
+        // parked at a pickup, and it does not resume them by itself. A pause
+        // would end the route for the rest of the shift while the screen still
+        // said tracking, and it is exactly as wrong off screen as on it.
         #expect(!manager.pausesLocationUpdatesAutomatically)
 
         // The rest of the policy, asserted here because it is invisible from
@@ -478,5 +515,35 @@ struct RealWorldRecoveryTests {
         #expect(manager.desiredAccuracy == kCLLocationAccuracyBest)
         #expect(manager.activityType == .automotiveNavigation)
         #expect(manager.distanceFilter == kCLDistanceFilterNone)
+    }
+
+    @Test("The built app declares the location background mode, and only that one")
+    func theBundleDeclaresTheLocationBackgroundMode() throws {
+        // `Bundle.main` in a hosted unit test is the app under test, so this
+        // reads what actually shipped rather than what a build setting says. It
+        // is the fact the whole interval rests on: without the declaration a
+        // capture session ends when the app leaves the foreground, and setting
+        // the manager's background flag anyway kills the process.
+        let modes = try #require(
+            Bundle.main.object(forInfoDictionaryKey: "UIBackgroundModes") as? [String]
+        )
+        #expect(modes == ["location"], "declared: \(modes)")
+
+        #expect(CoreLocationTrackingProvider().supportsBackgroundUpdates)
+    }
+
+    @Test("The app asks for When In Use and has no way to ask for Always")
+    func theBundleDescribesWhenInUseOnly() {
+        let info = Bundle.main.infoDictionary ?? [:]
+
+        let whenInUse = info["NSLocationWhenInUseUsageDescription"] as? String
+        #expect(whenInUse?.isEmpty == false, "The prompt has to say what location is for")
+
+        // A usage description is what makes a scope requestable at all. Its
+        // absence is the structural guarantee behind the claim that DashPilot
+        // never asks a driver for Always: with no string, iOS refuses to show
+        // the prompt whatever the code does.
+        #expect(info["NSLocationAlwaysAndWhenInUseUsageDescription"] == nil)
+        #expect(info["NSLocationAlwaysUsageDescription"] == nil)
     }
 }
