@@ -39,9 +39,18 @@ invalid or poor accuracy, cached stale fixes, duplicate and out-of-order timesta
 small to be movement, and jumps too fast to be real. A rejected sample is dropped and capture
 continues.
 
-**Recorded mileage.** A completed shift's distance is derived from its retained route, summing only
-what was captured continuously and excluding the distance across detected capture gaps. The figure
-is recomputed from the stored route every time rather than saved as a second total.
+**Recorded mileage.** A shift's distance is derived from its retained route, summing only what was
+captured continuously and excluding the distance across detected capture gaps. The figure is
+recomputed from the stored route every time rather than saved as a second total.
+
+**Live shift figures.** A running shift reports its working time, the mileage its route has recorded
+so far, the segment and gap counts behind that figure, and how many deliveries are open and
+finished. The mileage uses the finished shift's calculation and wording, grows only while positions
+are accepted, stops while the shift is paused, and never includes the distance covered during a
+break. It is extended a few positions at a time rather than remeasured, and nothing derived from it
+is written to the store. No earnings and no rates appear on a running shift, because a shift's gross
+earnings cannot be recorded until it has finished; the screen says that rather than showing a zero.
+See [Shift workflow](shift-workflow.md#while-a-shift-runs).
 
 **Delivery lifecycle.** A delivery belongs to one shift and moves through accepted, arrived at
 pickup, picked up and delivered, or ends cancelled from any of those. Every event is recorded
