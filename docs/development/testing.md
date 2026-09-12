@@ -19,6 +19,10 @@ test cannot see, such as a screen that renders a sentence the model never claime
 | Suite | What it holds |
 | --- | --- |
 | Shift lifecycle, Shift service | Start, end, single-active-shift, clamped clocks, rollback, relaunch recovery |
+| Shift pause domain | The union of a shift's pauses: overlap, touching, order independence, clipping to the shift, a malformed row counted rather than dropped, and an open pause measured to the moment it is read at, so working time stops growing. Plus working duration never going negative, and the three lifecycle states |
+| Shift pause service | Pause, resume, the refusals for each, the delivery rule in both directions, ending a paused shift closing its pause at the end time, a clock that moved backwards still letting a shift be ended, and a refused pause leaving the store untouched |
+| Shift pause persistence | The v8 to v9 migration with every shift's duration unchanged and nothing read as a break, the schema shape asserting a relationship rather than a paused flag, the plan's version and stage counts asserted here once, a paused shift recovered from a reopened store by the unchanged unfinished-shift query, and deletion cascading to pauses |
+| Shift pause metrics, reporting and export | The hourly rate dividing by working time, a break not lowering it, a shift paused throughout having no rate rather than a rate of zero, delivery active time unchanged while non-delivery time moves inside working time, the period total and its rate, the comparison's working-time row, and the three exported duration fields with zero meaning measured |
 | Persistence, Route sample persistence, Shift earnings persistence | Store round trips and the v1, v2 and v3 migrations |
 | Delivery lifecycle, Delivery service | Every transition and refusal, concurrent deliveries and their isolation, deterministic ordering and numbering, clamped clocks, the shift-end policy and cascade |
 | Delivery persistence | The v4 to v5 migration, and several active deliveries recovered independently from a reopened store |
@@ -57,9 +61,9 @@ test cannot see, such as a screen that renders a sentence the model never claime
 | Period expenses | Totals and category subtotals, missing distinct from an explicit zero, membership by the expense's own timestamp across a half-open boundary and a 23-hour day, a month totalled from its own records, a day holding costs but no shift, the net's two refusals and its negative case, the gross figures unchanged by any of it, no coverage pair invented for expenses, and the words the net may and may not use |
 | Expense persistence | The v7 to v8 migration with every earlier record intact and no expense fabricated from mileage or earnings, the plan's version and stage counts asserted here once, an expense with no relationship to a shift, a round trip through a reopened store, deleting a shift leaving expenses alone, and the service's refusals |
 | Intent lifecycle service | Every action performed off screen: the shift and delivery refusals carried through unchanged, a step recorded only while exactly one delivery is in progress, the refusal naming two and three, neither delivery moving under it, the refusal lifting once one remains, a cancelled delivery neither reachable nor counted, and no amount, place or cancellation reachable at all |
-| App intents | The four intents performed end to end against a throwaway store, the ambiguous step recording nothing, and the metadata the system reads: no intent opening the app, every one runnable on a locked device, and each carrying a title and a description that states its rule |
+| App intents | The six intents performed end to end against a throwaway store, the ambiguous step recording nothing, and the metadata the system reads: no intent opening the app, every one runnable on a locked device, and each carrying a title and a description that states its rule |
 | Intent wording | What a driver hears back: the recorded event named as history names it, the route caution on every shift start, an unknown number left out rather than invented, no figure claimed in any sentence, and a refusal repeating the service's own words rather than a second version of them |
-| Expense export | Expenses selected by their own dates, none in a single shift's file, a period of costs alone exported rather than refused, the summary's totals and net, the JSON key set and its explicit nulls, a round trip, the CSV unchanged at 32 columns with no expense in it, and the format version deliberately unmoved |
+| Expense export | Expenses selected by their own dates, none in a single shift's file, a period of costs alone exported rather than refused, the summary's totals and net, the JSON key set and its explicit nulls, a round trip, the CSV carrying no expense whatever its column count, and expenses adding one top-level key without redefining any |
 
 Running one suite:
 
@@ -182,8 +186,10 @@ they are five more launch paths to keep honest.
 
 ## UI journeys
 
-The UI target covers a handful of paths: launching, starting and ending a shift, recording a
-delivery through its whole lifecycle, cancelling one, being refused a shift end while a delivery is
+The UI target covers a handful of paths: launching, starting and ending a shift, pausing a running
+shift and resuming it, reading what a paused shift says about its stopped recording and its
+unavailable delivery control, a paused shift still being the shift in progress and still finishing as
+one shift in history, recording a delivery through its whole lifecycle, cancelling one, being refused a shift end while a delivery is
 running, recovering an already-running delivery at launch, opening a completed shift, adding and
 editing a shift's amount, adding, editing, cancelling an edit of and removing one delivery's amount,
 two stacked deliveries keeping independent amounts while the shift total stays untouched, reading the

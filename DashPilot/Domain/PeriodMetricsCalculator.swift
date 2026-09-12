@@ -21,9 +21,9 @@ nonisolated struct PeriodShiftRecord: Equatable, Sendable {
     /// period total.
     let isCompleted: Bool
 
-    /// The shift's working length — elapsed time less the time the driver had it
-    /// paused — or `nil` when it has none to contribute: a running shift, or a
-    /// stored row whose duration is not a usable measurement.
+    /// The shift's working length, meaning elapsed time less the time the driver
+    /// had it paused, or `nil` when it has none to contribute: a running shift,
+    /// or a stored row whose duration is not a usable measurement.
     ///
     /// Working rather than elapsed, so that a period's hours and the hourly rate
     /// over them describe time the driver was working. A shift with no pauses

@@ -10,9 +10,9 @@ import Foundation
 nonisolated struct ShiftPausedTime: Equatable, Sendable {
     /// The union of the shift's pauses, in seconds.
     ///
-    /// A union rather than a sum, so that overlapping rows — which the service
-    /// cannot write but a damaged store could hold — cannot subtract the same
-    /// minute twice and report a shift as having worked less than it did.
+    /// A union rather than a sum, so that overlapping rows cannot subtract the
+    /// same minute twice and report a shift as having worked less than it did.
+    /// The service cannot write such a row, but a damaged store could hold one.
     let duration: TimeInterval
 
     /// How many pause rows the shift holds.
@@ -64,7 +64,7 @@ nonisolated struct ShiftPausedTimeCalculator: Equatable, Sendable {
     ///
     /// - Parameters:
     ///   - intervals: one per recorded pause, in any order.
-    ///   - window: the stretch of the shift being measured — its start to its
+    ///   - window: the stretch of the shift being measured. Its start to its
     ///     end for a completed shift, and its start to the moment being read at
     ///     for an unfinished one. Pauses are clipped to it, so the result can
     ///     never exceed the elapsed time it will be subtracted from.

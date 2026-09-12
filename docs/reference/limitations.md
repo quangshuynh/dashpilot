@@ -31,14 +31,14 @@ and one they cannot.
 
 ## Voice and system actions
 
-- **Four actions only.** Start a shift, end a shift, start a delivery, record that delivery's next
-  event. Nothing else DashPilot does is reachable without the screen.
+- **Six actions only.** Start a shift, pause it, resume it, end it, start a delivery, record that
+  delivery's next event. Nothing else DashPilot does is reachable without the screen.
 - **A spoken delivery step needs exactly one delivery in progress.** With two or more, nothing is
   recorded and the refusal names the count. This is a refusal, not a gap: a sentence names no
   particular order, and guessing one would write an event into a delivery the driver did not mean.
-- **A shift started by voice records no route until the app is opened**, because a recording can
-  only be started in the foreground. The shift's own times are recorded exactly as they would be
-  from the screen.
+- **A shift started or resumed by voice records no route until the app is opened**, because a
+  recording can only be *started* in the foreground. The shift's own times are recorded exactly as
+  they would be from the screen, and both spoken confirmations say so.
 - **No cancellation, no amount, no cost, no pickup name and nothing about location** can be asked for
   by voice. Every one of them either cannot be undone or would have to be dictated.
 - **Nothing is read back.** No summary, rate or total is spoken; a confirmation states only what was
@@ -47,6 +47,28 @@ and one they cannot.
   day. App Shortcuts are the only discovery.
 - **No Live Activity, widget, control, watch app or notification.** The intents are the whole
   off-screen surface.
+
+## Shift pause
+
+- **A pause is only what the driver recorded.** DashPilot observes nothing during one: it does not
+  know whether the vehicle moved, and it never ends a pause by itself because something happened. A
+  driver who forgets to resume has a shift that records no working time until they do.
+- **Pausing is refused while a delivery is in progress**, and a delivery cannot be started while the
+  shift is paused. Both are refusals rather than gaps: a shift holding a pause and an open delivery
+  at once would report delivery active time running through hours it also reports as not worked.
+- **A pause puts a gap in the route**, which is the intended consequence and not a defect. Nothing
+  was recorded between pausing and resuming, so no distance is measured across it, and the shift's
+  recorded mileage is a floor as it always is. The shift's route quality reports the break the same
+  way it reports any other, so a paused shift usually reads as a partial route.
+- **Pauses are not editable.** There is no way to correct a pause recorded at the wrong moment, to
+  delete one, or to add one after the fact. The only correction available is deleting the shift.
+- **No pause is suggested, timed or limited.** Nothing prompts a driver to pause, nothing warns that
+  a pause has run long, and there is no maximum. A pause open for nine hours is recorded as a pause
+  open for nine hours.
+- **No Live Activity and no notification**, so a driver with the app closed is not reminded that a
+  shift is paused.
+- **Paused time is not broken out in a period summary.** A period reports the working time of its
+  shifts; how much of the span was paused is on each shift rather than aggregated.
 
 ## Deliveries
 

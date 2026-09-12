@@ -21,8 +21,8 @@ nonisolated enum RouteSampleRejection: String, Equatable, Sendable, CaseIterable
     /// Kept apart from ``shiftEnded`` because the two are different facts about
     /// the shift and the app behaves differently about each: an ended shift
     /// never grows again, while a paused one resumes into a **new** capture
-    /// session. It exists at all to close the same window ``shiftEnded`` closes
-    /// — a fix already in flight when the driver paused must not be retained
+    /// session. It exists at all to close the same window ``shiftEnded`` closes:
+    /// a fix already in flight when the driver paused must not be retained
     /// against a stretch the app is reporting as unrecorded.
     case shiftPaused
     /// The fix predates the start of the shift.

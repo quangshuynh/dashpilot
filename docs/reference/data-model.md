@@ -1,7 +1,7 @@
 # Data model
 
-Five persisted entities, and a small set of value types derived from them. Current schema
-version: **v8**.
+Six persisted entities, and a small set of value types derived from them. Current schema
+version: **v9**.
 
 ## `Shift`
 
@@ -12,15 +12,26 @@ version: **v8**.
 | `endedAt` | `Date?` | `nil` means the shift is still running. This is the only definition of "active" |
 | `routeSamples` | `[RouteSample]` | Cascade delete, inverse of `RouteSample.shift` |
 | `deliveries` | `[Delivery]` | Cascade delete, inverse of `Delivery.shift` |
+| `pauses` | `[ShiftPause]` | Cascade delete, inverse of `ShiftPause.shift` |
 | `grossEarningsAmount` | `Decimal?` | Private. `nil` means no amount recorded, which is not zero |
 
 Derived, never stored:
 
 | Member | Meaning |
 | --- | --- |
-| `isActive` | `endedAt == nil` |
+| `isActive` | `endedAt == nil`. Unchanged by pausing: a paused shift is unfinished |
+| `lifecycleState` | `running`, `paused` or `ended`, derived from `endedAt` and the open pause |
+| `openPause` | The pause with no end, or `nil`. What "paused" means |
+| `isPaused` | `lifecycleState == .paused` |
+| `pausesInOrder` | This shift's pauses sorted by start |
+| `pauseIntervals` | One `ShiftPauseInterval` per pause |
 | `completedDuration` | Elapsed seconds for a finished shift, clamped at zero |
 | `elapsed(asOf:)` | Elapsed seconds for a running shift, clamped at zero |
+| `measuredWindow(asOf:)` | `startedAt` to the shift's end, or to the moment being read at |
+| `pausedTime(asOf:)` | A `ShiftPausedTime` unioning the pauses within that window |
+| `completedPausedTime` | The same for a finished shift, `nil` while unfinished |
+| `workingDuration(asOf:)` | `elapsed − paused`, clamped at zero. Stops growing while paused |
+| `completedWorkingDuration` | The same for a finished shift, `nil` while unfinished |
 | `recordedDistance(...)` | A `RouteDistance` measured from the retained route |
 | `grossEarnings` | The stored decimal as a `Money`, or `nil` |
 | `activeDeliveries` | This shift's deliveries that are neither delivered nor cancelled, in acceptance order |
@@ -32,9 +43,30 @@ Derived, never stored:
 | `deliveryActiveIntervals` | One `DeliveryActiveInterval` per delivery: `acceptedAt`, and `deliveredAt ?? cancelledAt` |
 | `deliveryActiveTime(...)` | A `DeliveryActiveTime` unioning those intervals within `completedWindow` |
 
+`beginPause(at:)` rejects a pause on an ended shift, a second open pause, and a start before the
+shift's. `endOpenPause(at:)` rejects a resume with nothing open and one on an ended shift; the
+returned pause is inserted by the caller, so a refused write leaves nothing behind.
 `end(at:)` rejects ending a shift twice or ending it before it started. `setGrossEarnings(_:)`
 rejects a negative amount and an amount on an unfinished shift. `clearGrossEarnings()` removes the
 amount, which is a distinct operation from recording zero.
+
+## `ShiftPause`
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `id` | `UUID` | Unique attribute |
+| `startedAt` | `Date` | When the driver recorded pausing |
+| `endedAt` | `Date?` | `nil` while the driver has not resumed. An open pause is what "paused" means |
+| `shift` | `Shift?` | Optional only because SwiftData models the inverse that way. The initializer requires a shift |
+
+A row rather than a flag on `Shift`. A boolean could say a shift is paused now but not for how long
+or how many times; an accumulated "paused seconds" would be a running sum the app had to keep correct
+across every crash and failed save, which is the kind of derived value this project does not persist.
+
+`Shift.endedAt` is untouched by pausing, so `endedAt == nil` is still the only definition of
+"unfinished" and a paused shift is recovered after a relaunch by the same fetch as a running one.
+
+`end(at:)` rejects closing a pause twice or closing it before it began.
 
 ## `RouteSample`
 
@@ -197,16 +229,20 @@ none either — it is unioned from timestamps already stored, every time it is s
 | `MoneyInput` | Locale-aware parsing of what a decimal pad produces, with typed rejections |
 | `RoutePoint`, `LocationSample` | Framework-free position values used by the filter and calculator |
 | `RouteSampleFilter` | The capture acceptance policy and its rejection reasons |
-| `RouteCaptureState` | Active, paused because a session could not start off screen, permission required, unavailable |
+| `RouteCaptureState` | Active, stopped because the driver paused the shift, paused because a session could not start off screen, permission required, unavailable |
 | `RouteDistance` | Metres, segments, gaps, usable positions, inferred continuity, `isMeasured`, `isPartial` |
 | `RouteMileageCalculator` | Splits a route into continuous segments and sums within them |
 | `RouteQuality` | The tested vocabulary describing a measured route |
 | `GeographicDistance` | One haversine implementation, shared by capture and measurement |
-| `ShiftMetrics`, `ShiftMetricsCalculator` | Both derived rates and their precision rules |
+| `ShiftLifecycleState` | Running, paused or ended, derived from a shift's own rows |
+| `ShiftPauseInterval` | One recorded pause as a value: its bounds, its clipping and its malformed case |
+| `ShiftPausedTime`, `ShiftPausedTimeCalculator` | The union of a shift's pauses, with the counts behind it |
+| `DateRangeUnion` | The one sweep that merges overlapping stretches, shared by paused time and delivery active time |
+| `ShiftMetrics`, `ShiftMetricsCalculator` | The three derived rates, working duration, and their precision rules |
 | `ShiftRate`, `ShiftRateUnavailability` | An available shift rate, or the reason there is none |
 | `DeliveryEarningsRate`, `DeliveryRateUnavailability` | One delivery's gross per recorded delivery hour, or the reason there is none |
 | `LocationAuthorization` and its enums | Permission facts, condition precedence and recovery |
-| `ShiftLifecycleError` | Refused start, end and delete transitions |
+| `ShiftLifecycleError` | Refused start, pause, resume, end and delete transitions |
 | `DeliveryState`, `DeliveryAction` | The five lifecycle states, the one action each offers next, and the wording |
 | `DeliverySummary` | How many deliveries a shift recorded, how they ended, and how many are in progress |
 | `NumberedDelivery` | A delivery with the local number the interface labels it with. Presentation only, never persisted |
@@ -225,7 +261,10 @@ none either — it is unioned from timestamps already stored, every time it is s
 ## What is not in the store
 
 Durations, distances, rates, route quality wording and capture state are all computed when they are
-needed. A delivery's state is derived the same way, and so is the `Delivery 1` / `Delivery 2`
+needed. A shift's lifecycle state is derived from its end timestamp and its open pause rather than
+stored as a word, and its working duration is derived by subtracting the union of its pauses from its
+elapsed time, for the same reason: a stored answer can disagree with the rows beside it after a
+crash, a failed save or a migration, and a derived one cannot. A delivery's state is derived the same way, and so is the `Delivery 1` / `Delivery 2`
 numbering the interface shows for concurrent deliveries — it is counted from the acceptance
 timestamps rather than stored beside them. A pickup place's recency is derived from the deliveries
 that reference it, for the same reason. A delivery's gross per recorded delivery hour is derived from

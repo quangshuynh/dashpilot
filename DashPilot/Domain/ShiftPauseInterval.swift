@@ -7,7 +7,7 @@ import Foundation
 /// A shift is *paused* from the moment the driver recorded pausing it until the
 /// moment they recorded resuming it. That is the whole definition. DashPilot
 /// does not know whether they ate, slept, ran an errand or sat in the car, and
-/// it records nothing at all during the stretch — route capture is stopped for
+/// it records nothing at all during the stretch: route capture is stopped for
 /// its whole length. Nothing here is break time, rest time or unpaid time, and
 /// calling it any of those would claim a measurement the app does not make.
 ///

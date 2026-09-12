@@ -5,7 +5,7 @@ import Testing
 /// The pure domain reading of a shift's pauses: the union, the clipping, the
 /// working-duration subtraction, and the lifecycle state derived from rows.
 ///
-/// No store, no container and no rendered view — the model adapter is covered in
+/// No store, no container and no rendered view. The model adapter is covered in
 /// ``ShiftPausePersistenceTests``.
 @Suite("Shift pause domain")
 struct ShiftPauseTests {
@@ -54,8 +54,8 @@ struct ShiftPauseTests {
         #expect(measured.intervalCount == 2)
     }
 
-    /// The service cannot write overlapping pauses — pausing an already paused
-    /// shift is refused — so this is about a store that somehow holds them.
+    /// The service cannot write overlapping pauses, because pausing an already
+    /// paused shift is refused, so this is about a store that somehow holds them.
     /// Summing would subtract the same minutes twice and report a shift as
     /// having been worked less than it was.
     @Test("Overlapping pauses are unioned rather than summed")

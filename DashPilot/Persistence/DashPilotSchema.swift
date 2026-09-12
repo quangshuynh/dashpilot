@@ -821,8 +821,8 @@ enum DashPilotSchemaV8: VersionedSchema {
 ///
 /// A pre-v9 store holds no evidence that any shift was ever paused, because no
 /// build that wrote it could pause one. So every migrated shift has no pauses,
-/// its paused time is zero — a measurement, not a missing value — and its
-/// working duration equals the elapsed duration it has always had. Nothing is
+/// its paused time is zero, which is a measurement rather than a missing value,
+/// and its working duration equals the elapsed duration it has always had. Nothing is
 /// inferred. The temptation this stage refuses is the plausible-looking one: a
 /// long shift with a gap in its route, or a stretch with no delivery recorded,
 /// looks like a break, and reading either as a pause would write a driver's
@@ -988,8 +988,8 @@ enum DashPilotMigrationPlan: SchemaMigrationPlan {
     /// V8 → V9 is lightweight.
     ///
     /// A new entity and a new empty relationship, which SwiftData can add
-    /// without being told how — the same shape as v1 → v2 and v4 → v5, and with
-    /// the same nothing to derive. No existing attribute moves, so every shift,
+    /// without being told how. It is the same shape as v1 to v2 and v4 to v5,
+    /// and it has the same nothing to derive. No existing attribute moves, so every shift,
     /// route sample, capture session identifier, delivery, pickup place,
     /// recorded amount and expense carries over untouched.
     ///

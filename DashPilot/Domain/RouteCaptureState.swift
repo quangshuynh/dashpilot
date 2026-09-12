@@ -46,7 +46,7 @@ nonisolated enum RouteCaptureState: Equatable, Sendable {
     ///
     /// Not a failure and not an interruption: it is what the driver asked for.
     /// It is a state of its own rather than ``idle`` because a shift *is*
-    /// running, and rather than ``unavailable`` because nothing is wrong — the
+    /// running, and rather than ``unavailable`` because nothing is wrong. The
     /// screen has to say "stopped because you paused" and not "stopped because
     /// DashPilot cannot record".
     ///
