@@ -710,6 +710,32 @@ private struct DeliveryHistoryRow: View {
                         .foregroundStyle(.secondary)
                     }
                 }
+
+                // Shown whether or not a gross amount is recorded, and always
+                // under its own heading. Two rows reading "Expected pay $8.50"
+                // and "Gross earnings $7.25" are the point: what a delivery was
+                // thought to be worth and what the driver recorded it as paying
+                // are separate facts, and the only surface that can show both
+                // at once is this one.
+                if let expected = delivery.expectedEarnings {
+                    LabeledContent("Expected pay") {
+                        Text(expected.formatted(locale: locale))
+                            .monospacedDigit()
+                    }
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+
+                    // Said once, only where the absence is real. A delivery with
+                    // an expectation and no recorded amount is the state the
+                    // control below is offering to resolve, and leaving it
+                    // implied would let the expected figure stand alone on the
+                    // row as though it were the earnings.
+                    if delivery.grossEarnings == nil {
+                        Text("No gross earnings recorded.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
             .accessibilityElement(children: .combine)
             .accessibilityLabel(accessibilityLabel)
@@ -833,6 +859,18 @@ private struct DeliveryHistoryRow: View {
             if let rate = delivery.grossPerDeliveryHour.amount {
                 sentences.append(numbered.spokenDeliveryHourRate(rate.formatted(locale: locale)))
             }
+        }
+        // Spoken last and with the distinction carried in the sentence itself,
+        // because a listener has no column headings to fall back on. Which
+        // phrasing depends on whether a recorded amount was just read out: the
+        // "no earnings recorded" sentence would be false where one was.
+        if let expected = delivery.expectedEarnings {
+            let amount = expected.formatted(locale: locale)
+            sentences.append(
+                delivery.grossEarnings == nil
+                    ? numbered.spokenExpectedEarnings(amount)
+                    : numbered.spokenExpectedEarningsBesideRecorded(amount)
+            )
         }
         return sentences.joined(separator: ". ")
     }

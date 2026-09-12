@@ -21,6 +21,21 @@ import SwiftUI
 /// once, when the driver taps Save or Remove. Cancelling — or dismissing the
 /// sheet — leaves the recorded amount exactly as it was, and nothing is written
 /// per keystroke.
+///
+/// ## Where the expected amount fits
+///
+/// A delivery may also carry what the driver expected it to pay, entered while
+/// it was still in progress. This editor is the one place both amounts are on
+/// screen together, and it keeps them apart in three ways: the expectation is
+/// **stated** in its own section and cannot be typed into, the field below is
+/// labelled and explained as the recorded gross, and the expectation is never
+/// written by saving this sheet. Seeding the field from it is a convenience and
+/// is said out loud in the footer; what gets recorded is whatever the field
+/// holds when Save is pressed.
+///
+/// Removing the expectation lives here too, because this is where a terminal
+/// delivery's money is edited and ``DeliveryExpectedEarningsEditor`` is
+/// deliberately unreachable once the delivery has finished.
 struct DeliveryEarningsEditor: View {
     let numbered: NumberedDelivery
 
@@ -41,6 +56,37 @@ struct DeliveryEarningsEditor: View {
     var body: some View {
         NavigationStack {
             Form {
+                // Above the field, stated and not editable, exactly as
+                // ``DeliveryEarningsConfirmation`` states it: the driver has to
+                // be able to see which figure is the reference and which one
+                // they are recording, and a value that cannot be typed into
+                // says so without a caption.
+                if let expected = delivery.expectedEarnings {
+                    Section {
+                        LabeledContent("Expected pay") {
+                            Text(expected.formatted(locale: locale))
+                                .monospacedDigit()
+                        }
+                        .accessibilityElement(children: .combine)
+                        .accessibilityLabel(spokenExpectedLabel(expected))
+                        .accessibilityIdentifier("deliveryEarningsExpectedAmount")
+
+                        Button("Remove Expected Pay", role: .destructive, action: removeExpected)
+                            .accessibilityIdentifier("removeDeliveryExpectedEarningsButton")
+                            .accessibilityLabel(numbered.spokenRemoveExpectedEarningsLabel)
+                    } header: {
+                        Text("What You Expected")
+                    } footer: {
+                        Text(
+                            """
+                            What you recorded expecting \(numbered.title) to pay while it was in \
+                            progress. It is not earnings and no total includes it. Removing it leaves \
+                            whatever you record below untouched.
+                            """
+                        )
+                    }
+                }
+
                 Section {
                     // A decimal pad: the field holds an amount, and a full
                     // keyboard would offer a driver in a parked car a lot of
@@ -68,13 +114,7 @@ struct DeliveryEarningsEditor: View {
                 } header: {
                     Text("Gross Earnings")
                 } footer: {
-                    Text(
-                        """
-                        What this delivery paid, as you choose to record it. It is separate from the \
-                        amount recorded for the shift: DashPilot never splits a shift total between \
-                        deliveries, never adds one up from them, and does not mind if they differ.
-                        """
-                    )
+                    Text(grossEarningsExplanation)
                 }
 
                 if hasRecordedEarnings {
@@ -107,14 +147,65 @@ struct DeliveryEarningsEditor: View {
             }
         }
         .onAppear {
+            // A recorded amount wins: it is what this editor is for. Failing
+            // that, the field is **seeded** from the expectation, which saves a
+            // driver retyping a figure the app is already holding.
+            //
+            // Seeding is not recording. Nothing is written until Save is
+            // pressed, the expected figure is stated above the field so the
+            // number in it is not mistaken for something already stored, and
+            // what gets recorded is whatever the field says at that moment
+            // rather than the expectation it started from.
             if let earnings = delivery.grossEarnings {
                 text = MoneyInput(locale: locale).text(for: earnings)
+            } else if let expected = delivery.expectedEarnings {
+                text = MoneyInput(locale: locale).text(for: expected)
             }
             isAmountFocused = true
         }
     }
 
     private var placeholder: String { MoneyInput(locale: locale).placeholder }
+
+    /// What the amount being typed is, said in the terms of what the delivery
+    /// already carries.
+    ///
+    /// The seeded case gets its own sentence because a field that is already
+    /// full is the one arrangement a driver could mistake for something the app
+    /// has recorded. Saying that nothing is recorded until Save is pressed is
+    /// the whole distinction this screen exists to keep.
+    private var grossEarningsExplanation: String {
+        let shared = """
+            It is separate from the amount recorded for the shift: DashPilot never splits a shift \
+            total between deliveries, never adds one up from them, and does not mind if they differ.
+            """
+
+        if !hasRecordedEarnings, delivery.expectedEarnings != nil {
+            return """
+                What this delivery actually paid. The field starts from what you expected, so change \
+                it if it differs. Nothing is recorded until you save. \(shared)
+                """
+        }
+        return "What this delivery paid, as you choose to record it. \(shared)"
+    }
+
+    /// The expected figure spoken with what it is not, in the phrasing that
+    /// matches whether a recorded amount exists beside it.
+    private func spokenExpectedLabel(_ expected: Money) -> String {
+        let amount = expected.formatted(locale: locale)
+        return hasRecordedEarnings
+            ? numbered.spokenExpectedEarningsBesideRecorded(amount)
+            : numbered.spokenExpectedEarnings(amount)
+    }
+
+    private func removeExpected() {
+        do {
+            try DeliveryService(context: modelContext).clearExpectedEarnings(on: delivery)
+        } catch {
+            message = (error as? any LocalizedError)?.errorDescription
+                ?? "The expected amount could not be removed."
+        }
+    }
 
     private func save() {
         do {
