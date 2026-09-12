@@ -4,7 +4,7 @@ import Foundation
 ///
 /// ## Why this is not the schema version
 ///
-/// The store is at schema v9 and will move on. That number describes how
+/// The store is at schema v11 and will move on. That number describes how
 /// SwiftData lays out a database on one device, and nothing outside the app has
 /// ever seen it. This one describes a **file a driver has already taken
 /// somewhere else** — a spreadsheet, a folder, an accountant's inbox — and the
@@ -18,6 +18,41 @@ import Foundation
 /// keeps working.
 ///
 /// ## Version history
+///
+/// ### Still 3 — what a delivery was expected to pay
+///
+/// A driver can now record what they expect a delivery in progress to pay, and
+/// that figure survives the delivery finishing. JSON gains one field for it,
+/// `shifts[].deliveries[].expectedEarnings`. The version was **evaluated and
+/// deliberately not bumped**, by the rule above:
+///
+/// - **Nothing existing changed meaning.** `deliveries[].grossEarnings` is the
+///   same finalized recorded gross it has always been, and every figure derived
+///   from it — the delivery's own rate, the shift's rates, every period total,
+///   the whole `summary` block — is derived from exactly what it was derived
+///   from before. Not one previously exported value would differ.
+/// - **No field was removed or renamed**, and no enumeration gained a value.
+/// - **The new field is always present**, as an explicit `null` where no
+///   expectation was recorded, so a reader never has to tell "none recorded"
+///   from "an older build". A reader that ignores unknown keys is unaffected,
+///   which is the whole of what this number promises.
+///
+/// **It is in the file because an export is the only way anything leaves
+/// DashPilot.** There is no import, no backup and no sync, so a fact the driver
+/// typed and can see on screen would otherwise be unreachable from outside the
+/// app. The format's own argument applies: a file is exactly where distinctions
+/// get flattened, and the answer to that is to carry the distinction, not to
+/// drop the value.
+///
+/// **It is in JSON only, and the CSV form is unchanged at 35 columns.** That is
+/// a decision rather than an oversight, and it is the same one that keeps
+/// expenses out of the CSV. A spreadsheet column is a thing people sum. An
+/// amount that is explicitly *not* earnings, sitting one column away from one
+/// that is, in a table whose whole purpose is to be totalled, is the single most
+/// likely way a driver ends up reporting money nobody paid them. The JSON form
+/// can carry the field with the paragraph that says what it is not; a column
+/// heading cannot. Adding a column would also have bumped this version on its
+/// own, by breaking positional readers.
 ///
 /// ### 3: shift pause and resume
 ///
@@ -112,7 +147,7 @@ import Foundation
 nonisolated enum ExportFormat {
     /// The current format version, written into every export.
     ///
-    /// Not the store's schema version, which is unrelated and currently 9.
+    /// Not the store's schema version, which is unrelated and currently 11.
     static let version = 3
 
     /// What produced the file. A product name and nothing more — no build, no
@@ -171,11 +206,12 @@ nonisolated enum ExportFileFormat: String, CaseIterable, Sendable, Hashable, Ide
         case .csv:
             """
             One row per recorded delivery, with its shift's own figures repeated on it, for opening in \
-            a spreadsheet. Two things are not included. The period summary: each of its figures is \
+            a spreadsheet. Three things are not included. The period summary: each of its figures is \
             paired with the number of shifts behind it, and a single flat table cannot keep that \
             pairing. Your recorded expenses: an expense belongs to a date rather than to a shift or a \
             delivery, so it has no row in a table of deliveries and DashPilot will not invent one. \
-            Export JSON for both.
+            What you expected a delivery to pay: it is not earnings, and a column of it beside one \
+            that is would be summed as though it were. Export JSON for all three.
             """
         }
     }
