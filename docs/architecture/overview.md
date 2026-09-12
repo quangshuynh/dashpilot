@@ -125,10 +125,10 @@ Two consequences worth stating:
   interface offering to end a shift that had already ended. It is also what makes a background launch
   ordinary: when iOS starts the process only to run an intent, the intent's first access opens the
   store.
-- **Route capture is unaffected and still foreground-only.** Nothing in the intent layer starts,
-  stops or knows about capture. While the app is open, the root screen reconciles capture when the
-  active shift changes, whoever changed it; while it is not, a shift started by voice records no
-  route until the app is opened, and every spoken confirmation of a start says so.
+- **Route capture is unaffected.** Nothing in the intent layer starts, stops or knows about
+  capture. While the app is open, the root screen reconciles capture when the active shift changes,
+  whoever changed it; while it is not, a recording cannot be started at all, so a shift begun by
+  voice records no route until the app is opened, and every spoken confirmation of a start says so.
 
 What the intents deliberately cannot do (cancel a delivery, record an amount, a cost, or a pickup
 name) is described under [Voice and system actions](../product/voice-actions.md).

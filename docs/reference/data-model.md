@@ -197,7 +197,7 @@ none either — it is unioned from timestamps already stored, every time it is s
 | `MoneyInput` | Locale-aware parsing of what a decimal pad produces, with typed rejections |
 | `RoutePoint`, `LocationSample` | Framework-free position values used by the filter and calculator |
 | `RouteSampleFilter` | The capture acceptance policy and its rejection reasons |
-| `RouteCaptureState` | Active, paused in background, permission required, unavailable |
+| `RouteCaptureState` | Active, paused because a session could not start off screen, permission required, unavailable |
 | `RouteDistance` | Metres, segments, gaps, usable positions, inferred continuity, `isMeasured`, `isPartial` |
 | `RouteMileageCalculator` | Splits a route into continuous segments and sums within them |
 | `RouteQuality` | The tested vocabulary describing a measured route |

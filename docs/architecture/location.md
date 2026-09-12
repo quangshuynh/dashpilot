@@ -59,14 +59,30 @@ when restricted, unrecognised, or already authorized.
 
 ### Permission strategy
 
-**When In Use only**, and route capture is foreground-only precisely so that stays honest.
-Requesting Always because background route capture may exist later would ask a driver to grant more
-than the app can justify, and iOS does not re-prompt once a scope has been chosen, so escalation is
-a deliberate later decision made when background behaviour actually exists.
+**When In Use only**, and that is not a limitation working around the background behaviour: it is
+the scope that behaviour actually needs. Paired with the `location` background mode, When In Use
+lets an update session that began with the app on screen keep running while the driver is in another
+app or the phone is locked, which is the whole of what route capture does.
+
+Always would buy two further things, and DashPilot implements neither:
+
+- beginning a location session from the background, and
+- being relaunched into one by a significant-location-change or region event.
+
+Asking for a scope to support behaviour that does not exist would ask a driver to grant more than
+the app can justify, and iOS does not re-prompt once a scope has been chosen, so the over-ask would
+be permanent. Escalation stays a deliberate later decision, made if and when a feature needs it.
 
 `INFOPLIST_KEY_NSLocationWhenInUseUsageDescription` is set in the app target's build settings, since
-the project generates its Info.plist. No Always string and no temporary-accuracy purpose key are
-declared, because neither is requested.
+the project generates most of its Info.plist. No Always string and no temporary-accuracy purpose key
+are declared, because neither is requested, and a missing usage description is the structural reason
+the app could not ask for that scope even if its code tried. `RealWorldRecoveryTests` asserts both
+facts against the built bundle.
+
+`UIBackgroundModes` has no `INFOPLIST_KEY_` spelling, so `DashPilot/Info.plist` carries that one key
+and the generated keys are merged into it at build time. It is excluded from Copy Bundle Resources
+through a membership exception on the target's synchronized folder, and `location` is the only mode
+declared: no background task, no audio, no fetch.
 
 The prompt is never triggered at launch. `requestAuthorization()` additionally refuses unless the
 status is not determined: re-requesting after a denial does nothing visible, and a button that
@@ -124,30 +140,54 @@ whether the end succeeded or not, so a failed end restarts capture rather than l
 Losing location never ends a shift. Shift lifecycle and tracking availability are separate concerns:
 capture goes to `.unavailable(...)`, the shift keeps running, and the driver decides when it ends.
 
-### Foreground only
+### Where capture may run
 
-There is no background location mode, no Always authorization, no significant-location-change or
-region monitoring, and no background task. `allowsBackgroundLocationUpdates` is never set and the
-generated Info.plist declares no `UIBackgroundModes`.
+One rule, in two halves:
 
-When the app leaves the foreground, `enterBackground()` stops updates and flushes, so the pause is
-the app's own decision with its samples written rather than a side effect of iOS suspending the
-process, and the state becomes `.pausedInBackground`. `.inactive` is deliberately **not** treated as
-leaving: the app switcher, a call banner and the notification shade would otherwise chop the route
-into fragments for interruptions the driver never left the app for. `enterForeground()` reconciles,
-resuming capture if the shift is still running and location is still usable.
+- A session may only be **started** while DashPilot is in the foreground.
+- Once started, it **continues** when the driver switches to another app or locks the phone.
 
-The route therefore has a gap whenever DashPilot is not in front. iOS guarantees no background
-execution, the app claims none, and the running shift says plainly when capture is paused.
+That is exactly what When In Use plus the `location` background mode permits.
+`CoreLocationTrackingProvider` sets `allowsBackgroundLocationUpdates` immediately before starting a
+session and clears it when the session stops, so the grant is held only while a shift is actually
+being recorded. It is set only when the bundle really declares the mode: assigning it without the
+declaration raises rather than throws, and a dropped build setting should cost background capture
+rather than kill the process, so the declaration is read from `Bundle.main` at init.
+
+`enterBackground()` leaves a running session **untouched** and flushes. Stopping and restarting it
+around the transition would mint a second capture session and put a gap in a route that was never
+interrupted; flushing anyway is because iOS may suspend or terminate the process at any moment once
+it is off screen and promises no later chance to save. `enterForeground()` reconciles, which for a
+session that never stopped is a no-op.
+
+`.inactive` is deliberately **not** treated as leaving: the app switcher, a call banner and the
+notification shade would otherwise chop the route into fragments for interruptions the driver never
+left the app for.
+
+`synchronize()` refuses to start a session while the app is backgrounded, and reports
+`.pausedInBackground`. That is what the state means now, and only that: a shift is running, there is
+no session to continue, and one cannot begin here. It is reached when a shift starts by voice with
+DashPilot behind another app.
+
+What is still honest to say about the gaps:
+
+- iOS may suspend or terminate the process, and nothing here relaunches it. There is no
+  significant-location-change or region monitoring, so a terminated process stays stopped until the
+  driver opens DashPilot again. That ends the capture session like any other interruption, and the
+  mileage calculation refuses to measure across it.
+- iOS guarantees no background execution, and the app claims none.
+
+Permission can be revoked while the app is behind another one, which is where a driver changing it
+in Settings necessarily is. `LocationAuthorizationService.onAuthorizationChange` reports a settled
+change onwards and route capture is its one consumer, so a revocation stops capture where it happens
+rather than at the next return to the foreground.
 
 The one pause the app does **not** accept is the system's own. `CLLocationManager` pauses updates by
 default once iOS decides a device has stopped moving, which on a delivery shift is a driver waiting
-at a pickup, and it does not resume them by itself. With no background location mode there is
-nothing for the system to wake, so the rest of the shift would go unrecorded while the screen still
-said tracking. `CoreLocationTrackingProvider.configure(_:)` therefore sets
+at a pickup, and it does not resume them by itself, so the rest of the shift would go unrecorded
+while the screen still said tracking. `CoreLocationTrackingProvider.configure(_:)` therefore sets
 `pausesLocationUpdatesAutomatically` to `false`, alongside best accuracy, the automotive activity
-type and no distance filter. Capture is still stopped deliberately whenever the app leaves the
-foreground, so nothing keeps the hardware running behind the driver's back.
+type and no distance filter. It is exactly as wrong off screen as on it.
 
 ### The acceptance policy
 
@@ -189,13 +229,18 @@ the rest of the route.
 
 ### What the driver sees
 
-`RouteCaptureStatusView` is one line inside the running shift's panel: tracking active, foreground
-tracking paused, permission required, or unavailable. No map, no coordinates, no sample count, and
-no live distance.
+`RouteCaptureStatusView` is one line inside the running shift's panel, with a sentence under it:
+tracking active, route recording paused, permission required, or unavailable. No map, no
+coordinates, no sample count, and no live distance.
 
 It is shown because the alternative is worse. A driver who assumes their route is being recorded,
-while permission is off or the app spent the shift in the background, loses the shift's data and
-only finds out afterwards.
+while permission is off or recording stopped, loses the shift's data and only finds out afterwards.
+
+Recording continuing off screen makes the opposite mistake possible, so the active state carries its
+own sentence rather than a green label and silence: recording continues in other apps and behind a
+locked screen, iOS can still stop it, and it does not restart on its own. The permission panel says
+the same thing from the other side, and names the limit of the scope, which is that recording has to
+be started with DashPilot open.
 
 What the route measured appears once the shift is finished. See
 [Route measurement](route-measurement.md).

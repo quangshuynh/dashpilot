@@ -14,20 +14,34 @@ DashPilot does not estimate it.
 
 !!! example "A synthetic shift"
 
-    A three-hour shift where DashPilot was open for the first hour, backgrounded for forty minutes,
-    then open again reports the distance of the first stretch plus the distance of the last one. The
+    A three-hour shift where recording ran for the first hour, was interrupted for forty minutes,
+    then ran again reports the distance of the first stretch plus the distance of the last one. The
     driving during the forty minutes is missing from the total, and the shift is labelled a partial
     route.
 
-## Why capture stops
+## When recording runs
 
-Capture is foreground-only. There is no background location mode, no Always authorization, no
-significant-location-change monitoring and no background task. Capture therefore stops when the
-driver switches to another app, locks the phone, takes a call that leaves the app, or loses location
-permission, and it stops when the app is terminated.
+Recording starts when a shift starts with DashPilot open, and **carries on** while the driver uses
+the delivery app, follows a route in Maps, or locks the phone. That is what most of a shift looks
+like, so it is the case the feature is built around.
+
+Two halves of one rule make it work: recording can only be **started** with DashPilot open, and once
+started it **continues** off screen. DashPilot asks for location while in use and nothing more.
+
+## Why recording stops
+
+- **The shift ends.** Recording stops with it.
+- **Location permission is lost**, or Location Services is switched off for the device.
+- **iOS suspends or ends the app.** It gives no guarantee of background execution, and DashPilot
+  does nothing to be relaunched: no significant-location-change monitoring, no region monitoring.
+  Recording resumes the next time the driver opens the app.
+- **The driver force quits DashPilot**, which is the same case.
+- **A shift was started by voice with DashPilot behind another app.** There was no recording to
+  continue, and one cannot begin off screen, so that shift records nothing until the app is opened.
 
 The running shift says which of these is happening at the time, so a driver is not left assuming
-their route is being recorded when it is not.
+their route is being recorded when it is not, and the active line says plainly that recording is not
+guaranteed.
 
 ## Gaps, segments and partial routes
 
@@ -62,7 +76,7 @@ captured continuously.
 ## What it is not
 
 - **Not a tax or deduction figure.** DashPilot is not a tax tool, and a mileage deduction needs a
-  complete log, which foreground-only capture cannot produce.
+  complete log, which capture that iOS can interrupt cannot produce.
 - **Not per-delivery mileage.** Deliveries are not recorded yet, so no distance is attributed to
   one.
 - **Not calibrated.** The thresholds behind capture and measurement are defensible engineering
