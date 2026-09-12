@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	  The extension point, which has no INFOPLIST_KEY_* spelling, so this file
+	  carries it and the generated keys are merged into it at build time.
+
+	  The extension draws the shift's Live Activity and nothing else. It declares
+	  no background mode, no location use and no network use: it has a store it
+	  cannot reach and rules it does not hold, by design.
+	-->
+	<key>NSExtension</key>
+	<dict>
+		<key>NSExtensionPointIdentifier</key>
+		<string>com.apple.widgetkit-extension</string>
+	</dict>
+</dict>
+</plist>
