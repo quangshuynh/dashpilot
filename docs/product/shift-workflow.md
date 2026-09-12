@@ -69,9 +69,30 @@ For a shift that was never paused that is the same figure the timer always showe
 every rate the shift produces divides by, so the figure watched during the shift and the figure read
 afterwards are the same one.
 
-Deliberately absent from a running shift: a map, coordinates, a sample count, a live distance and a
-live rate. A figure changing under a driver while they drive is not what these numbers are for, and
-the useful moment for them is when the shift is finished.
+Under it the shift reports what it has recorded so far:
+
+```text
+02:14:07
+Worked so far
+4.5 mi recorded · partial route
+2 capture segments · 1 capture gap
+2 deliveries in progress · 3 completed
+```
+
+The mileage is **recorded** mileage, in the same words and from the same calculation the finished
+shift uses, and it grows only while positions are being accepted. A pause stops it, and resuming
+never adds the distance covered during the break. The segment and gap counts under it are what make
+the partiality concrete without a paragraph a driver in a cradle would not read; the sentence that
+explains what a partial route means is on the finished shift's own screen.
+
+**No earnings and no rates appear on a running shift**, and the screen says why rather than showing
+a dash or a zero. A shift's gross earnings cannot be recorded until it has finished, so every rate
+derived from them is withheld: `This shift is still running. Rates are worked out once it ends.`
+Nothing is worked out from the amounts recorded against individual deliveries, which are a separate
+fact and never a shift total.
+
+Still deliberately absent: a map, coordinates, a sample count, an earnings projection, a target, a
+goal and any comparison with another shift.
 
 ## Pausing a shift
 
