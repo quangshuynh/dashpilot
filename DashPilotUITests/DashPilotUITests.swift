@@ -1528,6 +1528,72 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["offerCorrectionEmptyOffer"].exists, "And the anomalous row is left alone")
     }
 
+    /// Grouping is corrected from a finished shift too, and the history rows say
+    /// so afterwards.
+    @MainActor
+    func testCorrectingGroupingFromACompletedShift() throws {
+        let app = launchWithSeededHistory()
+        openFirstShift(in: app)
+
+        // Three deliveries, each recorded in an offer of its own, so no row
+        // claims any grouping yet.
+        let first = deliveryRow(containing: "Delivery 1, delivered", in: app)
+        XCTAssertTrue(scrollTo(first, in: app))
+        XCTAssertFalse(first.label.contains("accepted together"), "Showed: \(first.label)")
+
+        let correct = app.buttons["correctOffersButton"]
+        XCTAssertTrue(scrollTo(correct, in: app), "History offers the same correction the running shift does")
+        correct.tap()
+
+        // The second offer joins the first, which is the direction the
+        // acceptance times allow.
+        let combine = app.buttons
+            .matching(NSPredicate(format: "identifier == %@ AND label CONTAINS %@",
+                                  "offerCorrectionMergeButton", "Combine Offer 2"))
+            .firstMatch
+        XCTAssertTrue(scrollTo(combine, in: app))
+        combine.tap()
+
+        let destination = app.buttons
+            .matching(NSPredicate(format: "identifier == %@ AND label CONTAINS %@",
+                                  "offerCorrectionDestinationButton", "into Offer 1"))
+            .firstMatch
+        XCTAssertTrue(destination.waitForExistence(timeout: 5))
+        destination.tap()
+
+        let alert = app.alerts.firstMatch
+        XCTAssertTrue(alert.waitForExistence(timeout: 5))
+        alert.buttons.matching(identifier: "confirmOfferCorrectionButton").firstMatch.tap()
+
+        app.buttons["closeOfferCorrectionButton"].tap()
+
+        // Left and reopened rather than scrolled back: the sheet closes onto a
+        // screen already scrolled past the rows the correction changed, and a
+        // journey that swipes blindly to find them again is asserting how far
+        // the screen happened to have moved.
+        goBack(in: app)
+        openFirstShift(in: app)
+
+        let summary = app.descendants(matching: .any)["shiftDetailDeliverySummary"]
+        XCTAssertTrue(scrollTo(summary, in: app))
+        XCTAssertEqual(
+            summary.label,
+            "2 deliveries completed. 1 delivery cancelled",
+            "Regrouping moved no count and no terminal state"
+        )
+
+        // The two rows now say they arrived together, and neither lost anything
+        // it recorded.
+        let corrected = deliveryRow(containing: "Delivery 1, delivered", in: app)
+        XCTAssertTrue(scrollTo(corrected, in: app))
+        XCTAssertTrue(
+            corrected.label.contains("Offer 1, accepted together with Delivery 2"),
+            "Showed: \(corrected.label)"
+        )
+        XCTAssertTrue(corrected.label.contains("Waited at pickup"), "The recorded wait is untouched")
+        XCTAssertTrue(corrected.label.contains("Accepted to delivered"))
+    }
+
     /// A shift with a single delivery has no grouping to correct, and says so by
     /// offering nothing.
     @MainActor
