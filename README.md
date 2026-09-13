@@ -49,6 +49,11 @@ derived legitimately from device sensors and stored history is typed by the driv
   one primary control per delivery, **several deliveries recordable at once** for stacked orders,
   every event targeted at one delivery, transitions enforced against the store, relaunch recovery for
   each of them, and a shift end refused while any delivery is running.
+- **Offers**, recording which deliveries the driver accepted together, with a correction for the
+  grouping afterwards: move a delivery between offers, split one out, combine two offers or separate
+  one, on a running shift or from history. A correction changes membership only. No lifecycle time,
+  pickup place, amount or terminal state moves with it, neither acceptance time is rewritten, and an
+  offer holds no money, duration or distance of its own.
 - **Voice and system actions** for the six short lifecycle steps (start a shift, pause it, resume it,
   end it, start a delivery, record that delivery's next event) through App Intents, with the app
   never coming to the screen. Each calls the same service the button calls, and a spoken delivery step is recorded only
