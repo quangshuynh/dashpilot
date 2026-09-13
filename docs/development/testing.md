@@ -129,7 +129,7 @@ a period locale and a comma locale side by side.
 
 ## Launch arguments
 
-Debug builds accept seven arguments, all used only by UI tests and screenshots:
+Debug builds accept nine arguments, all used only by UI tests and screenshots:
 
 | Argument | Effect |
 | --- | --- |
@@ -139,7 +139,9 @@ Debug builds accept seven arguments, all used only by UI tests and screenshots:
 | `-dashpilot-seeded-pickup-history` | Opens an in-memory store holding one completed shift whose deliveries give two pickup places deliberately different amounts of recorded history |
 | `-dashpilot-seeded-period-summary` | Opens an in-memory store holding a week of synthetic completed shifts and three synthetic expenses, anchored to today rather than to a fixed instant, so the period summary opens on a period that holds something |
 | `-dashpilot-seeded-period-comparison` | Opens an in-memory store holding three consecutive days, also anchored to today: a today still in progress with one of two shifts unpaid, two complete days before it, and nothing before those |
+| `-dashpilot-seeded-expected-pay` | Opens an in-memory store holding a running shift with two deliveries waiting at their pickups, alike except that one records what it is expected to pay |
 | `-dashpilot-stubbed-location` | Replaces Core Location with the stub providers, reporting When In Use at full accuracy and producing no positions |
+| `-dashpilot-simulated-route` | Replaces Core Location with a synthetic vehicle driving in a straight line, so a journey can watch a live mileage figure move; it implies the permission stub above |
 
 A UI test cannot make a simulator record a route, so a measured, partial route and the
 per-recorded-mile rate over it would otherwise be unreachable end to end. Nor can it terminate and
@@ -149,7 +151,7 @@ launch instead; that the *store* recovers one is proved against a real reopened 
 amounts and offsets from a round-number origin, the same data `SyntheticRoute` builds for the unit
 tests.
 
-The location stub is the one argument that is not a store fixture. A simulator cannot be told to
+The two location arguments are the ones that are not store fixtures. A simulator cannot be told to
 grant location from a journey, so without it the running shift's status line is only ever reachable
 in its "permission required" state, and every existing journey asserts its presence and nothing
 else. With it, three journeys read what a driver actually reads: that recording is active, that the
@@ -184,8 +186,16 @@ exact day and week figures and holds nothing before this week. Its three days ar
 answers a comparison differently: a day still in progress whose records do not cover it, two complete
 days whose difference is a quarter, and an empty day before those.
 
+The expected-pay fixture is a pair rather than a single delivery, and the pair is the point. An
+expected amount can only be entered while a delivery is in progress, so no completed-shift fixture
+can reach one; and what the feature has to be judged on is the difference between a delivery that
+carries an amount and a delivery that does not, at the same moment in the same shift. The two are
+left at the same lifecycle point, waiting at their pickups, so that nothing but the amount can
+explain a difference in what the app does with them, and so that a lifecycle step still sits in front
+of the completion the confirmation belongs to.
+
 The seeded paths are app code that exists only for tests. They are DEBUG-only and in-memory, and
-they are five more launch paths to keep honest.
+they are six more launch paths to keep honest.
 
 ## UI journeys
 
@@ -206,7 +216,11 @@ surviving a switch to another period length, exporting a month and a chosen rang
 expense and finding it in the list, being refused a negative one, editing and deleting one, reading a
 period's recorded costs, its categories and the net after them, that net never calling itself profit,
 gross earnings unchanged beside it, an expense recorded on a day with no shift still being
-summarised, reading a day beside the day before it with both figures and both coverages on screen,
+summarised, recording what a running delivery is expected to pay and reading it back on the card as
+expected rather than as earnings, delivering a delivery that carries an expectation and being offered
+the final amount, dismissing that offer and finding the delivery terminal with the expectation kept
+and no gross recorded, delivering one that carries no expectation and being asked nothing, reading a
+day beside the day before it with both figures and both coverages on screen,
 the percentage a finished and fully recorded pair of days states, the absence of one while a day is
 still in progress, an empty previous day said to hold nothing rather than shown as no earnings, and
 deleting a shift through its confirmation.
@@ -228,6 +242,14 @@ Two lessons are worth repeating when adding journeys:
   been reading it without scrolling.
 - SwiftUI mirrors an `accessibilityIdentifier` onto a button's label element as well, so an alert
   button matches twice. Use `.firstMatch`.
+- Proving a sheet does **not** appear needs an ordering argument rather than a sleep. The
+  expected-pay confirmation is raised by the same state change that removes the delivered card, so
+  waiting for the card to go and then finding no sheet is a real negative; the journey then opens
+  another card's own sheet, which a presented confirmation would have swallowed. Forcing the
+  confirmation to be raised unconditionally fails that journey on the assertion itself rather than
+  on a timeout.
+- An editor seeds its field through `MoneyInput.text(for:)`, which drops trailing zeroes, so an
+  expected `$8.50` seeds `8.5`. Assert the seeded text, not the formatted amount.
 - A `.sheet` attached to a conditionally rendered section goes away with the section. The period
   summary rebuilds its sections whenever it re-measures routes, which dismissed the export sheet
   before it had written anything; the modifier belongs on the `List`.
