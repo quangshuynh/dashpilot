@@ -141,6 +141,60 @@ enum PreviewSupport {
         return container
     }
 
+    // MARK: Expected pay
+
+    /// A throwaway store holding a running shift with **two** deliveries waiting
+    /// at their pickups, alike in every way except that one of them records what
+    /// it is expected to pay.
+    ///
+    /// The shift holds, in acceptance order, `Delivery 1` with an expected
+    /// `$8.50` and `Delivery 2` with no expected amount at all. Neither has been
+    /// picked up, so each is two taps from delivered, and neither can carry a
+    /// recorded gross amount yet: a running delivery is refused one.
+    ///
+    /// Why the pair rather than a single delivery. An expectation can only be
+    /// entered while the delivery is in progress, so it cannot be reached from
+    /// any completed-shift fixture; and what the feature has to be judged on is
+    /// the difference between a delivery that carries one and a delivery that
+    /// does not, at the same moment in the same shift. Two identical deliveries
+    /// are the smallest state that holds both, and they are deliberately left at
+    /// the same lifecycle point so that nothing but the amount can explain a
+    /// difference in what the app does with them.
+    ///
+    /// No preview twin, because no preview needs one: this fixture exists for
+    /// the expected-pay journeys and the editors have their own previews
+    /// already. Debug builds only, and in memory, like every fixture here. The
+    /// amount and the offsets are invented.
+    static func seededExpectedPayContainer(
+        referenceDate: Date = Date(timeIntervalSince1970: 1_756_000_000)
+    ) throws -> ModelContainer {
+        let container = try ModelContainerFactory.makeInMemoryContainer()
+        let context = ModelContext(container)
+
+        let shift = Shift(startedAt: referenceDate.addingTimeInterval(-5400))
+        context.insert(shift)
+
+        // Waiting at the pickup with an amount recorded: the state the feature
+        // was designed around, since the figure an offer showed is on the phone
+        // at the kerb and gone by the evening.
+        let expecting = Delivery(shift: shift, acceptedAt: referenceDate.addingTimeInterval(-4500))
+        try? expecting.markArrivedAtPickup(at: referenceDate.addingTimeInterval(-4200))
+        try? expecting.setExpectedEarnings(Money(minorUnits: 850))
+        context.insert(expecting)
+
+        // The same state, with nothing recorded. A driver who never uses the
+        // feature works exactly this delivery, and the journeys use it both to
+        // enter an amount and to prove that a delivery without one finishes the
+        // way it always did.
+        let plain = Delivery(shift: shift, acceptedAt: referenceDate.addingTimeInterval(-1800))
+        try? plain.markArrivedAtPickup(at: referenceDate.addingTimeInterval(-1500))
+        context.insert(plain)
+
+        try? context.save()
+
+        return container
+    }
+
     // MARK: Period summaries
 
     /// A throwaway store holding a week of synthetic completed shifts, built

@@ -37,6 +37,9 @@ enum AppModelContainer {
         if LaunchArgument.isPresent(LaunchArgument.seededPeriodComparison) {
             return try PreviewSupport.seededPeriodComparisonContainer()
         }
+        if LaunchArgument.isPresent(LaunchArgument.seededExpectedPay) {
+            return try PreviewSupport.seededExpectedPayContainer()
+        }
         if LaunchArgument.isPresent(LaunchArgument.seededPickupHistory) {
             return try PreviewSupport.seededPickupHistoryContainer()
         }
