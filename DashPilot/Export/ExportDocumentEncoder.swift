@@ -182,7 +182,13 @@ nonisolated struct ExportDocumentEncoder: Equatable, Sendable {
         "deliveryPickupWaitSeconds",
         "deliveryAcceptedToDeliveredSeconds",
         "deliveryGrossEarnings",
-        "deliveryGrossPerDeliveryHour"
+        "deliveryGrossPerDeliveryHour",
+        // Last, rather than beside `deliveryNumber` where it reads better.
+        // Appending a column leaves every existing column at the position a
+        // spreadsheet or a script already reads it from; inserting one moves all
+        // of them, which is a breaking change and would bump the format version
+        // on its own. Compatibility outranks the column order looking tidy.
+        "deliveryOfferNumber"
     ]
 
     /// An absent value.
@@ -193,7 +199,7 @@ nonisolated struct ExportDocumentEncoder: Equatable, Sendable {
     /// distinction.
     private static let empty = ""
 
-    private static let emptyDeliveryFields = Array(repeating: empty, count: 12)
+    private static let emptyDeliveryFields = Array(repeating: empty, count: 13)
 
     private static func shiftFields(_ shift: ShiftExportRecord) -> [String] {
         [
@@ -238,7 +244,12 @@ nonisolated struct ExportDocumentEncoder: Equatable, Sendable {
             integer(delivery.pickupWaitSeconds),
             integer(delivery.acceptedToDeliveredSeconds),
             amount(delivery.grossEarnings),
-            amount(delivery.grossPerDeliveryHour)
+            amount(delivery.grossPerDeliveryHour),
+            // Which offer of this shift the delivery arrived in. A grouping key
+            // and not a quantity: two rows carrying the same number were
+            // accepted together. Empty, never `0`, for a delivery recording no
+            // offer, by the rule every other missing cell here follows.
+            integer(delivery.offerNumber)
         ]
     }
 

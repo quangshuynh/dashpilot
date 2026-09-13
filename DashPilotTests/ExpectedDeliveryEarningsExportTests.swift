@@ -149,7 +149,9 @@ struct ExpectedDeliveryEarningsExportTests {
         let lines = text.split(separator: "\r\n", omittingEmptySubsequences: true)
         let header = try #require(lines.first).split(separator: ",", omittingEmptySubsequences: false)
 
-        #expect(header.count == 35, "The column count is the contract a positional reader depends on")
+        // 36 since the offer grouping appended `deliveryOfferNumber`. What this
+        // test asserts is unchanged: no column of this table is an expectation.
+        #expect(header.count == 36, "The column count is the contract a positional reader depends on")
         for column in header {
             #expect(!column.lowercased().contains("expect"), "No expected column: \(column)")
         }
@@ -160,6 +162,6 @@ struct ExpectedDeliveryEarningsExportTests {
         #expect(!text.contains("8.50"), "The expected figure does not reach a spreadsheet")
 
         let row = try #require(lines.dropFirst().first).split(separator: ",", omittingEmptySubsequences: false)
-        #expect(row.count == 35, "Every row matches the header")
+        #expect(row.count == 36, "Every row matches the header")
     }
 }

@@ -97,23 +97,24 @@ enum PreviewSupport {
     /// a fixture cannot drift into a grouping the app could not produce.
     ///
     /// The offer is inserted here and the delivery is returned for the caller to
-    /// insert, which is the shape every fixture already reads in. A fixture
-    /// whose timestamp precedes its shift is a bug in the fixture; the fallback
-    /// keeps previews rendering rather than trapping in one.
+    /// insert, which is the shape every fixture already reads in.
+    ///
+    /// The pair is built directly rather than through
+    /// ``Shift/beginOffer(deliveryCount:at:)`` because many of the fixtures
+    /// below assemble a shift that has **already ended**, which that method
+    /// rightly refuses: they describe the stored state of work that happened
+    /// rather than replaying it. What the method guarantees is kept here by
+    /// construction, since the offer and its delivery are made together and
+    /// share the shift and the instant.
     @discardableResult
     private static func insertedDelivery(
         on shift: Shift,
         acceptedAt: Date,
         in context: ModelContext
     ) -> Delivery {
-        guard
-            let recorded = try? shift.beginOffer(deliveryCount: 1, at: acceptedAt),
-            let delivery = recorded.deliveries.first
-        else {
-            return Delivery(shift: shift, acceptedAt: acceptedAt)
-        }
-        context.insert(recorded.offer)
-        return delivery
+        let offer = Offer(shift: shift, acceptedAt: acceptedAt)
+        context.insert(offer)
+        return Delivery(shift: shift, offer: offer, acceptedAt: acceptedAt)
     }
 
     /// One offer holding several deliveries, all inserted, which is what the
@@ -132,12 +133,13 @@ enum PreviewSupport {
         acceptedAt: Date,
         in context: ModelContext
     ) -> [Delivery] {
-        guard let recorded = try? shift.beginOffer(deliveryCount: deliveryCount, at: acceptedAt) else {
-            return []
+        let offer = Offer(shift: shift, acceptedAt: acceptedAt)
+        context.insert(offer)
+        let deliveries = (0..<deliveryCount).map { _ in
+            Delivery(shift: shift, offer: offer, acceptedAt: acceptedAt)
         }
-        context.insert(recorded.offer)
-        for delivery in recorded.deliveries { context.insert(delivery) }
-        return recorded.deliveries.sorted(by: Delivery.acceptedBefore)
+        for delivery in deliveries { context.insert(delivery) }
+        return deliveries.sorted(by: Delivery.acceptedBefore)
     }
 
     static func activeDeliveryContainer(

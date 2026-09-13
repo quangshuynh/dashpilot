@@ -131,7 +131,7 @@ struct ExportFixture {
         expected: String? = nil
     ) throws -> Delivery {
         let start = shift.startedAt
-        let delivery = Delivery(shift: shift, acceptedAt: start.addingTimeInterval(accepted))
+        let delivery = inOwnOffer(in: shift, acceptedAt: start.addingTimeInterval(accepted))
         // Before the lifecycle runs, because the model refuses an expectation on
         // a delivery that has finished. That refusal is the rule, not a detail
         // of this helper.
@@ -164,7 +164,7 @@ struct ExportFixture {
         expected: String? = nil
     ) throws -> Delivery {
         let start = shift.startedAt
-        let delivery = Delivery(shift: shift, acceptedAt: start.addingTimeInterval(accepted))
+        let delivery = inOwnOffer(in: shift, acceptedAt: start.addingTimeInterval(accepted))
         if let expected { try delivery.setExpectedEarnings(try money(expected)) }
         try delivery.markArrivedAtPickup(at: start.addingTimeInterval(accepted + 180))
         try delivery.cancel(at: start.addingTimeInterval(accepted + 900))
@@ -172,6 +172,60 @@ struct ExportFixture {
         if let earnings { try delivery.setGrossEarnings(try money(earnings)) }
         context.insert(delivery)
         return delivery
+    }
+
+    /// A delivery in a one-delivery offer of its own, which is what one tap
+    /// records.
+    ///
+    /// Built directly rather than through ``Shift/beginOffer(deliveryCount:at:)``
+    /// because the shifts here are **already finished** when their deliveries
+    /// are attached: this fixture assembles the stored state of a shift that
+    /// happened, rather than replaying one as it runs, which is why the helpers
+    /// above construct a `Delivery` directly too. The one thing that matters is
+    /// kept: an offer and its delivery are made together, sharing the shift and
+    /// the instant, so no fixture here holds a delivery outside an offer.
+    ///
+    /// The offer is inserted here; the delivery is returned for the caller to
+    /// insert, which is the shape the helpers above already have.
+    private func inOwnOffer(in shift: Shift, acceptedAt: Date) -> Delivery {
+        let offer = Offer(shift: shift, acceptedAt: acceptedAt)
+        context.insert(offer)
+        return Delivery(shift: shift, offer: offer, acceptedAt: acceptedAt)
+    }
+
+    /// One accepted offer holding several deliveries, every one of them
+    /// delivered.
+    ///
+    /// The deliveries share the offer's acceptance instant, because they were
+    /// accepted in one act, and are returned in the order the shift numbers
+    /// them. They are given **different** pickup and delivery times, so a test
+    /// can tell them apart by more than their identity.
+    @discardableResult
+    func deliveredOffer(
+        in shift: Shift,
+        deliveryCount: Int,
+        acceptedAfter accepted: TimeInterval,
+        earnings: [String?] = []
+    ) throws -> Offer {
+        let start = shift.startedAt
+        let acceptedAt = start.addingTimeInterval(accepted)
+        let offer = Offer(shift: shift, acceptedAt: acceptedAt)
+        context.insert(offer)
+        let recorded = (0..<deliveryCount).map { _ in
+            Delivery(shift: shift, offer: offer, acceptedAt: acceptedAt)
+        }
+
+        for (index, delivery) in recorded.sorted(by: Delivery.acceptedBefore).enumerated() {
+            let step = Double(index) * 300
+            try delivery.markArrivedAtPickup(at: start.addingTimeInterval(accepted + 180 + step))
+            try delivery.markPickedUp(at: start.addingTimeInterval(accepted + 780 + step))
+            try delivery.markDelivered(at: start.addingTimeInterval(accepted + 1_680 + step))
+            if index < earnings.count, let amount = earnings[index] {
+                try delivery.setGrossEarnings(try money(amount))
+            }
+            context.insert(delivery)
+        }
+        return offer
     }
 
     // MARK: Expenses
