@@ -129,11 +129,7 @@ struct OfferCorrectionView: View {
 
             if offer.isGrouped {
                 Button("Separate Into Single Deliveries") {
-                    pending = PendingCorrection(
-                        target: .offer(offer.id),
-                        operation: .separate,
-                        plan: .separate(offer)
-                    )
+                    pending = PendingCorrection(operation: .separate(offer.id), plan: .separate(offer))
                 }
                 .accessibilityLabel("Separate \(offer.title) into one offer per delivery")
                 .accessibilityIdentifier("offerCorrectionSeparateButton")
@@ -265,8 +261,7 @@ struct OfferCorrectionView: View {
                     ForEach(destinations) { destination in
                         Button(offerHeading(destination)) {
                             pending = PendingCorrection(
-                                target: .delivery(numbered.id),
-                                operation: .move(destination.id),
+                                operation: .move(numbered.id, into: destination.id),
                                 plan: .move(numbered, from: source, to: destination)
                             )
                         }
@@ -290,8 +285,7 @@ struct OfferCorrectionView: View {
                 Section {
                     Button("New Offer of Its Own") {
                         pending = PendingCorrection(
-                            target: .delivery(numbered.id),
-                            operation: .split,
+                            operation: .split(numbered.id),
                             plan: .split(numbered, from: source)
                         )
                     }
@@ -325,8 +319,7 @@ struct OfferCorrectionView: View {
                 ForEach(mergeDestinations(for: offer)) { destination in
                     Button(offerHeading(destination)) {
                         pending = PendingCorrection(
-                            target: .offer(offer.id),
-                            operation: .merge(destination.id),
+                            operation: .merge(offer.id, into: destination.id),
                             plan: .merge(offer, into: destination)
                         )
                     }
@@ -378,14 +371,18 @@ struct OfferCorrectionView: View {
     /// It carries identities and the sentences the alert shows, so the alert can
     /// describe the correction after the row that raised it has gone.
     private struct PendingCorrection: Identifiable {
+        /// Each case carries **everything** the correction acts on, so a target
+        /// and an operation that do not belong together cannot be built. The
+        /// alternative, a target beside an operation, needs an unreachable
+        /// branch that has to invent a refusal sentence for a state nothing can
+        /// reach.
         enum Operation {
-            case move(UUID)
-            case split
-            case merge(UUID)
-            case separate
+            case move(UUID, into: UUID)
+            case split(UUID)
+            case merge(UUID, into: UUID)
+            case separate(UUID)
         }
 
-        let target: CorrectionTarget
         let operation: Operation
         let plan: OfferCorrectionPlan
 
@@ -410,20 +407,15 @@ struct OfferCorrectionView: View {
 
         let service = OfferCorrectionService(context: modelContext)
         do {
-            switch (correction.target, correction.operation) {
-            case let (.delivery(id), .move(destinationID)):
-                let delivery = try requireDelivery(id)
-                try service.move(delivery, into: try requireOffer(destinationID))
-            case let (.delivery(id), .split):
+            switch correction.operation {
+            case let .move(id, destinationID):
+                try service.move(try requireDelivery(id), into: try requireOffer(destinationID))
+            case let .split(id):
                 try service.split([try requireDelivery(id)])
-            case let (.offer(id), .merge(destinationID)):
+            case let .merge(id, destinationID):
                 try service.merge(try requireOffer(id), into: try requireOffer(destinationID))
-            case let (.offer(id), .separate):
+            case let .separate(id):
                 try service.separate(try requireOffer(id))
-            default:
-                // Unreachable: every pending correction is built with a target
-                // and an operation that belong together.
-                throw OfferCorrectionError.invalidMembership(.noDeliveriesToGroup)
             }
         } catch {
             message = (error as? any LocalizedError)?.errorDescription
