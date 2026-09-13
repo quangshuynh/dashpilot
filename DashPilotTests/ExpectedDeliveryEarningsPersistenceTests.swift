@@ -32,28 +32,25 @@ struct ExpectedDeliveryEarningsPersistenceTests {
 
     // MARK: Schema
 
-    /// The plan's own shape, asserted here because v11 is the current version.
+    /// v11's own shape, now that it is frozen.
     ///
-    /// The repository's convention is that the count of versions and stages
-    /// lives in the suite belonging to whichever version is current, so it is
-    /// updated in one place rather than in four. It moved here from
-    /// `RouteSampleRelationshipTests`, which owned it while v10 was current.
-    @Test("Version 11 is the current version, and it is the one that adds expected pay")
+    /// The plan's version and stage counts moved to
+    /// `DeliveryOfferPersistenceTests` when v12 became current, by the
+    /// repository's convention that they live in the suite belonging to
+    /// whichever version is the current one.
+    @Test("Version 11 is the version that added expected pay, and it is frozen holding it")
     func schemaVersion() throws {
         #expect(DashPilotSchemaV11.versionIdentifier == Schema.Version(11, 0, 0))
-        #expect(DashPilotMigrationPlan.schemas.count == 11)
-        #expect(DashPilotMigrationPlan.stages.count == 10)
-        #expect(DashPilotMigrationPlan.schemas.last is DashPilotSchemaV11.Type)
 
-        let entities = Set(ModelContainerFactory.currentSchema.entities.map(\.name))
+        let schema = Schema(versionedSchema: DashPilotSchemaV11.self)
         #expect(
-            entities == ["Shift", "RouteSample", "Delivery", "PickupPlace", "Expense", "ShiftPause"],
-            "v11 adds no entity"
+            Set(schema.entities.map(\.name)) == ["Shift", "RouteSample", "Delivery", "PickupPlace", "Expense", "ShiftPause"],
+            "v11 added no entity"
         )
 
-        let delivery = try #require(ModelContainerFactory.currentSchema.entities.first { $0.name == "Delivery" })
+        let delivery = try #require(schema.entities.first { $0.name == "Delivery" })
         let properties = Set(delivery.properties.map(\.name))
-        #expect(properties.contains("expectedEarningsAmount"), "The new column is the whole of this version")
+        #expect(properties.contains("expectedEarningsAmount"), "The new column was the whole of this version")
         #expect(properties.contains("grossEarningsAmount"), "And it is beside the recorded amount, not instead of it")
 
         // Two columns, deliberately. One flagged column would have left every
@@ -66,11 +63,17 @@ struct ExpectedDeliveryEarningsPersistenceTests {
             ]
         )
 
-        // Nothing else moved.
-        let shift = try #require(ModelContainerFactory.currentSchema.entities.first { $0.name == "Shift" })
+        // Nothing else moved in v11, the offer included: that is v12's.
+        let shift = try #require(schema.entities.first { $0.name == "Shift" })
         #expect(
             Set(shift.properties.map(\.name)) == ["id", "startedAt", "endedAt", "deliveries", "pauses", "grossEarningsAmount"]
         )
+
+        // The current store still carries the column this version added, under
+        // the same name, which is what keeps every expectation a driver entered
+        // readable after v12.
+        let current = try #require(ModelContainerFactory.currentSchema.entities.first { $0.name == "Delivery" })
+        #expect(Set(current.properties.map(\.name)).contains("expectedEarningsAmount"))
     }
 
     @Test("The frozen version 10 still describes a delivery with one monetary column")

@@ -126,6 +126,32 @@ nonisolated final class Delivery {
     /// cannot outlive its shift.
     private(set) var shift: Shift?
 
+    /// The accepted offer this delivery came in.
+    ///
+    /// One offer may contain several deliveries, and this is the only thing
+    /// that says which ones arrived together. Two deliveries pointing at the
+    /// same ``Offer`` were accepted in one act; two pointing at different
+    /// offers were two decisions, however much their lifetimes overlap.
+    ///
+    /// **It groups; it does not govern.** Every lifecycle timestamp on this
+    /// delivery is still this delivery's own, and nothing here reads a sibling's
+    /// state: one delivery of an offer can be picked up while another is still
+    /// waiting at a counter, and completing one leaves the others exactly as
+    /// they were. See ``Offer``.
+    ///
+    /// Optional for two reasons, both about stores rather than about intent.
+    /// SwiftData models the inverse of a to-many relationship that way; and a
+    /// delivery recorded before offers existed had none until the v11 to v12
+    /// migration gave it its own one-delivery offer. The app's own creation path
+    /// always records one, and a row that somehow holds none is shown ungrouped
+    /// rather than attached to an offer it was never part of.
+    ///
+    /// The shift is **not** read through here. ``shift`` stays the authority on
+    /// which shift this delivery belongs to, unchanged and untouched by this
+    /// version, so no fetch, aggregate, export figure or delete rule depends on
+    /// an offer existing.
+    private(set) var offer: Offer?
+
     /// Where the driver said this order was collected from, or `nil` if they did
     /// not say.
     ///
@@ -194,10 +220,16 @@ nonisolated final class Delivery {
     /// this one; it does not overwrite or erase it.
     private var expectedEarningsAmount: Decimal?
 
-    init(id: UUID = UUID(), shift: Shift, acceptedAt: Date) {
+    /// - Parameter offer: the accepted offer this delivery came in. Defaulted to
+    ///   `nil` so that a fixture exercising the lifecycle alone does not have to
+    ///   construct a grouping it is not testing; the app's own creation path
+    ///   goes through ``Shift/beginOffer(deliveryCount:at:)``, which always
+    ///   supplies one.
+    init(id: UUID = UUID(), shift: Shift, offer: Offer? = nil, acceptedAt: Date) {
         self.id = id
         self.acceptedAt = acceptedAt
         self.shift = shift
+        self.offer = offer
     }
 
     /// Where the delivery has reached, read from its timestamps.
@@ -451,6 +483,37 @@ nonisolated final class Delivery {
     /// produce a negative duration on a driver's screen.
     private func clamped(from start: Date, to end: Date) -> TimeInterval {
         max(0, end.timeIntervalSince(start))
+    }
+}
+
+extension Delivery {
+    /// Builds the one-delivery offer a delivery recorded before offers existed
+    /// belongs in, and attaches this delivery to it.
+    ///
+    /// **The v11 to v12 migration's only write**, and the only place anywhere
+    /// that puts a delivery into an offer after the fact. It lives here because
+    /// ``offer``'s setter does, and it is written as a single operation so that
+    /// there is no reachable API for moving a delivery between offers: an offer
+    /// is an acceptance that already happened, and re-grouping one afterwards
+    /// would be rewriting what the driver did.
+    ///
+    /// Returns `nil`, changing nothing, in the two cases where there is no
+    /// truthful offer to build:
+    ///
+    /// - the delivery already records one, so the caller would be overwriting a
+    ///   grouping the driver's own work produced
+    /// - the delivery is attached to no shift, which is a store the app cannot
+    ///   produce. The row is left exactly as it is, for the reason nothing else
+    ///   in the app repairs, reparents or deletes one.
+    ///
+    /// The offer takes this delivery's own acceptance timestamp, because that is
+    /// the only acceptance the store records and it is a real one: the driver
+    /// tapped it.
+    func makeHistoricalOffer() -> Offer? {
+        guard offer == nil, let shift else { return nil }
+        let historical = Offer(shift: shift, acceptedAt: acceptedAt)
+        offer = historical
+        return historical
     }
 }
 
