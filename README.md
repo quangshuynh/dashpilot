@@ -67,6 +67,11 @@ derived legitimately from device sensors and stored history is typed by the driv
   cannot be read — one amount for a shift, and optionally one for each finished delivery. The two are
   independent facts: no shift total is ever split between deliveries, added up from them or
   reconciled against them.
+- **Expected pay on a delivery in progress**, entered from its card while waiting at a pickup and
+  kept strictly apart from earnings. Nothing counts it: no total, rate, period figure or export
+  summary is derived from it, and marking a delivery delivered finalizes nothing. A delivery that
+  carries one instead offers it back for the driver to confirm or correct, and dismissing that
+  leaves the delivery with no gross earnings recorded.
 - **Delivery active time**: the union of a shift's delivery intervals, so deliveries worked at the
   same time are counted once rather than summed, plus the non-delivery time left over.
 - **Completed-shift metrics and detail**: gross earnings per working hour, per active delivery hour and
@@ -95,7 +100,7 @@ Swift, SwiftUI, SwiftData, Core Location, App Intents, ActivityKit, WidgetKit, O
 and XCUITest. **No third-party runtime dependencies.** One application target, plus a widget
 extension that draws the shift's Live Activity and holds no logic of its own.
 
-Versioned schema at v10 with lightweight migrations from v1, tested by opening stores written under
+Versioned schema at v11 with lightweight migrations from v1, tested by opening stores written under
 each older version. Domain calculations import neither SwiftUI nor SwiftData, so every rule is
 tested without a container or a rendered view. Money is `Decimal` throughout: no monetary value
 passes through binary floating point, in memory or in the store. Nothing derived is stored, so

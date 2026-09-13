@@ -15,8 +15,24 @@ nonisolated enum DeliveryError: Error, Equatable {
     case timestampPrecedesLastEvent
     /// Earnings were recorded against a delivery that is still in progress.
     case deliveryNotFinished
+    /// An expected amount was recorded against a delivery that has already
+    /// finished.
+    ///
+    /// The mirror of ``deliveryNotFinished``, and deliberately its own case: an
+    /// expectation is a statement about work that has not been paid for yet, so
+    /// once the delivery is delivered or cancelled the fact worth recording is
+    /// what it actually paid. Clearing an expected amount is still allowed from
+    /// any state, because removing one claims nothing.
+    case deliveryNotActive
     /// A negative amount was recorded as gross earnings.
     case negativeEarnings
+    /// A negative amount was recorded as expected earnings.
+    ///
+    /// Apart from ``negativeEarnings`` so the refusal can name which of the two
+    /// amounts was refused. A driver who typed a minus sign into the expected
+    /// field must not be told that recorded gross earnings cannot be negative,
+    /// because they were not recording any.
+    case negativeExpectedEarnings
 }
 
 /// One delivery recorded during a shift.
@@ -39,6 +55,18 @@ nonisolated enum DeliveryError: Error, Equatable {
 /// shift. Neither is derived from the other, neither is checked against the
 /// other, and nothing anywhere divides a shift total among its deliveries —
 /// see ``setGrossEarnings(_:)``.
+///
+/// ## Expected and recorded are two more separate facts
+///
+/// A delivery can also carry ``expectedEarnings``: what the driver said they
+/// expect it to pay, entered while it was still in progress. It is a third
+/// independent fact, and the app never reads it as a fourth spelling of the
+/// first two. ``grossEarnings`` stays the finalized recorded gross of a terminal
+/// delivery and is the only amount any total, rate, period figure or export
+/// summary is built from; an expectation is what the driver believed before
+/// anything was paid. Finishing a delivery does not turn one into the other,
+/// matching numbers do not make them the same fact, and the only thing that ever
+/// writes a gross amount is the driver recording one.
 ///
 /// ## State lives in the timestamps
 ///
@@ -128,6 +156,43 @@ nonisolated final class Delivery {
     /// nothing. Migration never fabricates the second from the first, and
     /// nothing sums a shift's deliveries by reading a missing amount as zero.
     private var grossEarningsAmount: Decimal?
+
+    /// What the driver currently expects this delivery to pay, exactly as
+    /// entered, or `nil` if they have not said.
+    ///
+    /// **This is not ``grossEarningsAmount`` and never becomes it by itself.**
+    /// The two are separate columns holding separate facts, and the app is
+    /// careful never to read one as the other:
+    ///
+    /// - An **expected** amount is what the driver believes an *active* delivery
+    ///   will pay. It is entered while the work is still happening, usually
+    ///   while waiting at a pickup, from whatever the driver saw when they
+    ///   accepted the order. Nothing confirms it and nothing is paid on it.
+    /// - A **gross** amount is what the driver recorded a *terminal* delivery as
+    ///   having paid. It is the finalized figure, and it is the only one any
+    ///   total, rate, period figure or export summary is ever built from.
+    ///
+    /// The distinction holds **even when the two numbers are identical**. A
+    /// delivery that was expected to pay `8.50` and has no gross recorded has
+    /// not earned `8.50`; it has earned an amount nobody has written down yet.
+    /// Reading the expectation as the record would put a figure into a driver's
+    /// earnings history on the app's authority rather than theirs, and no later
+    /// screen could tell it from one they confirmed.
+    ///
+    /// Stored as a `Decimal` for the reason ``grossEarningsAmount`` is, and read
+    /// only through ``expectedEarnings``, ``setExpectedEarnings(_:)`` and
+    /// ``clearExpectedEarnings()``.
+    ///
+    /// **`nil` and zero are different facts** here too. `nil` means no
+    /// expectation was recorded; `0` means the driver recorded that they expect
+    /// this delivery to pay nothing. Migration fabricates neither.
+    ///
+    /// It survives the delivery finishing rather than being consumed by it. That
+    /// is what lets the app offer the figure back for confirmation afterwards,
+    /// and what lets a driver see later that a delivery they expected `8.50`
+    /// from paid `6.25` instead. Confirming an amount records a gross beside
+    /// this one; it does not overwrite or erase it.
+    private var expectedEarningsAmount: Decimal?
 
     init(id: UUID = UUID(), shift: Shift, acceptedAt: Date) {
         self.id = id
@@ -274,6 +339,72 @@ nonisolated final class Delivery {
     /// this", not "this delivery paid nothing".
     func clearGrossEarnings() {
         grossEarningsAmount = nil
+    }
+
+    // MARK: Expected earnings
+
+    /// What the driver expects this delivery to pay, or `nil` if they have not
+    /// said.
+    ///
+    /// **Never a substitute for ``grossEarnings``.** It is an expectation the
+    /// driver typed, not a payment anything confirmed, and no caller in the app
+    /// falls back to it when the gross amount is missing. Deliberately a
+    /// different property name rather than a flag on one amount, so that reading
+    /// the wrong fact requires writing the wrong word.
+    var expectedEarnings: Money? {
+        expectedEarningsAmount.map(Money.init(amount:))
+    }
+
+    /// Whether this delivery carries an expectation with no recorded gross
+    /// beside it.
+    ///
+    /// The state the completion flow and the history screen both offer to
+    /// resolve: something is expected, nothing is recorded. It is a question
+    /// about which facts exist, never a suggestion that the expected figure
+    /// should be treated as the recorded one.
+    var hasUnconfirmedExpectedEarnings: Bool {
+        expectedEarningsAmount != nil && grossEarningsAmount == nil
+    }
+
+    /// Records what the driver expects this delivery to pay, replacing any
+    /// expectation already recorded.
+    ///
+    /// Two invariants, the mirror of ``setGrossEarnings(_:)``'s and kept on the
+    /// model for the same reason:
+    ///
+    /// - Only an **active** delivery can carry an expectation. Once a delivery
+    ///   is delivered or cancelled it is no longer something to have
+    ///   expectations about, and the fact worth recording is what it paid.
+    ///   Allowing an expectation to be written afterwards would invite exactly
+    ///   the confusion this pair of columns exists to prevent: a figure that
+    ///   looks like a late correction to earnings while being stored as
+    ///   something no total will ever count.
+    /// - The amount may not be **negative**, for the reason a gross amount may
+    ///   not. Zero is allowed and means the driver expects this delivery to pay
+    ///   nothing, which is a real thing to expect.
+    ///
+    /// **Nothing here touches ``grossEarningsAmount``**, on this delivery or on
+    /// any other, and nothing reads the shift's own amount. Recording an
+    /// expectation changes no total, no rate, no period figure and no export
+    /// summary anywhere in the app.
+    ///
+    /// - Throws: ``DeliveryError/deliveryNotActive`` or
+    ///   ``DeliveryError/negativeExpectedEarnings``.
+    func setExpectedEarnings(_ expected: Money) throws {
+        guard state.isActive else { throw DeliveryError.deliveryNotActive }
+        guard !expected.isNegative else { throw DeliveryError.negativeExpectedEarnings }
+        expectedEarningsAmount = expected.amount
+    }
+
+    /// Removes the recorded expectation, returning the delivery to having none.
+    ///
+    /// Unconditional, and available after the delivery has finished, unlike
+    /// ``setExpectedEarnings(_:)``. Removing a figure claims nothing, and a
+    /// driver whose expectation turned out to be wrong must be able to take it
+    /// off a delivery whose gross they have already recorded. Distinct from
+    /// recording `0`, for the reason ``clearGrossEarnings()`` is.
+    func clearExpectedEarnings() {
+        expectedEarningsAmount = nil
     }
 
     /// The two rules every transition shares: a finished delivery does not

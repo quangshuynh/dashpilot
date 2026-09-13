@@ -35,6 +35,15 @@ nonisolated enum MoneyInputSubject: Sendable {
     /// An amount recorded against a shift or a delivery, which is optional and
     /// may be removed entirely.
     case grossEarnings
+    /// What the driver expects a delivery still in progress to pay. Optional,
+    /// removable, and **not** a recorded gross amount.
+    ///
+    /// Its own subject rather than ``grossEarnings`` for exactly the reason this
+    /// enumeration exists: a driver typing what they think an order will pay
+    /// should not be told that *recorded gross earnings* cannot be negative,
+    /// because they are not recording any. The parsing rules are identical; only
+    /// the two sentences differ.
+    case expectedEarnings
     /// What a recorded expense cost. Required: an expense with no amount is not
     /// a record of anything.
     case expense
@@ -47,6 +56,7 @@ nonisolated extension MoneyInputError {
         case .empty:
             switch subject {
             case .grossEarnings: "Enter an amount, or cancel to leave no amount recorded."
+            case .expectedEarnings: "Enter what you expect this delivery to pay, or cancel to leave none."
             case .expense: "Enter what this expense cost, for example 42.10."
             }
         case .notANumber:
@@ -56,6 +66,7 @@ nonisolated extension MoneyInputError {
         case .negative:
             switch subject {
             case .grossEarnings: "Gross earnings cannot be negative."
+            case .expectedEarnings: "An expected amount cannot be negative."
             case .expense: "An expense cannot be a negative amount. Enter what it cost."
             }
         case .tooLarge:

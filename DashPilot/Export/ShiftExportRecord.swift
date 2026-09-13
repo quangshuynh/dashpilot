@@ -31,6 +31,13 @@ import Foundation
 ///   the paused total beside them rather than one figure that could mean either.
 /// - **Working time is not delivery active time**, and non-delivery time is not
 ///   idle time.
+/// - **What a delivery was expected to pay is not what it paid.**
+///   ``DeliveryExportRecord/expectedEarnings`` is a figure the driver entered
+///   while the delivery was still running and nothing confirmed. It sits beside
+///   ``DeliveryExportRecord/grossEarnings`` on the delivery that carries it and
+///   nowhere else: no shift field, no summary figure and no rate in this format
+///   is derived from it, and the two are never added, compared or substituted
+///   for one another here.
 ///
 /// ## What is deliberately absent
 ///
@@ -282,6 +289,26 @@ nonisolated struct DeliveryExportRecord: Equatable, Sendable, Codable {
     /// Independent of the shift's own amount in both directions.
     let grossEarnings: ExportAmount?
 
+    /// What the driver said they **expected** this delivery to pay, or `null` if
+    /// they said nothing.
+    ///
+    /// **Not earnings, and never a substitute for ``grossEarnings``.** It was
+    /// entered while the delivery was still in progress, from whatever the
+    /// driver saw when they accepted the order; nothing confirmed it and nothing
+    /// was paid on it. A delivery may carry this with `grossEarnings` still
+    /// `null`, which means the driver expected an amount and has not recorded
+    /// what the delivery actually paid. That is not a delivery that earned this
+    /// figure.
+    ///
+    /// It is in the file so that a fact the driver entered is not silently
+    /// dropped on the way out, since an export is the only way anything leaves
+    /// DashPilot, and it appears **only here, on the delivery that carries
+    /// it**. Nothing sums it, no shift field includes it, no summary figure is
+    /// derived from it, and there is no expected counterpart to any total or
+    /// rate anywhere in this format. A consumer adding this column to an
+    /// earnings figure is adding an expectation to a record of payment.
+    let expectedEarnings: ExportAmount?
+
     /// This delivery's amount over its own lifecycle. Never summed or averaged
     /// with another delivery's: overlapping deliveries share minutes.
     let grossPerDeliveryHour: ExportAmount?
@@ -289,7 +316,7 @@ nonisolated struct DeliveryExportRecord: Equatable, Sendable, Codable {
     private enum CodingKeys: String, CodingKey {
         case id, number, state, acceptedAt, arrivedAtPickupAt, pickedUpAt, deliveredAt, cancelledAt
         case pickupPlaceName, pickupWaitSeconds, acceptedToDeliveredSeconds
-        case grossEarnings, grossPerDeliveryHour
+        case grossEarnings, expectedEarnings, grossPerDeliveryHour
     }
 
     func encode(to encoder: any Encoder) throws {
@@ -306,6 +333,7 @@ nonisolated struct DeliveryExportRecord: Equatable, Sendable, Codable {
         try container.encodeAlways(pickupWaitSeconds, forKey: .pickupWaitSeconds)
         try container.encodeAlways(acceptedToDeliveredSeconds, forKey: .acceptedToDeliveredSeconds)
         try container.encodeAlways(grossEarnings, forKey: .grossEarnings)
+        try container.encodeAlways(expectedEarnings, forKey: .expectedEarnings)
         try container.encodeAlways(grossPerDeliveryHour, forKey: .grossPerDeliveryHour)
     }
 }
