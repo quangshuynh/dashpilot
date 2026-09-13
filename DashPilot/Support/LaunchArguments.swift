@@ -69,6 +69,24 @@ nonisolated enum LaunchArgument {
     /// store.
     static let seededPeriodComparison = "-dashpilot-seeded-period-comparison"
 
+    /// Runs against a throwaway store holding a running shift with two
+    /// deliveries waiting at their pickups, one of which records what it is
+    /// expected to pay.
+    ///
+    /// Expected pay is the one delivery fact that can only be entered while the
+    /// delivery is in progress, so every journey through it starts from a
+    /// running delivery. Two of them, identical apart from the expectation, is
+    /// what lets one launch cover all three cases the feature has: entering an
+    /// amount on a delivery carrying none, completing a delivery that carries
+    /// one and meeting the confirmation, and completing one that does not and
+    /// meeting nothing. Seeding them at the pickup rather than already picked up
+    /// keeps a lifecycle step in front of the completion, which is how a journey
+    /// can assert that the confirmation belongs to the delivered event alone.
+    ///
+    /// The amounts, times and place are invented, like every other fixture here.
+    /// Debug builds only, and in memory, so it can never touch a real store.
+    static let seededExpectedPay = "-dashpilot-seeded-expected-pay"
+
     /// Runs with Core Location replaced by the stub the tests and previews use,
     /// reporting When In Use with full accuracy and producing no positions.
     ///
@@ -115,7 +133,8 @@ nonisolated enum LaunchArgument {
         seededActiveDelivery,
         seededPickupHistory,
         seededPeriodSummary,
-        seededPeriodComparison
+        seededPeriodComparison,
+        seededExpectedPay
     ]
 
     /// Whether this launch is running over synthetic, in-memory data.
