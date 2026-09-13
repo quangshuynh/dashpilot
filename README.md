@@ -55,10 +55,10 @@ derived legitimately from device sensors and stored history is typed by the driv
   while exactly one delivery is in progress; with more, DashPilot records nothing and says so. No
   intent takes a dictated value.
 - **A Live Activity for the shift in progress**, on the Lock Screen and in the Dynamic Island: the
-  working time, what the route has recorded, how the deliveries stand, and the one or two controls
-  the shift's own lifecycle rules permit. Pressing one runs the same service the app's button runs;
-  with two deliveries in progress it offers no step, because no button there can say which order it
-  meant. No amount, rate, place or coordinate appears on it.
+  working time, what the route has recorded, how the deliveries stand, and the controls the shift's
+  own lifecycle rules permit, including starting one more delivery. Pressing one runs the same
+  service the app's button runs; with two deliveries in progress it offers no step, because no button
+  there can say which order it meant. No amount, rate, place or coordinate appears on it.
 - **Optional pickup identity**: a delivery can name the place it was collected from, typed by the
   driver and reused across deliveries when the same name is entered again, with no address, no
   lookup and no platform involved. A place can be renamed, and one place explicitly merged into
@@ -186,8 +186,8 @@ The short version, with the full list in [`docs/reference/limitations.md`](docs/
 - **The shift's Live Activity shows and controls, and never alerts.** It carries the working time,
   the recorded mileage and the delivery counts, and no amount, rate, place or coordinate. Its
   controls are the app's own lifecycle actions and are refused by the same rules; with two deliveries
-  open it offers none, because no button on a Lock Screen can say which order it meant. It has been
-  run on the simulator only.
+  open it offers no step, because no button on a Lock Screen can say which order it meant. It has
+  been run on the simulator only.
 - **No delivery-platform integration**, permanently and by design.
 - **Local only.** No backup, no sync, no import, and deleting a shift is permanent. Export writes a
   file on the device and hands it to the share sheet; where it goes after that is the driver's
