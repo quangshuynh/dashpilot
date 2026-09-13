@@ -112,6 +112,44 @@ nonisolated struct NumberedDelivery: Identifiable {
     /// rather than `for`, because it takes something away.
     var spokenRemoveEarningsLabel: String { "Remove gross earnings from \(title)" }
 
+    /// What the expected-pay control prints, which depends only on whether an
+    /// expectation is already recorded.
+    ///
+    /// **"Expected pay", never "earnings".** The word the app uses for a
+    /// recorded amount is reserved for recorded amounts, on every surface, so
+    /// that two controls one tap apart on the same card cannot be read as two
+    /// ways of doing the same thing.
+    func expectedEarningsActionTitle(hasExpected: Bool) -> String {
+        hasExpected ? "Change Expected Pay" : "Add Expected Pay"
+    }
+
+    /// What VoiceOver hears for that control, named for its delivery like every
+    /// other one, because a driver carrying three orders hears three of these.
+    func spokenExpectedEarningsLabel(hasExpected: Bool) -> String {
+        hasExpected ? "Change expected pay for \(title)" : "Add expected pay for \(title)"
+    }
+
+    /// What VoiceOver hears for the control that deletes the expectation.
+    var spokenRemoveExpectedEarningsLabel: String { "Remove expected pay from \(title)" }
+
+    /// An expected amount spoken with the delivery it belongs to **and with
+    /// what it is not**.
+    ///
+    /// The trailing sentence is the whole point. A figure read out as "Delivery
+    /// 2, $8.50" is indistinguishable by ear from the recorded amount spoken by
+    /// ``spokenEarnings(_:)``, and a listener has no column headings to fall
+    /// back on. Saying that nothing is recorded yet is what keeps the two facts
+    /// apart for someone who cannot see them side by side.
+    func spokenExpectedEarnings(_ formattedAmount: String) -> String {
+        "Expected pay for \(title), \(formattedAmount). No gross earnings recorded yet."
+    }
+
+    /// The same figure spoken for a delivery that **does** have a recorded
+    /// amount beside it, where the absence sentence would be untrue.
+    func spokenExpectedEarningsBesideRecorded(_ formattedAmount: String) -> String {
+        "Expected pay for \(title), \(formattedAmount). This is what was expected, not what was recorded."
+    }
+
     /// A recorded amount spoken with the delivery it belongs to.
     ///
     /// A bare `$14.75` in a list of deliveries says which figure but not whose,

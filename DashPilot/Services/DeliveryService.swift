@@ -70,8 +70,12 @@ nonisolated extension DeliveryLifecycleError: LocalizedError {
             "That would record a delivery event before one that already happened."
         case .invalidTransition(.deliveryNotFinished):
             "Earnings can be recorded once the delivery has been delivered or cancelled."
+        case .invalidTransition(.deliveryNotActive):
+            "An expected amount can only be recorded while the delivery is still in progress."
         case .invalidTransition(.negativeEarnings):
             "Gross earnings cannot be negative."
+        case .invalidTransition(.negativeExpectedEarnings):
+            "An expected amount cannot be negative."
         case .storeUnavailable:
             "DashPilot could not save to its local data store, so the delivery was not changed."
         }
@@ -104,10 +108,14 @@ nonisolated extension DeliveryLifecycleError: LocalizedError {
 /// - Transitions happen in lifecycle order, once each, and never after the
 ///   delivery has finished. Those rules live on ``Delivery`` itself, so they
 ///   hold for every caller.
-/// - An amount may only be recorded against a **finished** delivery, and only
-///   ever the amount the driver typed for that one delivery. Nothing here reads
-///   the shift's own recorded amount, and no total is ever divided among
-///   deliveries — see ``setGrossEarnings(_:on:)``.
+/// - A **gross** amount may only be recorded against a **finished** delivery,
+///   and only ever the amount the driver typed for that one delivery. Nothing
+///   here reads the shift's own recorded amount, and no total is ever divided
+///   among deliveries. See ``setGrossEarnings(_:on:)``.
+/// - An **expected** amount may only be recorded against an **active**
+///   delivery, is stored in its own column, and never becomes a gross amount
+///   here or anywhere else. See ``setExpectedEarnings(_:on:)``. Finishing a
+///   delivery leaves its expectation exactly as it was and records no gross.
 ///
 /// ## Timestamps
 ///
@@ -393,6 +401,65 @@ struct DeliveryService {
         delivery.clearGrossEarnings()
         try saveEarnings(describing: "remove")
         AppLog.earnings.info("Delivery earnings removed")
+    }
+
+    // MARK: Expected earnings
+
+    /// Records what the driver expects one delivery in progress to pay,
+    /// replacing any expectation already stored against it.
+    ///
+    /// **This writes nothing a total will ever count.** The expected amount is
+    /// its own column; ``Delivery/grossEarningsAmount`` is untouched here, on
+    /// this delivery and on every other, so no shift figure, period figure,
+    /// rate or export summary moves because a driver said what they think an
+    /// order will pay. What it buys them is the figure being on the delivery
+    /// while they remember it, rather than being reconstructed from memory that
+    /// evening.
+    ///
+    /// It is the mirror of ``setGrossEarnings(_:on:)`` in both directions.
+    /// That one is the review action, allowed only on a finished delivery and
+    /// deliberately allowed after the shift has ended; this one is the
+    /// in-the-moment action, allowed only while the delivery is active, which
+    /// means only while its shift is still running. The model enforces both
+    /// rules, so a screen is never the only thing keeping them.
+    ///
+    /// - Throws: ``DeliveryLifecycleError/invalidTransition(_:)`` if the
+    ///   delivery has already finished or the amount is negative, or
+    ///   ``DeliveryLifecycleError/storeUnavailable(underlying:)`` if the write
+    ///   fails.
+    func setExpectedEarnings(_ expected: Money, on delivery: Delivery) throws {
+        // Read before the write, for the reason `setGrossEarnings` reads before
+        // its own: the log says what happened without ever holding the amount.
+        let isFirstAmount = delivery.expectedEarnings == nil
+
+        do {
+            try delivery.setExpectedEarnings(expected)
+        } catch let error as DeliveryError {
+            AppLog.earnings.notice(
+                "Delivery rejected an expected amount: \(String(describing: error), privacy: .public)"
+            )
+            throw DeliveryLifecycleError.invalidTransition(error)
+        }
+
+        try saveEarnings(describing: isFirstAmount ? "add expected" : "update expected")
+        AppLog.earnings.info("Delivery expected amount \(isFirstAmount ? "recorded" : "updated", privacy: .public)")
+    }
+
+    /// Removes a delivery's expected amount, returning it to having none.
+    ///
+    /// Available after the delivery has finished as well as during it, matching
+    /// ``Delivery/clearExpectedEarnings()``: removing a figure claims nothing,
+    /// and an expectation that turned out to be wrong must be removable from a
+    /// delivery whose gross the driver has already recorded.
+    ///
+    /// Distinct from recording zero, and it never touches the recorded gross
+    /// amount.
+    ///
+    /// - Throws: ``DeliveryLifecycleError/storeUnavailable(underlying:)`` if the write fails.
+    func clearExpectedEarnings(on delivery: Delivery) throws {
+        delivery.clearExpectedEarnings()
+        try saveEarnings(describing: "remove expected")
+        AppLog.earnings.info("Delivery expected amount removed")
     }
 
     /// Saves an earnings change, and rolls back if the store refuses.

@@ -96,6 +96,7 @@ none are kept, because nothing implemented reads them.
 | `shift` | `Shift?` | The only place the relationship is declared; `Shift` holds no matching collection. Optional only because SwiftData models a reference that way. The initializer requires a shift. Carries no delete rule, so `ShiftService.deleteCompletedShift(_:)` removes a shift's positions explicitly |
 | `pickupPlace` | `PickupPlace?` | Optional and often absent. A reference, so two deliveries from one place share a row. Nullify on delete |
 | `grossEarningsAmount` | `Decimal?` | Private. What this one delivery paid, as the driver typed it. `nil` means no amount recorded, which is not zero. Unrelated to `Shift.grossEarningsAmount` |
+| `expectedEarningsAmount` | `Decimal?` | Private. What the driver expects this delivery to pay, entered while it was active. **Not earnings**: nothing counts it, and it never becomes the column above. `nil` means none recorded, which is not zero |
 
 Derived, never stored:
 
@@ -107,6 +108,8 @@ Derived, never stored:
 | `pickupWait` | `pickedUpAt - arrivedAtPickupAt`, or `nil` if either end is missing or the pickup precedes the arrival |
 | `completedDuration` | `deliveredAt - acceptedAt`, or `nil` unless the delivery was delivered |
 | `grossEarnings` | The stored decimal as a `Money`, or `nil` |
+| `expectedEarnings` | The stored expected decimal as a `Money`, or `nil`. No rate is derived from it, here or anywhere |
+| `hasUnconfirmedExpectedEarnings` | An expectation is recorded and no gross amount is. The state the completion confirmation and the history screen offer to resolve |
 | `grossPerDeliveryHour` | A `DeliveryEarningsRate`: the amount over this delivery's own `completedDuration`, or the reason there is none |
 | `acceptedBefore(_:_:)` | The total, repeatable order over deliveries: acceptance ascending, identity breaking a tie |
 
@@ -115,7 +118,9 @@ repeated event, a transition after a terminal state, and a timestamp earlier tha
 event. `cancel(at:)` is allowed from every active state. `setGrossEarnings(_:)` rejects a negative
 amount and an amount on a delivery that is still in progress; a cancelled delivery may carry one, and
 is never forced to zero. `clearGrossEarnings()` removes the amount, which is a distinct operation
-from recording zero. `setPickupPlace(_:)` is deliberately
+from recording zero. `setExpectedEarnings(_:)` is the mirror of it and rejects a negative amount and
+an amount on a delivery that has **finished**; `clearExpectedEarnings()` is unconditional, because
+removing a figure claims nothing. `setPickupPlace(_:)` is deliberately
 unconditional: a pickup place is not an event, so correcting one changes no interval and is allowed
 on a finished delivery. Nothing identifying a customer or an address is stored.
 
@@ -123,6 +128,13 @@ The amount is a **second independent fact**, not a share of anything. It is what
 against this one delivery; it is never derived from `Shift.grossEarningsAmount`, never checked
 against it, and no total is ever divided among a shift's deliveries. See
 [Earnings and metrics](../product/earnings-and-metrics.md).
+
+The **expected** amount is a third independent fact, and two columns rather than one flagged column
+is the substantive decision. A flag would have left every existing reader of `grossEarningsAmount`
+free to report an expectation as earnings, and each reader that was missed would have done so
+silently. A separate column fails the other way: a reader that has not been taught about
+expectations cannot see them, which is exactly what every aggregate in the app wants. Finishing a
+delivery never moves a value from one column to the other.
 
 ## `PickupPlace`
 
@@ -214,6 +226,7 @@ shifts, deliveries, days or miles. See [Recorded expenses](../product/expenses.m
 | 8.0.0 | Adds `Expense`. No existing entity changes, and no relationship is added |
 | 9.0.0 | Adds `ShiftPause` and `Shift.pauses` |
 | 10.0.0 | Removes `Shift.routeSamples`. `RouteSample.shift` is unchanged, and no stored value moves |
+| 11.0.0 | Adds `Delivery.expectedEarningsAmount`. No existing attribute moves, and no delivery gains one |
 
 Every step so far is a lightweight stage, and none backfills a value. See
 [Migrations](../architecture/migrations.md).

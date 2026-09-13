@@ -83,6 +83,12 @@ nonisolated extension DeliveryExportRecord {
             pickupWaitSeconds: ExportDuration.seconds(delivery.pickupWait),
             acceptedToDeliveredSeconds: ExportDuration.seconds(delivery.completedDuration),
             grossEarnings: ExportAmount.recorded(delivery.grossEarnings),
+            // Written from its own column, and read by nothing else in this
+            // file. There is no expected-per-hour figure, no expected subtotal
+            // and no expected summary anywhere in the format, deliberately: a
+            // rate over an expectation would be a claim about what the driver
+            // would have earned.
+            expectedEarnings: ExportAmount.recorded(delivery.expectedEarnings),
             grossPerDeliveryHour: ExportAmount.recorded(delivery.grossPerDeliveryHour.amount)
         )
     }

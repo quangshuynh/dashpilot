@@ -857,6 +857,59 @@ enum PreviewSupport {
             .modelContainer(container)
     }
 
+    /// The expected-pay editor over a synthetic delivery **in progress**.
+    ///
+    /// Still active, because a finished delivery is one this editor is never
+    /// presented for and the model refuses an expected amount on.
+    @MainActor
+    static func deliveryExpectedEarningsEditor(withExpectedEarnings: Bool) -> some View {
+        let container = emptyContainer()
+        let context = container.mainContext
+        let start = Date(timeIntervalSince1970: 1_756_000_000)
+
+        let shift = Shift(startedAt: start)
+        context.insert(shift)
+
+        let delivery = Delivery(shift: shift, acceptedAt: start.addingTimeInterval(300))
+        try? delivery.markArrivedAtPickup(at: start.addingTimeInterval(600))
+        context.insert(delivery)
+
+        if withExpectedEarnings {
+            try? delivery.setExpectedEarnings(Money(minorUnits: 850))
+        }
+
+        return DeliveryExpectedEarningsEditor(numbered: NumberedDelivery(number: 1, delivery: delivery))
+            .modelContainer(container)
+    }
+
+    /// The confirmation raised when a delivery carrying an expectation is
+    /// marked delivered.
+    ///
+    /// The delivery is delivered and has **no** recorded gross amount, which is
+    /// the only state the sheet is ever presented in.
+    @MainActor
+    static func deliveryEarningsConfirmation() -> some View {
+        let container = emptyContainer()
+        let context = container.mainContext
+        let start = Date(timeIntervalSince1970: 1_756_000_000)
+
+        let shift = Shift(startedAt: start)
+        context.insert(shift)
+
+        let delivery = Delivery(shift: shift, acceptedAt: start.addingTimeInterval(300))
+        try? delivery.setExpectedEarnings(Money(minorUnits: 850))
+        try? delivery.markArrivedAtPickup(at: start.addingTimeInterval(600))
+        try? delivery.markPickedUp(at: start.addingTimeInterval(1_020))
+        try? delivery.markDelivered(at: start.addingTimeInterval(1_800))
+        context.insert(delivery)
+
+        return DeliveryEarningsConfirmation(
+            numbered: NumberedDelivery(number: 1, delivery: delivery),
+            expected: Money(minorUnits: 850)
+        )
+        .modelContainer(container)
+    }
+
     // MARK: Export
 
     /// The scopes the export sheet has to present.
