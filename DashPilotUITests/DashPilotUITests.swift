@@ -19,6 +19,9 @@ final class DashPilotUITests: XCTestCase {
     /// Must match `LaunchArgument.seededPeriodComparison`, for the same reason.
     private static let seededPeriodComparisonArgument = "-dashpilot-seeded-period-comparison"
 
+    /// Must match `LaunchArgument.seededExpectedPay`, for the same reason.
+    private static let seededExpectedPayArgument = "-dashpilot-seeded-expected-pay"
+
     /// Must match `LaunchArgument.stubbedLocation`, for the same reason.
     private static let stubbedLocationArgument = "-dashpilot-stubbed-location"
 
@@ -82,6 +85,28 @@ final class DashPilotUITests: XCTestCase {
     private func launchWithPickupHistory() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments.append(Self.seededPickupHistoryArgument)
+        app.launch()
+        return app
+    }
+
+    /// Launches against a throwaway store holding a running shift with two
+    /// deliveries waiting at their pickups, one of them carrying an expected
+    /// amount and the other carrying none.
+    ///
+    /// An expectation can only be entered while a delivery is in progress, so
+    /// none of the completed-shift fixtures can reach one. Two deliveries left
+    /// at the same lifecycle point, differing only in the amount, is what lets
+    /// the journeys attribute a difference in what the app does to the amount
+    /// and to nothing else.
+    ///
+    /// The fixture's shift holds `Delivery 1` waiting at its pickup with an
+    /// expected `$8.50`, and `Delivery 2` waiting at its pickup with no expected
+    /// amount. Neither carries a recorded gross amount, and neither can: a
+    /// running delivery is refused one.
+    @MainActor
+    private func launchWithExpectedPay() -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments.append(Self.seededExpectedPayArgument)
         app.launch()
         return app
     }
@@ -1408,6 +1433,254 @@ final class DashPilotUITests: XCTestCase {
         )
     }
 
+    // MARK: Expected pay
+
+    /// An amount is recorded against a delivery in progress, and the card states
+    /// it as what the delivery is *expected* to pay rather than as earnings.
+    ///
+    /// The distinction is the whole feature, so the journey asserts both halves:
+    /// that the figure the driver typed is on the card under its own name, and
+    /// that nothing anywhere on the running shift now reports a recorded amount.
+    @MainActor
+    func testRecordsExpectedPayOnARunningDelivery() throws {
+        let app = launchWithExpectedPay()
+
+        // The fixture's second delivery carries nothing, which is where the
+        // control has to offer to add rather than to change.
+        let card = deliveryStatus(containing: "Delivery 2", in: app)
+        let add = deliveryButton("expectedEarningsButton", containing: "Delivery 2", in: app)
+        XCTAssertTrue(scrollTo(add, in: app), "A delivery in progress offers expected pay")
+        XCTAssertEqual(add.label, "Add expected pay for Delivery 2")
+        XCTAssertFalse(
+            card.label.contains("Expected pay"),
+            "Nothing is expected until the driver records it: \(card.label)"
+        )
+
+        add.tap()
+        let field = app.textFields["deliveryExpectedEarningsAmountField"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        XCTAssertNotEqual(
+            field.value as? String,
+            "8.5",
+            "The editor opens on this delivery's own record rather than on the other card's amount"
+        )
+        XCTAssertFalse(
+            app.buttons["removeDeliveryExpectedEarningsButton"].exists,
+            "There is nothing to remove yet"
+        )
+        typeExpectedPay("12.25", in: app)
+        app.buttons["saveDeliveryExpectedEarningsButton"].tap()
+
+        XCTAssertTrue(
+            waitForLabel(card, toContain: "Expected pay for Delivery 2, $12.25"),
+            "The card states the amount with the delivery it belongs to: \(card.label)"
+        )
+        XCTAssertTrue(
+            card.label.contains("No gross earnings recorded yet"),
+            "And says in the same breath that it is not earnings: \(card.label)"
+        )
+        XCTAssertFalse(
+            card.label.contains("Gross earnings for Delivery 2, $12.25"),
+            "An expectation is never spoken as a recorded amount: \(card.label)"
+        )
+        XCTAssertEqual(
+            deliveryButton("expectedEarningsButton", containing: "Delivery 2", in: app).label,
+            "Change expected pay for Delivery 2",
+            "The control now offers to change what is recorded"
+        )
+
+        // The other delivery's own amount is untouched, so the figure went to
+        // the record the control named rather than to whichever card was handy.
+        XCTAssertTrue(
+            deliveryStatus(containing: "Delivery 1", in: app).label.contains("Expected pay for Delivery 1, $8.50")
+        )
+
+        // And nothing about the shift now reports earnings. The notice below is
+        // rendered after the amount and the rates would be, so reaching it is
+        // what makes their absence a real absence rather than an unrendered row.
+        let notice = app.descendants(matching: .any)["liveRateNotice"]
+        XCTAssertTrue(scrollToTop(reaching: notice, in: app), "The shift panel is back on screen")
+        XCTAssertEqual(notice.label, "This shift is still running. Rates are worked out once it ends.")
+        XCTAssertFalse(
+            app.descendants(matching: .any)["liveRecordedGross"].exists,
+            "An expected amount is not a recorded one, and no shift figure counts it"
+        )
+        XCTAssertEqual(rows(in: app).count, 0, "Nothing was finalized into history either")
+    }
+
+    /// A delivery carrying an expected amount is delivered through the real
+    /// lifecycle, is offered the chance to record what it actually paid, and is
+    /// left with none when the driver says not now.
+    ///
+    /// What the sheet must not do is turn the expectation into earnings by
+    /// itself, so the assertions after the dismissal are the point of the
+    /// journey: the delivery is terminal, the expectation survives into history,
+    /// and no gross amount exists anywhere.
+    @MainActor
+    func testDeliveringWithExpectedPayOffersItAndRecordsNothingWhenDismissed() throws {
+        let app = launchWithExpectedPay()
+
+        let action = deliveryButton("deliveryActionButton", containing: "Delivery 1", in: app)
+        XCTAssertTrue(scrollTo(action, in: app))
+        XCTAssertTrue(
+            deliveryStatus(containing: "Delivery 1", in: app).label.contains("Expected pay for Delivery 1, $8.50"),
+            "The fixture's first delivery carries an expectation"
+        )
+
+        // The step before the last one. The confirmation belongs to the
+        // delivered event alone, so picking the order up must raise nothing.
+        XCTAssertEqual(action.label, "Delivery 1. Mark order picked up")
+        action.tap()
+        XCTAssertTrue(waitForLabel(action, toContain: "Mark delivery completed"))
+        XCTAssertFalse(
+            app.buttons["confirmEarningsRecordButton"].exists,
+            "Nothing is asked until the delivery is actually delivered"
+        )
+
+        action.tap()
+
+        let expectedRow = app.descendants(matching: .any)["confirmEarningsExpectedAmount"]
+        XCTAssertTrue(expectedRow.waitForExistence(timeout: 5), "The confirmation is raised")
+        XCTAssertEqual(
+            expectedRow.label,
+            "Expected pay for Delivery 1, $8.50. No gross earnings recorded yet.",
+            "The sheet states the expectation as an expectation"
+        )
+        XCTAssertFalse(
+            app.textFields["confirmEarningsExpectedAmount"].exists,
+            "The expected figure is stated rather than offered as the field to type in"
+        )
+
+        // The editable amount is a different control, named for the fact it
+        // records. Seeded from the expectation, and that is all it is.
+        let amount = app.textFields["confirmEarningsAmountField"]
+        XCTAssertTrue(amount.exists)
+        XCTAssertEqual(amount.label, "Gross earnings for Delivery 1")
+        // `8.5` rather than `8.50`: an editor seeds a field with a number to be
+        // typed over, and `MoneyInput` writes it without trailing zeroes.
+        XCTAssertEqual(amount.value as? String, "8.5")
+        XCTAssertTrue(
+            app.navigationBars["Delivery 1 Delivered"].exists,
+            "The sheet names the delivery it is about"
+        )
+
+        let dismiss = app.buttons["confirmEarningsDismissButton"].firstMatch
+        XCTAssertEqual(dismiss.label, "Record no earnings for Delivery 1 now")
+        dismiss.tap()
+
+        XCTAssertTrue(
+            waitForDisappearance(of: app.buttons["confirmEarningsRecordButton"].firstMatch),
+            "Not Now closes the sheet"
+        )
+
+        // Terminal, and terminal because the lifecycle said so rather than
+        // because the sheet was answered.
+        XCTAssertTrue(
+            waitForCount(app.buttons.matching(identifier: "deliveryActionButton"), toEqual: 1),
+            "The delivered delivery has no next step and leaves the panel"
+        )
+        let status = app.descendants(matching: .any)["deliveryStatus"]
+        XCTAssertTrue(waitForLabel(status, toContain: "1 delivery completed"), "Status: \(status.label)")
+
+        // The rest of the shift is ordinary work, and only exists here so the
+        // shift can be ended and its history read.
+        let remaining = deliveryButton("deliveryActionButton", containing: "Delivery 2", in: app)
+        for expected in ["Mark order picked up", "Mark delivery completed"] {
+            XCTAssertTrue(waitForLabel(remaining, toContain: expected), "Showed: \(remaining.label)")
+            remaining.tap()
+        }
+
+        let endShift = app.buttons["endShiftButton"]
+        XCTAssertTrue(scrollToTop(reaching: endShift, in: app))
+        endShift.tap()
+        openFirstShift(in: app)
+
+        let row = deliveryRow(containing: "Delivery 1, delivered", in: app)
+        XCTAssertTrue(scrollTo(row, in: app))
+        XCTAssertTrue(
+            row.label.contains("Expected pay for Delivery 1, $8.50. No gross earnings recorded yet."),
+            "History keeps what was expected, and still says nothing was recorded: \(row.label)"
+        )
+        XCTAssertFalse(
+            row.label.contains("Gross earnings for Delivery 1"),
+            "Dismissing the confirmation recorded no amount: \(row.label)"
+        )
+        XCTAssertEqual(
+            app.buttons
+                .matching(identifier: "shiftDetailDeliveryEarningsButton")
+                .matching(NSPredicate(format: "label CONTAINS %@", "Delivery 1"))
+                .firstMatch
+                .label,
+            "Add gross earnings for Delivery 1",
+            "History offers the amount again rather than treating the question as answered"
+        )
+
+        let shiftEarnings = app.descendants(matching: .any)["shiftDetailEarnings"]
+        XCTAssertTrue(scrollToTop(reaching: shiftEarnings, in: app))
+        XCTAssertEqual(
+            shiftEarnings.label,
+            "No amount recorded",
+            "No shift figure was invented from a delivery's expectation either"
+        )
+    }
+
+    /// A delivery with no expected amount is delivered exactly as it always was,
+    /// and meets no confirmation on the way.
+    ///
+    /// The absence is asserted without waiting out a timeout. The sheet would be
+    /// presented by the same state change that removes the delivered card, so a
+    /// panel that has already dropped the card and is still taking taps has
+    /// answered the question: the second half of the journey opens another
+    /// card's sheet, which a presented confirmation would have swallowed.
+    @MainActor
+    func testDeliveringWithoutExpectedPayRaisesNoConfirmation() throws {
+        let app = launchWithExpectedPay()
+
+        let card = deliveryStatus(containing: "Delivery 2", in: app)
+        let action = deliveryButton("deliveryActionButton", containing: "Delivery 2", in: app)
+        XCTAssertTrue(scrollTo(action, in: app))
+        XCTAssertFalse(
+            card.label.contains("Expected pay"),
+            "The fixture's second delivery carries no expectation: \(card.label)"
+        )
+
+        for expected in ["Mark order picked up", "Mark delivery completed"] {
+            XCTAssertTrue(waitForLabel(action, toContain: expected), "Showed: \(action.label)")
+            action.tap()
+        }
+
+        XCTAssertTrue(
+            waitForCount(app.buttons.matching(identifier: "deliveryActionButton"), toEqual: 1),
+            "The delivered delivery leaves the panel, which is where a sheet would have been raised"
+        )
+        XCTAssertFalse(app.buttons["confirmEarningsRecordButton"].exists, "Nothing is asked")
+        XCTAssertFalse(app.descendants(matching: .any)["confirmEarningsExpectedAmount"].exists)
+
+        let status = app.descendants(matching: .any)["deliveryStatus"]
+        XCTAssertTrue(waitForLabel(status, toContain: "1 delivery completed"), "Status: \(status.label)")
+        XCTAssertTrue(status.label.contains("1 delivery in progress"), "Status: \(status.label)")
+
+        // The screen underneath is genuinely the one taking taps: a modal
+        // confirmation would take this one instead of the card.
+        let change = deliveryButton("expectedEarningsButton", containing: "Delivery 1", in: app)
+        XCTAssertTrue(scrollTo(change, in: app))
+        change.tap()
+        let field = app.textFields["deliveryExpectedEarningsAmountField"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5), "The other card's own sheet opens")
+        XCTAssertEqual(
+            field.value as? String,
+            "8.5",
+            "Completing a delivery left the other delivery's expectation exactly as it was"
+        )
+        app.buttons["cancelDeliveryExpectedEarningsButton"].tap()
+
+        XCTAssertTrue(
+            deliveryButton("deliveryActionButton", containing: "Delivery 1", in: app)
+                .waitForExistence(timeout: 5),
+            "And that delivery is still in progress"
+        )
+    }
+
     // MARK: Pickup identity
 
     /// A pickup place is named on a running delivery, and the card shows it.
@@ -2137,6 +2410,18 @@ final class DashPilotUITests: XCTestCase {
     @MainActor
     private func typeDeliveryAmount(_ text: String, in app: XCUIApplication) {
         let field = app.textFields["deliveryEarningsAmountField"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        field.tap()
+        field.typeText(text)
+    }
+
+    /// Types an amount into the expected-pay sheet's only field.
+    ///
+    /// The editor focuses the field itself, so the tap is about which element
+    /// the keystrokes reach rather than about raising a keyboard.
+    @MainActor
+    private func typeExpectedPay(_ text: String, in app: XCUIApplication) {
+        let field = app.textFields["deliveryExpectedEarningsAmountField"]
         XCTAssertTrue(field.waitForExistence(timeout: 5))
         field.tap()
         field.typeText(text)
