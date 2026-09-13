@@ -52,7 +52,7 @@ import SwiftData
 ///
 /// The last of those is the fact this investigation turns around. **A stationary
 /// vehicle writes nothing**, so the last row before a pickup wait describes the
-/// approach rather than the dwell — which was the hypothesis — and the absence
+/// approach rather than the dwell, which was the hypothesis, and the absence
 /// of rows across the dwell means either that the vehicle did not move or that
 /// capture was not running. See ``StationaryBracket`` for the part of that
 /// ambiguity the store can actually settle.
@@ -138,7 +138,7 @@ extension HistoricalPickupAnchorProbe {
     /// that records them driving away carries a capture session identifier.
     ///
     /// If the row before the wait and the row after it share one non-nil
-    /// session, capture did not stop between them — every path that stops it
+    /// session, capture did not stop between them: every path that stops it
     /// clears the identifier and the next accepted row opens a new one
     /// (`stopCapturing()`, and the pause, end, permission-loss, background and
     /// relaunch routes that call it). So the interval was **measured and
@@ -147,7 +147,7 @@ extension HistoricalPickupAnchorProbe {
     /// What that proves is bounded and worth stating exactly: every fix taken in
     /// between was either within `RouteSampleFilter.minimumDistance` (5 m) of
     /// the anchor, or was rejected for some other reason. Sustained poor
-    /// accuracy is the residual hole — an urban canyon reporting more than 100 m
+    /// accuracy is the residual hole. An urban canyon reporting more than 100 m
     /// for ten minutes writes nothing while the vehicle drives away, and looks
     /// exactly like a vehicle standing still. Nothing in the store closes that,
     /// and this investigation does not pretend otherwise.
