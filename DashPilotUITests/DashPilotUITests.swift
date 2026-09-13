@@ -25,6 +25,9 @@ final class DashPilotUITests: XCTestCase {
     /// Must match `LaunchArgument.seededStackedOffer`, for the same reason.
     private static let seededStackedOfferArgument = "-dashpilot-seeded-stacked-offer"
 
+    /// Must match `LaunchArgument.seededMalformedOffer`, for the same reason.
+    private static let seededMalformedOfferArgument = "-dashpilot-seeded-malformed-offer"
+
     /// Must match `LaunchArgument.stubbedLocation`, for the same reason.
     private static let stubbedLocationArgument = "-dashpilot-stubbed-location"
 
@@ -129,6 +132,20 @@ final class DashPilotUITests: XCTestCase {
     private func launchWithStackedOffer() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments.append(Self.seededStackedOfferArgument)
+        app.launch()
+        return app
+    }
+
+    /// Launches against a throwaway store holding one offer of two deliveries
+    /// and an offer holding none.
+    ///
+    /// The empty offer is a row the app cannot produce. It is seeded so a
+    /// journey can prove the correction screen reads a store holding one rather
+    /// than falling over on it.
+    @MainActor
+    private func launchWithMalformedOffer() -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments.append(Self.seededMalformedOfferArgument)
         app.launch()
         return app
     }
@@ -1293,6 +1310,246 @@ final class DashPilotUITests: XCTestCase {
             0,
             "A dismissed sheet records no offer and no delivery"
         )
+    }
+
+    // MARK: Correcting which deliveries arrived together
+
+    /// Two offers the driver recorded separately become the one acceptance they
+    /// really were, and the panel says so afterwards.
+    @MainActor
+    func testCorrectingGroupingCombinesTwoOffers() throws {
+        let app = launchWithStackedOffer()
+
+        XCTAssertTrue(app.buttons["endShiftButton"].waitForExistence(timeout: 15), "The seeded shift is running")
+
+        let correct = app.buttons["correctOffersButton"]
+        XCTAssertTrue(scrollTo(correct, in: app), "Correction is one control, not a button on every card")
+        correct.tap()
+
+        // The add-on offer is the one that moves, because it was accepted after
+        // the offer it is joining.
+        let combine = app.buttons
+            .matching(NSPredicate(format: "identifier == %@ AND label CONTAINS %@",
+                                  "offerCorrectionMergeButton", "Combine Offer 2"))
+            .firstMatch
+        XCTAssertTrue(scrollTo(combine, in: app), "Offer 2 can be combined into the offer accepted before it")
+        combine.tap()
+
+        let destination = app.buttons["offerCorrectionDestinationButton"]
+        XCTAssertTrue(destination.waitForExistence(timeout: 5))
+        XCTAssertEqual(destination.label, "Combine Offer 2 into Offer 1", "The direction is in the control itself")
+        destination.tap()
+
+        // The confirmation names the deliveries that move, and says the offer
+        // they leave is removed.
+        let alert = app.alerts.firstMatch
+        XCTAssertTrue(alert.waitForExistence(timeout: 5))
+        let confirm = alert.buttons.matching(identifier: "confirmOfferCorrectionButton").firstMatch
+        XCTAssertTrue(confirm.exists)
+        XCTAssertEqual(confirm.label, "Combine into Offer 1")
+        XCTAssertTrue(
+            alert.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "Delivery 3 moves to Offer 1")).count > 0,
+            "The confirmation names what moves rather than saying \"merge\""
+        )
+        confirm.tap()
+
+        // One offer left, holding all three deliveries.
+        let header = app.staticTexts
+            .matching(NSPredicate(format: "identifier == %@", "offerCorrectionOfferHeader"))
+        XCTAssertTrue(waitForCount(header, toEqual: 1), "The offer left holding nothing is gone")
+        XCTAssertTrue(header.firstMatch.label.contains("3 deliveries accepted together"),
+                      "Showed: \(header.firstMatch.label)")
+
+        app.buttons["closeOfferCorrectionButton"].tap()
+
+        // And the running panel agrees, with every delivery still advancing
+        // itself.
+        let heading = app.descendants(matching: .any)["offerGroupHeader"]
+        XCTAssertTrue(scrollTo(heading, in: app))
+        XCTAssertTrue(heading.label.contains("3 deliveries accepted together"), "Showed: \(heading.label)")
+        XCTAssertEqual(app.buttons.matching(identifier: "deliveryActionButton").count, 3)
+        XCTAssertEqual(
+            deliveryButton("deliveryActionButton", containing: "Delivery 1", in: app).label,
+            "Delivery 1. Mark order picked up",
+            "The delivery that was already waiting at its pickup kept its own next step"
+        )
+    }
+
+    /// An offer grouped by mistake becomes one offer per delivery, and every
+    /// card keeps the step it was on.
+    @MainActor
+    func testCorrectingGroupingSeparatesAnOffer() throws {
+        let app = launchWithStackedOffer()
+
+        XCTAssertTrue(app.buttons["endShiftButton"].waitForExistence(timeout: 15), "The seeded shift is running")
+
+        let correct = app.buttons["correctOffersButton"]
+        XCTAssertTrue(scrollTo(correct, in: app))
+        correct.tap()
+
+        let separate = app.buttons["offerCorrectionSeparateButton"]
+        XCTAssertTrue(separate.waitForExistence(timeout: 5), "Only a grouped offer offers this")
+        XCTAssertEqual(separate.label, "Separate Offer 1 into one offer per delivery")
+        separate.tap()
+
+        let alert = app.alerts.firstMatch
+        XCTAssertTrue(alert.waitForExistence(timeout: 5))
+        let confirm = alert.buttons.matching(identifier: "confirmOfferCorrectionButton").firstMatch
+        XCTAssertEqual(confirm.label, "Separate Offer 1")
+        XCTAssertTrue(
+            alert.staticTexts.containing(
+                NSPredicate(format: "label CONTAINS %@", "Delivery 2 moves into a new offer of its own")
+            ).count > 0,
+            "The confirmation names the delivery that moves"
+        )
+        confirm.tap()
+
+        XCTAssertTrue(
+            waitForCount(app.buttons.matching(identifier: "offerCorrectionSeparateButton"), toEqual: 0),
+            "Nothing is grouped any more, so nothing offers to be separated"
+        )
+
+        app.buttons["closeOfferCorrectionButton"].tap()
+
+        XCTAssertEqual(
+            app.descendants(matching: .any).matching(identifier: "offerGroupHeader").count,
+            0,
+            "Three offers of one, which is what the panel looked like before offers were grouped"
+        )
+        XCTAssertEqual(app.buttons.matching(identifier: "deliveryActionButton").count, 3)
+        XCTAssertEqual(
+            deliveryButton("deliveryActionButton", containing: "Delivery 1", in: app).label,
+            "Delivery 1. Mark order picked up",
+            "Regrouping moved no lifecycle step"
+        )
+        XCTAssertEqual(
+            deliveryButton("deliveryActionButton", containing: "Delivery 2", in: app).label,
+            "Delivery 2. Mark arrived at pickup"
+        )
+    }
+
+    /// One delivery leaves the offer it was grouped with, and the sibling it
+    /// leaves behind is untouched.
+    @MainActor
+    func testSplittingOneDeliveryIntoItsOwnOffer() throws {
+        let app = launchWithStackedOffer()
+
+        XCTAssertTrue(app.buttons["endShiftButton"].waitForExistence(timeout: 15), "The seeded shift is running")
+
+        let correct = app.buttons["correctOffersButton"]
+        XCTAssertTrue(scrollTo(correct, in: app))
+        correct.tap()
+
+        let delivery = app.buttons
+            .matching(NSPredicate(format: "identifier == %@ AND label CONTAINS %@",
+                                  "offerCorrectionDeliveryButton", "Delivery 2"))
+            .firstMatch
+        XCTAssertTrue(delivery.waitForExistence(timeout: 5))
+        XCTAssertEqual(delivery.label, "Move Delivery 2 out of Offer 1")
+        delivery.tap()
+
+        let split = app.buttons["offerCorrectionSplitButton"]
+        XCTAssertTrue(split.waitForExistence(timeout: 5), "Splitting is offered apart from moving, not mixed into it")
+        XCTAssertEqual(split.label, "Put Delivery 2 in a new offer of its own")
+        split.tap()
+
+        let alert = app.alerts.firstMatch
+        XCTAssertTrue(alert.waitForExistence(timeout: 5))
+        alert.buttons.matching(identifier: "confirmOfferCorrectionButton").firstMatch.tap()
+
+        XCTAssertTrue(
+            waitForCount(app.buttons.matching(identifier: "offerCorrectionSeparateButton"), toEqual: 0),
+            "Every offer now holds one delivery"
+        )
+
+        app.buttons["closeOfferCorrectionButton"].tap()
+        XCTAssertEqual(
+            app.descendants(matching: .any).matching(identifier: "offerGroupHeader").count,
+            0
+        )
+        XCTAssertEqual(app.buttons.matching(identifier: "deliveryActionButton").count, 3, "Nothing was deleted")
+    }
+
+    /// Leaving the correction screen records nothing.
+    @MainActor
+    func testDismissingTheCorrectionSheetChangesNothing() throws {
+        let app = launchWithStackedOffer()
+
+        XCTAssertTrue(app.buttons["endShiftButton"].waitForExistence(timeout: 15), "The seeded shift is running")
+
+        let correct = app.buttons["correctOffersButton"]
+        XCTAssertTrue(scrollTo(correct, in: app))
+        correct.tap()
+
+        XCTAssertTrue(app.buttons["offerCorrectionSeparateButton"].waitForExistence(timeout: 5))
+        app.buttons["closeOfferCorrectionButton"].tap()
+
+        let heading = app.descendants(matching: .any)["offerGroupHeader"]
+        XCTAssertTrue(scrollTo(heading, in: app))
+        XCTAssertTrue(heading.label.contains("2 deliveries accepted together"), "Showed: \(heading.label)")
+        XCTAssertEqual(
+            app.descendants(matching: .any).matching(identifier: "offerGroupHeader").count,
+            1,
+            "The grouping is exactly what it was"
+        )
+    }
+
+    /// A store holding an offer with no deliveries is read, stated, and
+    /// corrected around.
+    @MainActor
+    func testCorrectionReadsAnOfferHoldingNoDeliveries() throws {
+        let app = launchWithMalformedOffer()
+
+        XCTAssertTrue(app.buttons["endShiftButton"].waitForExistence(timeout: 15), "The seeded shift is running")
+
+        let correct = app.buttons["correctOffersButton"]
+        XCTAssertTrue(scrollTo(correct, in: app), "The screen opens over an anomalous store")
+        correct.tap()
+
+        let empty = app.staticTexts["offerCorrectionEmptyOffer"]
+        XCTAssertTrue(empty.waitForExistence(timeout: 5), "The row is stated rather than silently dropped")
+        XCTAssertTrue(
+            empty.label.contains("Nothing is recorded under this offer"),
+            "Showed: \(empty.label)"
+        )
+
+        // And the offers around it still correct. Separating the real offer is
+        // unaffected by the row beside it.
+        let separate = app.buttons["offerCorrectionSeparateButton"]
+        XCTAssertTrue(separate.exists, "The real offer is still correctable")
+        separate.tap()
+        let alert = app.alerts.firstMatch
+        XCTAssertTrue(alert.waitForExistence(timeout: 5))
+        alert.buttons.matching(identifier: "confirmOfferCorrectionButton").firstMatch.tap()
+
+        XCTAssertTrue(
+            waitForCount(app.buttons.matching(identifier: "offerCorrectionSeparateButton"), toEqual: 0)
+        )
+        XCTAssertTrue(app.staticTexts["offerCorrectionEmptyOffer"].exists, "And the anomalous row is left alone")
+    }
+
+    /// A shift with a single delivery has no grouping to correct, and says so by
+    /// offering nothing.
+    @MainActor
+    func testCorrectionIsNotOfferedForASingleDelivery() throws {
+        let app = launchWithEmptyStore()
+        app.buttons["startShiftButton"].tap()
+
+        XCTAssertTrue(app.buttons["startDeliveryButton"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["correctOffersButton"].exists, "Nothing is recorded, so nothing can be regrouped")
+
+        app.buttons["startDeliveryButton"].tap()
+        XCTAssertTrue(
+            waitForCount(app.buttons.matching(identifier: "deliveryActionButton"), toEqual: 1)
+        )
+        XCTAssertFalse(app.buttons["correctOffersButton"].exists, "One delivery is not a grouping")
+
+        XCTAssertTrue(scrollToTop(reaching: app.buttons["startDeliveryButton"], in: app))
+        app.buttons["startDeliveryButton"].tap()
+        XCTAssertTrue(
+            waitForCount(app.buttons.matching(identifier: "deliveryActionButton"), toEqual: 2)
+        )
+        XCTAssertTrue(scrollTo(app.buttons["correctOffersButton"], in: app), "Two deliveries can be regrouped")
     }
 
     /// Completing one of two deliveries leaves the other running.

@@ -106,6 +106,22 @@ nonisolated enum LaunchArgument {
     /// touch a real store.
     static let seededStackedOffer = "-dashpilot-seeded-stacked-offer"
 
+    /// Opens on a running shift holding one offer of two deliveries **and an
+    /// offer holding none**.
+    ///
+    /// The empty offer is a row the app cannot produce: an offer is recorded
+    /// with its deliveries in one write, and a correction that empties one
+    /// removes it in the same write. It exists in a store only through a fault
+    /// or a migration this build has not met, and the claim under test is that
+    /// the correction screen reads such a store, states what the row is, and
+    /// still corrects the offers around it rather than falling over.
+    ///
+    /// It is accepted **after** the real offer, so the real one is still
+    /// `Offer 1` and the journeys about grouping read what they always did.
+    ///
+    /// Every time is invented. Debug builds only, and in memory.
+    static let seededMalformedOffer = "-dashpilot-seeded-malformed-offer"
+
     /// Runs with Core Location replaced by the stub the tests and previews use,
     /// reporting When In Use with full accuracy and producing no positions.
     ///
@@ -154,7 +170,8 @@ nonisolated enum LaunchArgument {
         seededPeriodSummary,
         seededPeriodComparison,
         seededExpectedPay,
-        seededStackedOffer
+        seededStackedOffer,
+        seededMalformedOffer
     ]
 
     /// Whether this launch is running over synthetic, in-memory data.

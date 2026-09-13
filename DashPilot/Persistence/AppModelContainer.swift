@@ -43,6 +43,9 @@ enum AppModelContainer {
         if LaunchArgument.isPresent(LaunchArgument.seededStackedOffer) {
             return try PreviewSupport.seededStackedOfferContainer()
         }
+        if LaunchArgument.isPresent(LaunchArgument.seededMalformedOffer) {
+            return try PreviewSupport.seededMalformedOfferContainer()
+        }
         if LaunchArgument.isPresent(LaunchArgument.seededPickupHistory) {
             return try PreviewSupport.seededPickupHistoryContainer()
         }

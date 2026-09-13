@@ -81,6 +81,9 @@ struct DeliveryControlPanel: View {
     /// Whether the sheet that records an offer of several deliveries is up.
     @State private var isStartingGroupedOffer = false
 
+    /// Whether the sheet that corrects which deliveries arrived together is up.
+    @State private var isCorrectingOffers = false
+
     private var activeDeliveries: [NumberedDelivery] {
         let running = Set(unfinishedDeliveries.lazy.filter { $0.shift?.id == shift.id }.map(\.id))
         return shift.numberedDeliveries.filter { running.contains($0.id) }
@@ -117,6 +120,7 @@ struct DeliveryControlPanel: View {
 
             startControl
             groupedOfferControl
+            correctionControl
         }
         .padding(.vertical, 8)
         .alert(
@@ -158,6 +162,12 @@ struct DeliveryControlPanel: View {
         // lifecycle action on this screen is.
         .sheet(isPresented: $isStartingGroupedOffer) {
             NewOfferSheet { count in perform(.startOffer(count)) }
+        }
+        // A review action, reached from one control rather than from a button on
+        // every card, and writing nothing until a correction is confirmed inside
+        // it.
+        .sheet(isPresented: $isCorrectingOffers) {
+            OfferCorrectionView(shift: shift)
         }
     }
 
@@ -224,6 +234,34 @@ struct DeliveryControlPanel: View {
         .buttonStyle(.borderless)
         .accessibilityLabel("Start an offer containing several deliveries")
         .accessibilityIdentifier("startOfferButton")
+    }
+
+    /// Correcting which deliveries were accepted together.
+    ///
+    /// Shown only once the shift holds two deliveries, because grouping is a
+    /// statement about more than one of them and there is nothing to correct
+    /// below that. Small, secondary and never prominent, like the control above
+    /// it: this is not a step in recording work, and a driver who never
+    /// mis-taps never needs it.
+    ///
+    /// It is here as well as in the completed shift's history because the
+    /// mistake is noticed at the kerb as often as afterwards, and correcting it
+    /// then is one sheet away rather than waiting for the shift to end. Nothing
+    /// it does is a lifecycle action, so nothing it does can be done by mistake
+    /// to a delivery in progress.
+    @ViewBuilder
+    private var correctionControl: some View {
+        if shift.deliveries.count > 1 {
+            Button {
+                isCorrectingOffers = true
+            } label: {
+                Label("Correct Grouping", systemImage: "arrow.triangle.branch")
+                    .font(.subheadline)
+            }
+            .buttonStyle(.borderless)
+            .accessibilityLabel("Correct which deliveries were accepted together")
+            .accessibilityIdentifier("correctOffersButton")
+        }
     }
 
     // MARK: Actions
