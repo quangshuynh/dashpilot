@@ -8,10 +8,11 @@ import Foundation
 /// `DeliveryState.nextAction`'s answer in the app, and a test pins every case
 /// here to the action it stands for so the two cannot drift.
 ///
-/// `start` is absent because starting a delivery is not a step of one. It is
-/// also the one delivery action that is never ambiguous, and the reason it is
-/// still not offered here is space and safety rather than ambiguity: the Lock
-/// Screen carries the controls a driver needs *while* an order is running.
+/// `start` is absent because starting a delivery is not a step of one. The Lock
+/// Screen does offer it, as ``ShiftActivityControl/startDelivery``, and it is
+/// deliberately not a member of this enum: every case here names an existing
+/// delivery, and the one that creates one must not be reachable by the code
+/// paths that resolve which delivery a step belongs to.
 nonisolated enum ShiftActivityDeliveryStep: String, Codable, Hashable, Sendable, CaseIterable {
     case arriveAtPickup
     case pickUp
@@ -65,6 +66,18 @@ nonisolated enum ShiftActivityControl: Codable, Hashable, Sendable {
     case resume
     /// End the shift.
     case end
+    /// Start one more delivery on the running shift.
+    ///
+    /// **The one control here that names no existing record**, which is exactly
+    /// why it is safe on a surface with nothing to tap: it always means create
+    /// one delivery, whether the driver is carrying none or three. The
+    /// ambiguity that withholds ``deliveryStep`` does not apply to it, because
+    /// there is no delivery for it to pick the wrong one of.
+    ///
+    /// Offered only while the shift is **running**, since a paused shift is one
+    /// the driver said they had stopped working, and ``DeliveryService``
+    /// refuses a start on one.
+    case startDelivery
     /// Record the next step of the one delivery in progress.
     case deliveryStep(ShiftActivityDeliveryStep)
 
@@ -74,6 +87,7 @@ nonisolated enum ShiftActivityControl: Codable, Hashable, Sendable {
         case .pause: "Pause Shift"
         case .resume: "Resume Shift"
         case .end: "End Shift"
+        case .startDelivery: "Start Delivery"
         case let .deliveryStep(step): step.title
         }
     }
@@ -87,6 +101,7 @@ nonisolated enum ShiftActivityControl: Codable, Hashable, Sendable {
         case .pause: "Pause shift"
         case .resume: "Resume shift"
         case .end: "End shift"
+        case .startDelivery: "Start delivery"
         case let .deliveryStep(step): step.spokenLabel
         }
     }
@@ -96,20 +111,39 @@ nonisolated enum ShiftActivityControl: Codable, Hashable, Sendable {
         case .pause: "pause.fill"
         case .resume: "play.fill"
         case .end: "stop.fill"
+        // Not one of the step symbols: this control adds a delivery rather than
+        // moving one along, and a driver carrying an order must be able to tell
+        // the two apart without reading either label.
+        case .startDelivery: "plus.circle.fill"
         case let .deliveryStep(step): step.symbolName
         }
     }
 
     /// Whether this is the control a driver most likely reached for.
     ///
-    /// Exactly one control is emphasised at a time, and it is never `end`:
+    /// At most one control is emphasised at a time, and it is never `end`:
     /// emphasising the rarer, harder-to-undo action over the frequent one is how
     /// a shift gets ended by mistake. That is the same judgement the app's own
     /// panel makes about the same three buttons.
+    ///
+    /// ``startDelivery`` is deliberately **not** emphasised while a delivery is
+    /// running: the step of the order already in the car is what that driver
+    /// reached for, and the card would otherwise emphasise two controls at once.
+    /// The emphasis is therefore decided for the list rather than for the case,
+    /// by ``ShiftActivityControl/emphasised(in:)``.
     var isProminent: Bool {
         switch self {
-        case .resume, .deliveryStep: true
+        case .resume, .deliveryStep, .startDelivery: true
         case .pause, .end: false
         }
+    }
+
+    /// The one control in `controls` to emphasise, or `nil`.
+    ///
+    /// The first that would take emphasis on its own, which is the order the app
+    /// put them in: a delivery's next step outranks starting another, and both
+    /// outrank the two lifecycle controls, which are never emphasised at all.
+    static func emphasised(in controls: [ShiftActivityControl]) -> ShiftActivityControl? {
+        controls.first { $0.isProminent }
     }
 }

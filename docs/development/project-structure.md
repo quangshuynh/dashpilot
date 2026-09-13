@@ -11,7 +11,7 @@ DashPilot/
   Services/       Application services that own state transitions, and platform adapters
   Support/        Cross-cutting utilities: logging and launch arguments
 DashPilotActivity/ Value types shared by the app and the widget extension: the Live Activity snapshot,
-                   its control vocabulary and its four intent declarations
+                   its control vocabulary and its five intent declarations
 DashPilotWidgets/ The widget extension: the Live Activity's Lock Screen and Dynamic Island views
 DashPilotTests/   Swift Testing suites
 DashPilotUITests/ XCUITest journeys

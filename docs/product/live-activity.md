@@ -1,9 +1,9 @@
 # The shift on the Lock Screen
 
 While a shift is running, DashPilot puts one Live Activity on the Lock Screen and, on the hardware
-that has one, in the Dynamic Island. It shows what the shift has recorded so far and offers the one
-or two controls that apply, so a driver with the phone in a cradle can see where they stand and act
-without unlocking it.
+that has one, in the Dynamic Island. It shows what the shift has recorded so far and offers the few
+controls that apply, so a driver with the phone in a cradle can see where they stand and act without
+unlocking it.
 
 One activity represents **the shift**, never an individual delivery. A driver working three stacked
 orders is working one shift, and three cards competing for the same glance would be three chances to
@@ -41,15 +41,37 @@ rules permit:
 
 | The shift is | The card offers |
 | --- | --- |
-| Running, with no delivery open | **Pause Shift**, **End Shift** |
-| Running, with exactly one delivery open | That delivery's next step: **Arrived at Pickup**, then **Picked Up**, then **Delivered** |
-| Running, with two or more deliveries open | Nothing, and the reason |
+| Running, with no delivery open | **Start Delivery**, **Pause Shift**, **End Shift** |
+| Running, with exactly one delivery open | That delivery's next step (**Arrived at Pickup**, then **Picked Up**, then **Delivered**), and **Start Delivery** |
+| Running, with two or more deliveries open | **Start Delivery**, and the reason there is no step |
 | Paused | **Resume Shift**, **End Shift** |
 
 Pausing and ending are both refused while a delivery is in progress, so neither is offered then.
 Ending a **paused** shift is permitted, and closes the pause at the end instant rather than making a
 driver resume work they did not do, so End stays on the card while paused. See
 [Shift workflow](shift-workflow.md).
+
+Where three controls do not fit on one line, at the larger text sizes, they wrap to a second row
+rather than having their labels cut short. A button a driver has to guess at is how the wrong thing
+gets recorded.
+
+### Starting a delivery
+
+**Start Delivery is offered on every running shift**, whether the driver is carrying nothing or
+three orders. It is the one control here that names no existing delivery: it creates one, so there is
+no order for it to be aimed at by mistake, and the refusal below does not apply to it. A second press
+records a second delivery beside the first and changes nothing about the first. Stacked deliveries
+are how the app has always modelled this work, and the card now says so. See
+[Delivery lifecycle](delivery-lifecycle.md).
+
+It records **one fact**: that a delivery was accepted, at the instant the button was pressed. No
+amount, no expected amount, no pickup place. Those need a keyboard and a screen the driver is looking
+at, and the driver can add them later from the app.
+
+A **paused** shift does not offer it, because a paused shift is one the driver said they had stopped
+working on, and starting a delivery on one is refused by the same rule that refuses it in the app and
+by voice. If a card that is a moment out of date is pressed after the shift was paused or ended, the
+refusal comes from the store rather than from the card.
 
 A control is a courtesy and never a permission. Pressing one runs the same service the app's own
 button runs, which asks the store, so a card that is a moment out of date costs a refusal sentence
@@ -59,7 +81,7 @@ rather than a wrong write.
 
 With two orders in the car there is no "the delivery". A Lock Screen button names no particular
 order, and every way of choosing one (the newest, the oldest, the one furthest along) would write a
-driver's tap into a record they did not mean. So the card offers nothing and says so:
+driver's tap into a record they did not mean. So the card offers no step at all and says so:
 
 > Several deliveries are in progress. Open DashPilot to record a step.
 
@@ -67,6 +89,10 @@ The status line goes too: a card that named one of two orders would be picking o
 behalf. The refusal lifts by itself once one of them has been delivered or cancelled. This is the
 same rule the spoken step follows, from the same place in the code. See
 [Voice and system actions](voice-actions.md#the-rule-that-exists-only-off-screen).
+
+**Start Delivery stays**, and the distinction is what the refusal turns on. A step has to know which
+order it belongs to, and with two open there is no answer. Starting one has to know nothing about the
+orders already running.
 
 ## The clock counts itself
 
@@ -117,7 +143,8 @@ says whether capture is running right now, and why it is not, is the app's own s
   by itself, and never nudges a driver to do anything. Nothing ends a pause by itself and nothing
   reminds a driver of one.
 - **No control that cannot be undone from the app.** No cancelling a delivery, no deleting anything,
-  no entering an amount. A cancellation cannot be undone and a monetary figure is not an interaction
+  no entering an amount. A delivery started by mistake can be cancelled in the app, which keeps it in
+  history rather than erasing it, so the start is not one of these. A cancellation cannot be undone and a monetary figure is not an interaction
   to ask for from a moving car, which is the same line the voice surface draws.
 - **No Home Screen or Lock Screen widget.** A widget is a periodic summary of stored history, and
   deciding what a driver's earnings look like on a shared screen is a decision this project has not

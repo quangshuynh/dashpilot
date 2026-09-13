@@ -113,12 +113,13 @@ suggestion or tile carries a value.
 - **The log records which action ran and which rule refused it**, and never a timestamp, a count of
   what was said, or anything else. See [Privacy and logging](../architecture/privacy.md).
 
-## The Live Activity's four controls are these actions again
+## The Live Activity's five controls are these actions again
 
-Pause, Resume, End and the delivery step can also be pressed on the shift's Lock Screen card. They are
-declared as separate intents, because a Live Activity button has to be a `LiveActivityIntent` and has
-to exist in the widget extension, and they are **not discoverable**: Siri and the Shortcuts app
-already offer these actions, and two tiles doing the same thing would be two things to learn.
+Pause, Resume, End, Start Delivery and the delivery step can also be pressed on the shift's Lock
+Screen card. They are declared as separate intents, because a Live Activity button has to be a
+`LiveActivityIntent` and has to exist in the widget extension, and they are **not discoverable**:
+Siri and the Shortcuts app already offer these actions, and two tiles doing the same thing would be
+two things to learn. The six discoverable shortcuts are unchanged by them.
 
 What they are not is a second implementation. Each one calls `IntentLifecycleService`, exactly as the
 spoken actions do, so a shift paused from the Lock Screen is refused by the same rule with the same

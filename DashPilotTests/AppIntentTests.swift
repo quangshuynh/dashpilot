@@ -348,24 +348,26 @@ struct AppIntentTests {
 
     // MARK: The Live Activity's own controls
 
-    /// The four Lock Screen controls, read the way the system reads them.
+    /// The five Lock Screen controls, read the way the system reads them.
     ///
-    /// They are separate intents from the four above because a Live Activity
-    /// button must be a ``LiveActivityIntent`` and must exist in the widget
-    /// extension, while Siri must not learn two ways to say the same sentence.
-    /// What they must not be is a second implementation: every one of them goes
-    /// through ``IntentLifecycleService``, and these tests perform them against
-    /// a real store to prove it.
+    /// They are separate intents from the spoken ones above because a Live
+    /// Activity button must be a ``LiveActivityIntent`` and must exist in the
+    /// widget extension, while Siri must not learn two ways to say the same
+    /// sentence. What they must not be is a second implementation: every one of
+    /// them goes through ``IntentLifecycleService``, and these tests perform them
+    /// against a real store to prove it.
     @Test("Every Live Activity control runs in the background on a locked device")
     func activityIntentsRunOnALockedDevice() {
         #expect(PauseShiftFromActivityIntent.supportedModes == .background)
         #expect(ResumeShiftFromActivityIntent.supportedModes == .background)
         #expect(EndShiftFromActivityIntent.supportedModes == .background)
+        #expect(StartDeliveryFromActivityIntent.supportedModes == .background)
         #expect(RecordDeliveryProgressFromActivityIntent.supportedModes == .background)
 
         #expect(PauseShiftFromActivityIntent.authenticationPolicy == .alwaysAllowed)
         #expect(ResumeShiftFromActivityIntent.authenticationPolicy == .alwaysAllowed)
         #expect(EndShiftFromActivityIntent.authenticationPolicy == .alwaysAllowed)
+        #expect(StartDeliveryFromActivityIntent.authenticationPolicy == .alwaysAllowed)
         #expect(RecordDeliveryProgressFromActivityIntent.authenticationPolicy == .alwaysAllowed)
     }
 
@@ -374,9 +376,11 @@ struct AppIntentTests {
         #expect(PauseShiftFromActivityIntent.isDiscoverable == false)
         #expect(ResumeShiftFromActivityIntent.isDiscoverable == false)
         #expect(EndShiftFromActivityIntent.isDiscoverable == false)
+        #expect(StartDeliveryFromActivityIntent.isDiscoverable == false)
         #expect(RecordDeliveryProgressFromActivityIntent.isDiscoverable == false)
 
         #expect(PauseShiftIntent.isDiscoverable, "The spoken action is the discoverable one")
+        #expect(StartDeliveryIntent.isDiscoverable, "And it is the one that starts a delivery, too")
         #expect(DashPilotShortcuts.appShortcuts.count == 6, "And the shortcut count is unchanged by them")
     }
 
@@ -439,6 +443,108 @@ struct AppIntentTests {
             let deliveries = try context.fetch(FetchDescriptor<Delivery>())
             #expect(deliveries.count == 2)
             #expect(deliveries.allSatisfy { $0.state == .accepted }, "Neither delivery was advanced")
+        }
+    }
+
+    // MARK: Starting a delivery from the Live Activity
+
+    @Test("Starting a delivery from the Live Activity records exactly one")
+    func activityStartDeliveryRecordsExactlyOne() async throws {
+        try await withStore { context in
+            _ = try await StartShiftIntent().perform()
+            _ = try await StartDeliveryFromActivityIntent().perform()
+
+            let deliveries = try context.fetch(FetchDescriptor<Delivery>())
+            #expect(deliveries.count == 1)
+            #expect(deliveries.first?.state == .accepted)
+            // Nothing is invented alongside the delivery the driver started.
+            #expect(deliveries.first?.grossEarnings == nil)
+            #expect(deliveries.first?.expectedEarnings == nil)
+            #expect(deliveries.first?.pickupPlace == nil)
+        }
+    }
+
+    @Test("Starting one while another is running stacks rather than replacing")
+    func activityStartDeliveryStacks() async throws {
+        try await withStore { context in
+            _ = try await StartShiftIntent().perform()
+            _ = try await StartDeliveryFromActivityIntent().perform()
+            let first = try #require(try context.fetch(FetchDescriptor<Delivery>()).first)
+            _ = try await RecordDeliveryProgressFromActivityIntent().perform()
+            #expect(first.state == .arrivedAtPickup)
+
+            _ = try await StartDeliveryFromActivityIntent().perform()
+
+            let deliveries = try context.fetch(FetchDescriptor<Delivery>())
+            #expect(deliveries.count == 2)
+            #expect(first.state == .arrivedAtPickup, "The order already in the car is untouched")
+            #expect(deliveries.filter { $0.state == .accepted }.count == 1)
+        }
+    }
+
+    @Test("Each press records exactly one delivery")
+    func activityStartDeliveryRecordsOnePerPress() async throws {
+        try await withStore { context in
+            _ = try await StartShiftIntent().perform()
+
+            for expected in 1...3 {
+                _ = try await StartDeliveryFromActivityIntent().perform()
+                #expect(try context.fetch(FetchDescriptor<Delivery>()).count == expected)
+            }
+
+            let deliveries = try context.fetch(FetchDescriptor<Delivery>())
+            #expect(deliveries.allSatisfy { $0.state == .accepted })
+            #expect(Set(deliveries.map(\.id)).count == 3, "Three records, not one pressed three times")
+        }
+    }
+
+    @Test("A stale press after the shift is paused or ended is refused and writes nothing")
+    func activityStartDeliveryRefusesStalePresses() async throws {
+        try await withStore { context in
+            _ = try await StartShiftIntent().perform()
+            _ = try await PauseShiftIntent().perform()
+
+            await #expect(throws: IntentLifecycleError.delivery(.shiftPaused)) {
+                _ = try await StartDeliveryFromActivityIntent().perform()
+            }
+            #expect(try context.fetch(FetchDescriptor<Delivery>()).isEmpty)
+
+            _ = try await EndShiftIntent().perform()
+            await #expect(throws: IntentLifecycleError.delivery(.noActiveShift)) {
+                _ = try await StartDeliveryFromActivityIntent().perform()
+            }
+            #expect(try context.fetch(FetchDescriptor<Delivery>()).isEmpty)
+        }
+    }
+
+    @Test("A press with nothing running at all is refused")
+    func activityStartDeliveryRefusesWithNoShift() async throws {
+        try await withStore { context in
+            await #expect(throws: IntentLifecycleError.delivery(.noActiveShift)) {
+                _ = try await StartDeliveryFromActivityIntent().perform()
+            }
+
+            let deliveries = try context.fetch(FetchDescriptor<Delivery>())
+            #expect(deliveries.isEmpty)
+        }
+    }
+
+    @Test("Starting a delivery from the Live Activity asks the card to catch up, and a refusal does not")
+    func activityStartDeliveryReconciles() async throws {
+        try await withStoreWatchingActivity { _, recorder in
+            _ = try await StartShiftIntent().perform()
+            #expect(recorder.count == 1)
+
+            _ = try await StartDeliveryFromActivityIntent().perform()
+            #expect(recorder.count == 2)
+
+            _ = try await StartDeliveryFromActivityIntent().perform()
+            #expect(recorder.count == 3)
+
+            await #expect(throws: IntentLifecycleError.self) {
+                _ = try await PauseShiftFromActivityIntent().perform()
+            }
+            #expect(recorder.count == 3, "A refusal wrote nothing, so there is nothing to catch up with")
         }
     }
 

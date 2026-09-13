@@ -22,7 +22,7 @@ there is nothing to configure, disable or trust.
 - Location permission is requested at the When In Use scope only, and only when the driver taps.
 - **The voice and Shortcuts actions carry no values and are not donated.** None of the six intents
   takes a parameter, so nothing dictated is stored and no shortcut, suggestion or tile holds an
-  amount, a place or a position. The four the shift's Live Activity performs take none either, and
+  amount, a place or a position. The five the shift's Live Activity performs take none either, and
   they are not discoverable: Siri and Shortcuts already offer those actions, and a second tile would
   be one more place for the vocabulary to drift. DashPilot does not donate performed intents to the system either:
   App Shortcuts are offered from installation, and a donation would additionally feed the system's
