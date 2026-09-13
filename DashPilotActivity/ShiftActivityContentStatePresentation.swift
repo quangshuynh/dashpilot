@@ -114,17 +114,28 @@ nonisolated extension ShiftActivityAttributes.ContentState {
         return sentences.joined(separator: ". ")
     }
 
-    /// Why there are no controls, or `nil` when there are some.
+    /// Why no step is offered, or `nil` when the question does not arise.
     ///
-    /// The app offers nothing when two or more deliveries are open: there is no
-    /// "the delivery" for a step to belong to, and pausing and ending are both
-    /// refused while any delivery is running. A surface with no buttons and no
-    /// explanation reads as broken, so the refusal is said rather than left to be
-    /// inferred. It is the short form of the sentence the spoken surface gives
-    /// for the same refusal.
+    /// The app offers no step when two or more deliveries are open: there is no
+    /// "the delivery" for one to belong to, and pausing and ending are both
+    /// refused while any delivery is running. A card that has dropped the
+    /// controls a driver was using a minute ago, with no explanation, reads as
+    /// broken, so the refusal is said rather than left to be inferred. It is the
+    /// short form of the sentence the spoken surface gives for the same refusal.
+    ///
+    /// Read from the counts rather than from `controls.isEmpty`, which is what
+    /// it used to be. Start Delivery is offered on every running shift including
+    /// this one, because it names no existing order, so the list is no longer
+    /// empty in the state the sentence is about. The refusal it explains is
+    /// unchanged: it is the *step* that is withheld.
     var controlNotice: String? {
-        guard controls.isEmpty else { return nil }
+        guard !isPaused, activeDeliveryCount > 1, !offersDeliveryStep else { return nil }
         return "Several deliveries are in progress. Open DashPilot to record a step."
+    }
+
+    /// Whether the card carries a step of one delivery in progress.
+    private var offersDeliveryStep: Bool {
+        controls.contains { if case .deliveryStep = $0 { true } else { false } }
     }
 
     /// The number a Dynamic Island's compact side can fit, and nothing else.
