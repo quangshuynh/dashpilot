@@ -491,18 +491,13 @@ struct CompletedShiftDetailView: View {
             // delivery is called the same thing here as it was on the running
             // shift.
             //
-            // The offers are read once for the whole list rather than per row,
-            // and a row is handed one only where it held more than one delivery:
-            // history states the grouping it has, and says nothing at all about
-            // the ordinary offer of one.
-            let groupedOffers = shift.numberedOffers.filter(\.isGrouped)
+            // The offers are resolved once for the whole list rather than
+            // searched per row, and a row is handed one only where it held more
+            // than one delivery: history states the grouping it has, and says
+            // nothing at all about the ordinary offer of one.
+            let offers = groupedOffersByDelivery
             ForEach(shift.numberedDeliveries) { numbered in
-                DeliveryHistoryRow(
-                    numbered: numbered,
-                    offer: groupedOffers.first { offer in
-                        offer.deliveries.contains { $0.id == numbered.id }
-                    }
-                )
+                DeliveryHistoryRow(numbered: numbered, offer: offers[numbered.id])
             }
         } header: {
             Text("Deliveries")
@@ -625,6 +620,22 @@ struct CompletedShiftDetailView: View {
     /// waiting for the measurement the performance section needs.
     private var deliveryActiveTime: DeliveryActiveTime {
         shift.deliveryActiveTime()
+    }
+
+    /// The offer each delivery arrived in, for the offers that held more than
+    /// one.
+    ///
+    /// A delivery from an offer of one is absent, so the row it builds shows no
+    /// grouping at all, which is what the ordinary case looked like before
+    /// offers existed.
+    private var groupedOffersByDelivery: [UUID: NumberedOffer] {
+        var offers: [UUID: NumberedOffer] = [:]
+        for offer in shift.numberedOffers where offer.isGrouped {
+            for delivery in offer.deliveries {
+                offers[delivery.id] = offer
+            }
+        }
+        return offers
     }
 
     /// Derived from the distance measured once above, exactly as the history row
