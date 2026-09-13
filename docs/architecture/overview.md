@@ -15,7 +15,7 @@ structure is kept flat and explicit; layers are introduced when a concrete probl
 | `Intents` | The App Intents surface: six short lifecycle actions performed with no screen, over those same services |
 | `App` | SwiftUI entry point, screens and preview fixtures |
 | `Support` | Cross-cutting utilities: logging and launch arguments |
-| `DashPilotActivity` | Value types shared with the widget extension: the Live Activity's snapshot, its control vocabulary and its four intent declarations |
+| `DashPilotActivity` | Value types shared with the widget extension: the Live Activity's snapshot, its control vocabulary and its five intent declarations |
 | `DashPilotWidgets` | The widget extension, which draws that snapshot and nothing else |
 
 Domain types are deliberately free of SwiftUI and SwiftData so calculations can be tested without a
@@ -186,7 +186,7 @@ Domain types (`Money`, `MoneyInput`, `Shift`, `RouteSample`, `Delivery`, `Delive
 state, they are used from tests that are not main-actor bound, and background persistence work will
 need them off the main actor.
 
-`IntentLifecycleService` and the four intents' `perform()` methods are main-actor isolated for the
+`IntentLifecycleService` and every intent's `perform()` method are main-actor isolated for the
 same reason the services are: an intent performs one lifecycle operation over the main context, and
 it must not interleave with the interface doing the same.
 
