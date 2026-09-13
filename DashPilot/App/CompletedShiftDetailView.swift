@@ -43,6 +43,11 @@ struct CompletedShiftDetailView: View {
     /// it opens, and the driver can leave without sharing anything.
     @State private var isExporting = false
 
+    /// Correcting which deliveries were accepted together, in the same sheet the
+    /// running shift opens. History is where a driver reviews what they recorded
+    /// and where a grouping mistake is most often noticed.
+    @State private var isCorrectingOffers = false
+
     @State private var isConfirmingDeletion = false
     @State private var deletionError: ShiftLifecycleError?
 
@@ -87,6 +92,9 @@ struct CompletedShiftDetailView: View {
         }
         .sheet(isPresented: $isExporting) {
             ShiftExportSheet(scope: .shift(shift.id))
+        }
+        .sheet(isPresented: $isCorrectingOffers) {
+            OfferCorrectionView(shift: shift)
         }
         // An alert rather than a confirmation dialog: a dialog is presented as a
         // popover in some layouts, where iOS drops the explicit Cancel button
@@ -498,6 +506,16 @@ struct CompletedShiftDetailView: View {
             let offers = groupedOffersByDelivery
             ForEach(shift.numberedDeliveries) { numbered in
                 DeliveryHistoryRow(numbered: numbered, offer: offers[numbered.id])
+            }
+
+            // One control for the whole list rather than one per row: grouping
+            // is a statement about which deliveries arrived together, so it is
+            // corrected by looking at all of them at once. Absent on a shift
+            // holding a single delivery, where there is nothing to regroup.
+            if shift.deliveries.count > 1 {
+                Button("Correct Grouping") { isCorrectingOffers = true }
+                    .accessibilityLabel("Correct which deliveries were accepted together")
+                    .accessibilityIdentifier("correctOffersButton")
             }
         } header: {
             Text("Deliveries")
