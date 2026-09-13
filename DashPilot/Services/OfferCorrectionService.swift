@@ -231,7 +231,9 @@ struct OfferCorrectionService {
         guard deliveries.allSatisfy({ $0.offer?.id == source?.id }) else {
             throw OfferCorrectionError.invalidMembership(.deliveriesFromDifferentOffers)
         }
-        if let source, source.deliveryCount == deliveries.count {
+        // Counted over distinct deliveries, so a list that names one twice is
+        // not mistaken for one that names them all.
+        if let source, Set(deliveries.map(\.id)).count == source.deliveryCount {
             throw OfferCorrectionError.invalidMembership(.wouldRegroupEveryDelivery)
         }
 
