@@ -10,7 +10,7 @@ import Testing
 /// ships: there is no production anchor type, no schema change and no detector.
 /// They exist so the finding on `investigate/historical-pickup-anchor` is
 /// reproducible rather than asserted, and they are **off by default** for the
-/// reason `RouteCaptureWritePerformanceTests` is off by default — a suite that
+/// reason `RouteCaptureWritePerformanceTests` is off by default: a suite that
 /// pins the behaviour of code the app does not run would be read, later, as a
 /// contract the app has to keep.
 ///
