@@ -16,6 +16,15 @@ bootstrap script. Cloning it and opening it is the whole setup.
 Xcode 26.6 is required because the project's deployment target is iOS 26.5, and an Xcode without the
 iOS 26.5 SDK refuses to build it.
 
+## Schemes
+
+Both schemes are **shared and committed**, under
+`DashPilot.xcodeproj/xcshareddata/xcschemes`, so `-scheme DashPilot` means the same thing in a fresh
+clone, in CI and on a machine that has had the project open for months. Per-user Xcode state
+(`xcuserdata`) stays out of the repository, and one of the things it holds is a flag that switches
+off Xcode's automatic creation of a scheme for a target. A project whose schemes are not tracked
+therefore builds or does not build from the command line depending on files nobody can see.
+
 ## In Xcode
 
 Open `DashPilot.xcodeproj`, choose the `DashPilot` scheme and an iOS simulator, then build and run.
