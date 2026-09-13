@@ -102,8 +102,22 @@ and one they cannot.
 - **Nothing is detected.** Every delivery timestamp exists because the driver tapped a control.
   DashPilot cannot see an order, a restaurant handover or a customer receipt, so a delivery that was
   not recorded is not in the app, and an event recorded late is recorded late.
-- **No customer or address.** A delivery holds timestamps, its shift and an optional pickup place,
-  and nothing that says where it went or who it was for.
+- **No customer or address.** A delivery holds timestamps, its shift, the offer it arrived in and an
+  optional pickup place, and nothing that says where it went or who it was for.
+- **An offer is a grouping the driver recorded, and nothing more.** DashPilot reads no delivery
+  platform, so an offer holds no platform identifier, no pay figure, no distance estimate and no
+  customer. Whether two deliveries arrived together is recorded only because the driver said so at
+  the moment they accepted them: nothing infers it from their timing, their pickup place or their
+  overlap, and deliveries recorded before offers existed are each in a one-delivery offer of their
+  own whether or not they really arrived together.
+- **An offer cannot be corrected.** A delivery cannot be moved into or out of one, an offer's size
+  cannot be changed after the fact, and there is no control that cancels an offer as a unit. A driver
+  who taps Start Delivery twice for work that was really one offer of two has recorded two offers,
+  and the only remedy is cancelling a delivery and starting again.
+- **No offer holds money, time or distance.** There is no offer total, no per-offer rate and no
+  per-offer duration anywhere in the app or its exports. Amounts stay on the delivery they were
+  recorded against, and a sum over the deliveries of an offer would read every one with no amount as
+  having paid nothing.
 - **Per-delivery earnings are entirely manual, and often absent.** A delivery holds an amount only
   because the driver typed one against it, after the delivery finished. DashPilot never splits a
   shift total between deliveries, never adds a shift total up from them, and never reads a missing
