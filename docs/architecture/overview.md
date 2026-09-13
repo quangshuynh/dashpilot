@@ -101,6 +101,29 @@ does not know how a delivery advances.
   cancelled, deleted or reparented to tidy it up, because each of those would invent a fact about
   work the driver did.
 
+### Correcting grouping
+
+`OfferCorrectionService` is the only place a delivery's offer changes after it was recorded, and the
+only place an offer is removed. It owns four corrections and builds all of them from one model
+primitive, `Delivery.move(into:)`, rather than from four write paths that can drift apart: a merge is
+that applied to every delivery of an offer, followed by removing the offer left holding nothing.
+
+It moves membership and nothing else. No lifecycle timestamp, pickup place, amount or terminal state
+moves with it, and neither acceptance timestamp is rewritten. The single ordering rule is
+`Offer.couldHaveContained(_:)`, which refuses to put a delivery into an offer accepted after that
+delivery was; the destinations a screen lists are filtered by the same rule, so a destination that
+would be refused is never offered. An offer created by a split takes the earliest acceptance among
+the deliveries moving into it, which is a moment the driver really recorded.
+
+Each correction is one save with the same rollback rule the lifecycle transitions use, so no partly
+merged pair of offers can reach the store. Removing an emptied offer is guarded twice, because
+`Offer.deliveries` cascades: an offer is deleted only once that relationship is genuinely empty, and
+one that still lists a delivery is left standing and logged as the fault it is.
+
+Unlike a lifecycle transition it is allowed on a finished shift, for the reason recording a delivery's
+gross amount is: it performs no transition, and history is where a grouping mistake is noticed. It
+never moves a delivery to another shift.
+
 ## System surfaces: App Intents
 
 Six intents (start, end, pause and resume a shift; start a delivery; record the next delivery event)
