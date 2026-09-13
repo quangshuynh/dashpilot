@@ -100,8 +100,8 @@ Swift, SwiftUI, SwiftData, Core Location, App Intents, ActivityKit, WidgetKit, O
 and XCUITest. **No third-party runtime dependencies.** One application target, plus a widget
 extension that draws the shift's Live Activity and holds no logic of its own.
 
-Versioned schema at v11 with lightweight migrations from v1, tested by opening stores written under
-each older version. Domain calculations import neither SwiftUI nor SwiftData, so every rule is
+Versioned schema at v12 with migrations from v1, tested by opening stores written under each older
+version. Domain calculations import neither SwiftUI nor SwiftData, so every rule is
 tested without a container or a rendered view. Money is `Decimal` throughout: no monetary value
 passes through binary floating point, in memory or in the store. Nothing derived is stored, so
 mileage, active time and all three rates are recomputed from the stored data every time they are

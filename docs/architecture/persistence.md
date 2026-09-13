@@ -28,7 +28,7 @@ device.
 
 ## What is stored
 
-Six entities. Their fields are listed under [Data model](../reference/data-model.md).
+Seven entities. Their fields are listed under [Data model](../reference/data-model.md).
 
 `Shift` holds a start timestamp, an optional end timestamp and an optional gross earnings amount.
 Everything else about a shift, including its lifecycle state, its durations, its distance and its
@@ -40,10 +40,18 @@ but not for how long or how many times, and an accumulated "paused seconds" woul
 the app had to keep correct across every crash and failed save. Whether a shift is paused is a pause
 with no end; how long it was paused is the union of its rows.
 
-`Delivery` stores five timestamps and its shift. Its state is derived from which of those
-timestamps exist rather than stored beside them, so nothing in the store can disagree with the
-events it summarises. Nothing identifying a restaurant, a customer or an address is stored, and no
-amount is attributed to a delivery.
+`Delivery` stores five timestamps, its shift and the offer it arrived in. Its state is derived from
+which of those timestamps exist rather than stored beside them, so nothing in the store can disagree
+with the events it summarises. Nothing identifying a restaurant, a customer or an address is stored,
+and no amount is attributed to a delivery.
+
+`Offer` stores when the driver recorded accepting one piece of work, and holds the deliveries it
+contained. It exists because one acceptance can contain more than one dropoff, and before it the
+store could not tell two deliveries taken in a single tap from two taken ten minutes apart. It holds
+no money, no duration and no distance: an offer is a grouping the driver recorded, so every figure
+stays on the delivery it belongs to. `Delivery.shift` is kept beside `Delivery.offer` rather than
+replaced by it, because that column is what every fetch, aggregate, export figure and delete rule is
+built on.
 
 `Expense` stores when a cost was incurred, its amount, its category and an optional short note.
 It has **no relationship to anything**. See below.

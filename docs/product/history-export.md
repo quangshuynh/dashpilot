@@ -44,7 +44,7 @@ therefore carries none, because no expense belongs to a shift. See
 
 Every file states `formatVersion: 3`.
 
-**This is not the SwiftData schema version**, which is currently v11. The two describe different
+**This is not the SwiftData schema version**, which is currently v12. The two describe different
 things and are free to move independently:
 
 - The schema version describes how a database is laid out on one device. Nothing outside the app has
@@ -57,9 +57,38 @@ a change to what the file says does not pretend the store changed. The version i
 an existing field's meaning changes or a field is removed; adding a field is additive, and a reader
 that ignores unknown keys keeps working.
 
-Exports are never called "v11".
+Exports are never called "v12".
 
 ### Version history
+
+#### Still 3: which deliveries were accepted together
+
+One accepted offer can contain [more than one delivery](delivery-lifecycle.md#offers-and-deliveries),
+and the store now records which. JSON gains `shifts[].deliveries[].offerNumber`, and the CSV gains
+one appended column, `deliveryOfferNumber`. Deliveries of one shift carrying the same number were
+accepted together; different numbers were two decisions, however much their times overlap. The
+version was **evaluated and deliberately not moved**:
+
+- **Nothing existing changed meaning.** An offer holds no money, no duration and no distance, so
+  there is no figure for it to have moved. Every shift figure, period total and summary block is
+  derived from exactly what it was derived from before, and not one previously exported value would
+  differ.
+- **No field was removed or renamed**, and no enumeration gained a value.
+- **The new field is always present**, as an explicit `null` for a delivery recording no offer, which
+  this build cannot produce and a migrated store does not contain.
+- **The new CSV column is appended, not inserted.** Every existing column stays at the index a
+  positional reader already reads it from, which is why the column is last rather than beside
+  `deliveryNumber` where it would read better.
+
+**It is one grouping key rather than a nested structure**, and that is the substantive decision.
+Nesting the deliveries inside an `offers` array would move `shifts[].deliveries[]`, which is a
+removal to every existing reader, for a shape a consumer reconstructs in one pass by grouping on the
+key. The CSV could not express the nesting at all: its unit is a delivery, one row each, and a flat
+table cannot hold a parent record without repeating it.
+
+**There is no offer object, offer total, offer duration or offer rate** in either form. `offerNumber`
+is a local display number counted from the order a shift accepted its offers in, exactly as `number`
+is for a delivery. It is not a platform's offer identifier and never could be.
 
 #### Still 3: what a delivery was expected to pay
 
@@ -79,8 +108,8 @@ It is in the file because an export is the only way anything leaves DashPilot: t
 no backup and no sync, so a fact the driver typed and can see on screen would otherwise be
 unreachable from outside the app.
 
-**It is in JSON only. The CSV stays at 35 columns**, for the same reason expenses are not in it: see
-[CSV](#csv) below.
+**It is in JSON only, and the CSV gained no column for it**, for the same reason expenses are not in
+it: see [CSV](#csv) below.
 
 #### 3: shift pause and resume
 
@@ -293,9 +322,9 @@ the full key set, and so every record in an array is the same shape.
 
 ## CSV
 
-**One row per recorded delivery**, with its shift's own columns repeated across it. A shift with no
-deliveries still gets a row, with the delivery columns empty. Records end `\r\n`, per RFC 4180, and
-the file is UTF-8.
+**One row per recorded delivery**, with its shift's own columns repeated across it and a final
+column saying which accepted offer the delivery came in. A shift with no deliveries still gets a row,
+with the delivery columns empty. Records end `\r\n`, per RFC 4180, and the file is UTF-8.
 
 Three things are **not** in the CSV.
 
