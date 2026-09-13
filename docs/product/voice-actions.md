@@ -17,7 +17,7 @@ every rule that refuses a tap refuses a sentence.
 | End Shift | The end of the running shift, paused or not | No shift is running, or a delivery on it is still in progress |
 | Pause Shift | A pause starting now, so the paused time is not counted as working time | No shift is running, it is already paused, or a delivery on it is still in progress |
 | Resume Shift | The end of the pause | No shift is running, or it is not paused |
-| Start Delivery | A delivery accepted now, alongside any already running | No shift is running, or the shift is paused |
+| Start Delivery | One delivery accepted now, in an offer of one, alongside any already running | No shift is running, or the shift is paused |
 | Record Delivery Progress | The next event of the delivery in progress: arrived at the pickup, then picked up, then delivered | No shift is running, no delivery is in progress, or **more than one delivery is in progress** |
 
 Suggested phrases, offered by the system as soon as the app is installed:
@@ -48,7 +48,11 @@ driver's sentence into a record they did not mean. So DashPilot records nothing 
 The refusal lifts by itself. Once one of the two has been delivered or cancelled, the next spoken
 step reaches the one that is left.
 
-`Start Delivery` is not affected, because it names no existing delivery: it creates one.
+`Start Delivery` is not affected, because it names no existing delivery: it creates one, in an offer
+of one. Two deliveries that share an **offer** are still two deliveries, so a spoken step is refused
+over them exactly as it is over two separate offers. Recording an offer that held several deliveries
+needs a count, which is a number to get right on a screen rather than a sentence said at a junction:
+it is in the app only. See [Offers and deliveries](delivery-lifecycle.md#offers-and-deliveries).
 
 The shift's Live Activity applies the same rule from the same place in the code, and shows it rather
 than only saying it: with two deliveries open the card offers no step control at all. See

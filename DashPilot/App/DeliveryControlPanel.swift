@@ -16,7 +16,17 @@ import SwiftUI
 ///
 /// `Start Delivery` stays available underneath at all times while the shift
 /// runs, because accepting another order is normal work rather than an
-/// exception.
+/// exception. Beside it sits the one control for an offer that held more than
+/// one delivery, which records the same kind of work in one write.
+///
+/// ## Deliveries accepted together are shown together
+///
+/// Cards are arranged by the offer they arrived in. An offer that held more
+/// than one delivery gets a heading over its cards saying so; an offer of one
+/// gets nothing at all, which is what the ordinary case looked like before
+/// offers existed. The heading is a label and never a control: nothing acts on
+/// an offer as a unit, every button still belongs to one delivery, and each card
+/// keeps its own next step.
 ///
 /// Every button acts on the persisted delivery its card was built from, so the
 /// numbering is a label and nothing more: it could change and a tap would still
@@ -68,24 +78,45 @@ struct DeliveryControlPanel: View {
     /// the store happens to say a moment later.
     @State private var pendingEarningsConfirmation: PendingEarningsConfirmation?
 
+    /// Whether the sheet that records an offer of several deliveries is up.
+    @State private var isStartingGroupedOffer = false
+
     private var activeDeliveries: [NumberedDelivery] {
         let running = Set(unfinishedDeliveries.lazy.filter { $0.shift?.id == shift.id }.map(\.id))
         return shift.numberedDeliveries.filter { running.contains($0.id) }
+    }
+
+    /// The cards, arranged by the offer they were accepted in.
+    ///
+    /// The order is the order the deliveries already had, so a shift of
+    /// one-delivery offers shows exactly the list it showed before.
+    private var activeGroups: [DeliveryGroup] {
+        DeliveryGroup.grouping(activeDeliveries, within: shift.numberedOffers)
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             status
 
-            ForEach(activeDeliveries) { numbered in
-                ActiveDeliveryCard(
-                    numbered: numbered,
-                    advance: { perform(.advance(numbered)) },
-                    cancel: { pendingCancellation = numbered }
-                )
+            ForEach(activeGroups) { group in
+                VStack(alignment: .leading, spacing: 16) {
+                    if group.isGrouped, let offer = group.offer {
+                        OfferGroupHeader(offer: offer)
+                    }
+
+                    ForEach(group.deliveries) { numbered in
+                        ActiveDeliveryCard(
+                            numbered: numbered,
+                            offer: group.isGrouped ? group.offer : nil,
+                            advance: { perform(.advance(numbered)) },
+                            cancel: { pendingCancellation = numbered }
+                        )
+                    }
+                }
             }
 
             startControl
+            groupedOfferControl
         }
         .padding(.vertical, 8)
         .alert(
@@ -121,6 +152,12 @@ struct DeliveryControlPanel: View {
         // expected amounts never meets it.
         .sheet(item: $pendingEarningsConfirmation) { pending in
             DeliveryEarningsConfirmation(numbered: pending.numbered, expected: pending.expected)
+        }
+        // Reached only from the secondary control below the start button. The
+        // count it confirms is written through the same path every other
+        // lifecycle action on this screen is.
+        .sheet(isPresented: $isStartingGroupedOffer) {
+            NewOfferSheet { count in perform(.startOffer(count)) }
         }
     }
 
@@ -170,6 +207,25 @@ struct DeliveryControlPanel: View {
         }
     }
 
+    /// Recording an offer that contained more than one delivery.
+    ///
+    /// Deliberately small and secondary, and deliberately never prominent: most
+    /// offers are one delivery, the button above already records those in one
+    /// tap, and two competing prominent controls beside a kerb is how the wrong
+    /// one gets pressed. It opens a sheet rather than acting, because a count is
+    /// a thing to confirm.
+    private var groupedOfferControl: some View {
+        Button {
+            isStartingGroupedOffer = true
+        } label: {
+            Label("Offer With Several Deliveries", systemImage: "square.stack.3d.up")
+                .font(.subheadline)
+        }
+        .buttonStyle(.borderless)
+        .accessibilityLabel("Start an offer containing several deliveries")
+        .accessibilityIdentifier("startOfferButton")
+    }
+
     // MARK: Actions
 
     /// What a control asked for, and which delivery it asked for it on.
@@ -179,6 +235,7 @@ struct DeliveryControlPanel: View {
     /// following one.
     private enum Operation {
         case start
+        case startOffer(Int)
         case advance(NumberedDelivery)
         case cancel(NumberedDelivery)
     }
@@ -189,6 +246,8 @@ struct DeliveryControlPanel: View {
             switch operation {
             case .start:
                 try service.startDelivery()
+            case let .startOffer(count):
+                try service.startOffer(deliveryCount: count)
             case let .advance(numbered):
                 // The step is read from the delivery's own state and applied to
                 // that same delivery, so a card can only ever advance itself.
@@ -263,6 +322,43 @@ struct DeliveryControlPanel: View {
     }
 }
 
+/// The heading over the cards of one offer that contained several deliveries.
+///
+/// A label, never a control. There is nothing to act on at this level: an offer
+/// is not advanced, not completed and not cancelled, and every button on the
+/// screen belongs to exactly one delivery. What it adds is the one fact the
+/// cards below cannot state for themselves, which is that they arrived
+/// together.
+///
+/// It is one accessibility element, so a listener hears the group once rather
+/// than hearing each half of it; each card names its own grouping again, because
+/// a driver moving between cards by touch never has to have heard this.
+private struct OfferGroupHeader: View {
+    let offer: NumberedOffer
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Label("\(offer.title) · \(offer.groupStatement)", systemImage: "square.stack.3d.up.fill")
+                .font(.subheadline.weight(.semibold))
+
+            // Only once some of the offer's deliveries have finished. While they
+            // are all running it would repeat the line above it.
+            if let remaining = offer.remainingStatement {
+                Text(remaining)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(
+            [offer.spokenGroupStatement, offer.remainingStatement]
+                .compactMap { $0 }
+                .joined(separator: " ")
+        )
+        .accessibilityIdentifier("offerGroupHeader")
+    }
+}
+
 /// One delivery in progress: which one it is, what it is doing, and the single
 /// step available next.
 ///
@@ -271,6 +367,14 @@ struct DeliveryControlPanel: View {
 /// mis-tap with it.
 private struct ActiveDeliveryCard: View {
     let numbered: NumberedDelivery
+
+    /// The offer this delivery arrived in, when it held more than one delivery.
+    ///
+    /// `nil` for the ordinary case of an offer of one, and for a delivery that
+    /// records no offer at all, which is a row the app cannot produce. Both are
+    /// drawn exactly as a card was drawn before offers existed.
+    let offer: NumberedOffer?
+
     let advance: () -> Void
     let cancel: () -> Void
 
@@ -292,6 +396,19 @@ private struct ActiveDeliveryCard: View {
             VStack(alignment: .leading, spacing: 2) {
                 Label(numbered.statusTitle, systemImage: delivery.state.symbolName)
                     .font(.headline)
+
+                // The offer's name alone, because the heading directly above
+                // has already said how many deliveries it held and repeating
+                // that on every card is noise. It is on the card at all so that
+                // a driver scrolled past the heading can still tell which cards
+                // belong together. What VoiceOver hears is the fuller sentence
+                // below, since a listener has no heading in view to refer back
+                // to.
+                if let offer {
+                    Text(offer.title)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
 
                 if let place = delivery.pickupPlace {
                     Label(place.displayName, systemImage: "bag")
@@ -426,6 +543,13 @@ private struct ActiveDeliveryCard: View {
         parts.append("accepted at \(accepted)")
 
         var spoken = parts.joined(separator: ", ")
+        // Its own sentence, and before the money: which deliveries arrived
+        // together is what tells a listener which other cards on this screen
+        // belong with this one, and it must not be heard as a clause of the
+        // status above it.
+        if let grouping = offer?.spokenGrouping(of: numbered) {
+            spoken += ". \(grouping)"
+        }
         if let expected = delivery.expectedEarnings {
             spoken += ". \(numbered.spokenExpectedEarnings(expected.formatted(locale: locale)))"
         }
@@ -440,5 +564,9 @@ private struct ActiveDeliveryCard: View {
 
 #Preview("Two deliveries in progress") {
     PreviewSupport.rootView(container: PreviewSupport.activeDeliveryContainer())
+}
+
+#Preview("One offer of two, and an add-on offer") {
+    PreviewSupport.rootView(container: PreviewSupport.stackedOfferContainer())
 }
 #endif

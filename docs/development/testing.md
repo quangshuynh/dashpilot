@@ -66,6 +66,11 @@ test cannot see, such as a screen that renders a sentence the model never claime
 | Intent lifecycle service | Every action performed off screen: the shift and delivery refusals carried through unchanged, a step recorded only while exactly one delivery is in progress, the refusal naming two and three, neither delivery moving under it, the refusal lifting once one remains, a cancelled delivery neither reachable nor counted, and no amount, place or cancellation reachable at all |
 | App intents | The six intents performed end to end against a throwaway store, the ambiguous step recording nothing, and the metadata the system reads: no intent opening the app, every one runnable on a locked device, and each carrying a title and a description that states its rule |
 | Intent wording | What a driver hears back: the recorded event named as history names it, the route caution on every shift start, an unknown number left out rather than invented, no figure claimed in any sentence, and a refusal repeating the service's own words rather than a second version of them |
+| Delivery grouping | An offer's shape and its wording: an offer of one and of several, the refusals below one delivery and on an ended shift, siblings advancing independently, an offer terminal only once every delivery is, cancellation per delivery with the wholly cancelled and partly completed cases apart, the empty offer deliberately not complete, shift-wide numbering beside the `Offer 1` label, the spoken grouping naming the siblings, and a screen's cards arranged by offer including a delivery that records none |
+| Delivery offer service | One tap recording one delivery in an offer of one, a grouped offer recorded in one write, an add-on offer staying its own, offers overlapping without merging, siblings at different lifecycle points, completing one leaving the rest, amounts staying on the delivery they were recorded against, and a refused save leaving neither the offer nor any of its deliveries while an earlier offer stays whole |
+| Delivery offer persistence | The v11 to v12 custom migration giving every historical delivery a one-delivery offer of its own, including two accepted a second apart that end up in two offers; the plan's version and stage counts asserted here once; the frozen v11 shape holding no offer; every figure a migrated shift reports unmoved; a grouped offer surviving a reopened store with one delivery still running; deletion cascading to offers; and a rollback leaving no delivery pointing at a discarded offer, read through a fresh context |
+| Delivery offer surfaces | The negative claims, gathered: active time unioned identically whether two overlapping deliveries share an offer or not, unioned across offers, the Live Activity counting deliveries rather than offers and withholding the step within an offer exactly as it does across two, the card carrying no offer wording, an intent's Start Delivery recording one delivery in an offer of one, and a spoken step refused over a grouped offer without moving either delivery |
+| Delivery offer export | The grouping key on each delivery in both forms, no offer object or total anywhere, an explicit null for a delivery recording none, the CSV column appended so no existing column moves, an empty cell rather than a zero, and the format version unmoved |
 | Expense export | Expenses selected by their own dates, none in a single shift's file, a period of costs alone exported rather than refused, the summary's totals and net, the JSON key set and its explicit nulls, a round trip, the CSV carrying no expense whatever its column count, and expenses adding one top-level key without redefining any |
 
 Running one suite:
@@ -140,6 +145,7 @@ Debug builds accept nine arguments, all used only by UI tests and screenshots:
 | `-dashpilot-seeded-period-summary` | Opens an in-memory store holding a week of synthetic completed shifts and three synthetic expenses, anchored to today rather than to a fixed instant, so the period summary opens on a period that holds something |
 | `-dashpilot-seeded-period-comparison` | Opens an in-memory store holding three consecutive days, also anchored to today: a today still in progress with one of two shifts unpaid, two complete days before it, and nothing before those |
 | `-dashpilot-seeded-expected-pay` | Opens an in-memory store holding a running shift with two deliveries waiting at their pickups, alike except that one records what it is expected to pay |
+| `-dashpilot-seeded-stacked-offer` | Opens an in-memory store holding a running shift with one offer of two deliveries and a later add-on offer of one |
 | `-dashpilot-stubbed-location` | Replaces Core Location with the stub providers, reporting When In Use at full accuracy and producing no positions |
 | `-dashpilot-simulated-route` | Replaces Core Location with a synthetic vehicle driving in a straight line, so a journey can watch a live mileage figure move; it implies the permission stub above |
 
@@ -186,6 +192,19 @@ exact day and week figures and holds nothing before this week. Its three days ar
 answers a comparison differently: a day still in progress whose records do not cover it, two complete
 days whose difference is a quarter, and an empty day before those.
 
+The stacked-offer fixture holds **two offers** rather than one, and the second one is the point.
+Recording an offer of two is a single write, so what a journey has to judge is the screen afterwards:
+which cards carry a heading and which carry none. One grouped offer alone would leave the heading
+looking like part of the panel; with an add-on offer of one beside it, the count of headings is a
+real claim. Its two grouped deliveries are left at different lifecycle points, so advancing one and
+finding the other where it was is reachable too.
+
+Its deliveries are handed back **in the order the shift numbers them**, not in creation order. The
+deliveries of one offer share an acceptance instant, so their order is settled by the identity
+tie-break in `Delivery.acceptedBefore`, and a fixture that advanced `deliveries[0]` by creation order
+would be advancing a delivery whose number changes from run to run. That cost one flaky journey
+before it was noticed on screen.
+
 The expected-pay fixture is a pair rather than a single delivery, and the pair is the point. An
 expected amount can only be entered while a delivery is in progress, so no completed-shift fixture
 can reach one; and what the feature has to be judged on is the difference between a delivery that
@@ -219,7 +238,11 @@ gross earnings unchanged beside it, an expense recorded on a day with no shift s
 summarised, recording what a running delivery is expected to pay and reading it back on the card as
 expected rather than as earnings, delivering a delivery that carries an expectation and being offered
 the final amount, dismissing that offer and finding the delivery terminal with the expectation kept
-and no gross recorded, delivering one that carries no expectation and being asked nothing, reading a
+and no gross recorded, delivering one that carries no expectation and being asked nothing, reading a shift whose
+deliveries arrived in one offer and seeing exactly one heading over them with none over the add-on
+offer's card, hearing a card name the deliveries it was accepted with, advancing one delivery of an
+offer and finding its sibling where it was, recording an offer of two from the sheet and then a
+single delivery beside it, dismissing that sheet and recording nothing, reading a
 day beside the day before it with both figures and both coverages on screen,
 the percentage a finished and fully recorded pair of days states, the absence of one while a day is
 still in progress, an empty previous day said to hold nothing rather than shown as no earnings, and
