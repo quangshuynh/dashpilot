@@ -60,7 +60,7 @@ enum PreviewSupport {
         // a delivered lifecycle, a cancelled one, both derived intervals, and a
         // pair whose lifecycles overlap. Every timestamp is an invented offset
         // from the fixture's start.
-        let deliveries = syntheticDeliveries(in: completed, from: completed.startedAt)
+        let deliveries = syntheticDeliveries(in: completed, from: completed.startedAt, context: context)
         for delivery in deliveries {
             context.insert(delivery)
         }
@@ -87,6 +87,61 @@ enum PreviewSupport {
     /// through the interface: two cards, each offering its own next step,
     /// advancing one leaving the other alone, and a shift end refused while
     /// either is unfinished.
+    /// A delivery in a one-delivery offer of its own, which is exactly what one
+    /// tap on Start Delivery records.
+    ///
+    /// Every fixture below goes through it rather than building a `Delivery`
+    /// directly, so a seeded store has the shape a real one has: no delivery in
+    /// it is left holding no offer. It records through
+    /// ``Shift/beginOffer(deliveryCount:at:)``, the app's own creation path, so
+    /// a fixture cannot drift into a grouping the app could not produce.
+    ///
+    /// The offer is inserted here and the delivery is returned for the caller to
+    /// insert, which is the shape every fixture already reads in.
+    ///
+    /// The pair is built directly rather than through
+    /// ``Shift/beginOffer(deliveryCount:at:)`` because many of the fixtures
+    /// below assemble a shift that has **already ended**, which that method
+    /// rightly refuses: they describe the stored state of work that happened
+    /// rather than replaying it. What the method guarantees is kept here by
+    /// construction, since the offer and its delivery are made together and
+    /// share the shift and the instant.
+    @discardableResult
+    private static func insertedDelivery(
+        on shift: Shift,
+        acceptedAt: Date,
+        in context: ModelContext
+    ) -> Delivery {
+        let offer = Offer(shift: shift, acceptedAt: acceptedAt)
+        context.insert(offer)
+        return Delivery(shift: shift, offer: offer, acceptedAt: acceptedAt)
+    }
+
+    /// One offer holding several deliveries, all inserted, which is what the
+    /// driver records when they say an accepted offer contained more than one.
+    ///
+    /// They are returned **in the order the shift numbers them**, not in the
+    /// order they were created. The deliveries of one offer share an acceptance
+    /// instant, so their order is settled by the identity tie-break in
+    /// ``Delivery/acceptedBefore(_:_:)``, and a fixture that advanced
+    /// `deliveries[0]` by creation order would be advancing a delivery whose
+    /// number changes from run to run.
+    @discardableResult
+    private static func insertedOffer(
+        on shift: Shift,
+        deliveryCount: Int,
+        acceptedAt: Date,
+        in context: ModelContext
+    ) -> [Delivery] {
+        let offer = Offer(shift: shift, acceptedAt: acceptedAt)
+        context.insert(offer)
+        let deliveries = (0..<deliveryCount).map { _ in
+            Delivery(shift: shift, offer: offer, acceptedAt: acceptedAt)
+        }
+        for delivery in deliveries { context.insert(delivery) }
+        return deliveries.sorted(by: Delivery.acceptedBefore)
+    }
+
     static func activeDeliveryContainer(
         referenceDate: Date = Date(timeIntervalSince1970: 1_756_000_000)
     ) -> ModelContainer {
@@ -111,19 +166,19 @@ enum PreviewSupport {
 
         // One delivery already completed in this shift, so the status line has a
         // count to state alongside the two still running.
-        let finished = Delivery(shift: shift, acceptedAt: referenceDate.addingTimeInterval(-5000))
+        let finished = insertedDelivery(on: shift, acceptedAt: referenceDate.addingTimeInterval(-5000), in: context)
         try? finished.markArrivedAtPickup(at: referenceDate.addingTimeInterval(-4700))
         try? finished.markPickedUp(at: referenceDate.addingTimeInterval(-4300))
         try? finished.markDelivered(at: referenceDate.addingTimeInterval(-3800))
         context.insert(finished)
 
         // Accepted and no further: its next step is arriving at the pickup.
-        let accepted = Delivery(shift: shift, acceptedAt: referenceDate.addingTimeInterval(-1500))
+        let accepted = insertedDelivery(on: shift, acceptedAt: referenceDate.addingTimeInterval(-1500), in: context)
         context.insert(accepted)
 
         // Accepted later but already in the car, which is exactly why the two
         // cards cannot share one control: the later delivery is further along.
-        let carrying = Delivery(shift: shift, acceptedAt: referenceDate.addingTimeInterval(-900))
+        let carrying = insertedDelivery(on: shift, acceptedAt: referenceDate.addingTimeInterval(-900), in: context)
         try? carrying.markArrivedAtPickup(at: referenceDate.addingTimeInterval(-600))
         try? carrying.markPickedUp(at: referenceDate.addingTimeInterval(-240))
         context.insert(carrying)
@@ -177,7 +232,7 @@ enum PreviewSupport {
         // Waiting at the pickup with an amount recorded: the state the feature
         // was designed around, since the figure an offer showed is on the phone
         // at the kerb and gone by the evening.
-        let expecting = Delivery(shift: shift, acceptedAt: referenceDate.addingTimeInterval(-4500))
+        let expecting = insertedDelivery(on: shift, acceptedAt: referenceDate.addingTimeInterval(-4500), in: context)
         try? expecting.markArrivedAtPickup(at: referenceDate.addingTimeInterval(-4200))
         try? expecting.setExpectedEarnings(Money(minorUnits: 850))
         context.insert(expecting)
@@ -186,9 +241,69 @@ enum PreviewSupport {
         // feature works exactly this delivery, and the journeys use it both to
         // enter an amount and to prove that a delivery without one finishes the
         // way it always did.
-        let plain = Delivery(shift: shift, acceptedAt: referenceDate.addingTimeInterval(-1800))
+        let plain = insertedDelivery(on: shift, acceptedAt: referenceDate.addingTimeInterval(-1800), in: context)
         try? plain.markArrivedAtPickup(at: referenceDate.addingTimeInterval(-1500))
         context.insert(plain)
+
+        try? context.save()
+
+        return container
+    }
+
+    /// The stacked-offer fixture, for a preview, which cannot recover from a
+    /// container failure.
+    static func stackedOfferContainer(
+        referenceDate: Date = Date(timeIntervalSince1970: 1_756_000_000)
+    ) -> ModelContainer {
+        try! seededStackedOfferContainer(referenceDate: referenceDate)
+    }
+
+    /// A throwaway store holding a running shift with **two offers**: one that
+    /// contained two deliveries, and a later one that contained a single
+    /// delivery.
+    ///
+    /// The shift holds, in acceptance order, `Delivery 1` and `Delivery 2` from
+    /// one offer, and `Delivery 3` from an add-on offer accepted twenty minutes
+    /// later. `Delivery 1` is already waiting at its pickup and `Delivery 2` has
+    /// not arrived yet, which is the whole claim about grouping: two deliveries
+    /// accepted in one act still advance on their own.
+    ///
+    /// Why the add-on offer is in it. One grouped offer alone would leave the
+    /// heading looking like part of the panel. With a second offer on the same
+    /// screen, a journey can assert that exactly one heading exists, that it
+    /// names the offer it belongs to, and that the single delivery below carries
+    /// none.
+    ///
+    /// Grouping is the one state a journey cannot reach by tapping through the
+    /// app in a way that leaves it observable afterwards, which is why it is
+    /// seeded rather than recorded. Debug builds only, and in memory, like every
+    /// fixture here. Every offset is invented.
+    static func seededStackedOfferContainer(
+        referenceDate: Date = Date(timeIntervalSince1970: 1_756_000_000)
+    ) throws -> ModelContainer {
+        let container = try ModelContainerFactory.makeInMemoryContainer()
+        let context = ModelContext(container)
+
+        let shift = Shift(startedAt: referenceDate.addingTimeInterval(-5400))
+        context.insert(shift)
+
+        // One acceptance, two deliveries, recorded through the app's own
+        // creation path so the fixture cannot hold a grouping the app could not
+        // produce.
+        let stacked = insertedOffer(
+            on: shift,
+            deliveryCount: 2,
+            acceptedAt: referenceDate.addingTimeInterval(-4500),
+            in: context
+        )
+        if let first = stacked.first {
+            try? first.markArrivedAtPickup(at: referenceDate.addingTimeInterval(-4200))
+        }
+
+        // Accepted later, on its own: an add-on offer is a second acceptance and
+        // never an addition to the one above.
+        let addOn = insertedDelivery(on: shift, acceptedAt: referenceDate.addingTimeInterval(-3300), in: context)
+        context.insert(addOn)
 
         try? context.save()
 
@@ -440,7 +555,7 @@ enum PreviewSupport {
 
         for (index, wait) in waits.enumerated() {
             let accepted = start.addingTimeInterval(offset)
-            let delivery = Delivery(shift: shift, acceptedAt: accepted)
+            let delivery = insertedDelivery(on: shift, acceptedAt: accepted, in: context)
             try? delivery.markArrivedAtPickup(at: accepted.addingTimeInterval(180))
             try? delivery.markPickedUp(at: accepted.addingTimeInterval(180 + wait * 60))
             try? delivery.markDelivered(at: accepted.addingTimeInterval(600 + wait * 60))
@@ -462,7 +577,7 @@ enum PreviewSupport {
 
         guard cancelling else { return }
         let accepted = start.addingTimeInterval(offset)
-        let cancelled = Delivery(shift: shift, acceptedAt: accepted)
+        let cancelled = insertedDelivery(on: shift, acceptedAt: accepted, in: context)
         try? cancelled.markArrivedAtPickup(at: accepted.addingTimeInterval(180))
         try? cancelled.cancel(at: accepted.addingTimeInterval(900))
         context.insert(cancelled)
@@ -525,7 +640,7 @@ enum PreviewSupport {
         ]
 
         for wait in waits {
-            let delivery = Delivery(shift: shift, acceptedAt: start.addingTimeInterval(wait.offsets.0))
+            let delivery = insertedDelivery(on: shift, acceptedAt: start.addingTimeInterval(wait.offsets.0), in: context)
             try? delivery.markArrivedAtPickup(at: start.addingTimeInterval(wait.offsets.1))
             if let pickedUp = wait.offsets.2 {
                 try? delivery.markPickedUp(at: start.addingTimeInterval(pickedUp))
@@ -539,7 +654,7 @@ enum PreviewSupport {
 
         // Cancelled after arriving and before any pickup: it names the place and
         // records an arrival, and still contributes no wait to it.
-        let abandoned = Delivery(shift: shift, acceptedAt: start.addingTimeInterval(7_500))
+        let abandoned = insertedDelivery(on: shift, acceptedAt: start.addingTimeInterval(7_500), in: context)
         try? abandoned.markArrivedAtPickup(at: start.addingTimeInterval(7_800))
         try? abandoned.cancel(at: start.addingTimeInterval(8_100))
         abandoned.setPickupPlace(noodles)
@@ -583,7 +698,7 @@ enum PreviewSupport {
 
         for (index, wait) in waits.enumerated() {
             let accepted = start.addingTimeInterval(Double(index) * 3_000 + 300)
-            let delivery = Delivery(shift: shift, acceptedAt: accepted)
+            let delivery = insertedDelivery(on: shift, acceptedAt: accepted, in: context)
             try? delivery.markArrivedAtPickup(at: accepted.addingTimeInterval(300))
             if let wait {
                 try? delivery.markPickedUp(at: accepted.addingTimeInterval(300 + wait))
@@ -676,7 +791,7 @@ enum PreviewSupport {
     /// Offsets only, plus an invented pickup place attached separately. No
     /// customer and no address appears anywhere in DashPilot, so there is none
     /// to invent here either.
-    private static func syntheticDeliveries(in shift: Shift, from start: Date) -> [Delivery] {
+    private static func syntheticDeliveries(in shift: Shift, from start: Date, context: ModelContext) -> [Delivery] {
         func delivery(
             acceptedAfter: TimeInterval,
             arrivedAfter: TimeInterval?,
@@ -684,7 +799,7 @@ enum PreviewSupport {
             deliveredAfter: TimeInterval?,
             cancelledAfter: TimeInterval? = nil
         ) -> Delivery {
-            let delivery = Delivery(shift: shift, acceptedAt: start.addingTimeInterval(acceptedAfter))
+            let delivery = insertedDelivery(on: shift, acceptedAt: start.addingTimeInterval(acceptedAfter), in: context)
             if let arrivedAfter {
                 try? delivery.markArrivedAtPickup(at: start.addingTimeInterval(arrivedAfter))
             }
@@ -837,7 +952,7 @@ enum PreviewSupport {
             for sample in syntheticRoute(from: start) {
                 container.mainContext.insert(sample.attached(to: shift))
             }
-            let deliveries = syntheticDeliveries(in: shift, from: start)
+            let deliveries = syntheticDeliveries(in: shift, from: start, context: container.mainContext)
             for delivery in deliveries {
                 container.mainContext.insert(delivery)
             }
@@ -897,7 +1012,7 @@ enum PreviewSupport {
         try? shift.end(at: start.addingTimeInterval(4 * 3600))
         context.insert(shift)
 
-        let delivery = Delivery(shift: shift, acceptedAt: start.addingTimeInterval(300))
+        let delivery = insertedDelivery(on: shift, acceptedAt: start.addingTimeInterval(300), in: context)
         try? delivery.markArrivedAtPickup(at: start.addingTimeInterval(600))
         try? delivery.markPickedUp(at: start.addingTimeInterval(1_020))
         try? delivery.markDelivered(at: start.addingTimeInterval(1_800))
@@ -924,7 +1039,7 @@ enum PreviewSupport {
         let shift = Shift(startedAt: start)
         context.insert(shift)
 
-        let delivery = Delivery(shift: shift, acceptedAt: start.addingTimeInterval(300))
+        let delivery = insertedDelivery(on: shift, acceptedAt: start.addingTimeInterval(300), in: context)
         try? delivery.markArrivedAtPickup(at: start.addingTimeInterval(600))
         context.insert(delivery)
 
@@ -950,7 +1065,7 @@ enum PreviewSupport {
         let shift = Shift(startedAt: start)
         context.insert(shift)
 
-        let delivery = Delivery(shift: shift, acceptedAt: start.addingTimeInterval(300))
+        let delivery = insertedDelivery(on: shift, acceptedAt: start.addingTimeInterval(300), in: context)
         try? delivery.setExpectedEarnings(Money(minorUnits: 850))
         try? delivery.markArrivedAtPickup(at: start.addingTimeInterval(600))
         try? delivery.markPickedUp(at: start.addingTimeInterval(1_020))
@@ -1026,8 +1141,8 @@ enum PreviewSupport {
         let shift = Shift(startedAt: start)
         context.insert(shift)
 
-        let earlier = Delivery(shift: shift, acceptedAt: start.addingTimeInterval(300))
-        let subject = Delivery(shift: shift, acceptedAt: start.addingTimeInterval(1_800))
+        let earlier = insertedDelivery(on: shift, acceptedAt: start.addingTimeInterval(300), in: context)
+        let subject = insertedDelivery(on: shift, acceptedAt: start.addingTimeInterval(1_800), in: context)
         context.insert(earlier)
         context.insert(subject)
 
@@ -1084,7 +1199,7 @@ enum PreviewSupport {
 
         for (index, attached) in [subject, other].enumerated() {
             let accepted = start.addingTimeInterval(Double(index) * 3_000 + 300)
-            let delivery = Delivery(shift: shift, acceptedAt: accepted)
+            let delivery = insertedDelivery(on: shift, acceptedAt: accepted, in: context)
             try? delivery.markArrivedAtPickup(at: accepted.addingTimeInterval(300))
             try? delivery.markPickedUp(at: accepted.addingTimeInterval(900))
             try? delivery.markDelivered(at: accepted.addingTimeInterval(1_800))

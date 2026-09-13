@@ -74,6 +74,90 @@ button. A disabled control is presentation and cannot protect data.
   rather than a negative one.
 - Deleting a shift deletes its deliveries, through the relationship's cascade rule.
 
+## Offers and deliveries
+
+One accepted **offer** can contain more than one **delivery**, and the two are different facts:
+
+| | What it is | What it holds |
+| --- | --- | --- |
+| Offer | One acceptance event: the driver was shown work and took it | When it was accepted, and the deliveries it contained |
+| Delivery | One customer dropoff | Its own pickup, its own terminal event, its own amounts |
+
+Every delivery belongs to exactly one offer, and every offer holds at least one delivery. One tap on
+`Start Delivery` records an offer of one, which is the ordinary case. A driver who accepted two
+dropoffs together records one offer holding two.
+
+**An add-on offer is a different offer.** Accepting more work while deliveries are already running is
+ordinary, and it records a new offer every time. Two offers whose deliveries overlap in time are
+still two acceptances, and nothing merges them: overlapping lifetimes are what stacked work looks
+like, and treating them as one would erase the fact that the driver decided twice.
+
+The shapes this covers, all of which are ordinary in real work:
+
+- one offer, one store, one customer
+- one offer, one store, two customers
+- one offer, two stores, two customers
+- one offer, two stores, one customer, as far as the existing lifecycle can express it: a delivery
+  records **one** pickup, so two pickups are two deliveries, and a customer who received both is a
+  fact DashPilot does not record about either
+- one offer running, and a second accepted later
+- several offers running at once, with their deliveries at different points
+
+!!! info "An offer is a grouping the driver recorded"
+
+    DashPilot reads no delivery platform, sees no offer screen and receives no notification. An
+    offer here holds no platform identifier, no pay figure, no distance estimate and no customer: it
+    exists because the driver said how many deliveries they had just accepted.
+
+### Each delivery still advances on its own
+
+Grouping changes nothing about the lifecycle. One delivery of an offer can be picked up while
+another is still waiting at a counter, and completing one leaves its siblings exactly as they were.
+An offer is complete only when **every** delivery in it is terminal.
+
+**Cancellation is per delivery.** There is no control that cancels an offer. An offer whose
+deliveries all ended cancelled is cancelled; one with a mix is partly completed, which is neither a
+completed offer nor a cancelled one and is never reported as either.
+
+### An offer holds no money and no time
+
+Expected pay and recorded gross earnings stay on the delivery they were recorded against. Nothing
+sums them into an offer total, nothing divides an amount between the deliveries of an offer, and no
+rate, duration or distance is derived for an offer anywhere in the app. A sum over deliveries with no
+amount recorded would read each of them as having paid nothing, which is the allocation this project
+refuses everywhere else.
+
+Delivery active time is unchanged: it unions the intervals of a shift's deliveries, so two that
+overlap count their shared minutes once whether or not they share an offer.
+
+### Recording one
+
+`Start Delivery` is untouched: one tap, one delivery, in an offer of one. The same is true of the
+App Shortcut and the Live Activity button, which both go through the same service call.
+
+Beside it on the running shift is one small secondary control, `Offer With Several Deliveries`. It
+opens a sheet that asks **a count and nothing else**: no pickup place, no amount, no customer and no
+name, because each of those is optional on a delivery and can be added later from its own card. The
+confirm button repeats the number it will record.
+
+The stepper's range is a control's bounds rather than a rule. The model refuses an offer below one
+delivery and caps nothing above it, since how much work a driver accepted is a fact about their work.
+
+### Showing one
+
+The running shift's cards are arranged by the offer they arrived in. An offer that held more than
+one delivery gets a heading over its cards saying so, and how many of them are still in progress once
+some have finished; an offer of one gets no heading at all, which is exactly what the screen looked
+like before offers existed.
+
+The heading is a **label and never a control**. Nothing acts on an offer as a unit: each card keeps
+its own next step, its own pickup and expected-pay controls and its own named cancel button.
+
+VoiceOver hears the grouping on every card rather than only in the heading, and it names the
+siblings: *Part of Offer 1, accepted together with Delivery 2*. A listener has no layout to refer
+back to, so the sentence has to say which other cards belong with this one. The completed-shift
+history states the same thing on the rows of a grouped offer.
+
 ## Stacked deliveries
 
 Delivery work is routinely stacked: a driver accepts a second order before the first is finished,
@@ -92,8 +176,9 @@ whatever a fetch returned first — would attach a driver's tap to a record they
 !!! info "This is not a platform stack"
 
     DashPilot does not know that two orders were offered together, batched, or grouped by a delivery
-    platform. It knows only that the driver started two deliveries and has not finished them. Nothing
-    infers a relationship between them.
+    platform. It knows only what the driver recorded: two deliveries they started, and whether they
+    said the two arrived in one offer. Nothing infers a relationship between them, and two deliveries
+    accepted a second apart are two offers unless the driver said otherwise.
 
 ### Ordering and numbering
 
@@ -292,8 +377,9 @@ The rules, the normalisation policy and what a place deliberately does not hold 
 - **No editing or deleting one delivery.** A recorded delivery is what happened. If mis-taps prove
   to be a real problem, correction is its own design decision rather than a general editing
   framework added speculatively.
-- **No relationship between concurrent deliveries.** Two deliveries active at once are two
-  independent records. Nothing pairs them, groups them, or claims they were offered together.
+- **No inferred relationship between concurrent deliveries.** Two deliveries active at once are two
+  independent records. They are shown as one group only when the driver said they were accepted
+  together, and nothing pairs them by their timing, their pickup place or their overlap.
 
 ## What is not built on this yet
 
@@ -320,3 +406,11 @@ column exists, for the reason no mileage or rate column does.
 
 [Version 6](pickup-identity.md#schema) added the optional pickup place, as a new entity and a new
 optional reference. Existing deliveries migrated with none.
+
+[Version 12](../architecture/migrations.md#v11-to-v12) added the `Offer` entity and an optional
+`Delivery.offer` reference, and is the first stage in the app's history that is **custom** rather
+than lightweight. Every delivery recorded before it is given its own one-delivery offer, taking that
+delivery's own acceptance timestamp, and no two historical deliveries are ever grouped together: a
+v11 store holds no evidence that any two arrived in one acceptance, and deliveries accepted a second
+apart are exactly what tapping Start Delivery twice produces. `Delivery.shift` is unchanged, so no
+figure, fetch or delete rule moved.

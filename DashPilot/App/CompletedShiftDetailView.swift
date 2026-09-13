@@ -490,8 +490,14 @@ struct CompletedShiftDetailView: View {
             // Numbered by the shift rather than by position in this list, so a
             // delivery is called the same thing here as it was on the running
             // shift.
+            //
+            // The offers are resolved once for the whole list rather than
+            // searched per row, and a row is handed one only where it held more
+            // than one delivery: history states the grouping it has, and says
+            // nothing at all about the ordinary offer of one.
+            let offers = groupedOffersByDelivery
             ForEach(shift.numberedDeliveries) { numbered in
-                DeliveryHistoryRow(numbered: numbered)
+                DeliveryHistoryRow(numbered: numbered, offer: offers[numbered.id])
             }
         } header: {
             Text("Deliveries")
@@ -616,6 +622,22 @@ struct CompletedShiftDetailView: View {
         shift.deliveryActiveTime()
     }
 
+    /// The offer each delivery arrived in, for the offers that held more than
+    /// one.
+    ///
+    /// A delivery from an offer of one is absent, so the row it builds shows no
+    /// grouping at all, which is what the ordinary case looked like before
+    /// offers existed.
+    private var groupedOffersByDelivery: [UUID: NumberedOffer] {
+        var offers: [UUID: NumberedOffer] = [:]
+        for offer in shift.numberedOffers where offer.isGrouped {
+            for delivery in offer.deliveries {
+                offers[delivery.id] = offer
+            }
+        }
+        return offers
+    }
+
     /// Derived from the distance measured once above, exactly as the history row
     /// does it: ``ShiftMetricsCalculator`` owns every rule, including which rates
     /// exist at all, and this screen only decides how to say so.
@@ -631,6 +653,13 @@ struct CompletedShiftDetailView: View {
 /// zero or with the shift's own times.
 private struct DeliveryHistoryRow: View {
     let numbered: NumberedDelivery
+
+    /// The offer this delivery arrived in, when it held more than one delivery.
+    ///
+    /// `nil` for an offer of one, which is the ordinary case and needs no line
+    /// saying that a delivery arrived by itself, and for a delivery that records
+    /// no offer at all.
+    let offer: NumberedOffer?
 
     @Environment(\.locale) private var locale
 
@@ -661,6 +690,15 @@ private struct DeliveryHistoryRow: View {
                     systemImage: delivery.state.symbolName
                 )
                 .font(.subheadline.weight(.semibold))
+
+                // Which offer this delivery arrived in, said only where it
+                // arrived with others. It is the one fact about a finished
+                // delivery that the row cannot derive from its own timestamps.
+                if let caption = offer?.groupingCaption(of: numbered) {
+                    Text(caption)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
 
                 // The place supplements the local number rather than replacing
                 // it: `Delivery 2` is what this delivery was called all shift.
@@ -840,6 +878,12 @@ private struct DeliveryHistoryRow: View {
     /// unattached times is unintelligible.
     private var accessibilityLabel: String {
         var sentences = ["\(numbered.title), \(delivery.state.historyDescription.lowercased())"]
+        // Spoken right after the delivery names itself, so a listener knows
+        // which other rows in this history belong with it before hearing any of
+        // its own figures.
+        if let grouping = offer?.spokenGrouping(of: numbered) {
+            sentences.append(grouping)
+        }
         // The place is spoken as it is written. The key it is matched by is
         // never exposed anywhere, aloud or otherwise.
         if let place = delivery.pickupPlace {

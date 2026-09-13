@@ -55,8 +55,28 @@ nonisolated extension Shift {
             grossPerRecordedMile: ExportAmount.recorded(metrics.grossPerRecordedMile.amount),
             deliveredCount: summary.completed,
             cancelledCount: summary.cancelled,
-            deliveries: numberedDeliveries.map(DeliveryExportRecord.init)
+            // The offer numbers are worked out once for the shift and handed to
+            // each record, rather than each record asking the shift again: the
+            // numbering is over the whole shift, so a record cannot derive it
+            // from the delivery alone.
+            deliveries: numberedDeliveries.map { numbered in
+                DeliveryExportRecord(numbered, offerNumber: offerNumbersByDelivery[numbered.id])
+            }
         )
+    }
+
+    /// Which offer of this shift each delivery arrived in, by delivery.
+    ///
+    /// A delivery that records no offer is simply absent, which becomes an
+    /// explicit `null` in the file rather than an invented group.
+    private var offerNumbersByDelivery: [UUID: Int] {
+        var numbers: [UUID: Int] = [:]
+        for offer in numberedOffers {
+            for delivery in offer.deliveries {
+                numbers[delivery.id] = offer.number
+            }
+        }
+        return numbers
     }
 }
 
@@ -68,11 +88,18 @@ nonisolated extension DeliveryExportRecord {
     /// matching key never leaves the app: it is an internal rule that is allowed
     /// to improve, and publishing it would let a consumer group a driver's
     /// places by a policy this project is free to change.
-    init(_ numbered: NumberedDelivery) {
+    /// - Parameter offerNumber: which offer of the delivery's shift it arrived
+    ///   in, or `nil` for a delivery that records none. Supplied by the caller
+    ///   because the numbering runs over the shift rather than over the
+    ///   delivery.
+    init(_ numbered: NumberedDelivery, offerNumber: Int?) {
         let delivery = numbered.delivery
         self.init(
             id: delivery.id,
             number: numbered.number,
+            // The grouping key, and nothing else about the offer: it holds no
+            // money and no time, so there is nothing else of it to export.
+            offerNumber: offerNumber,
             state: delivery.state,
             acceptedAt: delivery.acceptedAt,
             arrivedAtPickupAt: delivery.arrivedAtPickupAt,

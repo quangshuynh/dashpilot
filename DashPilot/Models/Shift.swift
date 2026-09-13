@@ -54,6 +54,21 @@ nonisolated final class Shift {
     @Relationship(deleteRule: .cascade, inverse: \Delivery.shift)
     private(set) var deliveries: [Delivery] = []
 
+    /// The offers accepted during this shift, in no guaranteed order.
+    ///
+    /// The delete rule is `.cascade`, for the reason the deliveries' and the
+    /// pauses' are: an acceptance recorded inside one shift means nothing apart
+    /// from it, and leaving offers behind would orphan rows describing a shift
+    /// that no longer exists. A shift's deliveries cascade from here too, so an
+    /// offer and its deliveries go together whichever edge the delete walks.
+    ///
+    /// A collection here, where `Shift` deliberately holds no collection of its
+    /// route: the cost measured in v10 was in a to-many inverse a shift gains
+    /// rows in thousands of times, and an offer is recorded a few dozen times a
+    /// shift at most, the same order as a delivery or a pause.
+    @Relationship(deleteRule: .cascade, inverse: \Offer.shift)
+    private(set) var offers: [Offer] = []
+
     /// The stretches of this shift the driver recorded as paused, in no
     /// guaranteed order.
     ///
@@ -317,6 +332,73 @@ extension Shift {
     /// How many deliveries this shift recorded, and how they ended.
     var deliverySummary: DeliverySummary {
         DeliverySummary(states: deliveries.map(\.state))
+    }
+}
+
+// MARK: Offers
+
+extension Shift {
+    /// This shift's offers in the order they were accepted.
+    var offersInOrder: [Offer] {
+        offers.sorted(by: Offer.acceptedBefore)
+    }
+
+    /// The offers still holding at least one delivery in progress.
+    var activeOffers: [Offer] {
+        offersInOrder.filter { $0.state.isActive }
+    }
+
+    /// This shift's offers with the numbers the interface labels them with, each
+    /// carrying its deliveries under the numbers they have everywhere else in
+    /// this shift.
+    var numberedOffers: [NumberedOffer] {
+        NumberedOffer.numbering(offersInOrder, deliveries: numberedDeliveries)
+    }
+
+    /// The numbered offer a delivery was accepted in, or `nil` for a delivery
+    /// that records none.
+    func numberedOffer(containing delivery: Delivery) -> NumberedOffer? {
+        guard let offerID = delivery.offer?.id else { return nil }
+        return numberedOffers.first { $0.id == offerID }
+    }
+
+    /// Records an accepted offer containing `deliveryCount` deliveries.
+    ///
+    /// **The one place an offer and its deliveries are created**, so the two
+    /// invariants that hold them together cannot be bypassed by a screen, a
+    /// test or a future caller: an offer contains at least one delivery, and
+    /// every delivery in it belongs to the shift the offer was accepted during.
+    /// Mirrors ``beginPause(at:)`` in shape, including leaving the context
+    /// insert to the caller, so that a refused or failed write leaves the store
+    /// holding nothing the model does not also hold.
+    ///
+    /// Each delivery is created with the offer's own acceptance timestamp,
+    /// because that is when the driver accepted them: they arrived in one act.
+    /// From that instant on, each one advances entirely on its own.
+    ///
+    /// There is deliberately **no maximum**, for the reason there is no maximum
+    /// on how many deliveries may be running at once: how much work a driver
+    /// accepted is a fact about their work rather than a number this app is in
+    /// a position to cap. The stepper on screen bounds what can be tapped;
+    /// that is a control's range, not a domain rule.
+    ///
+    /// Both halves are returned rather than only the offer, so the caller can
+    /// insert exactly what was built instead of reading it back out of a
+    /// relationship on an object no store holds yet.
+    ///
+    /// - Throws: ``OfferError/deliveryCountNotPositive``,
+    ///   ``OfferError/shiftAlreadyEnded`` or
+    ///   ``OfferError/acceptedBeforeShiftStart``.
+    func beginOffer(deliveryCount: Int, at date: Date) throws -> (offer: Offer, deliveries: [Delivery]) {
+        guard deliveryCount >= 1 else { throw OfferError.deliveryCountNotPositive }
+        guard endedAt == nil else { throw OfferError.shiftAlreadyEnded }
+        guard date >= startedAt else { throw OfferError.acceptedBeforeShiftStart }
+
+        let offer = Offer(shift: self, acceptedAt: date)
+        let deliveries = (0..<deliveryCount).map { _ in
+            Delivery(shift: self, offer: offer, acceptedAt: date)
+        }
+        return (offer, deliveries)
     }
 }
 

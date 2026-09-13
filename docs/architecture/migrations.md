@@ -19,25 +19,27 @@ rather than a store reset.
 | 9.0.0 | Adds the `ShiftPause` entity and a `Shift.pauses` relationship. No existing attribute changes |
 | 10.0.0 | Removes the `Shift.routeSamples` relationship. `RouteSample.shift` is unchanged, and no stored value moves |
 | 11.0.0 | Adds `Delivery.expectedEarningsAmount`, an optional `Decimal` holding what the driver expects an active delivery to pay |
+| 12.0.0 | Adds the `Offer` entity, an optional `Delivery.offer` reference and a `Shift.offers` relationship. Backfills one offer per existing delivery |
 
-The current version is **v11**. Field-level detail is on [Data model](../reference/data-model.md).
+The current version is **v12**. Field-level detail is on [Data model](../reference/data-model.md).
 
-`DashPilotSchemaV1` through `DashPilotSchemaV10` hold frozen copies of their models rather than
+`DashPilotSchemaV1` through `DashPilotSchemaV11` hold frozen copies of their models rather than
 reusing the file-scope types, which have moved on. The plan then describes where a store is coming
 from as truthfully as where it is going, and the copies are never used at runtime outside
 migration.
 
-`DashPilotSchemaV10` was frozen in the interval that added v11, and the freeze was forced the way
-v9's was: v11 adds an attribute to `Delivery`, so reusing the file-scope type under v10 would
-describe every pre-v11 store as one that already held a column for what a delivery was expected to
-pay. It did not, and a version that claims otherwise cannot be used to prove a migration preserved
-anything. Each version gets its copies as the plan moves past it.
+`DashPilotSchemaV11` was frozen in the interval that added v12, and the freeze was forced the way
+v10's was: v12 adds an entity and a reference to it on `Delivery`, so reusing the file-scope types
+under v11 would describe every pre-v12 store as one that already recorded which deliveries were
+accepted together. It did not, and a version that claims otherwise cannot be used to prove a
+migration preserved anything. Each version gets its copies as the plan moves past it.
 
-## Every stage so far is lightweight, deliberately
+## Every stage but the last is lightweight, deliberately
 
-Every step but one is purely additive, and each time the decision not to backfill was the
+Every step up to v11 is purely additive, and each time the decision not to backfill was the
 substantive one. v10 is the only one that removes anything, and it removes a relationship rather
-than any stored value.
+than any stored value. v12 is the first custom stage, and it is custom because it has something to
+transform rather than because it has something to tidy.
 
 ### v1 to v2
 
@@ -194,7 +196,33 @@ gross, period gross, every rate, the delivery-earnings subtotal and every export
 from `grossEarningsAmount` alone, before this version and after it. See
 [Expected pay](../product/delivery-lifecycle.md#expected-pay).
 
-It becomes a custom stage the first time a version step actually has to transform something.
+### v11 to v12
+
+**The first custom stage in the app's history.** Adding the `Offer` entity and the reference to it
+would migrate lightweight on its own, and that is exactly what must not be left to happen: it would
+leave every delivery a driver has ever recorded holding no offer, in a build where a delivery
+holding no offer is a row the app cannot produce. Every screen, every grouping and every exported
+record would then carry a second reading for history, forever.
+
+So `didMigrate` walks the deliveries and gives **each one its own one-delivery offer**, taking that
+delivery's own acceptance timestamp. That is the truthful reconstruction and the whole of it: a v11
+store records one acceptance per delivery, because that is how the driver recorded them.
+
+**The inference this stage refuses is the one that looks like free information.** Two deliveries
+accepted a second apart, or sharing a pickup place, or overlapping completely, all look like a
+stacked offer, and none of them is evidence of one: a driver tapping Start Delivery twice in a row
+produces exactly that shape, and so does a driver accepting two separate orders outside the same
+restaurant. Grouping them would invent platform metadata the store has never held, on the app's
+authority rather than the driver's.
+
+No figure moves. An offer holds no money, no duration and no distance, so shift gross, delivery
+gross, expected pay, delivery active time, every rate, every period total and every exported summary
+are derived from exactly what they were derived from before. See
+[Offers](../product/delivery-lifecycle.md#offers-and-deliveries).
+
+Two rows are left alone rather than repaired: a delivery already holding an offer, which a v11 store
+cannot contain but a re-entrant migration could present, and a delivery attached to no shift at all,
+which has no shift for an offer to belong to.
 
 ## Proving a migration rather than assuming it
 
@@ -226,6 +254,13 @@ That is how "a v1 store keeps its shifts" is proven. The suite covers each step:
   with **their durations unchanged**, and the new pause table is empty. One case drives a long shift
   with a single early delivery and a route that stops after it, which is the shape that most
   resembles a break, and asserts that it keeps a working duration equal to its elapsed one.
+
+- A v11 store's shifts, samples, sessions, amounts, deliveries, pickup places, expected amounts,
+  pauses and expenses survive, and **every delivery comes out inside a one-delivery offer of its
+  own**. One case holds two deliveries accepted a second apart on the same shift, which is the shape
+  a grouping inference would seize on, and asserts that they end up in two different offers. Another
+  asserts that a shift's unioned delivery active time, its delivery-earnings coverage and its hourly
+  rate are the figures they were before the step.
 
 Each step is also walked from every earlier version, so a device that skipped several releases is
 covered by the same suite rather than by assumption.

@@ -19,6 +19,46 @@ import Foundation
 ///
 /// ## Version history
 ///
+/// ### Still 3: which deliveries were accepted together
+///
+/// One accepted offer can contain more than one delivery, and the store now
+/// records which. JSON gains one field for it, `shifts[].deliveries[].
+/// offerNumber`, and the CSV gains one column, `deliveryOfferNumber`. The
+/// version was **evaluated and deliberately not bumped**, by the rule above:
+///
+/// - **Nothing existing changed meaning.** Every delivery is the same delivery,
+///   with the same timestamps, the same amounts and the same rate; every shift
+///   figure, period total and summary block is derived from exactly what it was
+///   derived from before. An offer holds no money, no duration and no distance,
+///   so there is no figure for it to have moved. Not one previously exported
+///   value would differ.
+/// - **No field was removed or renamed**, and no enumeration gained a value.
+/// - **The new field is always present**, as an explicit `null` where a delivery
+///   records no offer, which a store migrated to schema 12 does not contain.
+/// - **The new CSV column is appended**, not inserted. Every existing column
+///   stays at the position a positional reader already reads it from, which is
+///   the half of the rule that forced version 3. It is why the column is last
+///   rather than beside `deliveryNumber`, where it would read better.
+///
+/// **It is one grouping key rather than a nested structure**, and that is the
+/// substantive decision. Nesting the deliveries inside an `offers` array would
+/// have moved `shifts[].deliveries[]`, which is a removal to every existing
+/// reader, for a shape a consumer can reconstruct in one pass by grouping on
+/// this key. The CSV could not have expressed the nesting at all: its unit is a
+/// delivery, one row each, and a table cannot hold a parent record without
+/// repeating it. A key groups honestly in both forms.
+///
+/// **There is no offer object, offer total, offer duration or offer rate**, in
+/// either form. An offer is an acceptance the driver recorded, and a figure
+/// derived from one would be a claim this app has no basis for: money stays on
+/// the delivery it was recorded against, and nothing is summed across the
+/// deliveries of an offer.
+///
+/// `offerNumber` is a **local display number**, counted from the order a shift
+/// accepted its offers in, exactly as `number` is for a delivery. It is not a
+/// platform's offer identifier and never could be: DashPilot reads no delivery
+/// platform and has never seen one.
+///
 /// ### Still 3: what a delivery was expected to pay
 ///
 /// A driver can now record what they expect a delivery in progress to pay, and
@@ -205,8 +245,9 @@ nonisolated enum ExportFileFormat: String, CaseIterable, Sendable, Hashable, Ide
             """
         case .csv:
             """
-            One row per recorded delivery, with its shift's own figures repeated on it, for opening in \
-            a spreadsheet. Three things are not included. The period summary: each of its figures is \
+            One row per recorded delivery, with its shift's own figures repeated on it, and a column \
+            saying which accepted offer each delivery came in, for opening in a spreadsheet. Three \
+            things are not included. The period summary: each of its figures is \
             paired with the number of shifts behind it, and a single flat table cannot keep that \
             pairing. Your recorded expenses: an expense belongs to a date rather than to a shift or a \
             delivery, so it has no row in a table of deliveries and DashPilot will not invent one. \

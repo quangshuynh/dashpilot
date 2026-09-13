@@ -64,9 +64,16 @@ records a second delivery beside the first and changes nothing about the first. 
 are how the app has always modelled this work, and the card now says so. See
 [Delivery lifecycle](delivery-lifecycle.md).
 
-It records **one fact**: that a delivery was accepted, at the instant the button was pressed. No
-amount, no expected amount, no pickup place. Those need a keyboard and a screen the driver is looking
-at, and the driver can add them later from the app.
+It records **one fact**: that a delivery was accepted, at the instant the button was pressed, in an
+offer of one. No count, no amount, no expected amount, no pickup place. Those need a keyboard and a
+screen the driver is looking at, and the driver can add them later from the app.
+
+**Recording an offer that held several deliveries is deliberately not on the card.** It needs a
+number, and a number needs a control that can be got wrong and then corrected; a Lock Screen button
+that meant "two deliveries" would be one press away from the button that means one. A driver who
+accepted a stacked offer either presses Start Delivery once per dropoff, which records them as
+separate offers, or records the offer in the app. See
+[Offers and deliveries](delivery-lifecycle.md#offers-and-deliveries).
 
 A **paused** shift does not offer it, because a paused shift is one the driver said they had stopped
 working on, and starting a delivery on one is refused by the same rule that refuses it in the app and
@@ -93,6 +100,10 @@ same rule the spoken step follows, from the same place in the code. See
 **Start Delivery stays**, and the distinction is what the refusal turns on. A step has to know which
 order it belongs to, and with two open there is no answer. Starting one has to know nothing about the
 orders already running.
+
+Two deliveries of **one offer** are two deliveries, so they withhold the step exactly as two offers
+do. The card counts deliveries and never offers: it says `2 deliveries in progress` whether they
+arrived in one acceptance or two, and it carries no offer wording at all.
 
 ## The clock counts itself
 

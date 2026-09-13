@@ -93,7 +93,9 @@ struct RouteSampleRelationshipTests {
         let shift = try #require(ModelContainerFactory.currentSchema.entities.first { $0.name == "Shift" })
         let properties = Set(shift.properties.map(\.name))
 
-        #expect(properties == ["id", "startedAt", "endedAt", "deliveries", "pauses", "grossEarningsAmount"])
+        #expect(
+            properties == ["id", "startedAt", "endedAt", "deliveries", "offers", "pauses", "grossEarningsAmount"]
+        )
         #expect(!properties.contains("routeSamples"))
 
         // The relationship itself is intact, declared from the sample's side.

@@ -262,6 +262,31 @@ nonisolated struct DeliveryExportRecord: Equatable, Sendable, Codable {
     /// outside this app would recognise it.
     let number: Int
 
+    /// Which **accepted offer** within this shift the delivery arrived in, or
+    /// `null` for a delivery that records none.
+    ///
+    /// The grouping key, and the whole of what this format says about offers.
+    /// Two deliveries of one shift carrying the same number were accepted
+    /// together, in one act; two carrying different numbers were two decisions,
+    /// however much their times overlap. It is scoped to the shift that contains
+    /// them, exactly as ``number`` is.
+    ///
+    /// A **local display number** like ``number``, counted from the order the
+    /// shift accepted its offers in. It is not a platform's offer identifier,
+    /// and DashPilot has never seen one: an offer here is a grouping the driver
+    /// recorded, not a message anything sent.
+    ///
+    /// Deliberately the only offer field. There is no offer object, no offer
+    /// total, no offer duration and no offer rate anywhere in this format: an
+    /// offer holds no money and no time of its own, and a figure derived from
+    /// one would be a claim this app cannot support. A consumer that wants the
+    /// deliveries of one offer groups the shift's `deliveries` by this key.
+    ///
+    /// `null` appears for a delivery holding no offer, which this build cannot
+    /// produce and which a store migrated to schema 12 does not contain. It is
+    /// written rather than assumed for the reason every optional here is.
+    let offerNumber: Int?
+
     /// `accepted`, `arrivedAtPickup`, `pickedUp`, `delivered` or `cancelled` —
     /// ``DeliveryState``'s own vocabulary. A cancelled delivery is exported as
     /// what it is and is never counted as completed.
@@ -314,7 +339,7 @@ nonisolated struct DeliveryExportRecord: Equatable, Sendable, Codable {
     let grossPerDeliveryHour: ExportAmount?
 
     private enum CodingKeys: String, CodingKey {
-        case id, number, state, acceptedAt, arrivedAtPickupAt, pickedUpAt, deliveredAt, cancelledAt
+        case id, number, offerNumber, state, acceptedAt, arrivedAtPickupAt, pickedUpAt, deliveredAt, cancelledAt
         case pickupPlaceName, pickupWaitSeconds, acceptedToDeliveredSeconds
         case grossEarnings, expectedEarnings, grossPerDeliveryHour
     }
@@ -323,6 +348,7 @@ nonisolated struct DeliveryExportRecord: Equatable, Sendable, Codable {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(id, forKey: .id)
         try container.encode(number, forKey: .number)
+        try container.encodeAlways(offerNumber, forKey: .offerNumber)
         try container.encode(state, forKey: .state)
         try container.encode(acceptedAt, forKey: .acceptedAt)
         try container.encodeAlways(arrivedAtPickupAt, forKey: .arrivedAtPickupAt)
