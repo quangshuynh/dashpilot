@@ -191,7 +191,7 @@ struct ShiftLiveActivityServiceTests {
         try shifts.startShift(at: start)
         service.reconcile()
         let started = presenter.live.first
-        #expect(presenter.onlyContent?.controls == [.pause, .end])
+        #expect(presenter.onlyContent?.controls == [.startDelivery, .pause, .end])
 
         clock.now = at(600)
         try shifts.pauseActiveShift(at: at(600))
@@ -204,7 +204,7 @@ struct ShiftLiveActivityServiceTests {
         try shifts.resumeActiveShift(at: at(1_200))
         service.reconcile()
         #expect(presenter.onlyContent?.isPaused == false)
-        #expect(presenter.onlyContent?.controls == [.pause, .end])
+        #expect(presenter.onlyContent?.controls == [.startDelivery, .pause, .end])
 
         clock.now = at(1_800)
         try shifts.endActiveShift(at: at(1_800))
@@ -255,25 +255,25 @@ struct ShiftLiveActivityServiceTests {
         clock.now = at(60)
         let delivery = try deliveries.startDelivery(at: at(60))
         service.reconcile()
-        #expect(presenter.onlyContent?.controls == [.deliveryStep(.arriveAtPickup)])
+        #expect(presenter.onlyContent?.controls == [.deliveryStep(.arriveAtPickup), .startDelivery])
         #expect(presenter.onlyContent?.activeDeliveryCount == 1)
 
         clock.now = at(120)
         try deliveries.markArrivedAtPickup(delivery, at: at(120))
         service.reconcile()
-        #expect(presenter.onlyContent?.controls == [.deliveryStep(.pickUp)])
+        #expect(presenter.onlyContent?.controls == [.deliveryStep(.pickUp), .startDelivery])
         #expect(presenter.onlyContent?.deliveryStatus == "Waiting at the pickup")
 
         clock.now = at(180)
         try deliveries.markPickedUp(delivery, at: at(180))
         try deliveries.markDelivered(delivery, at: at(240))
         service.reconcile()
-        #expect(presenter.onlyContent?.controls == [.pause, .end])
+        #expect(presenter.onlyContent?.controls == [.startDelivery, .pause, .end])
         #expect(presenter.onlyContent?.completedDeliveryCount == 1)
     }
 
-    @Test("A second delivery removes every control rather than choosing one")
-    func withdrawsControlsWhenDeliveriesStack() throws {
+    @Test("A second delivery removes the step control rather than choosing one")
+    func withdrawsTheStepControlWhenDeliveriesStack() throws {
         let context = try makeContext()
         let presenter = RecordingShiftActivityPresenter()
         let clock = Clock(start)
@@ -283,15 +283,65 @@ struct ShiftLiveActivityServiceTests {
         try ShiftService(context: context).startShift(at: start)
         _ = try deliveries.startDelivery(at: at(60))
         service.reconcile()
-        #expect(presenter.onlyContent?.controls.count == 1)
+        #expect(presenter.onlyContent?.controls == [.deliveryStep(.arriveAtPickup), .startDelivery])
 
         clock.now = at(120)
         _ = try deliveries.startDelivery(at: at(120))
         service.reconcile()
 
-        #expect(presenter.onlyContent?.controls.isEmpty == true)
+        // Start Delivery survives, because it names no existing order and
+        // therefore cannot be aimed at the wrong one.
+        #expect(presenter.onlyContent?.controls == [.startDelivery])
         #expect(presenter.onlyContent?.deliveryStatus == nil)
         #expect(presenter.onlyContent?.controlNotice != nil)
+    }
+
+    @Test("A delivery started from the card moves the count on the card at once")
+    func startingADeliveryMovesTheCountImmediately() throws {
+        let context = try makeContext()
+        let presenter = RecordingShiftActivityPresenter()
+        let clock = Clock(start)
+        let service = makeService(context: context, presenter: presenter, clock: clock)
+        let deliveries = DeliveryService(context: context)
+
+        try ShiftService(context: context).startShift(at: start)
+        service.reconcile()
+        #expect(presenter.onlyContent?.activeDeliveryCount == 0)
+        let afterStart = presenter.updateCount
+
+        clock.now = at(60)
+        _ = try deliveries.startDelivery(at: at(60))
+        service.reconcile()
+        #expect(presenter.onlyContent?.activeDeliveryCount == 1)
+        #expect(presenter.updateCount == afterStart + 1, "A count that moved is material, so it does not wait")
+
+        clock.now = at(90)
+        _ = try deliveries.startDelivery(at: at(90))
+        service.reconcile()
+        #expect(presenter.onlyContent?.activeDeliveryCount == 2, "Stacked, and the card says two")
+        #expect(presenter.updateCount == afterStart + 2)
+    }
+
+    @Test("Reconciling never starts a delivery of its own")
+    func reconcilingStartsNoDelivery() throws {
+        let context = try makeContext()
+        let presenter = RecordingShiftActivityPresenter()
+        let clock = Clock(start)
+        let service = makeService(context: context, presenter: presenter, clock: clock)
+
+        try ShiftService(context: context).startShift(at: start)
+        _ = try DeliveryService(context: context).startDelivery(at: at(60))
+
+        // The card is reconciled on every lifecycle transition, on returning to
+        // the foreground and on relaunch. A surface that wrote a record while
+        // catching up would turn one press into several deliveries.
+        for offset in stride(from: 120, through: 600, by: 60) {
+            clock.now = at(Double(offset))
+            service.reconcile()
+        }
+
+        #expect(try context.fetch(FetchDescriptor<Delivery>()).count == 1)
+        #expect(presenter.onlyContent?.activeDeliveryCount == 1)
     }
 
     // MARK: Mileage cadence

@@ -51,15 +51,21 @@ nonisolated extension ShiftActivityDeliveryStep {
 /// The one decision it makes is **which controls the surface offers**, and it
 /// makes it from the shift's own facts using the rules the services enforce:
 ///
-/// - A running shift with no delivery open offers Pause and End. Both are
+/// - Every **running** shift offers Start Delivery, whatever else it offers.
+///   Stacked deliveries are supported, so one more order is always a thing the
+///   driver may be accepting, and the control names no existing delivery: it
+///   always means create exactly one. A **paused** shift does not offer it,
+///   because ``DeliveryService`` refuses a start on one.
+/// - A running shift with no delivery open also offers Pause and End. Both are
 ///   refused by ``ShiftService`` while a delivery is open, so neither is offered
 ///   then.
-/// - A running shift with exactly one delivery open offers that delivery's next
-///   step, and nothing else.
-/// - A running shift with **two or more** deliveries open offers **nothing**. It
-///   is the ambiguity refusal, made visible: there is no step to offer because
-///   there is no "the delivery", and Pause and End are refused by the rule
-///   above.
+/// - A running shift with exactly one delivery open also offers that delivery's
+///   next step, and nothing else.
+/// - A running shift with **two or more** deliveries open offers Start Delivery
+///   and nothing else. That is the ambiguity refusal, unchanged: there is no
+///   step to offer because there is no "the delivery", and Pause and End are
+///   refused by the rule above. What Start Delivery adds does not depend on
+///   which order the driver meant, so it is not part of that refusal.
 /// - A paused shift offers Resume and End. Ending a paused shift is permitted
 ///   and closes the pause at the end instant, so refusing it here would be this
 ///   surface inventing a stricter rule than the app's.
@@ -100,19 +106,22 @@ nonisolated enum ShiftActivityContent {
 
     /// The controls this shift may offer, in the order they are shown.
     ///
-    /// The delivery step comes first where there is one: it is the control a
-    /// driver presses many times a shift, and the two lifecycle controls are
-    /// pressed once each.
+    /// The delivery step comes first where there is one, then Start Delivery:
+    /// both are pressed many times a shift, the step belongs to an order already
+    /// in the car, and the two lifecycle controls are pressed once each.
     private static func controls(
         for metrics: ActiveShiftMetrics,
         nextStep: ShiftActivityDeliveryStep?
     ) -> [ShiftActivityControl] {
         if metrics.isPaused { return [.resume, .end] }
-        if let nextStep { return [.deliveryStep(nextStep)] }
+
+        // Running, so one more delivery is always something the driver may be
+        // accepting, and the control that starts one names no existing record.
+        if let nextStep { return [.deliveryStep(nextStep), .startDelivery] }
         // Pausing and ending are both refused while any delivery is open, so a
-        // running shift that has one and offered no step has nothing to offer.
-        guard metrics.deliverySummary.inProgress == 0 else { return [] }
-        return [.pause, .end]
+        // running shift that has one and offered no step offers only the start.
+        guard metrics.deliverySummary.inProgress == 0 else { return [.startDelivery] }
+        return [.startDelivery, .pause, .end]
     }
 }
 

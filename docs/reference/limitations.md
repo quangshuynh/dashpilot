@@ -90,8 +90,9 @@ and one they cannot.
 - **It has never run on a physical device.** The behaviour described here was verified on the iOS
   26.5 simulator, which has no battery, cannot be carried and cannot evict an app under real memory
   pressure.
-- **No pause, delivery cancellation, amount or expense can be reached from it**, and there is no
-  Home Screen or Lock Screen widget of any kind.
+- **No delivery cancellation, amount or expense can be reached from it**, and there is no Home
+  Screen or Lock Screen widget of any kind. A delivery started from the card by mistake is cancelled
+  in the app, which keeps it in history.
 - **A paused figure is written `19:57` where the app writes `0:19:57`.** The system draws the running
   clock without an hour field until there is one, and the two figures share a place on the card, so
   the paused one follows the system rather than the app.

@@ -186,22 +186,60 @@ struct ShiftActivityDeliveryLine: View {
     }
 }
 
-/// The controls the app said this shift may offer, and the sentence for when it
-/// said none.
+/// The controls the app said this shift may offer, and the sentence for the step
+/// it withheld.
+///
+/// The two are no longer alternatives. A shift with several orders open is
+/// offered Start Delivery, which names no particular one of them, **and** told
+/// why the step control is missing, because the missing control is the thing
+/// that needs explaining.
+///
+/// A running shift with nothing open now offers three controls, which is one
+/// more than a Lock Screen card fits on a line at the larger accessibility text
+/// sizes. ``ViewThatFits`` takes the single row where it fits and wraps to two
+/// rows where it does not, rather than truncating a label: a button whose words
+/// are cut short is a button a driver has to guess at, which on this surface is
+/// how the wrong thing gets recorded.
 struct ShiftActivityControls: View {
     let state: ShiftActivityAttributes.ContentState
 
     var body: some View {
-        if let notice = state.controlNotice {
-            Text(notice)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-        } else {
-            HStack(spacing: 8) {
-                ForEach(state.controls, id: \.self) { control in
-                    ShiftActivityControlButton(control: control)
+        VStack(alignment: .leading, spacing: 6) {
+            if !state.controls.isEmpty {
+                ViewThatFits(in: .horizontal) {
+                    row(of: state.controls)
+                    VStack(alignment: .leading, spacing: 6) {
+                        ForEach(Array(wrapped.enumerated()), id: \.offset) { _, line in
+                            row(of: line)
+                        }
+                    }
                 }
+            }
+
+            if let notice = state.controlNotice {
+                Text(notice)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// The controls in rows of at most two, in the order the app put them in.
+    private var wrapped: [[ShiftActivityControl]] {
+        stride(from: 0, to: state.controls.count, by: 2).map { start in
+            Array(state.controls[start..<min(start + 2, state.controls.count)])
+        }
+    }
+
+    private func row(of controls: [ShiftActivityControl]) -> some View {
+        HStack(spacing: 8) {
+            ForEach(controls, id: \.self) { control in
+                ShiftActivityControlButton(
+                    control: control,
+                    isEmphasised: control == ShiftActivityControl.emphasised(in: state.controls)
+                )
             }
         }
     }
@@ -217,6 +255,14 @@ struct ShiftActivityControls: View {
 struct ShiftActivityControlButton: View {
     let control: ShiftActivityControl
 
+    /// Whether this is the one control on the card that carries the emphasis.
+    ///
+    /// Decided for the list rather than for the control, by
+    /// ``ShiftActivityControl/emphasised(in:)``: a card offering a delivery's
+    /// next step *and* Start Delivery has two controls that would each take the
+    /// emphasis on their own, and emphasising both emphasises neither.
+    let isEmphasised: Bool
+
     var body: some View {
         Group {
             switch control {
@@ -226,6 +272,8 @@ struct ShiftActivityControlButton: View {
                 Button(intent: ResumeShiftFromActivityIntent()) { label }
             case .end:
                 Button(intent: EndShiftFromActivityIntent()) { label }
+            case .startDelivery:
+                Button(intent: StartDeliveryFromActivityIntent()) { label }
             case .deliveryStep:
                 Button(intent: RecordDeliveryProgressFromActivityIntent()) { label }
             }
@@ -237,7 +285,7 @@ struct ShiftActivityControlButton: View {
 
     private var label: some View {
         Label(control.title, systemImage: control.symbolName)
-            .font(.caption.weight(control.isProminent ? .semibold : .regular))
+            .font(.caption.weight(isEmphasised ? .semibold : .regular))
             .lineLimit(1)
     }
 
@@ -246,7 +294,7 @@ struct ShiftActivityControlButton: View {
     private var tint: Color {
         switch control {
         case .end: .red
-        case .pause, .resume, .deliveryStep: .accentColor
+        case .pause, .resume, .startDelivery, .deliveryStep: .accentColor
         }
     }
 }

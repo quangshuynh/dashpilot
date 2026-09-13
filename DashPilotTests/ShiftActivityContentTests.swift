@@ -8,9 +8,10 @@ import Testing
 /// The claims under test are the ones a Lock Screen makes hardest to check by
 /// eye: that every figure is the app's own figure rather than a second
 /// calculation; that the controls follow the lifecycle rules the services
-/// enforce rather than a copy of them; that a stacked shift offers nothing
-/// instead of guessing; and that the surface never carries an amount, a rate, a
-/// place or a coordinate.
+/// enforce rather than a copy of them; that a stacked shift withholds the step
+/// instead of guessing, while still offering the one control that names no
+/// existing order; and that the surface never carries an amount, a rate, a place
+/// or a coordinate.
 @MainActor
 @Suite("Shift Live Activity content")
 struct ShiftActivityContentTests {
@@ -172,16 +173,19 @@ struct ShiftActivityContentTests {
 
     // MARK: Which controls are offered
 
-    @Test("A running shift with nothing open offers Pause and End")
-    func offersPauseAndEndOnAQuietRunningShift() throws {
+    @Test("A running shift with nothing open offers Start Delivery, Pause and End")
+    func offersStartPauseAndEndOnAQuietRunningShift() throws {
         let context = try makeContext()
         let shift = try startedShift(in: context)
 
-        #expect(shift.activityContentState(for: .none, asOf: at(30), locale: locale).controls == [.pause, .end])
+        #expect(
+            shift.activityContentState(for: .none, asOf: at(30), locale: locale).controls
+                == [.startDelivery, .pause, .end]
+        )
     }
 
-    @Test("A running shift with one delivery open offers that delivery's next step and nothing else")
-    func offersOnlyTheNextStep() throws {
+    @Test("A running shift with one delivery open offers that delivery's next step and one more start")
+    func offersTheNextStepBesideStartingAnother() throws {
         let context = try makeContext()
         let shift = try startedShift(in: context)
         let deliveries = DeliveryService(context: context)
@@ -189,19 +193,19 @@ struct ShiftActivityContentTests {
 
         #expect(
             shift.activityContentState(for: .none, asOf: at(20), locale: locale).controls
-                == [.deliveryStep(.arriveAtPickup)]
+                == [.deliveryStep(.arriveAtPickup), .startDelivery]
         )
 
         try deliveries.markArrivedAtPickup(delivery, at: at(30))
         #expect(
             shift.activityContentState(for: .none, asOf: at(40), locale: locale).controls
-                == [.deliveryStep(.pickUp)]
+                == [.deliveryStep(.pickUp), .startDelivery]
         )
 
         try deliveries.markPickedUp(delivery, at: at(50))
         #expect(
             shift.activityContentState(for: .none, asOf: at(60), locale: locale).controls
-                == [.deliveryStep(.complete)]
+                == [.deliveryStep(.complete), .startDelivery]
         )
     }
 
@@ -225,8 +229,8 @@ struct ShiftActivityContentTests {
         }
     }
 
-    @Test("A stacked shift offers nothing at all, and says why")
-    func offersNothingWhileSeveralDeliveriesAreOpen() throws {
+    @Test("A stacked shift offers no step at all, and says why")
+    func offersNoStepWhileSeveralDeliveriesAreOpen() throws {
         let context = try makeContext()
         let shift = try startedShift(in: context)
         let deliveries = DeliveryService(context: context)
@@ -235,9 +239,110 @@ struct ShiftActivityContentTests {
 
         let state = shift.activityContentState(for: .none, asOf: at(30), locale: locale)
 
-        #expect(state.controls.isEmpty, "Refusing is the answer; choosing one of two orders is not")
+        #expect(
+            state.controls == [.startDelivery],
+            "Refusing the step is the answer; choosing one of two orders is not"
+        )
         #expect(state.controlNotice?.contains("Several deliveries") == true)
         #expect(state.controlNotice?.contains("Open DashPilot") == true)
+    }
+
+    // MARK: Starting one more delivery
+
+    @Test("Start Delivery is offered on a running shift whatever it is carrying")
+    func offersStartDeliveryOnEveryRunningShift() throws {
+        let context = try makeContext()
+        let shift = try startedShift(in: context)
+        let deliveries = DeliveryService(context: context)
+
+        #expect(shift.activityContentState(for: .none, asOf: at(5), locale: locale).controls.contains(.startDelivery))
+
+        let first = try deliveries.startDelivery(at: at(10))
+        #expect(shift.activityContentState(for: .none, asOf: at(15), locale: locale).controls.contains(.startDelivery))
+
+        _ = try deliveries.startDelivery(at: at(20))
+        #expect(
+            shift.activityContentState(for: .none, asOf: at(25), locale: locale).controls.contains(.startDelivery),
+            "Stacking is what the control is for, so two orders do not withdraw it"
+        )
+
+        try deliveries.markArrivedAtPickup(first, at: at(30))
+        try deliveries.markPickedUp(first, at: at(40))
+        try deliveries.markDelivered(first, at: at(50))
+        #expect(shift.activityContentState(for: .none, asOf: at(55), locale: locale).controls.contains(.startDelivery))
+    }
+
+    @Test("A paused shift does not offer Start Delivery, which is the rule the service enforces")
+    func withholdsStartDeliveryWhilePaused() throws {
+        let context = try makeContext()
+        let service = ShiftService(context: context)
+        let shift = try service.startShift(at: start)
+        try service.pauseActiveShift(at: at(60))
+
+        let controls = shift.activityContentState(for: .none, asOf: at(120), locale: locale).controls
+        #expect(!controls.contains(.startDelivery))
+
+        // The same refusal, from the service that actually holds the rule.
+        #expect(throws: DeliveryLifecycleError.shiftPaused) {
+            try DeliveryService(context: context).startDelivery(at: at(120))
+        }
+
+        try service.resumeActiveShift(at: at(180))
+        #expect(
+            shift.activityContentState(for: .none, asOf: at(200), locale: locale).controls.contains(.startDelivery),
+            "Resuming brings it back"
+        )
+    }
+
+    @Test("An ended shift's snapshot offers no Start Delivery, and the service refuses one")
+    func withholdsStartDeliveryOnceTheShiftHasEnded() throws {
+        let context = try makeContext()
+        let service = ShiftService(context: context)
+        let shift = try service.startShift(at: start)
+        try service.endActiveShift(at: at(600))
+
+        #expect(shift.lifecycleState == .ended)
+        #expect(throws: DeliveryLifecycleError.noActiveShift) {
+            try DeliveryService(context: context).startDelivery(at: at(700))
+        }
+        #expect(try DeliveryService(context: context).activeDeliveries().isEmpty)
+    }
+
+    @Test("Start Delivery is named and spoken exactly as the app's own control is")
+    func startDeliveryIsNamedAsTheAppNamesIt() {
+        #expect(ShiftActivityControl.startDelivery.title == DeliveryAction.start.title)
+        #expect(ShiftActivityControl.startDelivery.spokenLabel == DeliveryAction.start.spokenLabel)
+        #expect(
+            ShiftActivityControl.startDelivery.spokenLabel.lowercased().contains("delivery"),
+            "A control on a Lock Screen names its subject"
+        )
+        #expect(
+            ShiftActivityControl.startDelivery.symbolName != ShiftActivityDeliveryStep.pickUp.symbolName,
+            "Adding an order and advancing one must not look the same"
+        )
+    }
+
+    @Test("Only one control carries the emphasis, whichever pair the card is showing")
+    func emphasisesExactlyOneControl() throws {
+        let context = try makeContext()
+        let shift = try startedShift(in: context)
+        let deliveries = DeliveryService(context: context)
+
+        let quiet = shift.activityContentState(for: .none, asOf: at(5), locale: locale).controls
+        #expect(ShiftActivityControl.emphasised(in: quiet) == .startDelivery)
+
+        _ = try deliveries.startDelivery(at: at(10))
+        let carrying = shift.activityContentState(for: .none, asOf: at(15), locale: locale).controls
+        #expect(
+            ShiftActivityControl.emphasised(in: carrying) == .deliveryStep(.arriveAtPickup),
+            "The order already in the car is what the driver reached for"
+        )
+        #expect(carrying.filter(\.isProminent).count == 2, "Both would take it on their own, which is why the list decides")
+        #expect(ShiftActivityControl.emphasised(in: []) == nil)
+        #expect(
+            ShiftActivityControl.emphasised(in: [.pause, .end]) == nil,
+            "Neither lifecycle control is ever the emphasised one"
+        )
     }
 
     @Test("A paused shift offers Resume and End")
@@ -266,6 +371,36 @@ struct ShiftActivityContentTests {
         try service.endActiveShift(at: at(180))
         #expect(shift.endedAt == at(180))
         #expect(shift.completedWorkingDuration == 60, "The pause was closed at the end instant")
+    }
+
+    @Test("The notice is about the withheld step, and survives the card still offering a start")
+    func explainsTheWithheldStepWhileStillOfferingAStart() throws {
+        let context = try makeContext()
+        let service = ShiftService(context: context)
+        let shift = try service.startShift(at: start)
+        let deliveries = DeliveryService(context: context)
+
+        #expect(shift.activityContentState(for: .none, asOf: at(5), locale: locale).controlNotice == nil)
+
+        let first = try deliveries.startDelivery(at: at(10))
+        #expect(
+            shift.activityContentState(for: .none, asOf: at(15), locale: locale).controlNotice == nil,
+            "One order has a step, so there is nothing to explain"
+        )
+
+        let second = try deliveries.startDelivery(at: at(20))
+        let stacked = shift.activityContentState(for: .none, asOf: at(25), locale: locale)
+        #expect(stacked.controlNotice != nil)
+        #expect(
+            !stacked.controls.isEmpty,
+            "The notice is no longer derived from an empty list, because the list is not empty"
+        )
+        #expect(stacked.controls.allSatisfy { if case .deliveryStep = $0 { false } else { true } })
+
+        // It lifts by itself once one of them is finished, exactly as before.
+        try deliveries.cancelDelivery(second, at: at(30))
+        #expect(shift.activityContentState(for: .none, asOf: at(35), locale: locale).controlNotice == nil)
+        #expect(first.state == .accepted, "Finishing one leaves the other exactly as it was")
     }
 
     // MARK: The vocabulary cannot drift from the app's
@@ -370,7 +505,7 @@ struct ShiftActivityContentTests {
         )
 
         #expect(decoded == state)
-        #expect(decoded.controls == [.deliveryStep(.arriveAtPickup)])
+        #expect(decoded.controls == [.deliveryStep(.arriveAtPickup), .startDelivery])
     }
 
     // MARK: The working clock the system draws

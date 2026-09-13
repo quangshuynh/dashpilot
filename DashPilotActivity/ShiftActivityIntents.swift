@@ -1,7 +1,7 @@
 import AppIntents
 import Foundation
 
-/// The four actions a driver can take from the shift's Live Activity.
+/// The five actions a driver can take from the shift's Live Activity.
 ///
 /// Named apart from the intents themselves so there is exactly one switch over
 /// them, in ``ShiftActivityIntentBridge``, rather than a lifecycle call buried
@@ -10,6 +10,7 @@ nonisolated enum ShiftActivityAction: String, CaseIterable, Sendable {
     case pauseShift
     case resumeShift
     case endShift
+    case startDelivery
     case recordDeliveryProgress
 }
 
@@ -64,6 +65,7 @@ enum ShiftActivityIntentBridge {
         case .pauseShift: _ = try service.pauseShift()
         case .resumeShift: _ = try service.resumeShift()
         case .endShift: _ = try service.endShift()
+        case .startDelivery: _ = try service.startDelivery()
         case .recordDeliveryProgress: _ = try service.recordDeliveryProgress()
         }
     }
@@ -177,6 +179,50 @@ struct EndShiftFromActivityIntent: LiveActivityIntent {
     @MainActor
     func perform() async throws -> some IntentResult {
         try ShiftActivityIntentBridge.perform(.endShift)
+        return .result()
+    }
+}
+
+/// Starting one more delivery from the Lock Screen.
+///
+/// **The one control on this surface that names no existing record**, and the
+/// reason it is offered however many orders the driver is already carrying.
+/// Stacked deliveries are supported, so a second start is not a correction of
+/// the first: it creates exactly one new delivery beside the ones already
+/// running, and it changes none of them. The ambiguity that withholds
+/// ``RecordDeliveryProgressFromActivityIntent`` does not apply to it, because
+/// there is no delivery for it to pick the wrong one of.
+///
+/// It records **only** that a delivery was accepted, at the instant the button
+/// was pressed. No amount, no expected amount, no pickup place: those are a
+/// keyboard's work, and the delivery the driver started is the fact this
+/// control is in a position to state.
+///
+/// Refused, by ``DeliveryService``'s own rule, while the shift is paused or
+/// once it has ended. The card does not offer the control in either state, but
+/// the layer that matters is this one: a snapshot on screen can be a moment out
+/// of date, and the store never is.
+struct StartDeliveryFromActivityIntent: LiveActivityIntent {
+    static let title: LocalizedStringResource = "Start Delivery from Live Activity"
+
+    static let description: IntentDescription? = IntentDescription(
+        """
+        Records that you accepted a delivery on the shift in progress, from its Live Activity. \
+        Deliveries already in progress are not changed. A paused shift records no delivery until \
+        you resume it.
+        """,
+        categoryName: "Delivery"
+    )
+
+    static let supportedModes: IntentModes = .background
+    static let isDiscoverable = false
+    static let authenticationPolicy = IntentAuthenticationPolicy.alwaysAllowed
+
+    init() {}
+
+    @MainActor
+    func perform() async throws -> some IntentResult {
+        try ShiftActivityIntentBridge.perform(.startDelivery)
         return .result()
     }
 }
