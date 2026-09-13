@@ -65,6 +65,7 @@ counts and errors. Coordinates, addresses and earnings amounts are never logged.
 | Category | Records | Never records |
 | --- | --- | --- |
 | `shift` | A shift started, ended or was deleted; a transition refused; a failed store read or write | When a shift ran, what it earned, how far it went |
+| `delivery` | That a delivery started, advanced to a named state, or was refused by rule; how many deliveries an offer recorded and how many are now active on the shift; that a delivery moved between offers, that two offers were combined, that an offer was separated, and that an offer left holding nothing was removed; a failed store read or write | Which delivery or which offers any of it was about, when any of it happened, where it happened, what it paid, and how many deliveries a correction moved |
 | `location` | Authorization transitions, Location Services availability, accuracy changes, unrecognised platform values | Any position, because this layer never reads one |
 | `route-capture` | Capture started or stopped, why it could not start, how many samples were retained and persisted, and the *name* of the rule that rejected a candidate | Latitude, longitude, address or route geometry |
 | `earnings` | That an amount was added, updated or removed, or that a save failed | The amount |

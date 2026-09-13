@@ -49,11 +49,18 @@ Derived, never stored:
 | `numberedOffers` | The same list paired with the local `Offer 1`, `Offer 2` labels, each carrying its deliveries under their shift-wide numbers |
 | `numberedOffer(containing:)` | The numbered offer a delivery arrived in, or `nil` for one recording none |
 
-`beginOffer(deliveryCount:at:)` is the only thing in the app that creates an offer or a delivery. It
-rejects a count below one, an offer on an ended shift, and an acceptance before the shift began, and
-returns the offer and its deliveries for the caller to insert, so a refused write leaves nothing
-behind. There is deliberately no maximum: how much work a driver accepted is a fact about their
-work, and the stepper on screen bounds a control rather than the model.
+`beginOffer(deliveryCount:at:)` is the only thing in the app that creates a delivery, and the only
+thing that records a new acceptance. It rejects a count below one, an offer on an ended shift, and an
+acceptance before the shift began, and returns the offer and its deliveries for the caller to insert,
+so a refused write leaves nothing behind. There is deliberately no maximum: how much work a driver
+accepted is a fact about their work, and the stepper on screen bounds a control rather than the model.
+
+`makeOffer(regrouping:)` is the only other thing that creates an offer, and it creates no delivery: it
+records deliveries the shift already holds as an offer of their own, for a driver correcting which
+deliveries arrived together. It requires the deliveries up front, rejects an empty group and a
+delivery from another shift, and takes the **earliest acceptance among them** as the new offer's own,
+which is a moment the driver really recorded. Unlike `beginOffer` it is allowed on a shift that has
+ended, because restating a grouping is not recording new work.
 
 `beginPause(at:)` rejects a pause on an ended shift, a second open pause, and a start before the
 shift's. `endOpenPause(at:)` rejects a resume with nothing open and one on an ended shift; the
@@ -127,6 +134,7 @@ Derived, never stored:
 | `grossPerDeliveryHour` | A `DeliveryEarningsRate`: the amount over this delivery's own `completedDuration`, or the reason there is none |
 | `acceptedBefore(_:_:)` | The total, repeatable order over deliveries: acceptance ascending, identity breaking a tie |
 | `makeHistoricalOffer()` | The v11 to v12 migration's one write: the one-delivery offer a delivery recorded before offers existed belongs in. `nil`, changing nothing, for a delivery that already holds one or belongs to no shift |
+| `move(into:)` | The one place a delivery's grouping changes. Returns the offer it left, so the caller can decide what happens to an offer left holding nothing. Refuses another shift's offer, the offer it is already in, and an offer accepted after this delivery was |
 
 `markArrivedAtPickup(at:)`, `markPickedUp(at:)` and `markDelivered(at:)` refuse a skipped step, a
 repeated event, a transition after a terminal state, and a timestamp earlier than the last recorded
@@ -167,6 +175,8 @@ Derived, never stored:
 | `deliveriesInOrder` | The offer's deliveries in the order the shift numbers them |
 | `deliveryCount` | How many deliveries the driver said this offer contained |
 | `isGrouped` | More than one delivery, which is the only case the interface shows a grouping for |
+| `couldHaveContained(_:)` | Whether a delivery accepted at that instant could have arrived in this offer, which is the one ordering rule correction keeps |
+| `earliestDeliveryAcceptance` | The earliest acceptance among this offer's deliveries, or `nil` for one holding none |
 | `activeDeliveries` | The offer's deliveries that are neither delivered nor cancelled |
 | `state` | An `OfferState`, read from the states of the deliveries it holds |
 | `isTerminal` | Every delivery has finished. An offer holding none is deliberately not terminal |
@@ -175,8 +185,11 @@ Derived, never stored:
 
 An **offer** is one acceptance event; a **delivery** is one dropoff with its own lifecycle. One offer
 may contain several deliveries, and an offer accepted later is a different offer even if its
-deliveries overlap in time with an earlier one's. Nothing merges two offers, and nothing moves a
-delivery between them: an offer is an acceptance that already happened.
+deliveries overlap in time with an earlier one's. Nothing merges two offers on its own: that happens
+only where the driver says the grouping they recorded was wrong, through `OfferCorrectionService`,
+which moves membership and never a lifecycle fact, an amount or an acceptance timestamp. An offer
+left holding no deliveries by a correction is removed in the same write, so `OfferState.empty`
+describes a store the app cannot produce rather than an outcome of ordinary use.
 
 **It holds no money, no duration and no distance.** Expected pay and recorded gross earnings stay on
 the delivery, and no total, rate or coverage figure anywhere is derived from an offer. Cancelling is

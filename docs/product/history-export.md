@@ -90,6 +90,14 @@ table cannot hold a parent record without repeating it.
 is a local display number counted from the order a shift accepted its offers in, exactly as `number`
 is for a delivery. It is not a platform's offer identifier and never could be.
 
+**A corrected grouping moves the values and nothing else.** A driver can
+[correct which deliveries they recorded as accepted together](delivery-lifecycle.md#correcting-one),
+and an export written afterwards carries the corrected `offerNumber`. Nothing about the contract
+changes with it: the numbers are counted from the order the shift accepted its offers in, so removing
+an offer renumbers the ones that outlive it, and no number is stored anywhere to go stale. Every
+other field in the file, including every delivery timestamp, amount and pickup name, is exactly what
+it was.
+
 #### Still 3: what a delivery was expected to pay
 
 A driver can now record [what they expect a delivery in progress to
