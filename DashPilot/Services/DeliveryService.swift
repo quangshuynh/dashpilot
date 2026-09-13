@@ -28,6 +28,8 @@ nonisolated enum DeliveryLifecycleError: Error {
     case deliveryNotOnARunningShift
     /// The delivery model rejected the transition.
     case invalidTransition(DeliveryError)
+    /// The shift refused to record the offer as described.
+    case invalidOffer(OfferError)
     /// The local store could not be read or written.
     case storeUnavailable(underlying: any Error)
 }
@@ -41,6 +43,7 @@ nonisolated extension DeliveryLifecycleError: Equatable {
         case (.shiftPaused, .shiftPaused): true
         case (.deliveryNotOnARunningShift, .deliveryNotOnARunningShift): true
         case let (.invalidTransition(lhsError), .invalidTransition(rhsError)): lhsError == rhsError
+        case let (.invalidOffer(lhsError), .invalidOffer(rhsError)): lhsError == rhsError
         case (.storeUnavailable, .storeUnavailable): true
         default: false
         }
@@ -76,6 +79,12 @@ nonisolated extension DeliveryLifecycleError: LocalizedError {
             "Gross earnings cannot be negative."
         case .invalidTransition(.negativeExpectedEarnings):
             "An expected amount cannot be negative."
+        case .invalidOffer(.deliveryCountNotPositive):
+            "An offer has to contain at least one delivery."
+        case .invalidOffer(.shiftAlreadyEnded):
+            "That shift has already ended, so no offer can be recorded against it."
+        case .invalidOffer(.acceptedBeforeShiftStart):
+            "That would record an offer accepted before its shift began."
         case .storeUnavailable:
             "DashPilot could not save to its local data store, so the delivery was not changed."
         }
@@ -99,6 +108,11 @@ nonisolated extension DeliveryLifecycleError: LocalizedError {
 ///
 /// - A delivery belongs to exactly one shift, and can only begin while that
 ///   shift is running.
+/// - A delivery is recorded **inside an accepted offer**, always, and an offer
+///   holds at least one delivery. One tap records an offer of one; a driver who
+///   says an offer held two records one offer holding two. Accepting more work
+///   later records a **new** offer, never an addition to an existing one. See
+///   ``startOffer(deliveryCount:at:)``.
 /// - A lifecycle event is applied to **exactly one delivery, named by the
 ///   caller**, and never to another. Nothing is shared between concurrent
 ///   deliveries: starting, advancing, finishing or cancelling one leaves every
@@ -217,14 +231,67 @@ struct DeliveryService {
 
     /// Starts a delivery on the running shift, alongside any already in progress.
     ///
-    /// Nothing already recorded is touched. There is deliberately no maximum:
-    /// how many orders a driver is carrying is a fact about their work, not a
-    /// number this app is in a position to cap.
+    /// **One offer containing one delivery**, which is what a single tap, a
+    /// spoken shortcut and a Lock Screen button all mean. It is the whole of
+    /// this method: it names a count of one and hands the work to
+    /// ``startOffer(deliveryCount:at:)``, so there is one write path and one
+    /// place the invariants live. The one-tap path is unchanged from the
+    /// caller's side, and every existing caller keeps the delivery it was
+    /// returned.
+    ///
+    /// Nothing already recorded is touched. There is deliberately no maximum on
+    /// how many deliveries may be running: how many orders a driver is carrying
+    /// is a fact about their work, not a number this app is in a position to
+    /// cap.
     ///
     /// - Throws: ``DeliveryLifecycleError/noActiveShift`` if no shift is
-    ///   running, or ``DeliveryLifecycleError/storeUnavailable(underlying:)``.
+    ///   running, ``DeliveryLifecycleError/shiftPaused`` if it is paused, or
+    ///   ``DeliveryLifecycleError/storeUnavailable(underlying:)``.
     @discardableResult
     func startDelivery(at date: Date = .now) throws -> Delivery {
+        let offer = try startOffer(deliveryCount: 1, at: date)
+        guard let delivery = offer.deliveriesInOrder.first else {
+            // Unreachable: an offer is refused below the count of one, so one
+            // that was recorded holds at least one delivery. Reported rather
+            // than forced, because the alternative is a crash on a driver's
+            // device over a store anomaly.
+            AppLog.delivery.fault("An offer was recorded holding no delivery")
+            throw DeliveryLifecycleError.invalidOffer(.deliveryCountNotPositive)
+        }
+        return delivery
+    }
+
+    /// Records an accepted offer on the running shift, containing
+    /// `deliveryCount` deliveries.
+    ///
+    /// ## What one call records
+    ///
+    /// One acceptance and the deliveries it contained, in **one write**. The
+    /// deliveries share the offer's acceptance timestamp, because the driver
+    /// accepted them in one act; from that instant each advances entirely on its
+    /// own, and completing one leaves its siblings exactly as they were.
+    ///
+    /// ## An add-on offer is a separate call and a separate offer
+    ///
+    /// Recording an offer while deliveries from an earlier one are still running
+    /// is ordinary work and is allowed. The new offer is its own row and is
+    /// never merged into an existing one: two acceptances whose deliveries
+    /// overlap in time are still two acceptances, and nothing here reads the
+    /// clock to decide otherwise.
+    ///
+    /// ## What it does not ask for
+    ///
+    /// A count, and nothing else. No pickup place, no expected amount, no
+    /// customer and no name: every one of those is optional on a delivery and
+    /// can be added later from a card, and asking for any of them at the kerb
+    /// is the interaction this project designs away.
+    ///
+    /// - Throws: ``DeliveryLifecycleError/noActiveShift``,
+    ///   ``DeliveryLifecycleError/shiftPaused``,
+    ///   ``DeliveryLifecycleError/invalidOffer(_:)`` for a count below one, or
+    ///   ``DeliveryLifecycleError/storeUnavailable(underlying:)``.
+    @discardableResult
+    func startOffer(deliveryCount: Int, at date: Date = .now) throws -> Offer {
         guard let shift = try activeShift() else {
             AppLog.delivery.notice("Refused to start a delivery: no shift is running")
             throw DeliveryLifecycleError.noActiveShift
@@ -235,16 +302,28 @@ struct DeliveryService {
             throw DeliveryLifecycleError.shiftPaused
         }
 
-        // A delivery cannot have been accepted before the shift it belongs to
+        // An offer cannot have been accepted before the shift it belongs to
         // began. Clamping rather than refusing keeps the driver able to record
-        // the delivery, and records a delivery that starts with its shift.
+        // the work, and records deliveries that start with their shift.
         let acceptedAt = max(date, shift.startedAt)
         if acceptedAt != date {
             AppLog.delivery.warning("Delivery start preceded the shift start; clamped to the shift start")
         }
 
-        let delivery = Delivery(shift: shift, acceptedAt: acceptedAt)
-        context.insert(delivery)
+        let recorded: (offer: Offer, deliveries: [Delivery])
+        do {
+            recorded = try shift.beginOffer(deliveryCount: deliveryCount, at: acceptedAt)
+        } catch let error as OfferError {
+            AppLog.delivery.notice("Shift rejected an offer: \(String(describing: error), privacy: .public)")
+            throw DeliveryLifecycleError.invalidOffer(error)
+        }
+
+        // Both halves, explicitly, rather than relying on a relationship to
+        // carry one in behind the other: a failed save must roll back exactly
+        // what this call put in.
+        context.insert(recorded.offer)
+        for delivery in recorded.deliveries { context.insert(delivery) }
+
         do {
             try commit(context)
         } catch {
@@ -254,11 +333,14 @@ struct DeliveryService {
             throw DeliveryLifecycleError.storeUnavailable(underlying: error)
         }
 
-        // A count, which is structural. Not when it started, and not which one.
+        // Counts, which are structural. Not when it started, and not which one.
         AppLog.delivery.info(
-            "Delivery started; \(shift.activeDeliveries.count, privacy: .public) now active on this shift"
+            """
+            Offer started with \(recorded.deliveries.count, privacy: .public) deliveries; \
+            \(shift.activeDeliveries.count, privacy: .public) now active on this shift
+            """
         )
-        return delivery
+        return recorded.offer
     }
 
     /// Records that the driver reached `delivery`'s pickup.
