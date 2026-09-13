@@ -257,7 +257,8 @@ offer and finding its sibling where it was, recording an offer of two from the s
 single delivery beside it, dismissing that sheet and recording nothing, combining two offers the
 driver recorded separately and finding one heading over all three deliveries afterwards, separating a
 grouped offer back into one offer per delivery, putting one delivery of a grouped offer into an offer
-of its own, leaving the correction screen without changing anything, a shift of one delivery offering
+of its own, combining two offers from a finished shift's history and finding both rows saying so with
+every recorded time kept, leaving the correction screen without changing anything, a shift of one delivery offering
 no correction at all, a store holding an offer with no deliveries being stated rather than crashed
 on, reading a
 day beside the day before it with both figures and both coverages on screen,
