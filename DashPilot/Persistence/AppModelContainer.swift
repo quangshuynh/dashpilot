@@ -40,6 +40,9 @@ enum AppModelContainer {
         if LaunchArgument.isPresent(LaunchArgument.seededExpectedPay) {
             return try PreviewSupport.seededExpectedPayContainer()
         }
+        if LaunchArgument.isPresent(LaunchArgument.seededStackedOffer) {
+            return try PreviewSupport.seededStackedOfferContainer()
+        }
         if LaunchArgument.isPresent(LaunchArgument.seededPickupHistory) {
             return try PreviewSupport.seededPickupHistoryContainer()
         }

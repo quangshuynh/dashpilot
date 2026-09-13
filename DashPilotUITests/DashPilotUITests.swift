@@ -22,6 +22,9 @@ final class DashPilotUITests: XCTestCase {
     /// Must match `LaunchArgument.seededExpectedPay`, for the same reason.
     private static let seededExpectedPayArgument = "-dashpilot-seeded-expected-pay"
 
+    /// Must match `LaunchArgument.seededStackedOffer`, for the same reason.
+    private static let seededStackedOfferArgument = "-dashpilot-seeded-stacked-offer"
+
     /// Must match `LaunchArgument.stubbedLocation`, for the same reason.
     private static let stubbedLocationArgument = "-dashpilot-stubbed-location"
 
@@ -107,6 +110,25 @@ final class DashPilotUITests: XCTestCase {
     private func launchWithExpectedPay() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments.append(Self.seededExpectedPayArgument)
+        app.launch()
+        return app
+    }
+
+    /// Launches against a throwaway store holding one offer of two deliveries
+    /// and a later add-on offer of one.
+    ///
+    /// Recording an offer of two is a single write, so what a journey has to
+    /// judge is the screen afterwards: which cards carry a heading and which
+    /// carry none. Two offers in the fixture is what makes that a real
+    /// distinction rather than a property of the panel.
+    ///
+    /// The fixture's shift holds `Delivery 1` waiting at its pickup and
+    /// `Delivery 2` accepted, both from the first offer, and `Delivery 3`
+    /// accepted on its own twenty minutes later.
+    @MainActor
+    private func launchWithStackedOffer() -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments.append(Self.seededStackedOfferArgument)
         app.launch()
         return app
     }
@@ -1074,6 +1096,203 @@ final class DashPilotUITests: XCTestCase {
             "The delivered one leaves the list"
         )
         XCTAssertEqual(accepted.label, "Delivery 2. Mark arrived at pickup")
+    }
+
+    // MARK: Offers containing several deliveries
+
+    /// Deliveries accepted together are shown together, and a delivery accepted
+    /// on its own is shown exactly as it always was.
+    @MainActor
+    func testDeliveriesAcceptedTogetherAreShownAsOneOffer() throws {
+        let app = launchWithStackedOffer()
+
+        // The panel is read before it is scrolled: `scrollTo` swipes rather than
+        // waits, so a journey that starts swiping at a still-launching app can
+        // exhaust its swipes before the first card exists.
+        XCTAssertTrue(app.buttons["endShiftButton"].waitForExistence(timeout: 15), "The seeded shift is running")
+
+        let heading = app.descendants(matching: .any)["offerGroupHeader"]
+        XCTAssertTrue(scrollTo(heading, in: app), "The offer that held two deliveries names itself")
+        XCTAssertTrue(
+            heading.label.contains("Offer 1") && heading.label.contains("2 deliveries accepted together"),
+            "The heading says which offer and how many: \(heading.label)"
+        )
+
+        // Exactly one heading: the add-on offer held a single delivery, and a
+        // heading over every card would be the interface repeating itself.
+        XCTAssertEqual(
+            app.descendants(matching: .any).matching(identifier: "offerGroupHeader").count,
+            1,
+            "An offer of one gets no heading"
+        )
+
+        // Every card still exists, still advances itself, and still says which
+        // delivery it is.
+        XCTAssertEqual(app.buttons.matching(identifier: "deliveryActionButton").count, 3)
+        XCTAssertEqual(
+            deliveryButton("deliveryActionButton", containing: "Delivery 1", in: app).label,
+            "Delivery 1. Mark order picked up"
+        )
+        XCTAssertEqual(
+            deliveryButton("deliveryActionButton", containing: "Delivery 2", in: app).label,
+            "Delivery 2. Mark arrived at pickup"
+        )
+        XCTAssertEqual(
+            deliveryButton("deliveryActionButton", containing: "Delivery 3", in: app).label,
+            "Delivery 3. Mark arrived at pickup"
+        )
+    }
+
+    /// The grouping is spoken, so a listener knows which cards belong together
+    /// without seeing where they sit.
+    @MainActor
+    func testGroupedDeliveriesSayWhatTheyWereAcceptedWith() throws {
+        let app = launchWithStackedOffer()
+
+        // The panel is read before it is scrolled: `scrollTo` swipes rather than
+        // waits, so a journey that starts swiping at a still-launching app can
+        // exhaust its swipes before the first card exists.
+        XCTAssertTrue(app.buttons["endShiftButton"].waitForExistence(timeout: 15), "The seeded shift is running")
+
+        let grouped = app.descendants(matching: .any)
+            .matching(
+                NSPredicate(
+                    format: "identifier == %@ AND label CONTAINS %@",
+                    "activeDeliveryStatus",
+                    "Delivery 1"
+                )
+            )
+            .firstMatch
+        XCTAssertTrue(scrollTo(grouped, in: app))
+        XCTAssertTrue(
+            grouped.label.contains("Part of Offer 1, accepted together with Delivery 2"),
+            "The card names its siblings aloud: \(grouped.label)"
+        )
+
+        let alone = app.descendants(matching: .any)
+            .matching(
+                NSPredicate(
+                    format: "identifier == %@ AND label CONTAINS %@",
+                    "activeDeliveryStatus",
+                    "Delivery 3"
+                )
+            )
+            .firstMatch
+        XCTAssertTrue(scrollTo(alone, in: app))
+        XCTAssertFalse(
+            alone.label.contains("accepted together"),
+            "A delivery accepted on its own claims no grouping: \(alone.label)"
+        )
+    }
+
+    /// One delivery of an offer advances without moving its sibling, and the
+    /// heading keeps stating the offer it belongs to.
+    @MainActor
+    func testAdvancingOneOfATwoDeliveryOfferLeavesItsSibling() throws {
+        let app = launchWithStackedOffer()
+
+        // The panel is read before it is scrolled: `scrollTo` swipes rather than
+        // waits, so a journey that starts swiping at a still-launching app can
+        // exhaust its swipes before the first card exists.
+        XCTAssertTrue(app.buttons["endShiftButton"].waitForExistence(timeout: 15), "The seeded shift is running")
+
+        let first = deliveryButton("deliveryActionButton", containing: "Delivery 1", in: app)
+        let sibling = deliveryButton("deliveryActionButton", containing: "Delivery 2", in: app)
+        XCTAssertTrue(scrollTo(first, in: app))
+        first.tap()
+
+        XCTAssertTrue(
+            waitForLabel(first, toContain: "Mark delivery completed"),
+            "The delivery that was tapped moved on"
+        )
+        XCTAssertEqual(
+            sibling.label,
+            "Delivery 2. Mark arrived at pickup",
+            "And its sibling stayed exactly where it was"
+        )
+
+        // Delivering one of the two leaves the other running, and the heading
+        // now says how much of the offer is left rather than disappearing.
+        first.tap()
+        XCTAssertTrue(
+            waitForCount(app.buttons.matching(identifier: "deliveryActionButton"), toEqual: 2),
+            "The delivered one leaves the list and the other two stay"
+        )
+        let heading = app.descendants(matching: .any)["offerGroupHeader"]
+        XCTAssertTrue(scrollTo(heading, in: app))
+        XCTAssertTrue(
+            heading.label.contains("1 of 2 still in progress"),
+            "The offer is not finished because one of its deliveries is: \(heading.label)"
+        )
+    }
+
+    /// Recording an offer that contained two deliveries takes one sheet and one
+    /// confirmation, and records exactly two.
+    @MainActor
+    func testStartingAnOfferOfTwoRecordsTwoDeliveries() throws {
+        let app = launchWithEmptyStore()
+        app.buttons["startShiftButton"].tap()
+
+        XCTAssertTrue(app.buttons["startDeliveryButton"].waitForExistence(timeout: 5))
+        XCTAssertEqual(
+            app.buttons.matching(identifier: "deliveryActionButton").count,
+            0,
+            "Nothing is recorded before the sheet is confirmed"
+        )
+
+        let offerControl = app.buttons["startOfferButton"]
+        XCTAssertTrue(scrollTo(offerControl, in: app), "The control for a several-delivery offer is on the panel")
+        offerControl.tap()
+
+        let confirm = app.buttons["confirmStartOfferButton"]
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        XCTAssertEqual(confirm.label, "Start an offer of 2 deliveries", "It opens on two, and says so")
+        confirm.tap()
+
+        XCTAssertTrue(
+            waitForCount(app.buttons.matching(identifier: "deliveryActionButton"), toEqual: 2),
+            "Two deliveries, from one offer"
+        )
+        let heading = app.descendants(matching: .any)["offerGroupHeader"]
+        XCTAssertTrue(scrollTo(heading, in: app))
+        XCTAssertTrue(heading.label.contains("2 deliveries accepted together"), "Showed: \(heading.label)")
+
+        // And the one-tap path is untouched: it adds a single delivery, in an
+        // offer of its own, with no heading over it.
+        XCTAssertTrue(scrollToTop(reaching: app.buttons["startDeliveryButton"], in: app))
+        app.buttons["startDeliveryButton"].tap()
+        XCTAssertTrue(
+            waitForCount(app.buttons.matching(identifier: "deliveryActionButton"), toEqual: 3),
+            "One more delivery, not two"
+        )
+        XCTAssertEqual(
+            app.descendants(matching: .any).matching(identifier: "offerGroupHeader").count,
+            1,
+            "The delivery started alone joined no group"
+        )
+    }
+
+    /// Dismissing the sheet records nothing.
+    @MainActor
+    func testCancellingTheOfferSheetRecordsNothing() throws {
+        let app = launchWithEmptyStore()
+        app.buttons["startShiftButton"].tap()
+
+        XCTAssertTrue(app.buttons["startDeliveryButton"].waitForExistence(timeout: 5))
+        let offerControl = app.buttons["startOfferButton"]
+        XCTAssertTrue(scrollTo(offerControl, in: app))
+        offerControl.tap()
+
+        let cancel = app.buttons["cancelStartOfferButton"]
+        XCTAssertTrue(cancel.waitForExistence(timeout: 5))
+        cancel.tap()
+
+        XCTAssertTrue(app.buttons["startDeliveryButton"].waitForExistence(timeout: 5))
+        XCTAssertEqual(
+            app.buttons.matching(identifier: "deliveryActionButton").count,
+            0,
+            "A dismissed sheet records no offer and no delivery"
+        )
     }
 
     /// Completing one of two deliveries leaves the other running.

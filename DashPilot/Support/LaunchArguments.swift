@@ -87,6 +87,25 @@ nonisolated enum LaunchArgument {
     /// Debug builds only, and in memory, so it can never touch a real store.
     static let seededExpectedPay = "-dashpilot-seeded-expected-pay"
 
+    /// Runs against a throwaway store holding a running shift with one offer of
+    /// two deliveries and a second, later offer of one.
+    ///
+    /// Grouping is the one thing a journey cannot reach by tapping: recording an
+    /// offer of two is a single write, and what has to be asserted is what the
+    /// screen looks like **afterwards**: which cards carry a heading, which
+    /// carry none, and that a heading never becomes a control. The add-on offer
+    /// is in the fixture for the same reason: two offers on one screen is the
+    /// shape that proves the heading belongs to one of them rather than to the
+    /// panel.
+    ///
+    /// The two deliveries of the first offer are left at different lifecycle
+    /// points, so a journey can advance one and watch its sibling stay where it
+    /// was.
+    ///
+    /// Every time is invented. Debug builds only, and in memory, so it can never
+    /// touch a real store.
+    static let seededStackedOffer = "-dashpilot-seeded-stacked-offer"
+
     /// Runs with Core Location replaced by the stub the tests and previews use,
     /// reporting When In Use with full accuracy and producing no positions.
     ///
@@ -134,7 +153,8 @@ nonisolated enum LaunchArgument {
         seededPickupHistory,
         seededPeriodSummary,
         seededPeriodComparison,
-        seededExpectedPay
+        seededExpectedPay,
+        seededStackedOffer
     ]
 
     /// Whether this launch is running over synthetic, in-memory data.

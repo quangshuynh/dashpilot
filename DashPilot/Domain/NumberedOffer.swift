@@ -114,7 +114,7 @@ nonisolated struct NumberedOffer: Identifiable {
     }
 
     /// "Delivery 2", "Delivery 2 and Delivery 3", "Delivery 2, Delivery 3 and
-    /// Delivery 4" — spoken punctuation, since VoiceOver does not read a comma
+    /// Delivery 4". Spoken punctuation, since VoiceOver does not read a comma
     /// as a conjunction.
     private static func list(_ items: [String]) -> String {
         guard let last = items.last else { return "" }
