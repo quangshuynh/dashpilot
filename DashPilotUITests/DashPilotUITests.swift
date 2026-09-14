@@ -2416,7 +2416,7 @@ final class DashPilotUITests: XCTestCase {
             "The pause records what the driver corrected it to. Showed: \(correctedRow.label)"
         )
 
-        XCTAssertTrue(scrollUpUntilHittable(elapsed, in: app, maxSwipes: 6), "The times are above the pauses")
+        XCTAssertTrue(scrollToTop(reaching: elapsed, in: app), "The shift's own times are at the top")
         XCTAssertTrue(
             waitForLabel(app.descendants(matching: .any)["shiftDetailPausedTime"], toContain: "1 hour, 5 minutes"),
             "The paused total is the corrected pause plus the one that did not move"
@@ -2554,7 +2554,7 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertFalse(pauseRow(containing: "Pause 2", in: app).exists, "and there is no second pause now")
 
         let elapsed = app.descendants(matching: .any)["shiftDetailDuration"]
-        XCTAssertTrue(scrollUpUntilHittable(elapsed, in: app, maxSwipes: 6))
+        XCTAssertTrue(scrollToTop(reaching: elapsed, in: app))
         XCTAssertTrue(
             waitForLabel(app.descendants(matching: .any)["shiftDetailWorkingTime"], toContain: "3 hours, 40 minutes"),
             "The working time grew by exactly the deleted pause"
@@ -2634,7 +2634,7 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertTrue(pauseRow(containing: "Pause 3", in: app).exists, "There are three of them now")
 
         let elapsed = app.descendants(matching: .any)["shiftDetailDuration"]
-        XCTAssertTrue(scrollUpUntilHittable(elapsed, in: app, maxSwipes: 6))
+        XCTAssertTrue(scrollToTop(reaching: elapsed, in: app))
         XCTAssertTrue(
             waitForLabel(app.descendants(matching: .any)["shiftDetailPausedTime"], toContain: "over 3 pauses"),
             "The shift counts three pauses now"
