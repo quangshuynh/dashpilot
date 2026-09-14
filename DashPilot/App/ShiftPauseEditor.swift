@@ -29,13 +29,19 @@ import SwiftUI
 ///
 /// ## The calendar is the environment's
 ///
-/// Both pickers, the bounds they offer and every time printed here read
-/// `Environment(\.calendar)` and `Environment(\.locale)`, which is what
-/// ``PeriodSummaryView`` and ``CustomRangeSheet`` already do. Nothing here
-/// reaches for `Calendar.autoupdatingCurrent`, so a shift is edited in the same
-/// calendar its period wording is written in. The values the pickers produce are
-/// instants, so a pause corrected across a daylight-saving change measures the
-/// hours that really passed rather than the ones the wall clock appears to show.
+/// Both pickers take their calendar and time zone from the environment, and the
+/// times printed here take the environment's locale, which is how
+/// ``PeriodSummaryView`` and ``CustomRangeSheet`` already read them. **Nothing
+/// here reaches for `Calendar.autoupdatingCurrent`**, so a pause is edited in the
+/// same calendar the shift's own times and its period wording are written in,
+/// and a future edit that reached for one would be reaching past the screen it
+/// is on.
+///
+/// What the pickers produce are **instants**. A pause corrected across a
+/// daylight-saving change therefore measures the hours that really passed rather
+/// than the ones the wall clock appears to show, and the bounds compare instants
+/// too: a time that reads as inside the shift on a wall clock that skipped an
+/// hour is still refused if the instant is outside it.
 struct ShiftPauseEditor: View {
     /// The shift being corrected. Its window bounds both pickers.
     let shift: Shift
@@ -47,7 +53,6 @@ struct ShiftPauseEditor: View {
     let pause: NumberedPause?
 
     @Environment(\.modelContext) private var modelContext
-    @Environment(\.calendar) private var calendar
     @Environment(\.locale) private var locale
     @Environment(\.dismiss) private var dismiss
 
