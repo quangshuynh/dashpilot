@@ -17,8 +17,12 @@ remembers, so a paused shift survives termination and is still the unfinished sh
 the driver paused is excluded from the shift's **working duration**, which is what every hourly
 figure divides by; route recording stops for the pause's whole length and resuming starts a new
 recording, so no distance is measured across the break. Pausing is refused while a delivery is in
-progress, and a delivery cannot be started while the shift is paused. See
-[Shift workflow](shift-workflow.md#pausing-a-shift).
+progress, and a delivery cannot be started while the shift is paused. Once the shift has ended, its
+pauses can be corrected, deleted or added to from its own detail screen, within rules that refuse a
+stretch reaching outside the shift, overlapping another pause or overlapping recorded delivery work,
+and without touching the shift's own times, its route or any amount. See
+[Shift workflow](shift-workflow.md#pausing-a-shift) and
+[Correcting a recorded pause](shift-workflow.md#correcting-a-recorded-pause).
 
 **Location authorization.** Core Location's permission and accuracy states are modelled separately:
 not determined, denied, restricted, When In Use, Always, plus the system-wide Location Services
