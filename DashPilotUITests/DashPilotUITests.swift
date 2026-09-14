@@ -1215,7 +1215,17 @@ final class DashPilotUITests: XCTestCase {
 
         let first = deliveryButton("deliveryActionButton", containing: "Delivery 1", in: app)
         let sibling = deliveryButton("deliveryActionButton", containing: "Delivery 2", in: app)
-        XCTAssertTrue(scrollTo(first, in: app))
+        // Scrolled from a known top rather than from wherever the launch left
+        // the screen. `scrollTo` stops as soon as the button *exists*, and a
+        // button inside a scroll view exists while it is off screen above:
+        // `tap()` then scrolls it into view itself and can park it under the
+        // navigation bar, where the synthesized tap lands on the bar and the
+        // delivery never moves. That reproduces only in a full serial run,
+        // where the app is relaunched over a running one and the panel is not
+        // where an isolated launch leaves it. Going to the top first and
+        // swiping down to the card makes the position the same either way.
+        XCTAssertTrue(scrollToTop(reaching: app.buttons["endShiftButton"], in: app))
+        XCTAssertTrue(scrollUntilHittable(first, in: app), "The card's own button can be pressed where it is")
         first.tap()
 
         XCTAssertTrue(
@@ -2838,6 +2848,33 @@ final class DashPilotUITests: XCTestCase {
             app.swipeUp()
         }
         return element.exists
+    }
+
+    /// Swipes down the screen until `element` is somewhere a tap will land on it.
+    ///
+    /// `scrollTo` stops as soon as the element **exists**, and an element inside
+    /// a scroll view exists while it is off screen. `tap()` then scrolls it into
+    /// view itself, and it can park the element under the navigation bar: the
+    /// synthesized tap lands on the bar, nothing happens, and the journey fails
+    /// on whatever it asserted after the tap rather than on the tap itself. That
+    /// is a red run that reproduces only in a full serial suite, where the app
+    /// is relaunched over a running one and a panel is not where an isolated
+    /// launch leaves it.
+    ///
+    /// It searches **downward only**, like `scrollTo`, so a caller that is not
+    /// already above the element should reach a known top first.
+    @MainActor
+    @discardableResult
+    private func scrollUntilHittable(
+        _ element: XCUIElement,
+        in app: XCUIApplication,
+        maxSwipes: Int = 10
+    ) -> Bool {
+        for _ in 0..<maxSwipes {
+            if element.isHittable { return true }
+            app.swipeUp()
+        }
+        return element.isHittable
     }
 
     /// Scrolls back to the top of the screen and waits for `element` there.
