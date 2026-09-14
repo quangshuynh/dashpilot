@@ -110,10 +110,20 @@ and one they cannot.
   the moment they accepted them: nothing infers it from their timing, their pickup place or their
   overlap, and deliveries recorded before offers existed are each in a one-delivery offer of their
   own whether or not they really arrived together.
-- **An offer cannot be corrected.** A delivery cannot be moved into or out of one, an offer's size
-  cannot be changed after the fact, and there is no control that cancels an offer as a unit. A driver
-  who taps Start Delivery twice for work that was really one offer of two has recorded two offers,
-  and the only remedy is cancelling a delivery and starting again.
+- **Grouping can be corrected; what a delivery recorded cannot be corrected through it.** A delivery
+  can be moved between offers, split into an offer of its own, and two offers can be combined or an
+  offer separated, on a running shift and on a finished one. A correction moves membership only: it
+  never changes a lifecycle timestamp, a pickup place, an amount or a terminal state, and it never
+  moves a delivery to another shift. There is still no control that cancels an offer as a unit,
+  because cancelling is a statement about one delivery.
+- **A correction cannot make an offer older than it is.** A delivery cannot be moved into an offer
+  accepted after that delivery was, because an offer is an acceptance and work cannot have arrived in
+  one that had not happened yet. Such an offer is not offered as a destination, and combining the two
+  offers the other way round, or splitting the delivery into a new offer, is what the driver does
+  instead. Neither acceptance timestamp is ever rewritten to make a grouping fit.
+- **Nothing verifies a correction either.** DashPilot cannot tell which two of a driver's offers were
+  really one, so nothing is suggested, highlighted or ordered by how close two acceptances are. A
+  correction is as true as the driver's memory of the shift, exactly as the original grouping was.
 - **No offer holds money, time or distance.** There is no offer total, no per-offer rate and no
   per-offer duration anywhere in the app or its exports. Amounts stay on the delivery they were
   recorded against, and a sum over the deliveries of an offer would read every one with no amount as

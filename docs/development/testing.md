@@ -71,6 +71,9 @@ test cannot see, such as a screen that renders a sentence the model never claime
 | Delivery offer persistence | The v11 to v12 custom migration giving every historical delivery a one-delivery offer of its own, including two accepted a second apart that end up in two offers; the plan's version and stage counts asserted here once; the frozen v11 shape holding no offer; every figure a migrated shift reports unmoved; a grouped offer surviving a reopened store with one delivery still running; deletion cascading to offers; and a rollback leaving no delivery pointing at a discarded offer, read through a fresh context |
 | Delivery offer surfaces | The negative claims, gathered: active time unioned identically whether two overlapping deliveries share an offer or not, unioned across offers, the Live Activity counting deliveries rather than offers and withholding the step within an offer exactly as it does across two, the card carrying no offer wording, an intent's Start Delivery recording one delivery in an offer of one, and a spoken step refused over a grouped offer without moving either delivery |
 | Delivery offer export | The grouping key on each delivery in both forms, no offer object or total anywhere, an explicit null for a delivery recording none, the CSV column appended so no existing column moves, an empty cell rather than a zero, and the format version unmoved |
+| Offer correction | The rules the model owns: the ordering rule an offer keeps, a move that leaves both acceptance timestamps where they were, refusals for an offer accepted later, another shift's offer and the offer a delivery is already in, the offer left behind returned rather than emptied here, a regrouped offer taking the earliest acceptance among its deliveries, regrouping allowed on a finished shift where recording new work is not, numbering renumbering what a removed offer leaves, and every confirmation sentence including the one that says an offer is removed and the sweep proving none of them carries an identifier |
+| Offer correction service | The four corrections as the store applies them: a move leaving both offers standing, a move out of a two-delivery offer leaving its sibling, the last delivery leaving removing the emptied offer read through a fresh store, a split of one and of several, a split of every delivery refused as the no-op it is, deliveries from two offers refused in one operation, a merge moving every delivery and removing the source without taking a delivery with it, the wrong merge direction refused before anything moves with the truthful direction then working, separating a grouped offer, and rollbacks during a move, a split and a merge each read through a fresh context |
+| Offer correction invariance | What must not move: every lifecycle timestamp, pickup place, amount and terminal state on an active and a terminal delivery under all four corrections; shift gross, delivery gross, the three rates, the active-time union and the delivery summary; the Live Activity's active count and its withheld step; pickup waits and their per-place samples; a period's whole `PeriodMetrics`; the export's `offerNumber` following the grouping while every other field and the format version stay put; renumbering after a merge; the one-tap Start Delivery path; a migrated one-delivery offer as both subject and destination; and an offer holding no deliveries read, offered and merged away without taking a delivery with it |
 | Expense export | Expenses selected by their own dates, none in a single shift's file, a period of costs alone exported rather than refused, the summary's totals and net, the JSON key set and its explicit nulls, a round trip, the CSV carrying no expense whatever its column count, and expenses adding one top-level key without redefining any |
 
 Running one suite:
@@ -134,7 +137,7 @@ a period locale and a comma locale side by side.
 
 ## Launch arguments
 
-Debug builds accept nine arguments, all used only by UI tests and screenshots:
+Debug builds accept ten arguments, all used only by UI tests and screenshots:
 
 | Argument | Effect |
 | --- | --- |
@@ -146,6 +149,7 @@ Debug builds accept nine arguments, all used only by UI tests and screenshots:
 | `-dashpilot-seeded-period-comparison` | Opens an in-memory store holding three consecutive days, also anchored to today: a today still in progress with one of two shifts unpaid, two complete days before it, and nothing before those |
 | `-dashpilot-seeded-expected-pay` | Opens an in-memory store holding a running shift with two deliveries waiting at their pickups, alike except that one records what it is expected to pay |
 | `-dashpilot-seeded-stacked-offer` | Opens an in-memory store holding a running shift with one offer of two deliveries and a later add-on offer of one |
+| `-dashpilot-seeded-malformed-offer` | Opens an in-memory store holding a running shift with one offer of two deliveries and one offer holding no deliveries at all, which is a row the app cannot produce |
 | `-dashpilot-stubbed-location` | Replaces Core Location with the stub providers, reporting When In Use at full accuracy and producing no positions |
 | `-dashpilot-simulated-route` | Replaces Core Location with a synthetic vehicle driving in a straight line, so a journey can watch a live mileage figure move; it implies the permission stub above |
 
@@ -213,8 +217,16 @@ left at the same lifecycle point, waiting at their pickups, so that nothing but 
 explain a difference in what the app does with them, and so that a lifecycle step still sits in front
 of the completion the confirmation belongs to.
 
+The malformed-offer fixture exists for one claim, which is that the grouping-correction screen reads
+whatever the store actually holds. An offer is recorded with its deliveries in one write and an offer
+emptied by a correction is removed in the same write, so an offer holding nothing reaches a store only
+through a fault or a migration this build has not met. An interface that fell over on one would turn
+a recoverable fault into a driver who cannot reach their own history. Its empty offer is accepted
+**after** the real one, so the real offer is still `Offer 1` and nothing else about the fixture reads
+differently from the stacked-offer one.
+
 The seeded paths are app code that exists only for tests. They are DEBUG-only and in-memory, and
-they are six more launch paths to keep honest.
+they are seven more launch paths to keep honest.
 
 ## UI journeys
 
@@ -242,7 +254,13 @@ and no gross recorded, delivering one that carries no expectation and being aske
 deliveries arrived in one offer and seeing exactly one heading over them with none over the add-on
 offer's card, hearing a card name the deliveries it was accepted with, advancing one delivery of an
 offer and finding its sibling where it was, recording an offer of two from the sheet and then a
-single delivery beside it, dismissing that sheet and recording nothing, reading a
+single delivery beside it, dismissing that sheet and recording nothing, combining two offers the
+driver recorded separately and finding one heading over all three deliveries afterwards, separating a
+grouped offer back into one offer per delivery, putting one delivery of a grouped offer into an offer
+of its own, combining two offers from a finished shift's history and finding both rows saying so with
+every recorded time kept, leaving the correction screen without changing anything, a shift of one delivery offering
+no correction at all, a store holding an offer with no deliveries being stated rather than crashed
+on, reading a
 day beside the day before it with both figures and both coverages on screen,
 the percentage a finished and fully recorded pair of days states, the absence of one while a day is
 still in progress, an empty previous day said to hold nothing rather than shown as no earnings, and

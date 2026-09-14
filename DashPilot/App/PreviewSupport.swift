@@ -310,6 +310,54 @@ enum PreviewSupport {
         return container
     }
 
+    static func malformedOfferContainer(
+        referenceDate: Date = Date(timeIntervalSince1970: 1_756_000_000)
+    ) -> ModelContainer {
+        try! seededMalformedOfferContainer(referenceDate: referenceDate)
+    }
+
+    /// A throwaway store holding a running shift with one offer of two
+    /// deliveries **and an offer holding no deliveries at all**.
+    ///
+    /// The second is a row the app cannot produce. An offer is recorded together
+    /// with its deliveries, and a correction that empties one removes it in the
+    /// same write, so this shape reaches a store only through a fault or a
+    /// migration this build has not met. It is seeded anyway, because the
+    /// correction screen has to read whatever the store actually holds: an
+    /// interface that falls over on an anomalous row turns a recoverable fault
+    /// into a driver who cannot reach their own history.
+    ///
+    /// It is accepted **after** the real offer, so the real one is still the
+    /// shift's first offer and everything numbered reads as it does elsewhere.
+    ///
+    /// Debug builds only, and in memory. Every offset is invented.
+    static func seededMalformedOfferContainer(
+        referenceDate: Date = Date(timeIntervalSince1970: 1_756_000_000)
+    ) throws -> ModelContainer {
+        let container = try ModelContainerFactory.makeInMemoryContainer()
+        let context = ModelContext(container)
+
+        let shift = Shift(startedAt: referenceDate.addingTimeInterval(-5400))
+        context.insert(shift)
+
+        let stacked = insertedOffer(
+            on: shift,
+            deliveryCount: 2,
+            acceptedAt: referenceDate.addingTimeInterval(-4500),
+            in: context
+        )
+        if let first = stacked.first {
+            try? first.markArrivedAtPickup(at: referenceDate.addingTimeInterval(-4200))
+        }
+
+        // The anomaly, inserted directly, which is the only way to reach one.
+        context.insert(Offer(shift: shift, acceptedAt: referenceDate.addingTimeInterval(-3300)))
+
+        try? context.save()
+
+        return container
+    }
+
     // MARK: Period summaries
 
     /// A throwaway store holding a week of synthetic completed shifts, built

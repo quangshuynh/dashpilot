@@ -158,6 +158,57 @@ siblings: *Part of Offer 1, accepted together with Delivery 2*. A listener has n
 back to, so the sentence has to say which other cards belong with this one. The completed-shift
 history states the same thing on the rows of a grouped offer.
 
+### Correcting one
+
+Grouping is recorded by hand, at a kerb, and it is occasionally wrong: two taps on `Start Delivery`
+for what was really one stacked offer, or an offer of three that was really two and a separate one.
+`Correct Grouping`, under the two controls that record work and again in a completed shift's delivery
+list, opens the one screen that fixes it. It appears only once a shift holds more than one delivery,
+because grouping is a statement about more than one of them.
+
+Four corrections are offered, and they are the same four operations underneath:
+
+| Correction | What it does |
+| --- | --- |
+| Move a delivery | Records it under another offer of the same shift |
+| Put a delivery in a new offer | Takes it out of the offer it shares and records it on its own |
+| Combine two offers | Moves every delivery of one offer into another, then removes the offer left holding nothing |
+| Separate an offer | Leaves its first delivery where it is and gives each of the others an offer of their own |
+
+**A correction moves membership and nothing else.** Every lifecycle timestamp, pickup place, expected
+amount, recorded gross and terminal state stays exactly where it was, on the delivery being corrected
+and on every delivery of either offer. No figure the app derives moves either: shift gross, delivery
+gross, delivery active time, recorded mileage, pickup waits, period totals and the Live Activity's
+active count are all read from deliveries, and none of them asks which offer a delivery came in. The
+one thing that changes anywhere is the grouping, including the `offerNumber` in an
+[export](history-export.md).
+
+**Neither acceptance timestamp is rewritten**, and the two are not required to agree. Two taps a
+minute apart is the commonest mistake being corrected, so requiring a delivery's acceptance to equal
+its offer's would refuse to fix it. The one rule enforced between them is that an offer may not come
+to hold a delivery accepted **before the offer itself was**: an offer is an acceptance, and work
+cannot have arrived in one that had not happened yet. That is refused explicitly rather than patched
+by moving a timestamp, and an offer accepted too late is simply not offered as a destination.
+
+A new offer created by a split or a separation takes the **earliest acceptance among the deliveries
+moving into it**. That is a moment the driver really recorded, it is the same answer every time, and
+nobody is asked to type an acceptance time they do not have.
+
+**An offer left holding no deliveries is removed in the same write.** An acceptance with no work
+under it is not something a driver witnessed, and letting empty rows accumulate through ordinary
+correction would put shifts in a driver's history that no screen can explain. A store that somehow
+holds one already is shown and stated rather than hidden, and combining it into another offer is what
+removes it.
+
+Correction is available on a finished shift and on a delivery that has already been delivered or
+cancelled. It performs no lifecycle transition, so it bypasses none of the rules above, and history
+is where a grouping mistake is usually noticed. It never moves a delivery to another shift.
+
+Every correction is one write. A refused save restores the grouping exactly, so there is no half
+combined pair of offers to find afterwards. None of it is undoable, which is why each one is
+confirmed by a sentence that names the deliveries that will move, the offer they will move to, and
+whether an offer is removed by it.
+
 ## Stacked deliveries
 
 Delivery work is routinely stacked: a driver accepts a second order before the first is finished,

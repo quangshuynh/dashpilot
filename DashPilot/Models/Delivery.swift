@@ -490,12 +490,15 @@ extension Delivery {
     /// Builds the one-delivery offer a delivery recorded before offers existed
     /// belongs in, and attaches this delivery to it.
     ///
-    /// **The v11 to v12 migration's only write**, and the only place anywhere
-    /// that puts a delivery into an offer after the fact. It lives here because
+    /// **The v11 to v12 migration's only write.** It lives here because
     /// ``offer``'s setter does, and it is written as a single operation so that
-    /// there is no reachable API for moving a delivery between offers: an offer
-    /// is an acceptance that already happened, and re-grouping one afterwards
-    /// would be rewriting what the driver did.
+    /// the migration cannot do anything but give an ungrouped delivery its own
+    /// offer.
+    ///
+    /// It is not the only way a delivery's offer changes any more. ``move(into:)``
+    /// corrects the grouping of deliveries that already exist, under invariants
+    /// this method does not need: there is nothing to correct about a delivery
+    /// that records no offer at all.
     ///
     /// Returns `nil`, changing nothing, in the two cases where there is no
     /// truthful offer to build:
@@ -514,6 +517,58 @@ extension Delivery {
         let historical = Offer(shift: shift, acceptedAt: acceptedAt)
         offer = historical
         return historical
+    }
+
+    /// Records this delivery under `offer` instead of the one it is under now,
+    /// and returns the offer it left.
+    ///
+    /// **The one place a delivery's grouping changes**, so the invariants that
+    /// hold membership together cannot be bypassed by a screen, a test or a
+    /// future caller. It lives here because ``offer``'s setter does.
+    ///
+    /// ## It moves membership and nothing else
+    ///
+    /// Every lifecycle timestamp, the pickup place, the expected amount, the
+    /// recorded gross and the terminal state are left exactly as they are, on
+    /// this delivery and on every delivery of either offer. A grouping mistake
+    /// is a mistake about which deliveries arrived together; it is not a claim
+    /// that anything else the driver recorded was wrong, and correcting it must
+    /// not quietly rewrite work that happened.
+    ///
+    /// ``shift`` is untouched, and a move across shifts is refused rather than
+    /// performed: that reference is what every fetch, aggregate, export figure
+    /// and delete rule in the app is built on.
+    ///
+    /// ## Neither acceptance timestamp moves
+    ///
+    /// ``acceptedAt`` stays what the driver recorded, and so does the
+    /// destination's ``Offer/acceptedAt``. The one relationship enforced between
+    /// them is ``Offer/couldHaveContained(_:)``: an offer cannot come to contain
+    /// a delivery accepted before it. They are not required to be equal, because
+    /// the commonest grouping mistake is two taps a minute apart.
+    ///
+    /// The offer left behind is **returned rather than emptied here**. Whether a
+    /// now-empty offer is removed is a decision about rows in a store, so it
+    /// belongs to ``OfferCorrectionService`` and to the one save it makes.
+    ///
+    /// - Throws: ``OfferMembershipError/differentShift``,
+    ///   ``OfferMembershipError/alreadyInThatOffer`` or
+    ///   ``OfferMembershipError/deliveryPrecedesOfferAcceptance``.
+    @discardableResult
+    func move(into destination: Offer) throws -> Offer? {
+        guard let shift, destination.shift?.id == shift.id else {
+            throw OfferMembershipError.differentShift
+        }
+        guard offer?.id != destination.id else {
+            throw OfferMembershipError.alreadyInThatOffer
+        }
+        guard destination.couldHaveContained(acceptedAt) else {
+            throw OfferMembershipError.deliveryPrecedesOfferAcceptance
+        }
+
+        let previous = offer
+        offer = destination
+        return previous
     }
 }
 
