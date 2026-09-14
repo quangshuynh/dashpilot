@@ -24,14 +24,21 @@ stateDiagram-v2
     arrivedAtPickup --> cancelled: Cancel Delivery
     pickedUp --> cancelled: Cancel Delivery
     delivered --> pickedUp: Reopen (a correction, not an event)
+    delivered --> cancelled: Correct to Cancelled (a correction, not an event)
     delivered --> [*]
     cancelled --> [*]
 ```
 
-The one edge that is not an event is `Reopen`. It records nothing: it **removes** the delivered
-timestamp of a delivery marked delivered by mistake, and the delivery goes back to the state its
-remaining timestamps already describe. See
-[Taking back a delivery marked delivered by mistake](#taking-back-a-delivery-marked-delivered-by-mistake).
+The two edges that are not events are the corrections, and both act on a delivery recorded as
+delivered by mistake. Which one applies depends on the **shift**, not on the delivery:
+
+- While the shift is still **running**, `Reopen` records nothing: it **removes** the delivered
+  timestamp and the delivery goes back to the state its remaining timestamps already describe, so the
+  driver can finish it properly. See
+  [Taking back a delivery marked delivered by mistake](#taking-back-a-delivery-marked-delivered-by-mistake).
+- Once the shift has **ended**, nothing can finish a delivery, so `Correct to Cancelled` records the
+  ending that actually happened instead. The delivery stays terminal. See
+  [Correcting a completion after the shift has ended](#correcting-a-completion-after-the-shift-has-ended).
 
 | State | What it means | Recorded by |
 | --- | --- | --- |
@@ -143,10 +150,11 @@ contributors than eligible records.
 
 **What a driver actually wants here is a different feature.** A historical `Delivered` is wrong in
 one of two ways: the time is off by a few minutes, or the delivery never completed. The first is a
-timestamp correction and the second is taking back a completion as a *cancellation*. Both are real,
-both are separate decisions with their own rules, and neither is served by removing a timestamp and
-leaving the delivery to claim it is still being worked. See
-[Limitations](../reference/limitations.md).
+timestamp correction and the second is taking back a completion as a *cancellation*. Neither is
+served by removing a timestamp and leaving the delivery to claim it is still being worked.
+
+The second of those is now built, and it is the section below. The first is not, and is still a
+[limitation](../reference/limitations.md).
 
 Two things were confirmed safe and are worth recording, because they were the obvious hazards: the
 shift's end timestamp is the only thing route capture and the [Live Activity](live-activity.md) read,
@@ -189,6 +197,89 @@ refused by the service rather than trusted.
 
 **It is in the app only**, not on the Live Activity and not by voice, for the reason cancelling a
 delivery is not: a correction aimed at one of several deliveries needs a screen that can name them.
+
+## Correcting a completion after the shift has ended
+
+A driver ends the shift, reads its history, and finds a delivery recorded as delivered that never
+completed. Reopening it is refused for the reasons above, and it would be the wrong repair anyway:
+there is no shift left to finish the delivery in. So DashPilot records the ending that actually
+happened instead. `Correct to Cancelled`, on the delivery's own row in the finished shift's history.
+
+**The delivery stays terminal.** That is the whole difference between this correction and reopening,
+and it is why a finished shift can carry it:
+
+| Before | After |
+| --- | --- |
+| Terminal as `delivered` | Terminal as `cancelled` |
+| `deliveredAt` recorded | `deliveredAt` gone |
+| no `cancelledAt` | `cancelledAt` recorded |
+
+### The cancellation time is the completion time
+
+**The instant the driver recorded as the completion becomes the cancellation.** Nothing is typed and
+nothing is invented, which is the rule the running-shift correction already rests on.
+
+It is the right instant rather than merely an available one: it is the only recorded time that
+represents the driver saying this delivery stopped being active, which is exactly what a cancellation
+timestamp means. The consequences are what make the correction safe on a shift every historical
+figure is built from:
+
+- the delivery's own **active interval** is unchanged, because it ends at `deliveredAt` or
+  `cancelledAt` and that instant has not moved;
+- the shift's **delivery active time**, which unions those intervals, is unchanged to the second, and
+  so is the non-delivery time derived from it;
+- the shift's **working duration**, its **recorded mileage**, its **recorded pickup waits** and the
+  **period** it is reported in are all untouched;
+- the shift stays **ended** and gains no delivery in progress, so nothing about it re-enters the
+  present tense.
+
+`.now` was the alternative and is refused: it would record a cancellation hours after the shift
+ended, outside the shift that contains it and outside the period that shift is counted in.
+
+### What moves, and what deliberately goes
+
+The shift counts a cancellation where it counted a completion, and the offer the delivery arrived in
+is re-derived: an offer whose deliveries are now all cancelled reads `All deliveries cancelled`, and
+one with some of each reads `Partly completed, partly cancelled`. No offer timestamp and no offer
+membership is rewritten.
+
+Two derived figures go with the completion, by their own existing definitions rather than by any
+decision made here: the delivery's **accepted to delivered** duration, and its **gross per recorded
+delivery hour**. Both need a completion to measure to, and a cancelled delivery has none. Deriving
+them to the cancellation instead would put a figure in the same column as deliveries that finished.
+
+### Money is not deleted
+
+A **gross amount** recorded against the delivery stays recorded. A cancelled delivery may truthfully
+carry one, because compensation for a cancelled order is real, and DashPilot has never required a
+cancelled delivery to be zero. An **expected amount** stays too. Neither is converted into the other,
+and no refund, clawback or platform adjustment is invented: the correction is a statement about how
+the delivery ended, not about what it paid.
+
+### What is refused
+
+- **A shift that has not ended**, including a paused one. While a shift is running the mis-tap is
+  reopened and finished properly, and rewriting it into a cancellation there would discard a
+  completion the driver is about to record for real.
+- **A delivery that is not recorded as delivered.** A delivery already recorded as cancelled is
+  already terminal as what it was, and this is what a second press meets: nothing is written the
+  second time.
+- **A store whose timestamps contradict each other**: a pickup with no arrival before it, or times
+  that run backwards. Nothing is repaired, for the reason the reopening repairs nothing.
+
+Each refusal is stated rather than hidden, and the control is not offered at all on a row it would
+refuse.
+
+### Nothing about the shift restarts
+
+The shift is not reopened, no delivery becomes active inside it, no route capture session begins, no
+[Live Activity](live-activity.md) is requested, and no lifecycle control appears anywhere. All of
+those read the shift's own end timestamp, and the correction writes two attributes of one delivery.
+
+The control says `Correct to Cancelled` rather than `Cancel Delivery`, which is the running shift's
+control for work falling through now, and rather than `Edit`, which would promise a lifecycle editor
+DashPilot does not have. Every correction is confirmed by a sentence that names the delivery and says
+what will happen to it.
 
 ## The rules, and where they live
 
@@ -575,10 +666,12 @@ The rules, the normalisation policy and what a place deliberately does not hold 
   delivery, so there is no per-delivery cost or gross-per-mile figure.
 - **No lifecycle editor, and no deleting one delivery.** A recorded delivery is what happened: no
   timestamp can be typed, moved or corrected, and only deleting the whole shift removes a delivery.
-  The one correction that exists is
+  The two corrections that exist are
   [reopening a delivery marked delivered by mistake](#taking-back-a-delivery-marked-delivered-by-mistake),
-  which **removes** the delivered timestamp and writes none. It was designed as its own bounded
-  decision rather than as a general editing framework.
+  which **removes** the delivered timestamp and writes none, and
+  [correcting a completion after the shift has ended](#correcting-a-completion-after-the-shift-has-ended),
+  which reuses that same timestamp as the cancellation rather than writing a new one. Each was
+  designed as its own bounded decision rather than as a general editing framework.
 - **No inferred relationship between concurrent deliveries.** Two deliveries active at once are two
   independent records. They are shown as one group only when the driver said they were accepted
   together, and nothing pairs them by their timing, their pickup place or their overlap.
