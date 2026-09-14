@@ -46,6 +46,10 @@ rules permit:
 | Running, with two or more deliveries open | **Start Delivery**, and the reason there is no step |
 | Paused | **Resume Shift**, **End Shift** |
 
+A delivery [reopened in the app](delivery-lifecycle.md#taking-back-a-delivery-marked-delivered-by-mistake)
+is a delivery in progress, so the card's counts and its controls follow it like any other change: the
+snapshot is derived from the store, never from what the card was last told.
+
 Pausing and ending are both refused while a delivery is in progress, so neither is offered then.
 Ending a **paused** shift is permitted, and closes the pause at the end instant rather than making a
 driver resume work they did not do, so End stays on the card while paused. See
