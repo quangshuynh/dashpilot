@@ -270,15 +270,15 @@ numbers*.
 | Section | What it holds |
 | --- | --- |
 | Shift | Start time, end time, elapsed duration, and, for a shift that was paused, its paused and working durations |
-| Pauses | Each recorded pause with its times and length, Edit and Delete for each, and Add Missed Pause |
 | Earnings | The recorded amount or "No amount recorded", and Add or Edit Earnings |
 | Route | Recorded mileage, capture segments, capture gaps, and what qualifies them |
 | Performance | Both derived rates, or the reason each could not be derived |
+| Pauses | Each recorded pause with its times and length, Edit and Delete for each, and Add Missed Pause |
 | Deliveries | How many were completed and cancelled, and what each one recorded |
 | Delete | Delete Shift, behind a confirmation |
 
-The delivery log is last of the reading sections because it is the only one that grows with the
-shift; the four above it summarise the shift in a fixed number of lines.
+The pause list and the delivery log are the last two reading sections because they are the two that
+grow with the shift; the four above them summarise it in a fixed number of lines.
 
 It is a summary, not a dashboard: no chart, no map, no gauge and no score. Only completed shifts
 have a detail screen, because a running shift has no finalised duration, no earnings it may record

@@ -92,17 +92,18 @@ struct CompletedShiftDetailView: View {
     private var content: some View {
         List {
             shiftSection
-            // Directly under the times it explains. The `Paused` and `Working`
-            // rows above are derived from exactly these rows, so the place to
-            // correct one is beside the figure that moves when it is corrected.
-            pausesSection
             earningsSection
             routeSection
             performanceSection
-            // Last of the reading sections, deliberately. The four above
-            // summarise the shift in a fixed number of lines; this one grows
-            // with the shift, and a long per-delivery log between the header
-            // and the figures would bury everything that summarises it.
+            // The last two reading sections, deliberately, and in this order.
+            // The four above summarise the shift in a fixed number of lines;
+            // these two grow with it, and a long list between the header and
+            // the figures would bury everything that summarises the shift.
+            // Pauses come before the delivery log because the figures they
+            // correct — the paused and working times — are the ones at the top
+            // of the screen, and because a shift records far fewer pauses than
+            // deliveries.
+            pausesSection
             deliveriesSection
             exportSection
             deleteSection
@@ -341,6 +342,14 @@ struct CompletedShiftDetailView: View {
     /// that records no pause says so in one line and still offers to record one,
     /// which is the only way a driver who took a break and did not tap anything
     /// can say so afterwards.
+    ///
+    /// ## Why it is below the figures rather than beside them
+    ///
+    /// It grows with the shift, exactly as the delivery log does, and the four
+    /// sections above it summarise the shift in a fixed number of lines. A
+    /// correction surface of unknown height between the header and the rates
+    /// would push what a driver opens this screen to read off the first screenful
+    /// — which is what it did, and what the route and rate journeys caught.
     private var pausesSection: some View {
         Section {
             let pauses = shift.numberedPauses
