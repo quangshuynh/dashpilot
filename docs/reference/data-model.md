@@ -111,8 +111,8 @@ none are kept, because nothing implemented reads them.
 | `acceptedAt` | `Date` | Acceptance is the delivery's creation, not an optional event |
 | `arrivedAtPickupAt` | `Date?` | `nil` until the driver records reaching the pickup |
 | `pickedUpAt` | `Date?` | `nil` until the driver records collecting the order |
-| `deliveredAt` | `Date?` | Terminal |
-| `cancelledAt` | `Date?` | Terminal. Set without erasing the events that preceded it |
+| `deliveredAt` | `Date?` | Terminal. Cleared by exactly two corrections: reopening a delivery on a running shift, and correcting a historical completion to a cancellation |
+| `cancelledAt` | `Date?` | Terminal. Set without erasing the events that preceded it. A historical correction sets it to the delivery's own former `deliveredAt` rather than to a new instant |
 | `offer` | `Offer?` | The accepted offer this delivery arrived in. Optional because SwiftData models a reference that way, and because a pre-v12 store had none until the migration gave each delivery its own. It groups and does not govern: no timestamp, figure, fetch or delete rule reads it |
 | `shift` | `Shift?` | The only place the relationship is declared; `Shift` holds no matching collection. Optional only because SwiftData models a reference that way. The initializer requires a shift. Carries no delete rule, so `ShiftService.deleteCompletedShift(_:)` removes a shift's positions explicitly |
 | `pickupPlace` | `PickupPlace?` | Optional and often absent. A reference, so two deliveries from one place share a row. Nullify on delete |
