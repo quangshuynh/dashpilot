@@ -79,4 +79,27 @@ nonisolated final class ShiftPause {
         guard date >= startedAt else { throw ShiftPauseError.endPrecedesStart }
         endedAt = date
     }
+
+    /// Rewrites both timestamps to the stretch the driver corrected this pause
+    /// to.
+    ///
+    /// The correction has already been checked against the shift's own facts by
+    /// ``ShiftPauseCorrection``; what is kept here is the one rule that is about
+    /// *this row* rather than about the shift around it: **the live pause is not
+    /// editable**. A pause with no end is the state the driver is in, and it is
+    /// left to Resume and End, which reconcile route capture and the Live
+    /// Activity as they close it.
+    ///
+    /// Both timestamps are written together, so a pause is never momentarily
+    /// half corrected, and the row keeps its identity: correcting a pause is not
+    /// deleting one and recording another, and nothing that refers to this row
+    /// has to be told.
+    ///
+    /// - Throws: ``ShiftPauseCorrectionRefusal/pauseIsOpen`` for a pause the
+    ///   driver has not ended.
+    func apply(_ correction: ShiftPauseCorrection) throws {
+        guard endedAt != nil else { throw ShiftPauseCorrectionRefusal.pauseIsOpen }
+        startedAt = correction.startedAt
+        endedAt = correction.endedAt
+    }
 }
