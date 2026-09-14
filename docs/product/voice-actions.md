@@ -97,6 +97,7 @@ waits.
 | Not offered | Why |
 | --- | --- |
 | Cancelling a delivery | It cannot be undone, and spoken it could not be aimed at one of several deliveries |
+| Reopening a delivery marked delivered by mistake | The same aiming problem in reverse: a correction that names one of several delivered deliveries needs a screen that can list them |
 | Recording earnings, per shift or per delivery | An amount is dictated, misheard and then believed. Amounts are typed, afterwards, on a screen |
 | Recording an expense | The same, with a category and a date as well |
 | Naming a pickup place | A dictated name would create a new place under a spelling the driver never saw |
