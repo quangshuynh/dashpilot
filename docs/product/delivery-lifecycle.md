@@ -469,6 +469,19 @@ never ended.
 is what a pickup place's recorded history is built from, under the same inclusion rule — see
 [Pickup wait](pickup-wait.md).
 
+### The corrections each delivery offers
+
+Under the record sit the controls that change it: `Add` or `Change Pickup Place` always,
+`Pickup History` where a place is named, and `Add` or `Edit Earnings` on a finished delivery. They
+are laid out as a two-column grid rather than as one row, so every control is given the same half of
+the card whatever it is called. Three of them sharing a row gave each about a third of a phone's
+width, which is less than `Change Pickup Place` needs, and the titles wrapped a word to a line.
+
+A title that still needs two lines takes them, and at an accessibility text size the grid becomes a
+single column and the card grows downwards. Nothing is scaled down, shortened or truncated to keep
+the card short. A delivery offering an odd number of controls leaves the last cell empty rather than
+drawing anything in it, so the column a control sits in is the same down the whole list.
+
 **Deliveries worked at the same time show overlapping times, and that is not a fault in the
 record.** Each delivery's intervals are its own, measured between its own timestamps, and nothing
 adds two of them together.
