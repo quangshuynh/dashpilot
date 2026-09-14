@@ -38,13 +38,31 @@ final class DashPilotUITests: XCTestCase {
         continueAfterFailure = false
     }
 
+    /// Launches `app` in the orientation every journey in this file is written
+    /// for.
+    ///
+    /// Nothing here tests landscape, and nothing here set an orientation before:
+    /// a run therefore inherited whatever the simulator was last left in, and a
+    /// device left rotated changes what a `List` renders. A row a journey
+    /// scrolls to then never becomes hittable, and the red run reads as a broken
+    /// screen rather than as a rotated device. Setting it explicitly is what
+    /// makes a run depend on the app rather than on a simulator's remembered
+    /// state, for the reason the schemes are committed rather than autocreated.
+    @MainActor
+    private func launchInPortrait(_ app: XCUIApplication) {
+        if XCUIDevice.shared.orientation != .portrait {
+            XCUIDevice.shared.orientation = .portrait
+        }
+        app.launch()
+    }
+
     /// Launches against a throwaway store so the journey starts from a known
     /// empty state and never writes into a real driver's shift history.
     @MainActor
     private func launchWithEmptyStore() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments.append(Self.inMemoryStoreArgument)
-        app.launch()
+        launchInPortrait(app)
         return app
     }
 
@@ -57,7 +75,7 @@ final class DashPilotUITests: XCTestCase {
     private func launchWithSeededHistory() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments.append(Self.seededHistoryArgument)
-        app.launch()
+        launchInPortrait(app)
         return app
     }
 
@@ -76,7 +94,7 @@ final class DashPilotUITests: XCTestCase {
     private func launchWithActiveDelivery() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments.append(Self.seededActiveDeliveryArgument)
-        app.launch()
+        launchInPortrait(app)
         return app
     }
 
@@ -91,7 +109,7 @@ final class DashPilotUITests: XCTestCase {
     private func launchWithPickupHistory() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments.append(Self.seededPickupHistoryArgument)
-        app.launch()
+        launchInPortrait(app)
         return app
     }
 
@@ -113,7 +131,7 @@ final class DashPilotUITests: XCTestCase {
     private func launchWithExpectedPay() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments.append(Self.seededExpectedPayArgument)
-        app.launch()
+        launchInPortrait(app)
         return app
     }
 
@@ -132,7 +150,7 @@ final class DashPilotUITests: XCTestCase {
     private func launchWithStackedOffer() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments.append(Self.seededStackedOfferArgument)
-        app.launch()
+        launchInPortrait(app)
         return app
     }
 
@@ -146,7 +164,7 @@ final class DashPilotUITests: XCTestCase {
     private func launchWithMalformedOffer() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments.append(Self.seededMalformedOfferArgument)
-        app.launch()
+        launchInPortrait(app)
         return app
     }
 
@@ -162,7 +180,7 @@ final class DashPilotUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments.append(Self.inMemoryStoreArgument)
         app.launchArguments.append(Self.stubbedLocationArgument)
-        app.launch()
+        launchInPortrait(app)
         return app
     }
 
@@ -180,7 +198,7 @@ final class DashPilotUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments.append(Self.inMemoryStoreArgument)
         app.launchArguments.append(Self.simulatedRouteArgument)
-        app.launch()
+        launchInPortrait(app)
         return app
     }
 
@@ -220,7 +238,7 @@ final class DashPilotUITests: XCTestCase {
     @MainActor
     func testLaunchesIntoShiftScreen() throws {
         let app = XCUIApplication()
-        app.launch()
+        launchInPortrait(app)
 
         XCTAssertTrue(app.navigationBars["DashPilot"].waitForExistence(timeout: 10))
         XCTAssertFalse(app.staticTexts["Local Data Unavailable"].exists)
@@ -3061,7 +3079,7 @@ final class DashPilotUITests: XCTestCase {
     private func launchWithPeriodSummary() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments.append(Self.seededPeriodSummaryArgument)
-        app.launch()
+        launchInPortrait(app)
         return app
     }
 
@@ -3279,7 +3297,7 @@ final class DashPilotUITests: XCTestCase {
     private func launchWithPeriodComparison() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments.append(Self.seededPeriodComparisonArgument)
-        app.launch()
+        launchInPortrait(app)
         return app
     }
 
