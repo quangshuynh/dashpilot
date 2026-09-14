@@ -699,6 +699,20 @@ private struct DeliveryHistoryRow: View {
     /// shift's is: typing belongs after the driving, not during it.
     @State private var isEditingEarnings = false
 
+    /// The correction awaiting confirmation. Nothing is written until it is
+    /// confirmed, and dismissing the alert writes nothing at all.
+    ///
+    /// It holds the sentences rather than a reference, so the alert describes
+    /// the correction in the words the domain wrote and the delivery itself is
+    /// read again at the moment the write is attempted.
+    @State private var pendingCancellation: HistoricalCancellationPrompt?
+
+    /// What the store said when a correction was refused, stated on the row
+    /// rather than swallowed.
+    @State private var correctionMessage: String?
+
+    @Environment(\.modelContext) private var modelContext
+
     private var delivery: Delivery { numbered.delivery }
 
     var body: some View {
@@ -812,8 +826,31 @@ private struct DeliveryHistoryRow: View {
                         .accessibilityIdentifier(action.rawValue)
                 }
             }
+
+            if let correctionMessage {
+                Label(correctionMessage, systemImage: "exclamationmark.triangle.fill")
+                    .font(.footnote)
+                    .foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("shiftDetailCorrectionMessage")
+            }
         }
         .padding(.vertical, 2)
+        // An alert rather than a confirmation dialog, for the reason the
+        // recovery screen uses one: a dialog is a popover in some layouts, where
+        // iOS drops the explicit Cancel button, and a correction that rewrites
+        // how a recorded delivery ended must always show both choices.
+        .alert(
+            pendingCancellation.map { Text($0.title) } ?? Text("Correct to Cancelled"),
+            isPresented: isConfirmingCancellation,
+            presenting: pendingCancellation
+        ) { prompt in
+            Button(prompt.confirmTitle) { applyCancellation() }
+                .accessibilityIdentifier("confirmCorrectToCancelledButton")
+            Button("Cancel", role: .cancel) { pendingCancellation = nil }
+        } message: { prompt in
+            Text(prompt.detail)
+        }
         .sheet(isPresented: $isEditingPickupPlace) {
             PickupPlaceEditor(numbered: numbered)
         }
@@ -854,7 +891,34 @@ private struct DeliveryHistoryRow: View {
             available.append(.earnings)
         }
 
+        // Last, so the two controls a driver reaches for every day keep the
+        // places they have had, and the one that rewrites a recorded fact is
+        // read after them. Offered only where it would actually succeed: the
+        // shift has to be over, the delivery has to be recorded as delivered,
+        // and its timestamps have to be ones the correction will accept. A
+        // control that always refuses is worse than no control, which is the
+        // rule the recovery screen already keeps.
+        if canCorrectToCancelled {
+            available.append(.correctToCancelled)
+        }
+
         return available
+    }
+
+    /// Whether this row may offer the historical correction at all.
+    ///
+    /// The three conditions are asked in the order they are cheap, and the last
+    /// of them is the domain rule itself rather than a second opinion about it:
+    /// ``HistoricalDeliveryCancellation`` is what the write will consult, so a
+    /// row it would refuse never grows a button.
+    ///
+    /// The shift check is not redundant even though this screen only ever shows
+    /// finished shifts. The rule lives in the service, and a view that merely
+    /// never presents a control is not a rule.
+    private var canCorrectToCancelled: Bool {
+        guard delivery.shift?.isActive == false else { return false }
+        guard delivery.state == .delivered else { return false }
+        return (try? HistoricalDeliveryCancellation(correcting: DeliveryLifecycleRecord(delivery))) != nil
     }
 
     /// Two columns of equal width, and one at accessibility text sizes.
@@ -916,6 +980,50 @@ private struct DeliveryHistoryRow: View {
             }
             .buttonStyle(.borderless)
             .accessibilityLabel(numbered.spokenEarningsLabel(hasEarnings: hasEarnings))
+
+        case .correctToCancelled:
+            Button {
+                correctionMessage = nil
+                pendingCancellation = .correct(
+                    numbered,
+                    keepsRecordedEarnings: delivery.grossEarnings != nil
+                )
+            } label: {
+                DeliveryActionLabel(
+                    title: NumberedDelivery.correctToCancelledActionTitle,
+                    systemImage: "arrow.uturn.backward"
+                )
+            }
+            .buttonStyle(.borderless)
+            .accessibilityLabel(numbered.spokenCorrectToCancelledLabel)
+        }
+    }
+
+    // MARK: Applying the correction
+
+    private var isConfirmingCancellation: Binding<Bool> {
+        Binding(
+            get: { pendingCancellation != nil },
+            set: { isShowing in if !isShowing { pendingCancellation = nil } }
+        )
+    }
+
+    /// Writes the correction the driver confirmed, or states why it was refused.
+    ///
+    /// Nothing is reconciled with the Live Activity afterwards, and that is
+    /// deliberate rather than an omission: the card represents the **running**
+    /// shift, this delivery belongs to one that has ended, and the correction
+    /// leaves the shift's own end timestamp exactly where it was. Nothing about
+    /// the running shift can have changed.
+    private func applyCancellation() {
+        pendingCancellation = nil
+        correctionMessage = nil
+
+        do {
+            try DeliveryService(context: modelContext).correctCompletionToCancellation(delivery)
+        } catch {
+            correctionMessage = (error as? any LocalizedError)?.errorDescription
+                ?? "That delivery could not be corrected."
         }
     }
 
@@ -1006,6 +1114,7 @@ private enum DeliveryRowAction: String, Identifiable {
     case pickupPlace = "shiftDetailPickupPlaceButton"
     case pickupHistory = "shiftDetailPickupHistoryButton"
     case earnings = "shiftDetailDeliveryEarningsButton"
+    case correctToCancelled = "shiftDetailCorrectToCancelledButton"
 
     var id: String { rawValue }
 }
