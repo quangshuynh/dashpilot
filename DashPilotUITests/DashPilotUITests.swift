@@ -34,6 +34,9 @@ final class DashPilotUITests: XCTestCase {
     /// Must match `LaunchArgument.simulatedRoute`, for the same reason.
     private static let simulatedRouteArgument = "-dashpilot-simulated-route"
 
+    /// The largest accessibility text size iOS offers, as UIKit names it.
+    private static let accessibilityXXXLTextSize = "UICTContentSizeCategoryAccessibilityXXXL"
+
     override func setUpWithError() throws {
         continueAfterFailure = false
     }
@@ -75,6 +78,21 @@ final class DashPilotUITests: XCTestCase {
     private func launchWithSeededHistory() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments.append(Self.seededHistoryArgument)
+        launchInPortrait(app)
+        return app
+    }
+
+    /// The same fixture, opened at a chosen preferred text size.
+    ///
+    /// `-UIPreferredContentSizeCategoryName` is UIKit's own launch override, so
+    /// the app under test reads the size a driver would have set in Settings
+    /// without the journey touching the simulator's own state, and the launch
+    /// after it is an ordinary one again.
+    @MainActor
+    private func launchWithSeededHistory(atTextSize category: String) -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments.append(Self.seededHistoryArgument)
+        app.launchArguments += ["-UIPreferredContentSizeCategoryName", category]
         launchInPortrait(app)
         return app
     }
@@ -1951,6 +1969,151 @@ final class DashPilotUITests: XCTestCase {
         )
     }
 
+    // MARK: The actions a completed delivery offers
+
+    /// The delivery carrying every correction offers all of them, each one
+    /// tappable and each one given a column of its own.
+    ///
+    /// The defect this pins was a layout one: three controls sharing a single
+    /// row left each about a third of a phone's width, and `Change Pickup Place`
+    /// came out a word to a line. The assertions are therefore about the room
+    /// each control is given rather than about where its words break. A control
+    /// narrower than two-fifths of the screen is one of three in a row again,
+    /// which is the state that produced the defect.
+    ///
+    /// Verified by mutation: putting the three back in one row fails this on the
+    /// width assertion itself, at 104.7 points against the 160.8 it asks for,
+    /// rather than on a timeout or on a wrapped word.
+    @MainActor
+    func testCompletedDeliveryOffersEveryCorrectionWithRoomToReadIt() throws {
+        let app = launchWithSeededHistory()
+        openFirstShift(in: app)
+
+        // The fixture's first delivery is the one with the whole set: it names a
+        // place, that place has recorded history, and it carries an amount.
+        let card = deliveryCard(containing: "Delivery 1, delivered", in: app)
+        XCTAssertTrue(scrollTo(card, in: app), "The delivery should be listed")
+
+        let place = card.buttons["shiftDetailPickupPlaceButton"]
+        let history = card.buttons["shiftDetailPickupHistoryButton"]
+        let earnings = card.buttons["shiftDetailDeliveryEarningsButton"]
+
+        // Reaching the last of the three brings the other two with it: they are
+        // the two directly above it in the same card.
+        XCTAssertTrue(scrollUntilHittable(earnings, in: app), "Every action is reachable by scrolling")
+
+        // Each one still names the delivery it acts on, which is what makes it
+        // usable with several cards on screen and nothing to look at.
+        XCTAssertEqual(place.label, "Change pickup place for Delivery 1")
+        XCTAssertEqual(history.label, "Recorded pickup waits at \(Self.noodles)")
+        XCTAssertEqual(earnings.label, "Edit gross earnings for Delivery 1")
+
+        let width = app.windows.element(boundBy: 0).frame.width
+        for action in [place, history, earnings] {
+            XCTAssertTrue(action.isHittable, "Every action is tappable where it is: \(action.label)")
+            XCTAssertGreaterThanOrEqual(
+                action.frame.height,
+                44,
+                "An action keeps a standard touch target: \(action.label)"
+            )
+            XCTAssertGreaterThan(
+                action.frame.width,
+                width * 0.4,
+                "An action gets a column rather than a third of a row: \(action.label)"
+            )
+        }
+
+        // Two columns, not three squeezed controls and not a stack: the first
+        // two sit on one line and the widths are the column's, not the words'.
+        XCTAssertEqual(
+            place.frame.minY,
+            history.frame.minY,
+            accuracy: 1,
+            "The first two actions share a line"
+        )
+        XCTAssertGreaterThan(
+            history.frame.minX,
+            place.frame.maxX - 1,
+            "And sit beside each other rather than overlapping"
+        )
+        XCTAssertEqual(
+            place.frame.width,
+            history.frame.width,
+            accuracy: 1,
+            "Both are the width of a column, whatever each is called"
+        )
+
+        // The odd one out keeps its column rather than being stretched across
+        // the card, so the left edge is the same down every delivery.
+        XCTAssertGreaterThan(earnings.frame.minY, place.frame.maxY - 1, "The third action is on the next line")
+        XCTAssertEqual(
+            earnings.frame.width,
+            place.frame.width,
+            accuracy: 1,
+            "A line holding one action still holds it in a column"
+        )
+        XCTAssertEqual(earnings.frame.minX, place.frame.minX, accuracy: 1, "Aligned with the column above it")
+
+        // And the controls still do what they did: the grid changed where they
+        // are, not what they open.
+        earnings.tap()
+        let field = app.textFields["deliveryEarningsAmountField"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5), "The earnings editor still opens from its action")
+        app.buttons["cancelDeliveryEarningsButton"].tap()
+    }
+
+    /// At an accessibility text size the same actions stack instead of
+    /// compressing, and every one of them stays tappable.
+    @MainActor
+    func testCompletedDeliveryActionsStackAtAnAccessibilityTextSize() throws {
+        let app = launchWithSeededHistory(atTextSize: Self.accessibilityXXXLTextSize)
+
+        // The shift panel alone fills the screen at this size, so history is
+        // below the fold and the row has to be scrolled to before it is tapped
+        // rather than reached where an ordinary launch leaves it.
+        let shift = rows(in: app).firstMatch
+        XCTAssertTrue(scrollTo(shift, in: app, maxSwipes: 15), "A completed shift is listed, further down")
+        XCTAssertTrue(scrollUntilHittable(shift, in: app, maxSwipes: 5), "And can be opened")
+        shift.tap()
+
+        // Every row is several times taller at this size, so the delivery log is
+        // much further down the screen than it is by default.
+        let card = deliveryCard(containing: "Delivery 1, delivered", in: app)
+        XCTAssertTrue(scrollTo(card, in: app, maxSwipes: 30), "The delivery should be listed")
+
+        let place = card.buttons["shiftDetailPickupPlaceButton"]
+        let history = card.buttons["shiftDetailPickupHistoryButton"]
+        let earnings = card.buttons["shiftDetailDeliveryEarningsButton"]
+
+        XCTAssertTrue(
+            scrollUntilHittable(place, in: app, maxSwipes: 30),
+            "The actions are reachable at an accessibility size too"
+        )
+
+        let width = app.windows.element(boundBy: 0).frame.width
+        for action in [place, history, earnings] {
+            XCTAssertTrue(action.exists, "Nothing is dropped to keep the card short")
+            XCTAssertGreaterThan(
+                action.frame.width,
+                width * 0.7,
+                "An action takes the width of the card rather than half of it: \(action.label)"
+            )
+        }
+
+        // One column: the second action is under the first rather than beside
+        // it, which is the card growing downwards instead of the words being
+        // squeezed sideways.
+        XCTAssertGreaterThan(
+            history.frame.minY,
+            place.frame.maxY - 1,
+            "The grid becomes a single column rather than keeping two narrow ones"
+        )
+        XCTAssertEqual(history.frame.minX, place.frame.minX, accuracy: 1, "Still one aligned column")
+
+        // Reached by scrolling, like anything else this far down a long screen.
+        XCTAssertTrue(scrollUntilHittable(earnings, in: app, maxSwipes: 10), "And every action is still tappable")
+    }
+
     // MARK: Delivery earnings, from detail
 
     /// Records an amount against one finished delivery, then changes it.
@@ -2960,6 +3123,26 @@ final class DashPilotUITests: XCTestCase {
     private func deliveryRow(containing text: String, in app: XCUIApplication) -> XCUIElement {
         app.descendants(matching: .any)
             .matching(
+                NSPredicate(
+                    format: "identifier == %@ AND label CONTAINS %@",
+                    "shiftDetailDeliveryRow",
+                    text
+                )
+            )
+            .firstMatch
+    }
+
+    /// The whole list cell one delivery occupies, record and controls together.
+    ///
+    /// ``deliveryRow(containing:in:)`` finds the combined element holding the
+    /// facts, which is a sibling of the controls rather than their ancestor. A
+    /// claim about one delivery's own actions has to start from something that
+    /// contains them, because two deliveries picked up at the same place offer
+    /// two controls with identical labels.
+    @MainActor
+    private func deliveryCard(containing text: String, in app: XCUIApplication) -> XCUIElement {
+        app.cells
+            .containing(
                 NSPredicate(
                     format: "identifier == %@ AND label CONTAINS %@",
                     "shiftDetailDeliveryRow",
