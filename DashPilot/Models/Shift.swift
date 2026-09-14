@@ -400,6 +400,55 @@ extension Shift {
         }
         return (offer, deliveries)
     }
+
+    /// Records an offer containing deliveries this shift already holds, for a
+    /// driver correcting which deliveries arrived together.
+    ///
+    /// **The one place an offer is created without creating deliveries**, and it
+    /// is written so that the invariant ``beginOffer(deliveryCount:at:)`` keeps
+    /// is kept here too: the deliveries are required up front and attached
+    /// before it returns, so no caller can be handed an empty offer to fill in
+    /// later.
+    ///
+    /// ## The acceptance timestamp is derived, not chosen
+    ///
+    /// The new offer takes the **earliest ``Delivery/acceptedAt`` among the
+    /// deliveries moving into it**. That is a moment the driver really recorded,
+    /// it is deterministic, and it is the only rule available that invents
+    /// nothing: an acceptance the driver was never asked for cannot be guessed
+    /// from how close two timestamps are, and asking them to type one would be
+    /// asking for platform history they do not have. It also satisfies
+    /// ``Offer/couldHaveContained(_:)`` for every delivery in the group by
+    /// construction, so a split can never be refused for an ordering the split
+    /// itself produced.
+    ///
+    /// Nothing about the deliveries changes but their offer. Their own
+    /// acceptance, lifecycle timestamps, pickup places, amounts and terminal
+    /// states are left exactly as they are.
+    ///
+    /// Unlike ``beginOffer(deliveryCount:at:)`` this is **allowed on a shift
+    /// that has ended**. It records no new work and no new acceptance: it
+    /// restates which of the deliveries already in that shift arrived together,
+    /// which is a review action, and history is where a driver notices the
+    /// mistake.
+    ///
+    /// - Throws: ``OfferMembershipError/noDeliveriesToGroup`` for an empty group,
+    ///   or ``OfferMembershipError/differentShift`` if any delivery belongs to
+    ///   another shift.
+    func makeOffer(regrouping deliveries: [Delivery]) throws -> Offer {
+        guard let earliest = deliveries.map(\.acceptedAt).min() else {
+            throw OfferMembershipError.noDeliveriesToGroup
+        }
+        guard deliveries.allSatisfy({ $0.shift?.id == id }) else {
+            throw OfferMembershipError.differentShift
+        }
+
+        let offer = Offer(shift: self, acceptedAt: earliest)
+        for delivery in deliveries {
+            try delivery.move(into: offer)
+        }
+        return offer
+    }
 }
 
 // MARK: Pausing

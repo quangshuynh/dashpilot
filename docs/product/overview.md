@@ -59,7 +59,14 @@ belongs to exactly one shift, transitions must happen in order, and a shift cann
 of its deliveries is still running. Several deliveries can be in progress at once, as they
 are in stacked work: each advances independently, and every event is recorded against one named
 delivery. Deliveries left in progress when the app was terminated are
-picked up on the next launch at the step it had reached. See
+picked up on the next launch at the step it had reached.
+
+One accepted **offer** can hold more than one delivery, and the driver can say so when they record
+it. Grouping never governs a lifecycle: each delivery in an offer advances on its own, and an offer
+holds no money, no duration and no distance. A grouping recorded wrongly can be corrected afterwards,
+on a running shift or from history, by moving a delivery between offers, splitting one out, combining
+two offers or separating one. A correction moves membership only: no timestamp, pickup place, amount
+or terminal state changes with it. See
 [Delivery lifecycle](delivery-lifecycle.md).
 
 **Voice and system actions.** Starting a shift, ending it, pausing and resuming it, starting a

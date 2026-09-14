@@ -75,6 +75,28 @@ nonisolated struct NumberedOffer: Identifiable {
         "\(title). \(groupStatement)."
     }
 
+    /// How many deliveries this offer holds, said for an offer of one and for an
+    /// offer of none as well.
+    ///
+    /// ``groupStatement`` says *accepted together*, which is true of two or more
+    /// and is nonsense about one: a single delivery arrived with nothing. The
+    /// grouping correction screen names **every** offer a shift holds, including
+    /// the ordinary offer of one and an anomalous offer holding none, so it needs
+    /// a phrase that claims only what the offer actually is.
+    var membershipStatement: String {
+        switch deliveryCount {
+        case 0: "No deliveries recorded"
+        case 1: "1 delivery"
+        default: groupStatement
+        }
+    }
+
+    /// The same fact spoken, named first for the reason
+    /// ``spokenGroupStatement`` is.
+    var spokenMembershipStatement: String {
+        "\(title). \(membershipStatement)."
+    }
+
     /// How many of this offer's deliveries are still running, stated only where
     /// some have already finished.
     ///
