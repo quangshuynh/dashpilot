@@ -91,6 +91,40 @@ nonisolated struct NumberedDelivery: Identifiable {
         hasPlace ? "Change pickup place for \(title)" : "Add pickup place for \(title)"
     }
 
+    /// What the control that takes back an accidental `Delivered` prints.
+    ///
+    /// Named after what it does to **this delivery**, and deliberately not
+    /// `Edit`: nothing here edits a timestamp, and a control that says so would
+    /// promise a lifecycle editor the app does not have. It says `Reopen`
+    /// because that is what happens to the delivery, and it names which one for
+    /// the reason every other control on a list of deliveries does.
+    var reopenActionTitle: String { "Reopen \(title)" }
+
+    /// What VoiceOver hears for that control.
+    ///
+    /// It says the consequence rather than the action alone. A listener choosing
+    /// between rows has to know that this puts the delivery back among the ones
+    /// they are still working, and which state it goes back to, before they
+    /// press anything.
+    func spokenReopenLabel(restoredTo state: DeliveryState) -> String {
+        "Reopen \(title). It becomes active again, \(state.statusDescription.lowercased())."
+    }
+
+    /// What the short-lived undo offered right after the tap says on screen.
+    ///
+    /// Two words and a name, because it appears while the driver may be putting
+    /// the phone down.
+    var deliveredStatement: String { "\(title) marked delivered" }
+
+    /// What VoiceOver hears for that undo.
+    ///
+    /// The delivery is named and the consequence is stated, exactly as it is on
+    /// the deliberate control above: a listener who hears only "Undo" has been
+    /// told neither which delivery it belongs to nor what pressing it does.
+    func spokenUndoDeliveredLabel(restoredTo state: DeliveryState) -> String {
+        "Undo marking \(title) delivered. It becomes active again, \(state.statusDescription.lowercased())."
+    }
+
     /// What the earnings control prints, which depends only on whether an amount
     /// is already recorded.
     func earningsActionTitle(hasEarnings: Bool) -> String {
