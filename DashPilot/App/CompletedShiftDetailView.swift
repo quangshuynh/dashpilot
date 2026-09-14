@@ -27,6 +27,10 @@ struct CompletedShiftDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.locale) private var locale
 
+    /// What the grid of pause corrections is allowed to do with the width it is
+    /// given. An accessibility size gets one column rather than two.
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     /// Measured once when the screen appears rather than in `body`.
     ///
     /// A shift's route can hold thousands of positions and a body is
@@ -47,6 +51,21 @@ struct CompletedShiftDetailView: View {
     /// running shift opens. History is where a driver reviews what they recorded
     /// and where a grouping mistake is most often noticed.
     @State private var isCorrectingOffers = false
+
+    /// The pause the editor is open on, or `.adding` for one being recorded
+    /// after the fact. `nil` means the editor is closed.
+    ///
+    /// It holds the pause rather than a flag beside a separate selection, so
+    /// there is no state in which the sheet is open with nothing to correct.
+    @State private var pauseBeingEdited: PauseEdit?
+
+    /// The pause awaiting a deletion confirmation, with the sentences the domain
+    /// wrote for it. Nothing is written until it is confirmed.
+    @State private var pendingPauseDeletion: PendingPauseDeletion?
+
+    /// What the store said when a pause correction was refused, stated on the
+    /// screen rather than swallowed.
+    @State private var pauseCorrectionMessage: String?
 
     @State private var isConfirmingDeletion = false
     @State private var deletionError: ShiftLifecycleError?
@@ -73,6 +92,10 @@ struct CompletedShiftDetailView: View {
     private var content: some View {
         List {
             shiftSection
+            // Directly under the times it explains. The `Paused` and `Working`
+            // rows above are derived from exactly these rows, so the place to
+            // correct one is beside the figure that moves when it is corrected.
+            pausesSection
             earningsSection
             routeSection
             performanceSection
@@ -95,6 +118,24 @@ struct CompletedShiftDetailView: View {
         }
         .sheet(isPresented: $isCorrectingOffers) {
             OfferCorrectionView(shift: shift)
+        }
+        .sheet(item: $pauseBeingEdited) { edit in
+            ShiftPauseEditor(shift: shift, pause: edit.pause)
+        }
+        // An alert rather than a confirmation dialog, for the reason the shift's
+        // own deletion uses one: a dialog is a popover in some layouts, where
+        // iOS drops the explicit Cancel button, and a correction that removes a
+        // recorded fact must always show both choices.
+        .alert(
+            pendingPauseDeletion.map { Text($0.prompt.title) } ?? Text("Delete Pause"),
+            isPresented: isConfirmingPauseDeletion,
+            presenting: pendingPauseDeletion
+        ) { pending in
+            Button(pending.prompt.confirmTitle, role: .destructive) { deletePause(pending.pause) }
+                .accessibilityIdentifier("confirmDeleteShiftPauseButton")
+            Button("Cancel", role: .cancel) { pendingPauseDeletion = nil }
+        } message: { pending in
+            Text(pending.prompt.detail)
         }
         // An alert rather than a confirmation dialog: a dialog is presented as a
         // popover in some layouts, where iOS drops the explicit Cancel button
@@ -243,8 +284,20 @@ struct CompletedShiftDetailView: View {
         ]
         sentences.append(
             """
-            No route was recorded while the shift was paused, and the distance between where you \
-            paused and where you resumed is not counted.
+            Nothing was recorded while the shift was paused at the time, and the distance between \
+            where you paused and where you resumed is not counted.
+            """
+        )
+        // Said because this screen can now change a pause after the fact.
+        // Correcting or adding one never touches the route, so a shift can
+        // record mileage inside a stretch it also records as paused. Stating it
+        // is the alternative to the two dishonest repairs: deleting positions
+        // that were really recorded, or claiming a gap that never happened.
+        sentences.append(
+            """
+            A pause you corrected or added afterwards does not change the route: no recorded \
+            position is ever added, moved or deleted, so the recorded mileage above still covers \
+            everything this shift recorded.
             """
         )
         return sentences
@@ -267,6 +320,209 @@ struct CompletedShiftDetailView: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(DurationText.spoken(duration)) \(spokenTitle)")
         .accessibilityIdentifier(identifier)
+    }
+
+    // MARK: Pauses
+
+    /// The stretches this shift records as paused, and the corrections each one
+    /// offers.
+    ///
+    /// ## Why it is here rather than on the running shift
+    ///
+    /// Choosing two times from two pickers is the sustained typing this app
+    /// deliberately keeps away from a driver who may be at a wheel, and the live
+    /// pause belongs to Resume and End, which reconcile route capture as they
+    /// close it. ``ShiftPauseCorrectionService`` refuses a running shift outright
+    /// rather than relying on no screen offering the control.
+    ///
+    /// ## Why it appears on a shift with no pauses
+    ///
+    /// Because forgetting to pause is the mistake with no other remedy. A shift
+    /// that records no pause says so in one line and still offers to record one,
+    /// which is the only way a driver who took a break and did not tap anything
+    /// can say so afterwards.
+    private var pausesSection: some View {
+        Section {
+            let pauses = shift.numberedPauses
+            if pauses.isEmpty {
+                Text("No pauses recorded")
+                    .foregroundStyle(.secondary)
+                    .accessibilityIdentifier("shiftDetailNoPauses")
+            } else {
+                ForEach(pauses) { numbered in
+                    pauseRow(numbered)
+                }
+            }
+
+            Button {
+                pauseCorrectionMessage = nil
+                pauseBeingEdited = .adding
+            } label: {
+                Label("Add Missed Pause", systemImage: "plus.circle")
+            }
+            .accessibilityLabel("Add a pause you did not record during the shift")
+            .accessibilityIdentifier("addMissedPauseButton")
+
+            if let pauseCorrectionMessage {
+                Label(pauseCorrectionMessage, systemImage: "exclamationmark.triangle.fill")
+                    .font(.footnote)
+                    .foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
+                    // One element carrying the sentence rather than a glyph
+                    // called "Warning" beside it, and never a colour alone.
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(pauseCorrectionMessage)
+                    .accessibilityIdentifier("shiftDetailPauseCorrectionMessage")
+            }
+        } header: {
+            Text("Pauses")
+        } footer: {
+            Text(
+                """
+                Each pause is a stretch you recorded as not working, and together they are what this                 shift's working time subtracts. Correcting one changes the working time and the                 hourly figures over it; it never changes the shift's own start and end times, the                 route recorded during it, or any amount you entered.
+                """
+            )
+        }
+    }
+
+    /// One recorded pause: when it began, when it ended, how long it was, and
+    /// the two corrections it offers.
+    ///
+    /// The facts are one combined element and the controls sit outside it, for
+    /// the reason a delivery row's do: a button folded into a combined element
+    /// is not reachable by VoiceOver. Both controls name the pause, because two
+    /// rows offer two buttons that would otherwise be told apart only by where
+    /// they sit.
+    ///
+    /// Nothing here is distinguished by colour alone. `Delete Pause` is a
+    /// destructive role *and* says the word, and the pause is identified by its
+    /// number in text rather than by its position in a list.
+    private func pauseRow(_ numbered: NumberedPause) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 2) {
+                LabeledContent(numbered.title) {
+                    Text(pauseTimes(numbered.pause)).monospacedDigit()
+                }
+                .font(.subheadline.weight(.semibold))
+
+                if let duration = pauseDuration(numbered.pause) {
+                    Text(DurationText.short(duration))
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                } else {
+                    // A row the app cannot write: an end before its start, or a
+                    // pause left open on a finished shift. It is stated rather
+                    // than hidden or shown as zero, because a pause that cannot
+                    // be measured is left out of the shift's paused total and
+                    // the driver should be told which one.
+                    Text("This pause's times cannot be measured, so it is not counted in the paused time above.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(pauseAccessibilityLabel(numbered))
+            .accessibilityIdentifier("shiftDetailPauseRow")
+
+            LazyVGrid(columns: pauseActionColumns, alignment: .leading, spacing: 8) {
+                Button {
+                    pauseCorrectionMessage = nil
+                    pauseBeingEdited = .correcting(numbered)
+                } label: {
+                    DeliveryActionLabel(title: "Edit Pause", systemImage: "pencil")
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel(numbered.spokenEditLabel)
+                .accessibilityIdentifier("editShiftPauseButton")
+
+                Button(role: .destructive) {
+                    pauseCorrectionMessage = nil
+                    pendingPauseDeletion = PendingPauseDeletion(
+                        pause: numbered.pause,
+                        prompt: .delete(
+                            numbered.title,
+                            duration: DurationText.short(pauseDuration(numbered.pause) ?? 0)
+                        )
+                    )
+                } label: {
+                    DeliveryActionLabel(title: "Delete Pause", systemImage: "trash")
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel(numbered.spokenDeleteLabel)
+                .accessibilityIdentifier("deleteShiftPauseButton")
+            }
+        }
+        .padding(.vertical, 2)
+    }
+
+    /// Two columns, and one at accessibility text sizes, for the reason a
+    /// completed delivery's corrections are laid out that way: two controls
+    /// sharing a phone's width leave each enough room to say which pause it
+    /// changes.
+    private var pauseActionColumns: [GridItem] {
+        let column = GridItem(.flexible(), spacing: 12, alignment: .topLeading)
+        return Array(repeating: column, count: dynamicTypeSize.isAccessibilitySize ? 1 : 2)
+    }
+
+    /// When a pause began and ended, printed the way every other time on this
+    /// screen is.
+    private func pauseTimes(_ pause: ShiftPause) -> String {
+        let started = pause.startedAt.formatted(.dateTime.hour().minute().locale(locale))
+        guard let endedAt = pause.endedAt else { return "\(started) to no recorded resume" }
+        return "\(started) to \(endedAt.formatted(.dateTime.hour().minute().locale(locale)))"
+    }
+
+    /// How long a pause was, or `nil` for a row that cannot say.
+    ///
+    /// `nil` covers both anomalies ``ShiftPauseInterval`` counts as unusable: a
+    /// pause with no recorded end, and one whose end precedes its start. Neither
+    /// becomes a zero, which would look like a measurement.
+    private func pauseDuration(_ pause: ShiftPause) -> TimeInterval? {
+        guard let endedAt = pause.endedAt, endedAt >= pause.startedAt else { return nil }
+        return endedAt.timeIntervalSince(pause.startedAt)
+    }
+
+    /// One sentence rather than a row of unattached times, because a listener
+    /// has no column headings to fall back on.
+    private func pauseAccessibilityLabel(_ numbered: NumberedPause) -> String {
+        let pause = numbered.pause
+        let started = pause.startedAt.formatted(date: .omitted, time: .shortened)
+        guard let endedAt = pause.endedAt else {
+            return "\(numbered.title), paused at \(started), with no resume recorded"
+        }
+        let ended = endedAt.formatted(date: .omitted, time: .shortened)
+        guard let duration = pauseDuration(pause) else {
+            return """
+            \(numbered.title), paused at \(started), resumed at \(ended). These times cannot be \
+            measured, so this pause is not counted in the shift's paused time
+            """
+        }
+        return "\(numbered.title), paused at \(started), resumed at \(ended), \(DurationText.spoken(duration))"
+    }
+
+    private var isConfirmingPauseDeletion: Binding<Bool> {
+        Binding(
+            get: { pendingPauseDeletion != nil },
+            set: { isShowing in if !isShowing { pendingPauseDeletion = nil } }
+        )
+    }
+
+    /// Removes the pause the driver confirmed, or states why it was refused.
+    ///
+    /// Nothing is reconciled with route capture or the Live Activity afterwards,
+    /// and that is deliberate rather than an omission: both are about the
+    /// **running** shift, and this one has ended.
+    private func deletePause(_ pause: ShiftPause) {
+        pendingPauseDeletion = nil
+        pauseCorrectionMessage = nil
+        do {
+            try ShiftPauseCorrectionService(context: modelContext).delete(pause)
+        } catch {
+            pauseCorrectionMessage = (error as? any LocalizedError)?.errorDescription
+                ?? "That pause could not be deleted."
+        }
     }
 
     // MARK: Earnings
@@ -1101,6 +1357,47 @@ private struct DeliveryHistoryRow: View {
         }
         return sentences.joined(separator: ". ")
     }
+}
+
+/// Which pause the editor is open on.
+///
+/// A case rather than an optional pause beside a boolean, so there is no state
+/// in which the sheet is presented with nothing to correct, and adding a pause
+/// is a first-class case rather than the absence of one.
+private enum PauseEdit: Identifiable {
+    case correcting(NumberedPause)
+    case adding
+
+    var pause: NumberedPause? {
+        switch self {
+        case let .correcting(numbered): numbered
+        case .adding: nil
+        }
+    }
+
+    /// The pause's own identifier, or a fixed one for the additive case.
+    ///
+    /// It drives `sheet(item:)` only. The stored identifier is never shown,
+    /// spoken or put in an accessibility label.
+    var id: String {
+        switch self {
+        case let .correcting(numbered): numbered.id.uuidString
+        case .adding: "add"
+        }
+    }
+}
+
+/// One pause awaiting a deletion confirmation, with the sentences the domain
+/// wrote for it.
+///
+/// The prompt is built when the control is pressed and carried here, so the
+/// alert describes the deletion in the words the domain chose while the pause
+/// itself is read again at the moment the write is attempted.
+private struct PendingPauseDeletion: Identifiable {
+    let pause: ShiftPause
+    let prompt: ShiftPauseDeletionPrompt
+
+    var id: UUID { pause.id }
 }
 
 /// One of the corrections a finished delivery offers from its history row.
