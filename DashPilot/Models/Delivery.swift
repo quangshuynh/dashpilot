@@ -343,6 +343,51 @@ nonisolated final class Delivery {
         return recovery.restoredState
     }
 
+    // MARK: Correcting a historical completion
+
+    /// Records that this delivery, already terminal as delivered, was really
+    /// cancelled, reusing the instant it recorded as its completion.
+    ///
+    /// **The one place a recorded completion becomes a cancellation**, and the
+    /// only place `deliveredAt` is cleared and `cancelledAt` written in the same
+    /// breath. It lives here because both setters do, and it is one operation
+    /// for the reason ``reopenFromDelivered()`` is: a caller must not be able to
+    /// clear the completion and then decide separately what replaces it, which
+    /// is how a delivery ends up terminal by nothing.
+    ///
+    /// ## It is a correction, and the delivery stays terminal
+    ///
+    /// Nothing about this is a lifecycle event. ``cancel(at:)`` records that an
+    /// order fell through *now* and refuses a delivery that has already
+    /// finished; this rewrites which ending an already finished delivery
+    /// records, and is refused for every delivery that is not recorded as
+    /// delivered. The two are deliberately separate entry points rather than one
+    /// permissive one.
+    ///
+    /// ## The time is reused, never invented
+    ///
+    /// The new ``cancelledAt`` is the delivery's own ``deliveredAt``, derived by
+    /// ``HistoricalDeliveryCancellation`` rather than chosen here. The delivery
+    /// therefore stops being active at exactly the instant it already stopped
+    /// being active, so its own interval, the shift's delivery active time and
+    /// every figure over them are unchanged to the second.
+    ///
+    /// ## Nothing else on the delivery moves
+    ///
+    /// ``acceptedAt``, ``arrivedAtPickupAt`` and ``pickedUpAt`` keep the values
+    /// they were recorded with, and so do the pickup place, the expected amount
+    /// and the recorded gross amount. A gross amount on a cancelled delivery is
+    /// **not** an illegal state. ``setGrossEarnings(_:)`` accepts one, because
+    /// compensation for a cancelled order is real, so there is nothing here
+    /// that would justify the app deleting money on its own authority.
+    ///
+    /// - Throws: ``HistoricalCancellationRefusal``.
+    func correctCompletionToCancellation() throws {
+        let correction = try HistoricalDeliveryCancellation(correcting: DeliveryLifecycleRecord(self))
+        deliveredAt = nil
+        cancelledAt = correction.cancelledAt
+    }
+
     // MARK: Pickup identity
 
     /// Names the place this order was collected from, or clears it with `nil`.

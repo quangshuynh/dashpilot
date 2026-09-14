@@ -161,25 +161,38 @@ and one they cannot.
   arrival marked late shortens it and one marked early lengthens it, and nothing detects either.
 - **A recorded delivery's timestamps cannot be edited, and a delivery cannot be deleted
   individually.** A mis-tapped lifecycle event stays as recorded, and only deleting the whole shift
-  removes it. There are two exceptions and both are narrow. The pickup place can be added, changed or
-  removed at any time, because it is not an event. And a delivery marked delivered by mistake can be
-  **reopened**, which removes the delivered timestamp and writes none: no time can be typed, moved or
-  corrected through it, and every other event stays exactly as recorded. A mis-tapped *arrival* or
-  *pickup* is still permanent.
+  removes it. There are three exceptions and all are narrow. The pickup place can be added, changed
+  or removed at any time, because it is not an event. A delivery marked delivered by mistake can be
+  **reopened** while its shift is running, which removes the delivered timestamp and writes none. And
+  once the shift has ended it can be **corrected to cancelled**, which reuses the recorded completion
+  as the cancellation rather than writing a new time. No time can be typed, moved or shifted through
+  any of them, and a mis-tapped *arrival* or *pickup* is still permanent.
 - **A delivery can only be reopened while its shift is running.** It is refused on a shift that has
   ended, and refused while the shift is paused, because a delivery cannot run through time the app
-  reports as not worked. Reopening the shift itself is a separate decision DashPilot does not make. A
-  mistake noticed after the shift has ended therefore cannot be corrected at all. **The ended-shift
-  refusal is permanent, and it was re-examined rather than inherited.** Reopening removes the
-  delivered timestamp and writes none, and on an ended shift nothing can ever write it back: the
-  delivery could never be delivered, cancelled or reopened again, so the correction would destroy a
-  recorded fact one way and give nothing in return. It would also leave the app claiming in the
-  present tense that a delivery is being worked, an offer is in progress and a finished period holds
-  work in progress; and it would shorten or remove that shift's delivery active time with nothing on
-  screen saying so. What a driver wants after a historical mis-tap is either a corrected timestamp or
-  a completion taken back as a **cancellation**, and both are separate decisions this version has not
-  made. See
+  reports as not worked. Reopening the shift itself is a separate decision DashPilot does not make.
+  **The ended-shift refusal is permanent, and it was re-examined rather than inherited.** Reopening
+  removes the delivered timestamp and writes none, and on an ended shift nothing can ever write it
+  back: the delivery could never be delivered, cancelled or reopened again, so the correction would
+  destroy a recorded fact one way and give nothing in return. It would also leave the app claiming in
+  the present tense that a delivery is being worked, an offer is in progress and a finished period
+  holds work in progress; and it would shorten or remove that shift's delivery active time with
+  nothing on screen saying so. See
   [Why the ended-shift refusal is permanent](../product/delivery-lifecycle.md#why-the-ended-shift-refusal-is-permanent).
+- **A historical completion can only be corrected to a cancellation, not to a different time.** A
+  `Delivered` recorded after the shift ended is wrong in one of two ways: the delivery never
+  completed, or the time is off. Only the first is fixable. The delivery is recorded as cancelled at
+  the instant it recorded as its completion, which keeps every duration and every period figure
+  exactly where they were; a completion recorded ten minutes late stays ten minutes late. There is
+  still no timestamp editor anywhere in DashPilot.
+- **A correction to cancelled cannot be taken back.** A cancelled delivery is terminal and nothing
+  reopens one, so a driver who corrects the wrong row has no remedy but deleting the shift. The
+  correction is confirmed by a sentence naming the delivery for exactly that reason.
+- **Correcting a completion removes the two figures that needed one.** The delivery's accepted to
+  delivered duration and its gross per recorded delivery hour both go, because each needs a
+  completion to measure to. That is their existing definition rather than a decision this correction
+  made, and it means a driver who corrects a delivery loses a figure they may have been reading.
+- **A historical correction is in the app only**, on the finished shift's own record. Not on the
+  Live Activity, not in a shortcut and not by voice, for the reason reopening is not.
 - **A cancelled delivery cannot be reopened.** Only a delivery recorded as delivered can. Taking back
   a cancellation is a different statement with different consequences, and it has deliberately not
   been decided rather than assumed to work the same way.

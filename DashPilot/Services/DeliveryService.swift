@@ -44,8 +44,28 @@ nonisolated enum DeliveryLifecycleError: Error {
     /// ``ShiftService`` forbids: delivery active time running through hours the
     /// app also reports as not worked.
     case cannotReopenWhilePaused
+    /// A historical completion was asked to be corrected to a cancellation on a
+    /// shift that has **not** ended.
+    ///
+    /// The mirror of ``cannotReopenOnEndedShift``, and its own case for the same
+    /// reason: a refusal sentence has to name what was refused, and this one has
+    /// somewhere better to send the driver. While the shift is still running, a
+    /// delivery marked delivered by mistake is **reopened** and finished
+    /// properly; rewriting it into a cancellation would throw away work the
+    /// driver can still record. The correction exists for the shift that is
+    /// already over, where there is nothing left to finish.
+    case cannotCorrectOnRunningShift
+    /// A correction was asked for a delivery attached to no shift at all.
+    ///
+    /// A store the app cannot produce, so this reports a fault rather than an
+    /// ordinary refusal. Distinct from ``deliveryNotOnARunningShift``, whose
+    /// sentence says the delivery's shift has ended, which is the required
+    /// state for this correction rather than an obstacle to it.
+    case deliveryNotOnAShift
     /// The delivery model refused to reopen the delivery.
     case invalidRecovery(DeliveryRecoveryRefusal)
+    /// A historical correction was refused by the delivery's own timestamps.
+    case invalidCancellation(HistoricalCancellationRefusal)
     /// The delivery model rejected the transition.
     case invalidTransition(DeliveryError)
     /// The shift refused to record the offer as described.
@@ -64,7 +84,10 @@ nonisolated extension DeliveryLifecycleError: Equatable {
         case (.deliveryNotOnARunningShift, .deliveryNotOnARunningShift): true
         case (.cannotReopenOnEndedShift, .cannotReopenOnEndedShift): true
         case (.cannotReopenWhilePaused, .cannotReopenWhilePaused): true
+        case (.cannotCorrectOnRunningShift, .cannotCorrectOnRunningShift): true
+        case (.deliveryNotOnAShift, .deliveryNotOnAShift): true
         case let (.invalidRecovery(lhsError), .invalidRecovery(rhsError)): lhsError == rhsError
+        case let (.invalidCancellation(lhsError), .invalidCancellation(rhsError)): lhsError == rhsError
         case let (.invalidTransition(lhsError), .invalidTransition(rhsError)): lhsError == rhsError
         case let (.invalidOffer(lhsError), .invalidOffer(rhsError)): lhsError == rhsError
         case (.storeUnavailable, .storeUnavailable): true
@@ -89,6 +112,27 @@ nonisolated extension DeliveryLifecycleError: LocalizedError {
             """
         case .cannotReopenWhilePaused:
             "This shift is paused. Resume it before reopening a delivery."
+        case .cannotCorrectOnRunningShift:
+            """
+            That shift has not ended yet. While a shift is still running, a delivery marked \
+            delivered by mistake is reopened and finished properly instead.
+            """
+        case .deliveryNotOnAShift:
+            "That delivery is not recorded against a shift, so it cannot be changed."
+        case .invalidCancellation(.notDelivered):
+            "That delivery is not recorded as delivered, so there is no completion to correct."
+        case .invalidCancellation(.alreadyCancelled):
+            "That delivery is already recorded as cancelled, so nothing was changed."
+        case .invalidCancellation(.pickedUpWithoutArrival):
+            """
+            That delivery records being picked up with no arrival at the pickup before it, so \
+            DashPilot will not rewrite how it ended. Nothing was changed.
+            """
+        case .invalidCancellation(.timestampsOutOfOrder):
+            """
+            That delivery's recorded times run backwards, so DashPilot will not rewrite how it \
+            ended. Nothing was changed.
+            """
         case .invalidRecovery(.notDelivered):
             "That delivery is not recorded as delivered, so there is nothing to reopen."
         case .invalidRecovery(.cancelled):
@@ -530,6 +574,107 @@ struct DeliveryService {
             """
         )
         return restored
+    }
+
+    // MARK: Correcting a historical completion
+
+    /// Corrects one delivery that a **finished** shift records as delivered, and
+    /// that never actually completed, into the cancellation it was.
+    ///
+    /// ## What it corrects, and what it refuses to become
+    ///
+    /// One mistake, noticed too late: a delivery marked delivered that fell
+    /// through, on a shift that is already over. The delivery **stays
+    /// terminal**. Its `deliveredAt` is removed, its `cancelledAt` is written
+    /// with the instant that completion recorded, and nothing else on the row
+    /// moves. It is deliberately not a lifecycle editor and not a second
+    /// ``cancelDelivery(_:at:)``: no timestamp can be supplied through here, no
+    /// state can be named, and a delivery that is not recorded as delivered is
+    /// refused rather than cancelled.
+    ///
+    /// **Nothing about the shift changes.** It stays ended, no delivery becomes
+    /// active inside it, no route capture session is started, no Live Activity
+    /// is requested and no lifecycle control appears anywhere: the correction
+    /// writes two attributes of one delivery, and every one of those surfaces
+    /// reads the shift's own end timestamp, which this does not touch.
+    ///
+    /// ## Only once the shift has ended
+    ///
+    /// The mirror of ``reopenDelivered(_:)``'s rule, and the two together cover
+    /// the whole of the mistake. While the shift is **running** there is still
+    /// work to do, so the correction is to reopen the delivery and finish it
+    /// properly; rewriting it into a cancellation there would discard a
+    /// completion the driver is about to record for real. Once the shift has
+    /// **ended** nothing can finish it, and recording the ending that actually
+    /// happened is the only truthful repair left. A **paused** shift has not
+    /// ended, so it is refused by the same guard and sent to the same place.
+    ///
+    /// ## One write, and the money is left alone
+    ///
+    /// One save, with the same rollback rule every other mutation here uses: a
+    /// refused save leaves the **store** holding the delivery exactly as
+    /// delivered as it already had it. A gross amount already recorded stays
+    /// recorded, because a cancelled delivery may truthfully carry one (see
+    /// ``Delivery/setGrossEarnings(_:)``) and a lifecycle correction is not an
+    /// instruction to delete money; an expected amount stays for the same
+    /// reason. Neither is converted into the other and no adjustment, refund or
+    /// clawback is invented.
+    ///
+    /// A second invocation meets
+    /// ``HistoricalCancellationRefusal/alreadyCancelled`` and writes nothing,
+    /// which is what makes a double tap safe.
+    ///
+    /// - Throws: ``DeliveryLifecycleError/deliveryNotOnAShift``,
+    ///   ``DeliveryLifecycleError/cannotCorrectOnRunningShift``,
+    ///   ``DeliveryLifecycleError/invalidCancellation(_:)`` or
+    ///   ``DeliveryLifecycleError/storeUnavailable(underlying:)``.
+    func correctCompletionToCancellation(_ delivery: Delivery) throws {
+        guard let shift = delivery.shift else {
+            // A delivery attached to no shift is a store the app cannot produce,
+            // which is why this is a fault rather than the refusal below. The
+            // row is left exactly as it is.
+            AppLog.delivery.fault("Refused to correct a delivery: it is attached to no shift")
+            throw DeliveryLifecycleError.deliveryNotOnAShift
+        }
+        guard !shift.isActive else {
+            AppLog.delivery.notice("Refused to correct a delivery: its shift has not ended")
+            throw DeliveryLifecycleError.cannotCorrectOnRunningShift
+        }
+
+        do {
+            try delivery.correctCompletionToCancellation()
+        } catch let error as HistoricalCancellationRefusal {
+            // Nothing has been mutated: the model derives before it writes.
+            AppLog.delivery.notice(
+                "Delivery refused a historical correction: \(String(describing: error), privacy: .public)"
+            )
+            throw DeliveryLifecycleError.invalidCancellation(error)
+        }
+
+        do {
+            try commit(context)
+        } catch {
+            // The store keeps the delivery exactly as delivered as it already
+            // had it, and nothing is left pending. The live object can still
+            // read as cancelled until the context is re-read, which is the
+            // SwiftData rollback caveat `AGENTS.md` records and is why every
+            // claim about a refused save here is verified through a fresh
+            // context.
+            context.rollback()
+            AppLog.delivery.error("Failed to persist a historical delivery correction: \(error)")
+            throw DeliveryLifecycleError.storeUnavailable(underlying: error)
+        }
+
+        // Structural only: that one recorded completion became a cancellation,
+        // and how the shift's deliveries now divide. Never which delivery, never
+        // a timestamp, never a place and never the amount it still carries.
+        let summary = shift.deliverySummary
+        AppLog.delivery.info(
+            """
+            A recorded completion was corrected to a cancellation; this shift now records \
+            \(summary.completed, privacy: .public) completed and \(summary.cancelled, privacy: .public) cancelled
+            """
+        )
     }
 
     /// Applies one lifecycle event to one named delivery.

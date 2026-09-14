@@ -72,6 +72,31 @@ nonisolated struct DeliveryLifecycleRecord: Equatable, Sendable {
         self.deliveredAt = deliveredAt
         self.cancelledAt = cancelledAt
     }
+
+    /// Whether the timestamps this row does record run in lifecycle order.
+    ///
+    /// The one definition of "these times contradict each other", asked by every
+    /// correction that reads a recorded delivery rather than restated by each
+    /// of them. A missing timestamp is skipped rather than treated as a break:
+    /// a delivery cancelled before the driver reached the pickup records no
+    /// arrival, and that is an ordinary row rather than a contradictory one.
+    ///
+    /// Nothing here repairs anything. A row that fails this is refused by its
+    /// caller and left exactly as the store holds it, because two times running
+    /// backwards do not say which of the two events is the wrong one.
+    var isChronological: Bool {
+        let recorded = [acceptedAt, arrivedAtPickupAt, pickedUpAt, deliveredAt, cancelledAt].compactMap { $0 }
+        return zip(recorded, recorded.dropFirst()).allSatisfy { $0 <= $1 }
+    }
+
+    /// Whether the row records being picked up with no arrival at the pickup
+    /// before it.
+    ///
+    /// A shape the lifecycle cannot produce: ``Delivery/markPickedUp(at:)``
+    /// refuses a pickup with no arrival recorded. It is asked on its own rather
+    /// than folded into ``isChronological`` because it is a **missing** event
+    /// rather than a backwards one, and the two deserve different sentences.
+    var recordsPickupWithoutArrival: Bool { pickedUpAt != nil && arrivedAtPickupAt == nil }
 }
 
 /// What taking back an accidental `Delivered` leaves behind.
@@ -119,26 +144,15 @@ nonisolated struct DeliveryRecovery: Equatable, Sendable {
     /// - Throws: ``DeliveryRecoveryRefusal``.
     init(reopening record: DeliveryLifecycleRecord) throws {
         guard record.cancelledAt == nil else { throw DeliveryRecoveryRefusal.cancelled }
-        guard let deliveredAt = record.deliveredAt else { throw DeliveryRecoveryRefusal.notDelivered }
+        guard record.deliveredAt != nil else { throw DeliveryRecoveryRefusal.notDelivered }
+        guard !record.recordsPickupWithoutArrival else { throw DeliveryRecoveryRefusal.pickedUpWithoutArrival }
+        guard record.isChronological else { throw DeliveryRecoveryRefusal.timestampsOutOfOrder }
 
-        if let pickedUpAt = record.pickedUpAt {
-            guard let arrivedAtPickupAt = record.arrivedAtPickupAt else {
-                throw DeliveryRecoveryRefusal.pickedUpWithoutArrival
-            }
-            guard arrivedAtPickupAt >= record.acceptedAt,
-                  pickedUpAt >= arrivedAtPickupAt,
-                  deliveredAt >= pickedUpAt
-            else {
-                throw DeliveryRecoveryRefusal.timestampsOutOfOrder
-            }
+        if record.pickedUpAt != nil {
             restoredState = .pickedUp
-        } else if let arrivedAtPickupAt = record.arrivedAtPickupAt {
-            guard arrivedAtPickupAt >= record.acceptedAt, deliveredAt >= arrivedAtPickupAt else {
-                throw DeliveryRecoveryRefusal.timestampsOutOfOrder
-            }
+        } else if record.arrivedAtPickupAt != nil {
             restoredState = .arrivedAtPickup
         } else {
-            guard deliveredAt >= record.acceptedAt else { throw DeliveryRecoveryRefusal.timestampsOutOfOrder }
             restoredState = .accepted
         }
     }

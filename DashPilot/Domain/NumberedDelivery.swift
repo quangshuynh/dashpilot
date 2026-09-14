@@ -110,6 +110,39 @@ nonisolated struct NumberedDelivery: Identifiable {
         "Reopen \(title). It becomes active again, \(state.statusDescription.lowercased())."
     }
 
+    /// What the control that corrects a historical `Delivered` into a
+    /// cancellation prints.
+    ///
+    /// `Correct` rather than `Mark`, and deliberately not `Edit` or `Cancel`.
+    /// `Cancel Delivery` is what the running shift's own control does to work
+    /// that is falling through right now; this one acts on a shift that finished
+    /// hours ago, and the first word has to say that it is repairing a record
+    /// rather than ending anything.
+    ///
+    /// It does **not** name the delivery on screen, exactly as
+    /// ``pickupPlaceActionTitle(hasPlace:)`` and
+    /// ``earningsActionTitle(hasEarnings:)`` do not: it sits inside a card that
+    /// has already named itself two lines above, in a grid cell about half a
+    /// phone wide, and a title long enough to hold `Delivery 2` is a title that
+    /// wraps a word to a line. VoiceOver hears the full subject through
+    /// ``spokenCorrectToCancelledLabel``, where there is no heading to refer
+    /// back to.
+    static let correctToCancelledActionTitle = "Correct to Cancelled"
+
+    /// What VoiceOver hears for that control.
+    ///
+    /// It says the consequence rather than the action alone, and the first
+    /// consequence stated is the one a listener is most likely to fear: the
+    /// delivery stays finished. A listener choosing between rows has to know
+    /// that this does not put the delivery back among work to be done before
+    /// they press anything.
+    var spokenCorrectToCancelledLabel: String {
+        """
+        Correct \(title) to cancelled. It stays a finished delivery, recorded as cancelled instead \
+        of delivered.
+        """
+    }
+
     /// What the short-lived undo offered right after the tap says on screen.
     ///
     /// Two words and a name, because it appears while the driver may be putting
