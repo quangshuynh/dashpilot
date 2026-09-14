@@ -161,8 +161,34 @@ and one they cannot.
   arrival marked late shortens it and one marked early lengthens it, and nothing detects either.
 - **A recorded delivery's timestamps cannot be edited, and a delivery cannot be deleted
   individually.** A mis-tapped lifecycle event stays as recorded, and only deleting the whole shift
-  removes it. The pickup place is the one exception, because it is not an event: it can be added,
-  changed or removed at any time, including on a finished delivery.
+  removes it. There are two exceptions and both are narrow. The pickup place can be added, changed or
+  removed at any time, because it is not an event. And a delivery marked delivered by mistake can be
+  **reopened**, which removes the delivered timestamp and writes none: no time can be typed, moved or
+  corrected through it, and every other event stays exactly as recorded. A mis-tapped *arrival* or
+  *pickup* is still permanent.
+- **A delivery can only be reopened while its shift is running.** It is refused on a shift that has
+  ended, because a shift cannot end while a delivery is in progress and reopening one afterwards
+  would leave a delivery nothing could finish; and it is refused while the shift is paused, because a
+  delivery cannot run through time the app reports as not worked. Reopening the shift itself is a
+  separate decision DashPilot does not make. A mistake noticed after the shift has ended therefore
+  cannot be corrected at all.
+- **A cancelled delivery cannot be reopened.** Only a delivery recorded as delivered can. Taking back
+  a cancellation is a different statement with different consequences, and it has deliberately not
+  been decided rather than assumed to work the same way.
+- **Reopening is refused rather than guessed at over a store it cannot read.** A delivery recording a
+  pickup with no arrival before it, or timestamps that run backwards, is left exactly as it is: the
+  row says two contradictory things and does not say which is the mistake. Neither is reachable
+  through the app.
+- **Reopening is in the app only.** Not on the Live Activity, not in a shortcut and not by voice,
+  because a correction aimed at one of several deliveries needs a screen that can name them.
+- **The immediate undo is short lived by design, and names the most recent completion only.** It is
+  offered for a few seconds after the tap and then goes, and marking a second delivery delivered
+  replaces it rather than queueing both. The deliberate control has no deadline and lists every
+  delivered delivery of the shift, so nothing is lost, but a driver who expects the undo to still be
+  there minutes later will not find it.
+- **Reopening a delivery does not restore what the mis-tap already set off.** If the delivery carried
+  an expected amount, the confirmation it raised was raised; dismissing or answering that is a
+  separate action with its own record.
 - **Overlapping deliveries are unioned, never summed.** A 30-minute delivery and a 25-minute one
   overlapping by 20 minutes is 35 minutes of delivery active time. The per-delivery durations in the
   shift's delivery list are still separate figures and are never added together.

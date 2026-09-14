@@ -49,6 +49,12 @@ derived legitimately from device sensors and stored history is typed by the driv
   one primary control per delivery, **several deliveries recordable at once** for stacked orders,
   every event targeted at one delivery, transitions enforced against the store, relaunch recovery for
   each of them, and a shift end refused while any delivery is running.
+- **Taking back a delivery marked delivered by mistake**: an undo offered on the panel for the first
+  few seconds after the tap, and a deliberate `Reopen a Delivered Delivery` control for the mistake
+  noticed later. Reopening removes the delivered time and nothing else, and the delivery returns to
+  the state its remaining timestamps already describe. No timestamp is edited, moved or invented, the
+  amounts recorded against it stay, and it is refused while the shift is paused and after the shift
+  has ended, because a shift cannot hold a delivery nothing could finish.
 - **Offers**, recording which deliveries the driver accepted together, with a correction for the
   grouping afterwards: move a delivery between offers, split one out, combine two offers or separate
   one, on a running shift or from history. A correction changes membership only. No lifecycle time,
