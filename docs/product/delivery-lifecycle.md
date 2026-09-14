@@ -114,6 +114,46 @@ completed-shift figure and every [period summary](period-summaries.md) out of it
 from completed shifts, and this shift cannot be completed again until the delivery is delivered or
 cancelled.
 
+#### Why the ended-shift refusal is permanent
+
+The refusal was re-examined on its own, against the question of whether a mistake noticed after the
+shift ended could be corrected without turning that shift back into a working session. It was
+measured rather than argued, by building the row the app refuses to create and reading what every
+existing figure does with it. The answer is that **a completed shift cannot truthfully hold a
+delivery corrected to a non-terminal state**, for three reasons, and the refusal stays.
+
+**The correction would be one-way.** Reopening *removes* the delivered timestamp and writes none. On
+a running shift the driver writes it back by finishing the delivery a few minutes later. On an ended
+shift nothing can: every lifecycle write requires a running shift, so the delivery could never be
+delivered again, never be cancelled, and never be reopened again either. A driver correcting one
+mis-tap would permanently destroy a recorded fact and get nothing in its place.
+
+**Non-terminal is a claim about now.** The states a reopening restores are present tense: `pickedUp`
+is "heading to the customer", an offer holding an active delivery is "in progress", and a shift's
+delivery counts say one is "still in progress". None of that can be true of work that finished hours
+ago, and the app would be asserting it on the completed shift's own screen, in its
+[period summaries](period-summaries.md) and in its [export](history-export.md).
+
+**The figures would quietly get worse.** Delivery active time is the union of intervals that have
+ends, and a reopened delivery has none, so the shift's active time falls short of its sources with
+nothing on screen saying so, and a shift whose only delivery was reopened reports no measurable
+delivery active time at all. A gross amount recorded against the delivery survives the reopening by
+design, while the count of deliveries eligible to carry one does not, so a period would print more
+contributors than eligible records.
+
+**What a driver actually wants here is a different feature.** A historical `Delivered` is wrong in
+one of two ways: the time is off by a few minutes, or the delivery never completed. The first is a
+timestamp correction and the second is taking back a completion as a *cancellation*. Both are real,
+both are separate decisions with their own rules, and neither is served by removing a timestamp and
+leaving the delivery to claim it is still being worked. See
+[Limitations](../reference/limitations.md).
+
+Two things were confirmed safe and are worth recording, because they were the obvious hazards: the
+shift's end timestamp is the only thing route capture and the [Live Activity](live-activity.md) read,
+so neither would restart for a completed shift whatever its deliveries say. That is not enough to
+make the correction truthful, but it means the refusal rests on domain semantics rather than on a
+fear of waking a background service.
+
 ### What is refused rather than guessed
 
 - **A cancelled delivery.** Taking back a cancellation is a different statement with different

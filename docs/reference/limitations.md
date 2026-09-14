@@ -167,11 +167,19 @@ and one they cannot.
   corrected through it, and every other event stays exactly as recorded. A mis-tapped *arrival* or
   *pickup* is still permanent.
 - **A delivery can only be reopened while its shift is running.** It is refused on a shift that has
-  ended, because a shift cannot end while a delivery is in progress and reopening one afterwards
-  would leave a delivery nothing could finish; and it is refused while the shift is paused, because a
-  delivery cannot run through time the app reports as not worked. Reopening the shift itself is a
-  separate decision DashPilot does not make. A mistake noticed after the shift has ended therefore
-  cannot be corrected at all.
+  ended, and refused while the shift is paused, because a delivery cannot run through time the app
+  reports as not worked. Reopening the shift itself is a separate decision DashPilot does not make. A
+  mistake noticed after the shift has ended therefore cannot be corrected at all. **The ended-shift
+  refusal is permanent, and it was re-examined rather than inherited.** Reopening removes the
+  delivered timestamp and writes none, and on an ended shift nothing can ever write it back: the
+  delivery could never be delivered, cancelled or reopened again, so the correction would destroy a
+  recorded fact one way and give nothing in return. It would also leave the app claiming in the
+  present tense that a delivery is being worked, an offer is in progress and a finished period holds
+  work in progress; and it would shorten or remove that shift's delivery active time with nothing on
+  screen saying so. What a driver wants after a historical mis-tap is either a corrected timestamp or
+  a completion taken back as a **cancellation**, and both are separate decisions this version has not
+  made. See
+  [Why the ended-shift refusal is permanent](../product/delivery-lifecycle.md#why-the-ended-shift-refusal-is-permanent).
 - **A cancelled delivery cannot be reopened.** Only a delivery recorded as delivered can. Taking back
   a cancellation is a different statement with different consequences, and it has deliberately not
   been decided rather than assumed to work the same way.
