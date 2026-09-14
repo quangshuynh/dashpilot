@@ -307,6 +307,54 @@ Two lessons are worth repeating when adding journeys:
   summary rebuilds its sections whenever it re-measures routes, which dismissed the export sheet
   before it had written anything; the modifier belongs on the `List`.
 
+### A red UI run is a measurement, not a verdict
+
+The UI suite is sensitive to how busy the **host** is, and that was measured rather than inferred.
+`investigate/ui-suite-instability` ran the full serial suite three times and then re-ran the failing
+journeys in isolation.
+
+What it found:
+
+- The suite ran **clean on `main`** in one full serial run, and produced **1 and 2 failures** in two
+  full serial runs of a feature branch, with a **failing set that did not overlap** and every failed
+  journey passing in the other run. At those counts the difference is not significant
+  (Fisher exact `p = 0.55` for 3 failures in 224 executions against 0 in 109), so a single clean run
+  settles nothing either way.
+- The cost of one synthesized swipe, measured between consecutive swipe events inside a test, had a
+  **median of 3 to 6 seconds, a 90th percentile near 12 seconds and a maximum of 63 seconds**. It
+  should be well under a second. Most of each gap is XCUITest waiting for the app to go idle.
+- The host's load average during those runs was between **15 and 79**. The clean baseline this
+  project records was taken "on a machine doing nothing else".
+
+So **`xcrun simctl erase` is necessary but not sufficient**. It resets simulator state, which is a
+real cause of a different failure mode (a run that fails dozens of untouched journeys at once), and
+it does nothing at all about host CPU contention. Erase before a baseline run *and* run it on an idle
+machine; a suite run beside a busy desktop is not a baseline.
+
+**How to read a red run.** Compare the failing set against the previous run's. A set that does not
+repeat is contention, not a regression. Confirm by re-running the journeys in isolation, and by
+checking whether the same journeys pass on `main`; a branch is only implicated if the failures
+concentrate on what it changed.
+
+### One journey races a product deadline, and that is arithmetic
+
+`testUndoingADeliveryMarkedDeliveredByMistake` is the one failure that reproduces. The undo banner is
+offered for **20 seconds** (`DeliveryControlPanel.undoSeconds`), and the journey needs roughly that
+long to reach and press it: the measured interval from the completion tap to the undo tap was
+**20.34 s and 19.72 s on the two runs that passed**. On a clean checkout of `main`, in isolation,
+under host load, it failed **3 times out of 6**.
+
+The budget goes on about six accessibility round trips, and the largest single item is one
+`app.swipeDown()` to bring the banner back into view, measured at up to 13 seconds under contention.
+Nothing on the test side recovers enough of that to matter: removing the label assertions inside the
+window buys about 1.3 seconds against a swipe that can cost ten times as much.
+
+It is therefore **not fixable from the test target alone**, and it was deliberately left alone rather
+than papered over with a longer timeout, a retry or a sleep. The options, in the order they should be
+considered, are to run the suite on an idle machine, or to give the undo window a debug-only launch
+argument so a journey can ask for a longer one, in the family of the seams above. The second is a
+production change and needs its own scope.
+
 ## Continuous integration
 
 `ci.yml` runs on pull requests and pushes to `main`, on a GitHub-hosted `macos-26` runner, with
