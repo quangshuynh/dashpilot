@@ -681,6 +681,10 @@ private struct DeliveryHistoryRow: View {
 
     @Environment(\.locale) private var locale
 
+    /// What the grid of corrections below the record is allowed to do with the
+    /// width it is given. An accessibility size gets one column rather than two.
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     /// Naming a pickup is offered here as well as on the running shift, because
     /// this is where a driver sitting still afterwards actually reviews what
     /// they recorded — and where they notice a place tapped onto the wrong card.
@@ -797,54 +801,15 @@ private struct DeliveryHistoryRow: View {
             .accessibilityLabel(accessibilityLabel)
             .accessibilityIdentifier("shiftDetailDeliveryRow")
 
-            HStack(spacing: 16) {
-                Button {
-                    isEditingPickupPlace = true
-                } label: {
-                    Label(
-                        numbered.pickupPlaceActionTitle(hasPlace: delivery.pickupPlace != nil),
-                        systemImage: delivery.pickupPlace == nil ? "plus.circle" : "pencil"
-                    )
-                    .font(.footnote)
-                }
-                .buttonStyle(.borderless)
-                .accessibilityLabel(numbered.spokenPickupPlaceLabel(hasPlace: delivery.pickupPlace != nil))
-                .accessibilityIdentifier("shiftDetailPickupPlaceButton")
-
-                // Only where there is a place to have a history. A delivery
-                // that names none has nothing to group by, and offering the
-                // control anyway would suggest the app knows where it was.
-                if let place = delivery.pickupPlace {
-                    Button {
-                        isShowingPickupHistory = true
-                    } label: {
-                        Label("Pickup History", systemImage: "clock.arrow.circlepath")
-                            .font(.footnote)
-                    }
-                    .buttonStyle(.borderless)
-                    .accessibilityLabel("Recorded pickup waits at \(place.displayName)")
-                    .accessibilityIdentifier("shiftDetailPickupHistoryButton")
-                }
-
-                // Offered only for a finished delivery, which every delivery on
-                // a completed shift is — a shift cannot end while one is still
-                // running. Checked anyway, because a screen that merely never
-                // presents a control is not the rule; the model's is.
-                if delivery.state.isFinished {
-                    Button {
-                        isEditingEarnings = true
-                    } label: {
-                        Label(
-                            numbered.earningsActionTitle(hasEarnings: delivery.grossEarnings != nil),
-                            systemImage: delivery.grossEarnings == nil ? "plus.circle" : "pencil"
-                        )
-                        .font(.footnote)
-                    }
-                    .buttonStyle(.borderless)
-                    .accessibilityLabel(
-                        numbered.spokenEarningsLabel(hasEarnings: delivery.grossEarnings != nil)
-                    )
-                    .accessibilityIdentifier("shiftDetailDeliveryEarningsButton")
+            // The corrections this delivery offers, laid out in a grid rather
+            // than in one row. See ``availableActions`` and ``actionColumns``.
+            LazyVGrid(columns: actionColumns, alignment: .leading, spacing: 8) {
+                ForEach(availableActions) { action in
+                    // The identifier is the action's own identity, set here
+                    // rather than three times below, so the control a journey
+                    // looks up cannot drift from the one the grid ordered.
+                    button(for: action)
+                        .accessibilityIdentifier(action.rawValue)
                 }
             }
         }
@@ -859,6 +824,98 @@ private struct DeliveryHistoryRow: View {
         }
         .sheet(isPresented: $isEditingEarnings) {
             DeliveryEarningsEditor(numbered: numbered)
+        }
+    }
+
+    // MARK: Actions
+
+    /// The corrections this delivery offers, in the order they are read.
+    ///
+    /// A list rather than three conditional controls written straight into the
+    /// layout, so that the grid is handed the number of actions there actually
+    /// are: a delivery naming no place offers two, and the row that holds an odd
+    /// last one has to leave the other cell empty rather than draw a control in
+    /// it.
+    private var availableActions: [DeliveryRowAction] {
+        var available: [DeliveryRowAction] = [.pickupPlace]
+
+        // Only where there is a place to have a history. A delivery that names
+        // none has nothing to group by, and offering the control anyway would
+        // suggest the app knows where it was.
+        if delivery.pickupPlace != nil {
+            available.append(.pickupHistory)
+        }
+
+        // Offered only for a finished delivery, which every delivery on a
+        // completed shift is: a shift cannot end while one is still running.
+        // Checked anyway, because a screen that merely never presents a control
+        // is not the rule; the model's is.
+        if delivery.state.isFinished {
+            available.append(.earnings)
+        }
+
+        return available
+    }
+
+    /// Two columns of equal width, and one at accessibility text sizes.
+    ///
+    /// Three of these controls sharing a single row left each about a third of a
+    /// phone's width, which is less than `Change Pickup Place` needs: on a real
+    /// device the titles wrapped a word to a line and the whole area read as
+    /// unfinished. Two columns give every action the same generous width,
+    /// whatever its own title happens to be, and a title that still needs two
+    /// lines gets them by making the row taller.
+    ///
+    /// At an accessibility size two columns would be the same mistake again, so
+    /// the grid becomes a single column and the card grows downwards. Nothing
+    /// here scales a font down, shortens a title or hard-codes a width for one
+    /// device: the columns are fractions of whatever width the row is given.
+    private var actionColumns: [GridItem] {
+        let column = GridItem(.flexible(), spacing: 12, alignment: .topLeading)
+        return Array(repeating: column, count: dynamicTypeSize.isAccessibilitySize ? 1 : 2)
+    }
+
+    /// One action's control, which is the only thing that knows what the action
+    /// says, does and is called by VoiceOver.
+    @ViewBuilder
+    private func button(for action: DeliveryRowAction) -> some View {
+        switch action {
+        case .pickupPlace:
+            let hasPlace = delivery.pickupPlace != nil
+            Button {
+                isEditingPickupPlace = true
+            } label: {
+                DeliveryActionLabel(
+                    title: numbered.pickupPlaceActionTitle(hasPlace: hasPlace),
+                    systemImage: hasPlace ? "pencil" : "plus.circle"
+                )
+            }
+            .buttonStyle(.borderless)
+            .accessibilityLabel(numbered.spokenPickupPlaceLabel(hasPlace: hasPlace))
+
+        case .pickupHistory:
+            Button {
+                isShowingPickupHistory = true
+            } label: {
+                DeliveryActionLabel(title: "Pickup History", systemImage: "clock.arrow.circlepath")
+            }
+            .buttonStyle(.borderless)
+            .accessibilityLabel(
+                delivery.pickupPlace.map { "Recorded pickup waits at \($0.displayName)" } ?? "Recorded pickup waits"
+            )
+
+        case .earnings:
+            let hasEarnings = delivery.grossEarnings != nil
+            Button {
+                isEditingEarnings = true
+            } label: {
+                DeliveryActionLabel(
+                    title: numbered.earningsActionTitle(hasEarnings: hasEarnings),
+                    systemImage: hasEarnings ? "pencil" : "plus.circle"
+                )
+            }
+            .buttonStyle(.borderless)
+            .accessibilityLabel(numbered.spokenEarningsLabel(hasEarnings: hasEarnings))
         }
     }
 
@@ -935,6 +992,73 @@ private struct DeliveryHistoryRow: View {
             )
         }
         return sentences.joined(separator: ". ")
+    }
+}
+
+/// One of the corrections a finished delivery offers from its history row.
+///
+/// A case rather than a closure held in a value: the row keeps deciding what
+/// each control says and does, and this only says which of them are there and
+/// in what order. The raw value is the accessibility identifier the control has
+/// always carried, so the identity the grid orders by is the identity a journey
+/// already looks the control up by.
+private enum DeliveryRowAction: String, Identifiable {
+    case pickupPlace = "shiftDetailPickupPlaceButton"
+    case pickupHistory = "shiftDetailPickupHistoryButton"
+    case earnings = "shiftDetailDeliveryEarningsButton"
+
+    var id: String { rawValue }
+}
+
+/// A `Label` whose icon sits close to its title rather than in a column of its
+/// own.
+///
+/// The default style reserves a fixed width for the icon, which inside a
+/// half-width grid cell is space taken from the words. Closing the gap gives
+/// each title around fourteen more points to be written on, which is the
+/// difference between `Change Pickup Place` on one line and on two, and it also
+/// makes the pair read as one control rather than as a glyph beside some text.
+///
+/// Aligned on the first baseline, so an icon stays beside the first line of a
+/// title that does wrap instead of drifting into the middle of it.
+private struct DeliveryActionLabelStyle: LabelStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            configuration.icon
+            configuration.title
+        }
+    }
+}
+
+/// What one of those corrections looks like inside its grid cell.
+///
+/// It fills the cell rather than sizing to its own title, which is what makes
+/// two controls beside each other the same width whatever they are called, and
+/// what keeps the columns aligned down a list of deliveries whose actions
+/// differ. The title wraps rather than truncating or shrinking: a control that
+/// cannot say which delivery it changes is worse than a card one line taller.
+///
+/// The icon belongs to the title inside one `Label`, so the pair is one control
+/// and one accessibility element rather than a picture beside a button.
+private struct DeliveryActionLabel: View {
+    let title: String
+    let systemImage: String
+
+    var body: some View {
+        Label(title, systemImage: systemImage)
+            .labelStyle(DeliveryActionLabelStyle())
+            .font(.footnote)
+            .multilineTextAlignment(.leading)
+            // Wraps within the cell and takes the height it needs, rather than
+            // being compressed to one line by the row around it.
+            .fixedSize(horizontal: false, vertical: true)
+            // The 44 points every interactive control is entitled to, kept even
+            // for a one-line title, so two stacked actions cannot end up close
+            // enough to tap each other by mistake.
+            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+            // Without this the tap only lands on the glyphs themselves, which
+            // is the narrow target the whole cell exists to avoid.
+            .contentShape(Rectangle())
     }
 }
 

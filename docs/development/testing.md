@@ -266,7 +266,10 @@ no correction at all, a store holding an offer with no deliveries being stated r
 on, reading a
 day beside the day before it with both figures and both coverages on screen,
 the percentage a finished and fully recorded pair of days states, the absence of one while a day is
-still in progress, an empty previous day said to hold nothing rather than shown as no earnings, and
+still in progress, an empty previous day said to hold nothing rather than shown as no earnings,
+finding every correction a completed delivery offers laid out in columns wide enough to read and
+each one hittable, the same controls becoming a single column at the largest accessibility text
+size, and
 deleting a shift through its confirmation.
 
 The share sheet itself is never opened. `ShareLink` presents a system surface XCUITest cannot inspect
@@ -294,6 +297,12 @@ Two lessons are worth repeating when adding journeys:
   on a timeout.
 - An editor seeds its field through `MoneyInput.text(for:)`, which drops trailing zeroes, so an
   expected `$8.50` seeds `8.5`. Assert the seeded text, not the formatted amount.
+- A claim about one delivery's own controls has to start from the list cell that contains them.
+  `shiftDetailDeliveryRow` is the combined element holding the facts and is a **sibling** of the
+  controls, and two deliveries picked up at the same place carry two controls with identical labels.
+- A journey that sets `-UIPreferredContentSizeCategoryName` reaches a screen several times longer
+  than the default one: history is below the fold on launch, so the shift row has to be scrolled to
+  before it is tapped, and the scrolling helpers need a larger `maxSwipes`.
 - A `.sheet` attached to a conditionally rendered section goes away with the section. The period
   summary rebuilds its sections whenever it re-measures routes, which dismissed the export sheet
   before it had written anything; the modifier belongs on the `List`.
