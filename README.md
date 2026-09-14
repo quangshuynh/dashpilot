@@ -55,6 +55,12 @@ derived legitimately from device sensors and stored history is typed by the driv
   the state its remaining timestamps already describe. No timestamp is edited, moved or invented, the
   amounts recorded against it stay, and it is refused while the shift is paused and after the shift
   has ended, because a shift cannot hold a delivery nothing could finish.
+- **Correcting a completion after the shift has ended**, from the finished shift's own record: a
+  delivery recorded as delivered that never completed is recorded as cancelled instead, and stays
+  terminal. The instant it recorded as its completion becomes the cancellation, so no time is typed
+  or invented and the shift's delivery active time, working duration, recorded mileage and period
+  figures are all unchanged. The shift is not reopened, no delivery becomes active in it, and the
+  pickup place and recorded amounts stay.
 - **Offers**, recording which deliveries the driver accepted together, with a correction for the
   grouping afterwards: move a delivery between offers, split one out, combine two offers or separate
   one, on a running shift or from history. A correction changes membership only. No lifecycle time,
