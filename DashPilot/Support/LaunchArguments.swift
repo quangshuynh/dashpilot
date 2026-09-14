@@ -122,6 +122,21 @@ nonisolated enum LaunchArgument {
     /// Every time is invented. Debug builds only, and in memory.
     static let seededMalformedOffer = "-dashpilot-seeded-malformed-offer"
 
+    /// Runs against a throwaway store holding one **completed** shift that was
+    /// paused twice, with one delivery recorded between the two pauses.
+    ///
+    /// The completed-shift detail's `Paused` and `Working` rows, its list of
+    /// recorded pauses and every correction offered there were reachable from no
+    /// fixture and from no sequence of taps: a journey would have to pause a
+    /// live shift, wait a measurable number of minutes and end it, which
+    /// measures the clock rather than the screen. The shape is chosen for what
+    /// the corrections are checked against — two pauses, a delivery between
+    /// them, and a stretch at the end with neither.
+    ///
+    /// Every time and amount is invented. Debug builds only, and in memory, so
+    /// it can never touch a real store.
+    static let seededPausedHistory = "-dashpilot-seeded-paused-history"
+
     /// Runs with Core Location replaced by the stub the tests and previews use,
     /// reporting When In Use with full accuracy and producing no positions.
     ///
@@ -171,7 +186,8 @@ nonisolated enum LaunchArgument {
         seededPeriodComparison,
         seededExpectedPay,
         seededStackedOffer,
-        seededMalformedOffer
+        seededMalformedOffer,
+        seededPausedHistory
     ]
 
     /// Whether this launch is running over synthetic, in-memory data.

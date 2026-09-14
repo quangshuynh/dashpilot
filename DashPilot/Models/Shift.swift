@@ -570,6 +570,61 @@ extension Shift {
         return ShiftPause(shift: self, startedAt: date)
     }
 
+    /// This shift's pauses with the numbers the interface calls them by.
+    var numberedPauses: [NumberedPause] {
+        NumberedPause.numbering(pauses)
+    }
+
+    /// Checks a stretch the driver proposes to record as a pause of this shift.
+    ///
+    /// The adapter between the model and ``ShiftPauseCorrection``, holding no
+    /// rule of its own: it gathers this shift's window, its other pauses and its
+    /// delivery intervals, and the value type decides. Nothing is written, and
+    /// nothing is mutated, so a screen can ask what a proposed stretch would be
+    /// refused for without attempting it.
+    ///
+    /// - Parameters:
+    ///   - startedAt: the proposed start.
+    ///   - endedAt: the proposed end.
+    ///   - pause: the pause being corrected, excluded from the overlap check so
+    ///     that it cannot collide with itself. `nil` proposes a pause this shift
+    ///     does not yet record, which is what adding a missed one means.
+    /// - Throws: ``ShiftPauseCorrectionRefusal``.
+    func pauseCorrection(
+        from startedAt: Date,
+        to endedAt: Date,
+        replacing pause: ShiftPause? = nil
+    ) throws -> ShiftPauseCorrection {
+        try ShiftPauseCorrection(
+            startedAt: startedAt,
+            endedAt: endedAt,
+            within: completedWindow,
+            avoiding: pauses.filter { $0.id != pause?.id }.map(\.interval),
+            and: deliveryActiveIntervals
+        )
+    }
+
+    /// Records a pause the driver did not record at the time.
+    ///
+    /// **The one place a pause is created outside the live lifecycle**, and it
+    /// is deliberately not ``beginPause(at:)``: that one opens a pause on a
+    /// running shift and says the driver is stopping now. This one writes a
+    /// completed pause onto a shift that has already finished and says the
+    /// driver stopped then, which is a statement about history and is only ever
+    /// made from a finished shift's own record.
+    ///
+    /// Nothing is detected, suggested or filled in. Both timestamps come from
+    /// the driver through ``ShiftPauseCorrection``, which has already checked
+    /// them against this shift's window, its other pauses and its delivery work.
+    ///
+    /// The context insert is the caller's, exactly as it is for
+    /// ``beginPause(at:)`` and ``beginOffer(deliveryCount:at:)``, so a refused or
+    /// failed write leaves the store holding nothing the model does not also
+    /// hold.
+    func addMissedPause(_ correction: ShiftPauseCorrection) -> ShiftPause {
+        ShiftPause(shift: self, startedAt: correction.startedAt, endedAt: correction.endedAt)
+    }
+
     /// Closes the open pause.
     ///
     /// - Throws: ``ShiftError/shiftAlreadyEnded``, ``ShiftError/notPaused``, or

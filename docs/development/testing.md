@@ -25,6 +25,8 @@ test cannot see, such as a screen that renders a sentence the model never claime
 | Shift pause domain | The union of a shift's pauses: overlap, touching, order independence, clipping to the shift, a malformed row counted rather than dropped, and an open pause measured to the moment it is read at, so working time stops growing. Plus working duration never going negative, and the three lifecycle states |
 | Shift pause service | Pause, resume, the refusals for each, the delivery rule in both directions, ending a paused shift closing its pause at the end time, a clock that moved backwards still letting a shift be ended, and a refused pause leaving the store untouched |
 | Shift pause persistence | The v8 to v9 migration with every shift's duration unchanged and nothing read as a break, the schema shape asserting a relationship rather than a paused flag, the plan's version and stage counts asserted here once, a paused shift recovered from a reopened store by the unchanged unfinished-shift query, and deletion cascading to pauses |
+| Shift pause correction | The rules a proposed correction is checked against, with no store: the bounds, positive length, touching allowed and overlapping refused for another pause and for delivery work, an open or malformed stored row blocking nothing because it measures nothing, and every refusal having a sentence that says what would make the stretch acceptable |
+| Shift pause correction service | The three writes through the store and mostly what must not move: a start, an end and both together, deletion renumbering nothing it should not, a missed pause added without making the shift paused, the running-shift and open-pause refusals, an overlap refused rather than merged, a delivery kept rather than shortened, elapsed time, delivery active time, mileage, route sessions and both amounts unchanged, the period's working hours and rate following, a pre-existing overlap still unioned and a malformed row repairable, three refused saves read back through a fresh context, the export carrying it through the fields it already had at format version 3, and three daylight-saving cases measured in real seconds |
 | Shift pause metrics, reporting and export | The hourly rate dividing by working time, a break not lowering it, a shift paused throughout having no rate rather than a rate of zero, delivery active time unchanged while non-delivery time moves inside working time, the period total and its rate, the comparison's working-time row, and the three exported duration fields with zero meaning measured |
 | Persistence, Route sample persistence, Shift earnings persistence | Store round trips and the v1, v2 and v3 migrations |
 | Delivery lifecycle, Delivery service | Every transition and refusal, concurrent deliveries and their isolation, deterministic ordering and numbering, clamped clocks, the shift-end policy and cascade |
@@ -230,8 +232,19 @@ a recoverable fault into a driver who cannot reach their own history. Its empty 
 **after** the real one, so the real offer is still `Offer 1` and nothing else about the fixture reads
 differently from the stacked-offer one.
 
+The paused-history fixture is the one a journey cannot reach by tapping at all. Reaching it would
+mean pausing a live shift, waiting a measurable number of minutes and ending it, which measures the
+clock rather than the screen. Its shape is chosen for what the pause corrections are checked against:
+**two** pauses, so one can be corrected or deleted while the other is watched for not moving; a
+delivery **between** them, so a correction that would swallow recorded work can be proposed and
+refused; and a stretch at the end with neither, so a missed pause can be added somewhere truthful.
+
+It is also the one fixture anchored to a **whole hour** rather than to the round-ish epoch the others
+share, so every pause lands on a clean clock minute and a journey can set a minute wheel to a round
+value and know exactly what the corrected pause is.
+
 The seeded paths are app code that exists only for tests. They are DEBUG-only and in-memory, and
-they are seven more launch paths to keep honest.
+they are eight more launch paths to keep honest.
 
 ## UI journeys
 
@@ -265,7 +278,13 @@ grouped offer back into one offer per delivery, putting one delivery of a groupe
 of its own, combining two offers from a finished shift's history and finding both rows saying so with
 every recorded time kept, leaving the correction screen without changing anything, a shift of one delivery offering
 no correction at all, a store holding an offer with no deliveries being stated rather than crashed
-on, reading a
+on, correcting a recorded pause from a finished shift and watching the paused, working and hourly
+figures move while the elapsed, delivery and mileage figures do not, leaving that editor without
+writing anything, being refused a pause corrected over a recorded delivery and told which fact it
+collided with, deleting a pause recorded by mistake after a confirmation that states which way the
+working time moves, cancelling that confirmation, adding a pause that was never recorded and finding
+it opens refused rather than pre-filled, a shift with no pauses still offering to record one, none of
+those corrections being offered on a running or a paused shift, reading a
 day beside the day before it with both figures and both coverages on screen,
 the percentage a finished and fully recorded pair of days states, the absence of one while a day is
 still in progress, an empty previous day said to hold nothing rather than shown as no earnings,

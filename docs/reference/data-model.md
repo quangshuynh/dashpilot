@@ -86,7 +86,16 @@ across every crash and failed save, which is the kind of derived value this proj
 `Shift.endedAt` is untouched by pausing, so `endedAt == nil` is still the only definition of
 "unfinished" and a paused shift is recovered after a relaunch by the same fetch as a running one.
 
-`end(at:)` rejects closing a pause twice or closing it before it began.
+`end(at:)` rejects closing a pause twice or closing it before it began. `apply(_:)` rewrites both
+timestamps to a correction that `ShiftPauseCorrection` has already checked, and rejects an **open**
+pause: a pause with no end is the state the driver is in, and it is closed by resuming or by ending
+the shift, which reconcile route capture and the Live Activity as they go.
+
+`Shift.pauseCorrection(from:to:replacing:)` is the adapter that gathers the shift's window, its other
+pauses and its delivery intervals for that check; `Shift.addMissedPause(_:)` is the only thing that
+creates a pause outside the live lifecycle, and like `beginPause(at:)` it leaves the context insert
+to the caller. Both are reached through `ShiftPauseCorrectionService`, which refuses a running shift
+outright and commits once per correction.
 
 ## `RouteSample`
 

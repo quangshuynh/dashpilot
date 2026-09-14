@@ -713,6 +713,108 @@ enum PreviewSupport {
         return container
     }
 
+    // MARK: A finished shift that was paused
+
+    /// The anchor this fixture's offsets hang from: a **whole hour**, unlike the
+    /// round-ish epoch the other fixtures use.
+    ///
+    /// Every offset below is a whole number of minutes, so a pause lands on a
+    /// clean clock minute in any time zone whose offset is a whole number of
+    /// minutes — which is all of them. That is what lets a journey set a minute
+    /// wheel to `45` and know exactly what the corrected pause is, rather than
+    /// inheriting the forty seconds the other fixtures' anchor carries.
+    static let pausedHistoryReference = Date(timeIntervalSince1970: 1_755_997_200)
+
+    static func pausedHistoryContainer(
+        referenceDate: Date = pausedHistoryReference
+    ) -> ModelContainer {
+        // Previews cannot meaningfully recover from a container failure.
+        try! seededPausedHistoryContainer(referenceDate: referenceDate)
+    }
+
+    /// A throwaway store holding one **completed** shift that was paused twice,
+    /// with one delivery recorded between the two pauses.
+    ///
+    /// No other fixture reaches this state, and it cannot be reached by tapping
+    /// either: a journey would have to pause a live shift, wait a measurable
+    /// number of minutes and end it, which is a journey about the clock rather
+    /// than about the screen. Seeding it is what lets the completed shift's
+    /// `Paused` and `Working` rows, its pause list and every correction offered
+    /// there be asserted end to end.
+    ///
+    /// The shape is chosen for what the corrections have to be checked against:
+    ///
+    /// - **two** pauses, so one can be corrected, deleted or renumbered while
+    ///   the other is watched for not moving, and so an overlap between two rows
+    ///   can actually be proposed,
+    /// - **a delivery between them**, so a correction that would swallow
+    ///   recorded work can be proposed and refused,
+    /// - **a gap between the deliveries and the shift's end**, so a missed pause
+    ///   can be added somewhere truthful.
+    ///
+    /// The shift is four hours long: it is paused from 01:00 to 01:30 and again
+    /// from 02:45 to 03:05, and its one delivery runs from 02:00 to 02:30. The
+    /// second pause begins a quarter of an hour after the delivery ends, which
+    /// is what lets a journey move one picker and meet the delivery refusal.
+    /// Every time is invented. Debug builds only, and in memory, so it can never
+    /// touch a real store.
+    static func seededPausedHistoryContainer(
+        referenceDate: Date = pausedHistoryReference
+    ) throws -> ModelContainer {
+        let container = try ModelContainerFactory.makeInMemoryContainer()
+        let context = ModelContext(container)
+
+        let start = referenceDate.addingTimeInterval(-6 * 3600)
+        func at(_ seconds: TimeInterval) -> Date { start.addingTimeInterval(seconds) }
+
+        let shift = Shift(startedAt: start)
+        context.insert(shift)
+
+        // Built directly rather than through `ShiftService`, for the reason
+        // every other fixture here builds a finished shift directly: this
+        // describes the stored state of work that happened rather than
+        // replaying it in real time.
+        context.insert(ShiftPause(shift: shift, startedAt: at(3_600), endedAt: at(5_400)))
+        context.insert(ShiftPause(shift: shift, startedAt: at(9_900), endedAt: at(11_100)))
+
+        let delivery = insertedDelivery(on: shift, acceptedAt: at(7_200), in: context)
+        try? delivery.markArrivedAtPickup(at: at(7_500))
+        try? delivery.markPickedUp(at: at(7_800))
+        try? delivery.markDelivered(at: at(9_000))
+        delivery.setPickupPlace(place(named: SyntheticPickupPlace.noodles, at: start, in: context))
+        context.insert(delivery)
+
+        try? shift.end(at: at(4 * 3600))
+        // An invented amount, so the hourly figure the working duration divides
+        // has something to divide.
+        try? shift.setGrossEarnings(Money(minorUnits: 9_600))
+
+        try? context.save()
+
+        return container
+    }
+
+    /// The pause editor over the fixture above, correcting its first pause or
+    /// adding one.
+    @MainActor
+    static func shiftPauseEditor(correctingFirstPause: Bool) -> some View {
+        let container = pausedHistoryContainer()
+        let context = container.mainContext
+        let shift = (try? context.fetch(FetchDescriptor<Shift>()))?.first
+
+        return Group {
+            if let shift {
+                ShiftPauseEditor(
+                    shift: shift,
+                    pause: correctingFirstPause ? shift.numberedPauses.first : nil
+                )
+            } else {
+                Text("No synthetic shift")
+            }
+        }
+        .modelContainer(container)
+    }
+
     /// The shapes of pickup-wait history the sheet has to handle.
     enum PickupHistoryFixture {
         /// Enough recorded waits for a median, including one long one.
