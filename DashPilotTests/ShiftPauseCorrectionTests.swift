@@ -259,13 +259,13 @@ struct ShiftPauseCorrectionTests {
     @Test("Every refusal has a sentence that says what would make the stretch acceptable")
     func everyRefusalIsExplained() {
         for refusal in ShiftPauseCorrectionRefusal.allCases {
-            let sentence = ShiftPauseCorrectionError.invalidCorrection(refusal).errorDescription
-            let description = try? #require(sentence)
-            #expect(description?.isEmpty == false, "\(refusal) has no sentence")
+            let sentence = ShiftPauseCorrectionError.invalidCorrection(refusal).errorDescription ?? ""
+            #expect(!sentence.isEmpty, "\(refusal) has no sentence")
             #expect(
-                description?.contains("invalid") == false,
+                !sentence.contains("invalid"),
                 "\(refusal) says \"invalid\" rather than what is wrong"
             )
+            #expect(sentence.hasSuffix("."), "\(refusal) is not written as a sentence")
         }
     }
 
