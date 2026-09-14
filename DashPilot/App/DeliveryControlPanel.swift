@@ -84,6 +84,19 @@ struct DeliveryControlPanel: View {
     /// Whether the sheet that corrects which deliveries arrived together is up.
     @State private var isCorrectingOffers = false
 
+    /// Whether the sheet that reopens a delivery marked delivered by mistake is
+    /// up.
+    @State private var isReopeningDelivery = false
+
+    /// The delivery just marked delivered, while the offer to take it back is
+    /// still on screen.
+    ///
+    /// Held as the numbered delivery and the state it would go back to, for the
+    /// reason ``PendingEarningsConfirmation`` holds its amount: the card leaves
+    /// ``activeDeliveries`` with the write, so there is nothing left on screen to
+    /// read either from, and the offer has to name the delivery it belongs to.
+    @State private var recentlyDelivered: RecentCompletion?
+
     private var activeDeliveries: [NumberedDelivery] {
         let running = Set(unfinishedDeliveries.lazy.filter { $0.shift?.id == shift.id }.map(\.id))
         return shift.numberedDeliveries.filter { running.contains($0.id) }
@@ -99,6 +112,7 @@ struct DeliveryControlPanel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
+            undoBanner
             status
 
             ForEach(activeGroups) { group in
@@ -121,8 +135,28 @@ struct DeliveryControlPanel: View {
             startControl
             groupedOfferControl
             correctionControl
+            recoveryControl
         }
         .padding(.vertical, 8)
+        // The window the immediate undo is offered for, counted in one-second
+        // ticks while the banner is actually on screen. It restarts with each
+        // completion, because the offer names the latest one.
+        .task(id: recentlyDelivered?.id) {
+            guard recentlyDelivered != nil else { return }
+            var remaining = Self.undoSeconds
+
+            while !Task.isCancelled, remaining > 0 {
+                try? await Task.sleep(for: .seconds(1))
+                guard !Task.isCancelled else { return }
+                // A second the driver cannot see does not count: the earnings
+                // confirmation is raised by the same tap and covers this.
+                guard pendingEarningsConfirmation == nil else { continue }
+                remaining -= 1
+            }
+
+            guard !Task.isCancelled else { return }
+            recentlyDelivered = nil
+        }
         .alert(
             pendingCancellation.map { "Cancel \($0.title)?" } ?? "Cancel this delivery?",
             isPresented: isConfirmingCancellation,
@@ -168,6 +202,45 @@ struct DeliveryControlPanel: View {
         // it.
         .sheet(isPresented: $isCorrectingOffers) {
             OfferCorrectionView(shift: shift)
+        }
+        // The deliberate way back from a mis-tap, for the driver who did not
+        // catch the offer above. Like the correction sheet, it writes nothing
+        // until a reopening is confirmed inside it.
+        .sheet(isPresented: $isReopeningDelivery) {
+            DeliveryRecoveryView(shift: shift)
+        }
+    }
+
+    /// Taking back the `Delivered` that has just been recorded, for as long as
+    /// the driver is plausibly still looking at the screen.
+    ///
+    /// At the top of the panel rather than where the card was, because the card
+    /// is gone: the write that raised this is the write that removed it. It
+    /// names the delivery in print and says aloud what pressing it does, since a
+    /// listener has no card left to refer back to.
+    ///
+    /// Deliberately low friction. There is no confirmation, because the action
+    /// being taken back happened seconds ago and undoing it immediately is the
+    /// least consequential correction in the app. The deliberate path under
+    /// `Reopen a Delivered Delivery` is the one that confirms.
+    @ViewBuilder
+    private var undoBanner: some View {
+        if let recent = recentlyDelivered {
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                // A symbol and a sentence, never a tint alone.
+                Label(recent.numbered.deliveredStatement, systemImage: DeliveryState.delivered.symbolName)
+                    .font(.subheadline)
+                    .accessibilityIdentifier("undoDeliveredBanner")
+
+                Spacer(minLength: 0)
+
+                Button("Undo") { perform(.undo(recent)) }
+                    .buttonStyle(.bordered)
+                    .accessibilityLabel(recent.numbered.spokenUndoDeliveredLabel(restoredTo: recent.restored))
+                    .accessibilityIdentifier("undoDeliveredButton")
+            }
+            .padding(10)
+            .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 10))
         }
     }
 
@@ -264,18 +337,46 @@ struct DeliveryControlPanel: View {
         }
     }
 
+    /// Reopening a delivery that was marked delivered by mistake.
+    ///
+    /// Shown only once the shift holds a delivery recorded as delivered, because
+    /// that is the only thing it acts on. Small, secondary and never prominent,
+    /// like the two controls above it: this is not a step in recording work, and
+    /// a driver who never mis-taps never needs it.
+    ///
+    /// It is here rather than in a completed shift's history because that is
+    /// where it can work. A shift cannot end while a delivery is in progress, so
+    /// reopening one after the shift has finished would leave a delivery nothing
+    /// could complete; the refusal lives in ``DeliveryService``.
+    @ViewBuilder
+    private var recoveryControl: some View {
+        if shift.deliveries.contains(where: { $0.state == .delivered }) {
+            Button {
+                isReopeningDelivery = true
+            } label: {
+                Label("Reopen a Delivered Delivery", systemImage: "arrow.uturn.backward.circle")
+                    .font(.subheadline)
+            }
+            .buttonStyle(.borderless)
+            .accessibilityLabel("Reopen a delivery you marked delivered by mistake")
+            .accessibilityIdentifier("reopenDeliveryButton")
+        }
+    }
+
     // MARK: Actions
 
     /// What a control asked for, and which delivery it asked for it on.
     ///
     /// Cancelling is kept apart from the ordered lifecycle steps because it is
     /// not one of them: it is available from every active state rather than
-    /// following one.
+    /// following one. So is undoing a completion, which records no event and
+    /// removes one.
     private enum Operation {
         case start
         case startOffer(Int)
         case advance(NumberedDelivery)
         case cancel(NumberedDelivery)
+        case undo(RecentCompletion)
     }
 
     private func perform(_ operation: Operation) {
@@ -312,11 +413,19 @@ struct DeliveryControlPanel: View {
                             expected: expected
                         )
                     }
+                    offerToUndo(numbered)
                 case .start, nil: break
                 }
             case let .cancel(numbered):
                 pendingCancellation = nil
                 try service.cancelDelivery(numbered.delivery)
+            case let .undo(recent):
+                // The offer goes whatever happens next: a refusal is reported by
+                // the alert below, and leaving the control up would invite a
+                // second press at a delivery the store has already refused to
+                // reopen.
+                recentlyDelivered = nil
+                try service.reopenDelivered(recent.numbered.delivery)
             }
         } catch let error as DeliveryLifecycleError {
             lifecycleError = error
@@ -329,6 +438,53 @@ struct DeliveryControlPanel: View {
         // — reconciling only on success — would be this screen deciding what the
         // store now holds.
         liveActivity.reconcile()
+    }
+
+    /// How many seconds on screen the immediate undo is offered for.
+    ///
+    /// Long enough to look down, read which delivery it names and press it,
+    /// short enough that it is gone before the next door. It is a convenience
+    /// with a deadline rather than a second way to reach the correction: the
+    /// deliberate control under the panel has no deadline at all, which is why
+    /// this one can have one.
+    ///
+    /// The figure is a judgement rather than a measurement, and it has never
+    /// been held in a hand. A driver who walks back to the car before noticing
+    /// is meant to reach the deliberate control, not this.
+    ///
+    /// It is counted in one-second ticks rather than slept through in one go,
+    /// which is the cadence the running shift's own panel already keeps. A
+    /// single sleep of the whole window stops the app going quiet for the length
+    /// of it, and anything waiting for the app to go quiet, XCUITest included,
+    /// waits the window out with it.
+    private static let undoSeconds = 20
+
+    /// Offers to take back the completion just recorded, where there is
+    /// something truthful to take it back to.
+    ///
+    /// The state is derived by the same rule the write will apply, so the offer
+    /// cannot exist for a delivery the service would refuse. A row it refuses is
+    /// one the app cannot produce, and no banner is shown for one.
+    private func offerToUndo(_ numbered: NumberedDelivery) {
+        guard let restored = try? DeliveryRecovery(
+            reopening: DeliveryLifecycleRecord(numbered.delivery)
+        ).restoredState else { return }
+
+        recentlyDelivered = RecentCompletion(numbered: numbered, restored: restored)
+    }
+
+    /// A delivery marked delivered a moment ago, and the state taking that back
+    /// would return it to.
+    ///
+    /// The state is carried rather than looked up when the button is pressed, so
+    /// the sentence VoiceOver reads is the one that describes what will actually
+    /// happen, and so the banner is unpresentable for a delivery that cannot be
+    /// reopened.
+    private struct RecentCompletion: Identifiable {
+        let numbered: NumberedDelivery
+        let restored: DeliveryState
+
+        var id: UUID { numbered.id }
     }
 
     /// A delivery that has just been recorded as delivered, together with the

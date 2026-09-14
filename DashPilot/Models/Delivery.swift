@@ -300,6 +300,49 @@ nonisolated final class Delivery {
         cancelledAt = date
     }
 
+    // MARK: Correcting an accidental completion
+
+    /// Removes the delivered timestamp, returning this delivery to the state its
+    /// remaining timestamps describe.
+    ///
+    /// **The one place `deliveredAt` is ever cleared**, so the rules that decide
+    /// whether there is anything truthful to restore cannot be bypassed by a
+    /// screen, a test or a future caller. It lives here because that property's
+    /// setter does, and it is written as one operation for the reason
+    /// ``move(into:)`` is: a caller cannot clear the timestamp and then decide
+    /// what the delivery became.
+    ///
+    /// ## It removes one timestamp and derives the rest
+    ///
+    /// ``acceptedAt``, ``arrivedAtPickupAt`` and ``pickedUpAt`` are left exactly
+    /// as they are, and nothing is written in place of what is removed. The
+    /// state that results is ``DeliveryRecovery``'s reading of the timestamps
+    /// that stay, which is the same derivation ``state`` performs: there is no
+    /// second opinion about what a delivery with these timestamps is doing.
+    ///
+    /// ## Nothing else on the delivery moves
+    ///
+    /// The pickup place, the expected amount and the recorded gross amount are
+    /// untouched. A gross amount recorded against a delivery the driver has now
+    /// reopened stays recorded: it is what they were told they were paid, the
+    /// lifecycle correction says nothing about it, and removing money on the
+    /// app's own authority is the one thing a recovery from a mis-tap must never
+    /// do. ``setGrossEarnings(_:)`` still refuses to record a **new** amount
+    /// while the delivery is active, which is unchanged and is a rule about
+    /// writing rather than about holding.
+    ///
+    /// Reopening a delivery that is not recorded as delivered is refused rather
+    /// than ignored, so invoking this twice writes nothing the second time.
+    ///
+    /// - Returns: the state the delivery is now in.
+    /// - Throws: ``DeliveryRecoveryRefusal``.
+    @discardableResult
+    func reopenFromDelivered() throws -> DeliveryState {
+        let recovery = try DeliveryRecovery(reopening: DeliveryLifecycleRecord(self))
+        deliveredAt = nil
+        return recovery.restoredState
+    }
+
     // MARK: Pickup identity
 
     /// Names the place this order was collected from, or clears it with `nil`.

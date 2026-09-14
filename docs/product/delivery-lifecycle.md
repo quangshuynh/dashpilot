@@ -23,9 +23,15 @@ stateDiagram-v2
     accepted --> cancelled: Cancel Delivery
     arrivedAtPickup --> cancelled: Cancel Delivery
     pickedUp --> cancelled: Cancel Delivery
+    delivered --> pickedUp: Reopen (a correction, not an event)
     delivered --> [*]
     cancelled --> [*]
 ```
+
+The one edge that is not an event is `Reopen`. It records nothing: it **removes** the delivered
+timestamp of a delivery marked delivered by mistake, and the delivery goes back to the state its
+remaining timestamps already describe. See
+[Taking back a delivery marked delivered by mistake](#taking-back-a-delivery-marked-delivered-by-mistake).
 
 | State | What it means | Recorded by |
 | --- | --- | --- |
@@ -54,6 +60,95 @@ delivery cancelled after twenty minutes at a pickup still records that the drive
 
 A cancelled delivery is never deleted, never counted as completed, and never folded into a single
 total. It is work the driver did that did not end in a delivery.
+
+## Taking back a delivery marked delivered by mistake
+
+`Delivered` is one tap on a card the driver may be looking at from a kerb, and it is occasionally the
+wrong card or a minute too early. DashPilot lets that one mistake be taken back.
+
+**Reopening removes the delivered timestamp and nothing else.** There is no destination to choose,
+because the timestamps that stay are the answer:
+
+| What the delivery still records | What it goes back to |
+| --- | --- |
+| A pickup | `pickedUp`, heading to the customer |
+| An arrival and no pickup | `arrivedAtPickup`, waiting at the pickup |
+| Only the acceptance | `accepted`, heading to the pickup |
+
+Only the first is reachable through the app, which refuses a completion before a pickup was recorded.
+The other two are derived rather than refused so that a store holding such a row is returned to a
+state a driver could really have been looking at.
+
+Nothing else moves. `acceptedAt`, `arrivedAtPickupAt` and `pickedUpAt` keep the values they were
+recorded with, the pickup place stays, and **no timestamp is written, shifted or invented anywhere**.
+Nobody is asked to type a time. This is deliberately not a lifecycle editor: the only thing that can
+be corrected through it is an accidental completion.
+
+### Two ways to reach it
+
+- **Undo**, offered at the top of the running shift's panel for the first few seconds after a
+  delivery is marked delivered. It names the delivery, says aloud that the delivery becomes active
+  again and which state it returns to, and takes no confirmation: the action it reverses happened
+  seconds ago. The window does not start while the [expected pay](#expected-pay) confirmation is
+  covering it, because an offer the driver cannot see is not one they were given.
+- **`Reopen a Delivered Delivery`**, a small secondary control under the panel, for the mistake
+  noticed at the next door. It lists the shift's delivered deliveries with the state each would
+  return to, and every reopening there is confirmed by a sentence saying what will happen. It appears
+  only once the shift holds a delivery recorded as delivered.
+
+Neither is called `Edit`. Nothing here edits anything.
+
+### Only while the shift is running
+
+Reopening is refused on a shift that has **ended**, and on one that is **paused**.
+
+Both refusals keep rules that already exist. A shift cannot be ended while a delivery is in progress,
+so reopening one afterwards would leave an active delivery under a finished shift that nothing could
+advance and no screen could resolve; and a delivery cannot be started while a shift is paused, so
+reopening one during a pause would run delivery active time through hours the app reports as not
+worked. **Reopening the shift itself is a separate decision DashPilot does not make**, silently or
+otherwise.
+
+A reopened delivery therefore only ever exists inside a running shift, which is what keeps every
+completed-shift figure and every [period summary](period-summaries.md) out of it: those are built
+from completed shifts, and this shift cannot be completed again until the delivery is delivered or
+cancelled.
+
+### What is refused rather than guessed
+
+- **A cancelled delivery.** Taking back a cancellation is a different statement with different
+  consequences, and this version has not decided them. It is refused and said, not treated as the
+  same correction.
+- **A delivery that is not recorded as delivered**, which is what a second press meets. Nothing is
+  written the second time.
+- **A store whose remaining timestamps do not describe a state the lifecycle can produce**: a pickup
+  with no arrival before it, or times that run backwards. The row says two contradictory things and
+  does not say which one is the mistake, so nothing is removed and the screen states why.
+
+### What it does not touch
+
+**Money is not deleted.** A gross amount recorded against the delivery stays recorded, and so does an
+expected amount. A lifecycle correction is not an instruction to remove a figure the driver entered,
+and neither amount is converted into the other. Recording a *new* gross amount is still refused while
+the delivery is active, which is a rule about writing rather than about holding; an expected amount
+becomes editable again with the delivery.
+
+Its **delivery active time** derives exactly as any unfinished delivery's does: the interval is open,
+so it is counted as unfinished rather than measured, and its gross per recorded delivery hour is
+unavailable until it is delivered again. The shift counts it among the deliveries in progress rather
+than the completed ones, because that is what it is.
+
+Nothing about **which deliveries arrived together** moves. The offer keeps its deliveries, its
+siblings are untouched, and an offer that was terminal becomes active again because one of its
+deliveries is. See [Correcting one](#correcting-one) for the correction that moves membership and no
+lifecycle state, which is the mirror of this one.
+
+The shift's [Live Activity](live-activity.md) is reconciled from the store like every other change:
+the active count, the completed count and the controls follow, and a control drawn a moment before is
+refused by the service rather than trusted.
+
+**It is in the app only**, not on the Live Activity and not by voice, for the reason cancelling a
+delivery is not: a correction aimed at one of several deliveries needs a screen that can name them.
 
 ## The rules, and where they live
 
@@ -425,9 +520,12 @@ The rules, the normalisation policy and what a place deliberately does not hold 
   allocation would produce a per-delivery figure nobody recorded.
 - **No per-delivery mileage.** Route distance is measured for a shift, never assigned to one
   delivery, so there is no per-delivery cost or gross-per-mile figure.
-- **No editing or deleting one delivery.** A recorded delivery is what happened. If mis-taps prove
-  to be a real problem, correction is its own design decision rather than a general editing
-  framework added speculatively.
+- **No lifecycle editor, and no deleting one delivery.** A recorded delivery is what happened: no
+  timestamp can be typed, moved or corrected, and only deleting the whole shift removes a delivery.
+  The one correction that exists is
+  [reopening a delivery marked delivered by mistake](#taking-back-a-delivery-marked-delivered-by-mistake),
+  which **removes** the delivered timestamp and writes none. It was designed as its own bounded
+  decision rather than as a general editing framework.
 - **No inferred relationship between concurrent deliveries.** Two deliveries active at once are two
   independent records. They are shown as one group only when the driver said they were accepted
   together, and nothing pairs them by their timing, their pickup place or their overlap.

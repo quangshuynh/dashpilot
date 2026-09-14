@@ -38,13 +38,31 @@ final class DashPilotUITests: XCTestCase {
         continueAfterFailure = false
     }
 
+    /// Launches `app` in the orientation every journey in this file is written
+    /// for.
+    ///
+    /// Nothing here tests landscape, and nothing here set an orientation before:
+    /// a run therefore inherited whatever the simulator was last left in, and a
+    /// device left rotated changes what a `List` renders. A row a journey
+    /// scrolls to then never becomes hittable, and the red run reads as a broken
+    /// screen rather than as a rotated device. Setting it explicitly is what
+    /// makes a run depend on the app rather than on a simulator's remembered
+    /// state, for the reason the schemes are committed rather than autocreated.
+    @MainActor
+    private func launchInPortrait(_ app: XCUIApplication) {
+        if XCUIDevice.shared.orientation != .portrait {
+            XCUIDevice.shared.orientation = .portrait
+        }
+        app.launch()
+    }
+
     /// Launches against a throwaway store so the journey starts from a known
     /// empty state and never writes into a real driver's shift history.
     @MainActor
     private func launchWithEmptyStore() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments.append(Self.inMemoryStoreArgument)
-        app.launch()
+        launchInPortrait(app)
         return app
     }
 
@@ -57,7 +75,7 @@ final class DashPilotUITests: XCTestCase {
     private func launchWithSeededHistory() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments.append(Self.seededHistoryArgument)
-        app.launch()
+        launchInPortrait(app)
         return app
     }
 
@@ -76,7 +94,7 @@ final class DashPilotUITests: XCTestCase {
     private func launchWithActiveDelivery() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments.append(Self.seededActiveDeliveryArgument)
-        app.launch()
+        launchInPortrait(app)
         return app
     }
 
@@ -91,7 +109,7 @@ final class DashPilotUITests: XCTestCase {
     private func launchWithPickupHistory() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments.append(Self.seededPickupHistoryArgument)
-        app.launch()
+        launchInPortrait(app)
         return app
     }
 
@@ -113,7 +131,7 @@ final class DashPilotUITests: XCTestCase {
     private func launchWithExpectedPay() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments.append(Self.seededExpectedPayArgument)
-        app.launch()
+        launchInPortrait(app)
         return app
     }
 
@@ -132,7 +150,7 @@ final class DashPilotUITests: XCTestCase {
     private func launchWithStackedOffer() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments.append(Self.seededStackedOfferArgument)
-        app.launch()
+        launchInPortrait(app)
         return app
     }
 
@@ -146,7 +164,7 @@ final class DashPilotUITests: XCTestCase {
     private func launchWithMalformedOffer() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments.append(Self.seededMalformedOfferArgument)
-        app.launch()
+        launchInPortrait(app)
         return app
     }
 
@@ -162,7 +180,7 @@ final class DashPilotUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments.append(Self.inMemoryStoreArgument)
         app.launchArguments.append(Self.stubbedLocationArgument)
-        app.launch()
+        launchInPortrait(app)
         return app
     }
 
@@ -180,7 +198,7 @@ final class DashPilotUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments.append(Self.inMemoryStoreArgument)
         app.launchArguments.append(Self.simulatedRouteArgument)
-        app.launch()
+        launchInPortrait(app)
         return app
     }
 
@@ -220,7 +238,7 @@ final class DashPilotUITests: XCTestCase {
     @MainActor
     func testLaunchesIntoShiftScreen() throws {
         let app = XCUIApplication()
-        app.launch()
+        launchInPortrait(app)
 
         XCTAssertTrue(app.navigationBars["DashPilot"].waitForExistence(timeout: 10))
         XCTAssertFalse(app.staticTexts["Local Data Unavailable"].exists)
@@ -1628,6 +1646,148 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertTrue(scrollTo(app.buttons["correctOffersButton"], in: app), "Two deliveries can be regrouped")
     }
 
+    // MARK: Taking back a delivery marked delivered by mistake
+
+    /// The offer to undo appears the moment a delivery is marked delivered, says
+    /// which delivery it belongs to, and puts that delivery back where it was.
+    @MainActor
+    func testUndoingADeliveryMarkedDeliveredByMistake() throws {
+        let app = launchWithActiveDelivery()
+
+        let carrying = deliveryButton("deliveryActionButton", containing: "Delivery 3", in: app)
+        XCTAssertTrue(scrollUntilHittable(carrying, in: app))
+        carrying.tap()
+
+        // Read before anything slow: the offer is short lived by design, so a
+        // journey that spends the window scrolling is testing its own scrolling.
+        let banner = app.staticTexts["undoDeliveredBanner"]
+        XCTAssertTrue(banner.waitForExistence(timeout: 5), "The offer to take it back is on screen")
+        XCTAssertEqual(banner.label, "Delivery 3 marked delivered", "It names the delivery it is about")
+
+        let undo = app.buttons["undoDeliveredButton"]
+        XCTAssertTrue(undo.exists)
+        XCTAssertEqual(
+            undo.label,
+            "Undo marking Delivery 3 delivered. It becomes active again, heading to the customer.",
+            "What a listener hears says which delivery, and what pressing it does"
+        )
+        XCTAssertTrue(scrollUpUntilHittable(undo, in: app), "and it can be pressed where it sits")
+        undo.tap()
+
+        XCTAssertTrue(
+            waitForCount(app.buttons.matching(identifier: "deliveryActionButton"), toEqual: 2),
+            "The delivery is among the ones being worked again"
+        )
+        XCTAssertEqual(
+            deliveryButton("deliveryActionButton", containing: "Delivery 3", in: app).label,
+            "Delivery 3. Mark delivery completed",
+            "and it is back at the step it was on, with the pickup it recorded still recorded"
+        )
+        XCTAssertFalse(app.buttons["undoDeliveredButton"].exists, "The offer goes once it has been taken")
+
+        let status = app.descendants(matching: .any)["deliveryStatus"]
+        XCTAssertTrue(waitForLabel(status, toContain: "2 deliveries in progress"), "Status: \(status.label)")
+        XCTAssertTrue(
+            status.label.contains("1 delivery completed"),
+            "and the shift counts one completed delivery again, not two: \(status.label)"
+        )
+    }
+
+    /// A delivery marked delivered earlier in the shift is reopened from the
+    /// deliberate control, behind a confirmation that says what will happen.
+    @MainActor
+    func testReopeningADeliveredDeliveryFromTheShiftsRecord() throws {
+        let app = launchWithActiveDelivery()
+
+        XCTAssertTrue(app.buttons["endShiftButton"].waitForExistence(timeout: 15), "The seeded shift is running")
+
+        // Nothing was marked delivered in this session, so there is no offer to
+        // catch: this is the path for a mistake noticed later.
+        XCTAssertFalse(app.buttons["undoDeliveredButton"].exists)
+
+        let reopen = app.buttons["reopenDeliveryButton"]
+        XCTAssertTrue(scrollTo(reopen, in: app), "The deliberate way back is one control under the panel")
+        reopen.tap()
+
+        let row = app.descendants(matching: .any)["deliveryRecoveryRow"]
+        XCTAssertTrue(row.waitForExistence(timeout: 5), "The shift's delivered delivery is listed")
+        XCTAssertTrue(row.label.contains("Delivery 1, recorded as delivered"), "Showed: \(row.label)")
+        XCTAssertTrue(
+            row.label.contains("Reopening it makes it active again, heading to the customer"),
+            "The row says what reopening does before anything is pressed: \(row.label)"
+        )
+
+        let rowButton = app.buttons["reopenDeliveryRowButton"]
+        XCTAssertTrue(rowButton.exists)
+        XCTAssertEqual(
+            rowButton.label,
+            "Reopen Delivery 1. It becomes active again, heading to the customer.",
+            "and so does the control"
+        )
+        rowButton.tap()
+
+        let alert = app.alerts.firstMatch
+        XCTAssertTrue(alert.waitForExistence(timeout: 5), "Reopening from history is confirmed")
+        let confirm = alert.buttons.matching(identifier: "confirmReopenDeliveryButton").firstMatch
+        XCTAssertTrue(confirm.exists)
+        XCTAssertEqual(confirm.label, "Reopen Delivery 1", "The button repeats which delivery it acts on")
+        XCTAssertTrue(
+            alert.staticTexts.containing(
+                NSPredicate(
+                    format: "label CONTAINS %@",
+                    "Delivery 1 becomes active again, heading to the customer"
+                )
+            ).count > 0,
+            "The confirmation says the delivery becomes active again rather than saying \"edit\""
+        )
+        confirm.tap()
+
+        XCTAssertTrue(
+            app.staticTexts["deliveryRecoveryUnavailable"].waitForExistence(timeout: 5),
+            "The shift now records no delivered delivery, so there is nothing left to reopen"
+        )
+        app.buttons["closeDeliveryRecoveryButton"].tap()
+
+        // And the running panel agrees: three cards, each with its own step.
+        XCTAssertTrue(
+            waitForCount(app.buttons.matching(identifier: "deliveryActionButton"), toEqual: 3),
+            "The reopened delivery is a card again"
+        )
+        XCTAssertEqual(
+            deliveryButton("deliveryActionButton", containing: "Delivery 1", in: app).label,
+            "Delivery 1. Mark delivery completed",
+            "at the step its own timestamps put it at"
+        )
+        XCTAssertEqual(
+            deliveryButton("deliveryActionButton", containing: "Delivery 2", in: app).label,
+            "Delivery 2. Mark arrived at pickup",
+            "and its siblings are exactly where they were"
+        )
+        XCTAssertFalse(
+            app.buttons["reopenDeliveryButton"].exists,
+            "The control goes with the last delivered delivery it could act on"
+        )
+    }
+
+    /// A shift that has recorded no completion offers no way back from one.
+    @MainActor
+    func testRecoveryIsNotOfferedWithoutADeliveredDelivery() throws {
+        let app = launchWithEmptyStore()
+        app.buttons["startShiftButton"].tap()
+
+        XCTAssertTrue(app.buttons["startDeliveryButton"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["reopenDeliveryButton"].exists, "Nothing is recorded, so nothing can be reopened")
+
+        app.buttons["startDeliveryButton"].tap()
+        XCTAssertTrue(
+            waitForCount(app.buttons.matching(identifier: "deliveryActionButton"), toEqual: 1)
+        )
+        XCTAssertFalse(
+            app.buttons["reopenDeliveryButton"].exists,
+            "A delivery in progress has a card of its own; this is not the control for it"
+        )
+    }
+
     /// Completing one of two deliveries leaves the other running.
     @MainActor
     func testCompletingOneDeliveryLeavesTheOtherRunning() throws {
@@ -2877,6 +3037,28 @@ final class DashPilotUITests: XCTestCase {
         return element.isHittable
     }
 
+    /// Swipes **up** the screen until `element` is somewhere a tap will land on
+    /// it, or returns at once if it already is.
+    ///
+    /// The mirror of ``scrollUntilHittable(_:in:maxSwipes:)``, for something
+    /// above where the screen is rather than below it. It stops as soon as the
+    /// element is hittable rather than swiping a fixed number of times, because
+    /// the one control it exists for is offered for a few seconds only: a
+    /// journey that spends that window scrolling is measuring its own scrolling.
+    @MainActor
+    @discardableResult
+    private func scrollUpUntilHittable(
+        _ element: XCUIElement,
+        in app: XCUIApplication,
+        maxSwipes: Int = 4
+    ) -> Bool {
+        for _ in 0..<maxSwipes {
+            if element.isHittable { return true }
+            app.swipeDown()
+        }
+        return element.isHittable
+    }
+
     /// Scrolls back to the top of the screen and waits for `element` there.
     ///
     /// The shift's own controls sit above the delivery section, so a test that
@@ -3061,7 +3243,7 @@ final class DashPilotUITests: XCTestCase {
     private func launchWithPeriodSummary() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments.append(Self.seededPeriodSummaryArgument)
-        app.launch()
+        launchInPortrait(app)
         return app
     }
 
@@ -3279,7 +3461,7 @@ final class DashPilotUITests: XCTestCase {
     private func launchWithPeriodComparison() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments.append(Self.seededPeriodComparisonArgument)
-        app.launch()
+        launchInPortrait(app)
         return app
     }
 
