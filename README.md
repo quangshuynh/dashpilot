@@ -37,6 +37,14 @@ derived legitimately from device sensors and stored history is typed by the driv
   recording stops for its whole length. Resuming starts a new recording, so no distance is measured
   across the break. Pausing is refused while a delivery is in progress; ending a paused shift is
   allowed and closes the pause at the end time.
+- **Correcting a recorded pause**, from a finished shift's own record: a pause recorded at the wrong
+  moment can have either end or both moved, one recorded by mistake can be deleted, and a pause the
+  driver took and never recorded can be added. A stretch is refused rather than nudged if it ends
+  before it starts, reaches outside the shift, overlaps another pause or overlaps a stretch a
+  delivery was open for, and no delivery timestamp is ever moved to make a pause fit. The shift's own
+  start and end, its route and every amount it records are untouched; the working duration, the
+  hourly rate and the period totals over it follow. The open pause of a shift that is paused right
+  now stays Resume's and End's alone, and nothing anywhere detects or suggests a pause.
 - **Route capture** that starts and stops with the shift, carries on while the driver is in another
   app or the phone is locked, states whether it is active, stopped because the shift is paused,
   paused because a session could not start off screen, or unavailable, and never ends a shift
