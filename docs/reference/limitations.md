@@ -60,8 +60,30 @@ and one they cannot.
   was recorded between pausing and resuming, so no distance is measured across it, and the shift's
   recorded mileage is a floor as it always is. The shift's route quality reports the break the same
   way it reports any other, so a paused shift usually reads as a partial route.
-- **Pauses are not editable.** There is no way to correct a pause recorded at the wrong moment, to
-  delete one, or to add one after the fact. The only correction available is deleting the shift.
+- **Only a finished shift's pauses are correctable, and only its completed ones.** The pauses of a
+  shift that has ended can be corrected, deleted or added to from its detail screen. While a shift is
+  running none of that is offered, and the open pause of a paused shift is never editable: it is
+  ended by resuming or by ending the shift, both of which reconcile route capture and the Lock Screen
+  card as they close it, and the editor does neither. A driver who mis-tapped the pause they are in
+  resumes out of it and corrects the row afterwards.
+- **A correction is refused rather than resolved.** A stretch that ends before it starts, that has no
+  length, that reaches outside the shift, that overlaps another pause or that overlaps a stretch a
+  delivery was open for is named and refused. Nothing is clamped, swapped, merged or nudged, and no
+  delivery timestamp is ever moved to make a pause fit.
+- **A pause added or corrected afterwards does not change the route**, which is the one place the
+  feature leaves an inconsistency and does so deliberately. A pause recorded live stopped recording,
+  so the route carries a real gap; a pause added later does not, because DashPilot never deletes
+  positions it recorded to make a correction fit. A shift can therefore record mileage inside a
+  stretch it also records as paused. The detail screen's route section states this rather than
+  smoothing it over; the alternatives were deleting real positions or claiming a gap that never
+  happened.
+- **A pause's number is not stable.** Pauses are called `Pause 1`, `Pause 2` and so on by the order
+  they began, so deleting one renumbers the rest and correcting a start can reorder two. The number
+  is presentation only and nothing acts on a pause by it.
+- **An overlapping pair of stored pauses is measured but not repaired.** The editor will not create
+  an overlap, and the paused total has always unioned rather than summed, so a store that holds one
+  is still measured as the stretch it covers. Nothing merges the two rows or tells the driver they
+  overlap; correcting one out of the other is the repair.
 - **No pause is suggested, timed or limited.** Nothing prompts a driver to pause, nothing warns that
   a pause has run long, and there is no maximum. A pause open for nine hours is recorded as a pause
   open for nine hours.
@@ -70,9 +92,9 @@ and one they cannot.
   never makes a sound and never nudges, so a driver who is not looking at the phone is not told.
 - **Paused time is not broken out in a period summary.** A period reports the working time of its
   shifts; how much of the span was paused is on each shift rather than aggregated.
-- **The completed-shift detail's paused and working rows are not covered by a UI journey**, because
-  no launch fixture seeds a finished shift that was paused. Their values are covered at domain level,
-  and the running and paused shift panel is covered end to end.
+- **Paused stretches are not shown against the route.** The detail screen lists the pauses and lists
+  the capture segments and gaps, and nothing lines the two up or says which gap belongs to which
+  pause.
 
 ## The shift's Live Activity
 

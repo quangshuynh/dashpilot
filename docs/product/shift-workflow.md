@@ -131,6 +131,73 @@ confirmation says so.
 A shift left paused when the app is terminated is still paused on the next launch, with its pause
 intact and nothing recording.
 
+## Correcting a recorded pause
+
+A pause is two taps made at a kerb, and it is the easiest thing in DashPilot to record at the wrong
+moment: pausing on arriving at a restaurant rather than on leaving it, forgetting to resume until
+the next offer arrives, or forgetting to pause at all. Until the pauses of a **finished** shift
+became correctable, the only remedy was deleting the whole shift, which threw away its route, its
+deliveries and its amounts to fix one timestamp.
+
+The corrections live on the finished shift's own detail screen, in a `Pauses` section beside the
+paused and working figures they feed:
+
+| Correction | What it records |
+| --- | --- |
+| Edit Pause | This pause began, ended, or both, at times other than the ones recorded |
+| Delete Pause | This pause was recorded by mistake and did not happen |
+| Add Missed Pause | A pause was taken and never recorded |
+
+Each opens two date and time pickers with the shift's own start and end as their bounds. Nothing is
+written while the pickers move, **Cancel leaves the pause exactly as it was**, and the screen states
+what the shift's working time would become before anything is saved.
+
+### What a correction is refused for
+
+A stretch is **named and refused**, never quietly clamped, swapped or nudged into the nearest
+acceptable one:
+
+- it has to end after it starts, so a pause of no length or of negative length is refused; deleting
+  a pause is the separate action for a pause that should not exist
+- both times have to be inside the shift
+- it may not overlap another pause the shift records, because two pauses covering the same minutes
+  are one pause recorded twice, and combining them would delete a row the driver can still see
+- it may not overlap a stretch a delivery was open for, which is the same fact the live lifecycle
+  already keeps from both directions, and it is refused rather than resolved by moving the delivery
+
+Two pauses may **touch**: one beginning exactly where another ended is two adjacent breaks, not one
+claim made twice.
+
+### What a correction never touches
+
+- **The shift's own start and end times.** Its elapsed duration is the same afterwards.
+- **The route.** No recorded position is added, moved, deleted or reassigned to another capture
+  session, so the recorded mileage, the capture segments and the gaps are all exactly as they were.
+  A pause recorded live left a real break in the route and that break stays.
+- **Deliveries.** No lifecycle timestamp moves, so the shift's delivery active time does not either.
+- **Amounts.** The shift's gross earnings and every delivery's stay as entered.
+
+What does move is what a pause is subtracted from: the shift's paused time, its working duration,
+its gross per shift hour, and the period totals and rates that sum working durations.
+
+!!! note "A pause added afterwards does not rewrite the route"
+
+    A pause recorded during the shift stopped recording, so the route has a real gap across it. A
+    pause **added** afterwards does not: DashPilot never deletes positions it recorded, so a shift
+    can record mileage inside a stretch it also records as paused. The alternatives were both
+    dishonest, and the detail screen's route section says so rather than smoothing it over.
+
+### What is not correctable here
+
+**The open pause of a shift that is paused right now.** It is ended by resuming or by ending the
+shift, both of which reconcile route capture and the Lock Screen card as they close it, and this
+editor does neither. The same rule is why none of these corrections appear on a running shift at
+all: choosing two times from two pickers is the sustained attention DashPilot keeps away from a
+driver who may be at a wheel.
+
+**Nothing is detected.** No pause is inferred from a stationary stretch, a gap in the route or a
+quiet hour, and none is proposed when one is added. Every timestamp here was typed by the driver.
+
 ## Location permission
 
 Permission is never requested at launch. iOS shows the prompt once, and a prompt that appears
@@ -206,11 +273,12 @@ numbers*.
 | Earnings | The recorded amount or "No amount recorded", and Add or Edit Earnings |
 | Route | Recorded mileage, capture segments, capture gaps, and what qualifies them |
 | Performance | Both derived rates, or the reason each could not be derived |
+| Pauses | Each recorded pause with its times and length, Edit and Delete for each, and Add Missed Pause |
 | Deliveries | How many were completed and cancelled, and what each one recorded |
 | Delete | Delete Shift, behind a confirmation |
 
-The delivery log is last of the reading sections because it is the only one that grows with the
-shift; the four above it summarise the shift in a fixed number of lines.
+The pause list and the delivery log are the last two reading sections because they are the two that
+grow with the shift; the four above them summarise it in a fixed number of lines.
 
 It is a summary, not a dashboard: no chart, no map, no gauge and no score. Only completed shifts
 have a detail screen, because a running shift has no finalised duration, no earnings it may record

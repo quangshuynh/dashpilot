@@ -28,6 +28,9 @@ final class DashPilotUITests: XCTestCase {
     /// Must match `LaunchArgument.seededMalformedOffer`, for the same reason.
     private static let seededMalformedOfferArgument = "-dashpilot-seeded-malformed-offer"
 
+    /// Must match `LaunchArgument.seededPausedHistory`, for the same reason.
+    private static let seededPausedHistoryArgument = "-dashpilot-seeded-paused-history"
+
     /// Must match `LaunchArgument.stubbedLocation`, for the same reason.
     private static let stubbedLocationArgument = "-dashpilot-stubbed-location"
 
@@ -182,6 +185,27 @@ final class DashPilotUITests: XCTestCase {
     private func launchWithMalformedOffer() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments.append(Self.seededMalformedOfferArgument)
+        launchInPortrait(app)
+        return app
+    }
+
+    /// Launches against a throwaway store holding one **completed** shift that
+    /// was paused twice.
+    ///
+    /// A journey cannot produce this state by tapping: it would have to pause a
+    /// live shift, wait a measurable number of minutes and end it, which
+    /// measures the clock rather than the screen.
+    ///
+    /// The fixture's shift runs four hours. It is paused from one hour in for 30
+    /// minutes (`Pause 1`) and from two hours forty-five minutes in for 20
+    /// minutes (`Pause 2`), and records one delivery from two hours in to two
+    /// hours thirty. So its elapsed time is `4 hr`, its paused time `50 min` and
+    /// its working time `3 hr 10 min`, and `Pause 2` begins a quarter of an hour
+    /// after the delivery ends.
+    @MainActor
+    private func launchWithPausedHistory() -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments.append(Self.seededPausedHistoryArgument)
         launchInPortrait(app)
         return app
     }
@@ -2310,6 +2334,362 @@ final class DashPilotUITests: XCTestCase {
         return String(remainder.prefix(while: { $0 != "." }))
     }
 
+    // MARK: Correcting a recorded pause
+
+    /// The whole journey, from a finished shift's own record: read the pause,
+    /// correct where it ended, and watch the figure it feeds move.
+    ///
+    /// The claim is not only that the pause changes. It is that **exactly three
+    /// figures move with it** — the paused time, the working time and the hourly
+    /// rate — while the elapsed time, the delivery active time and the recorded
+    /// amount stay where they were. Those are what a pause is, and is not,
+    /// subtracted from.
+    @MainActor
+    func testCorrectingARecordedPauseFromAFinishedShift() throws {
+        let app = launchWithPausedHistory()
+        openFirstShift(in: app)
+
+        let elapsed = app.descendants(matching: .any)["shiftDetailDuration"]
+        XCTAssertTrue(scrollTo(elapsed, in: app), "The shift states its elapsed time")
+        XCTAssertEqual(elapsed.label, "4 hours elapsed shift time")
+        XCTAssertEqual(
+            app.descendants(matching: .any)["shiftDetailPausedTime"].label,
+            "50 minutes paused time, over 2 pauses"
+        )
+        XCTAssertEqual(
+            app.descendants(matching: .any)["shiftDetailWorkingTime"].label,
+            "3 hours, 10 minutes working time"
+        )
+        // The rates live below the pauses, so they are read on the way past and
+        // the screen is brought back to the top before anything is tapped.
+        let hourlyRate = app.descendants(matching: .any)["shiftDetailHourlyRate"]
+        let perMileRate = app.descendants(matching: .any)["shiftDetailPerMileRate"]
+        XCTAssertTrue(scrollTo(hourlyRate, in: app), "The shift derives an hourly rate")
+        let hourlyBefore = hourlyRate.label
+        let perMileBefore = perMileRate.label
+        XCTAssertTrue(scrollToTop(reaching: elapsed, in: app))
+
+        let row = pauseRow(containing: "Pause 1", in: app)
+        XCTAssertTrue(scrollTo(row, in: app), "The shift lists the pauses it recorded")
+        XCTAssertTrue(
+            row.label.contains("30 minutes"),
+            "and says how long each one was. Showed: \(row.label)"
+        )
+
+        let edit = pauseButton("editShiftPauseButton", containing: "Pause 1", in: app)
+        XCTAssertTrue(scrollUntilHittable(edit, in: app), "Pause 1 offers its own correction")
+        XCTAssertEqual(
+            edit.label,
+            "Edit Pause 1. Change when this pause started and ended",
+            "The control names the pause it changes"
+        )
+        edit.tap()
+
+        let summary = app.descendants(matching: .any)["shiftPauseEditorSummary"]
+        XCTAssertTrue(summary.waitForExistence(timeout: 5), "The editor opens on the pause as recorded")
+        XCTAssertTrue(
+            summary.label.hasPrefix("30 minutes paused"),
+            "with the length it already has. Showed: \(summary.label)"
+        )
+        XCTAssertTrue(
+            summary.label.contains("working time becomes 3 hr, 10 min"),
+            "and states the figure the driver is really changing. Showed: \(summary.label)"
+        )
+
+        // The driver resumed a quarter of an hour later than they recorded.
+        setTime(minute: "45", ofPicker: "shiftPauseEndPicker", in: app)
+        XCTAssertTrue(
+            waitForLabel(summary, toContain: "45 minutes paused"),
+            "The consequence is restated before anything is written. Showed: \(summary.label)"
+        )
+        XCTAssertTrue(
+            summary.label.contains("working time becomes 2 hr, 55 min"),
+            "Showed: \(summary.label)"
+        )
+        app.buttons["shiftPauseEditorSaveButton"].tap()
+
+        // Back on the shift, and the three figures a pause feeds have moved.
+        let correctedRow = pauseRow(containing: "Pause 1", in: app)
+        XCTAssertTrue(correctedRow.waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            correctedRow.label.contains("45 minutes"),
+            "The pause records what the driver corrected it to. Showed: \(correctedRow.label)"
+        )
+
+        XCTAssertTrue(scrollToTop(reaching: elapsed, in: app), "The shift's own times are at the top")
+        XCTAssertTrue(
+            waitForLabel(app.descendants(matching: .any)["shiftDetailPausedTime"], toContain: "1 hour, 5 minutes"),
+            "The paused total is the corrected pause plus the one that did not move"
+        )
+        XCTAssertEqual(
+            app.descendants(matching: .any)["shiftDetailWorkingTime"].label,
+            "2 hours, 55 minutes working time",
+            "and the working time is the elapsed time less it"
+        )
+        XCTAssertEqual(
+            elapsed.label,
+            "4 hours elapsed shift time",
+            "The shift's own start and end did not move"
+        )
+        XCTAssertEqual(
+            app.descendants(matching: .any)["shiftDetailDeliveryActiveTime"].label,
+            "30 minutes delivery active time",
+            "and neither did the delivery it recorded"
+        )
+        XCTAssertTrue(scrollTo(hourlyRate, in: app))
+        XCTAssertNotEqual(
+            hourlyRate.label,
+            hourlyBefore,
+            "The rate that divides by working time follows the correction"
+        )
+        XCTAssertEqual(
+            perMileRate.label,
+            perMileBefore,
+            "and the rate a pause has nothing to do with is exactly as it was"
+        )
+    }
+
+    /// Leaving the editor writes nothing at all.
+    @MainActor
+    func testCancellingAPauseCorrectionChangesNothing() throws {
+        let app = launchWithPausedHistory()
+        openFirstShift(in: app)
+
+        let edit = pauseButton("editShiftPauseButton", containing: "Pause 1", in: app)
+        XCTAssertTrue(scrollUntilHittable(edit, in: app))
+        edit.tap()
+
+        XCTAssertTrue(app.descendants(matching: .any)["shiftPauseEditorSummary"].waitForExistence(timeout: 5))
+        setTime(minute: "45", ofPicker: "shiftPauseEndPicker", in: app)
+        app.buttons["shiftPauseEditorCancelButton"].tap()
+
+        let row = pauseRow(containing: "Pause 1", in: app)
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            row.label.contains("30 minutes"),
+            "The pause is exactly as it was recorded. Showed: \(row.label)"
+        )
+    }
+
+    /// A pause cannot be corrected over work the shift recorded, and the refusal
+    /// says which fact it collided with.
+    @MainActor
+    func testAPauseCannotBeCorrectedOverADelivery() throws {
+        let app = launchWithPausedHistory()
+        openFirstShift(in: app)
+
+        // Pause 2 begins a quarter of an hour after the shift's one delivery
+        // ended, so moving its start back by half an hour puts it inside that
+        // delivery.
+        let edit = pauseButton("editShiftPauseButton", containing: "Pause 2", in: app)
+        XCTAssertTrue(scrollUntilHittable(edit, in: app))
+        edit.tap()
+
+        XCTAssertTrue(app.descendants(matching: .any)["shiftPauseEditorSummary"].waitForExistence(timeout: 5))
+        setTime(minute: "15", ofPicker: "shiftPauseStartPicker", in: app)
+
+        // `firstMatch`, because a SwiftUI `Label` is a glyph and a text under one
+        // identifier and reading `.label` off a query matching both is an error.
+        let refusal = app.descendants(matching: .any)
+            .matching(identifier: "shiftPauseEditorRefusal")
+            .firstMatch
+        XCTAssertTrue(refusal.waitForExistence(timeout: 5), "The stretch is refused rather than saved")
+        XCTAssertTrue(
+            refusal.label.contains("A delivery was in progress during that time"),
+            "and the refusal says which recorded fact it collided with. Showed: \(refusal.label)"
+        )
+        XCTAssertFalse(
+            app.buttons["shiftPauseEditorSaveButton"].isEnabled,
+            "Saving is withheld rather than offered and then refused"
+        )
+
+        app.buttons["shiftPauseEditorCancelButton"].tap()
+        let row = pauseRow(containing: "Pause 2", in: app)
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        XCTAssertTrue(row.label.contains("20 minutes"), "Showed: \(row.label)")
+    }
+
+    /// Deleting a pause recorded by mistake, which makes the shift's working
+    /// time longer rather than shorter.
+    @MainActor
+    func testDeletingAPauseRecordedByMistake() throws {
+        let app = launchWithPausedHistory()
+        openFirstShift(in: app)
+
+        let delete = pauseButton("deleteShiftPauseButton", containing: "Pause 1", in: app)
+        XCTAssertTrue(scrollUntilHittable(delete, in: app))
+        XCTAssertEqual(
+            delete.label,
+            "Delete Pause 1. Record that this pause did not happen",
+            "The control says what deleting a pause means rather than only that a row goes"
+        )
+        delete.tap()
+
+        let alert = app.alerts.firstMatch
+        XCTAssertTrue(alert.waitForExistence(timeout: 5), "Deleting is confirmed before anything is written")
+        XCTAssertTrue(
+            alert.staticTexts.containing(
+                NSPredicate(format: "label CONTAINS %@", "working time becomes 30 min longer")
+            ).count > 0,
+            "The confirmation states the direction the working time moves"
+        )
+        XCTAssertTrue(
+            alert.staticTexts.containing(
+                NSPredicate(format: "label CONTAINS %@", "route recorded during it is not changed")
+            ).count > 0,
+            "and that the route is not touched"
+        )
+        let confirm = alert.buttons.matching(identifier: "confirmDeleteShiftPauseButton").firstMatch
+        XCTAssertEqual(confirm.label, "Delete Pause 1", "The button repeats which pause it acts on")
+        confirm.tap()
+
+        // One pause left, and it is renumbered, which is why nothing acts on a
+        // pause by its number.
+        let remaining = pauseRow(containing: "Pause 1", in: app)
+        XCTAssertTrue(remaining.waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            remaining.label.contains("20 minutes"),
+            "The pause that is left is the one that was second. Showed: \(remaining.label)"
+        )
+        XCTAssertFalse(pauseRow(containing: "Pause 2", in: app).exists, "and there is no second pause now")
+
+        let elapsed = app.descendants(matching: .any)["shiftDetailDuration"]
+        XCTAssertTrue(scrollToTop(reaching: elapsed, in: app))
+        XCTAssertTrue(
+            waitForLabel(app.descendants(matching: .any)["shiftDetailWorkingTime"], toContain: "3 hours, 40 minutes"),
+            "The working time grew by exactly the deleted pause"
+        )
+        XCTAssertEqual(
+            app.descendants(matching: .any)["shiftDetailPausedTime"].label,
+            "20 minutes paused time, over 1 pause"
+        )
+        XCTAssertEqual(elapsed.label, "4 hours elapsed shift time", "The shift itself is untouched")
+    }
+
+    /// Dismissing the confirmation writes nothing.
+    @MainActor
+    func testCancellingAPauseDeletionKeepsThePause() throws {
+        let app = launchWithPausedHistory()
+        openFirstShift(in: app)
+
+        let delete = pauseButton("deleteShiftPauseButton", containing: "Pause 1", in: app)
+        XCTAssertTrue(scrollUntilHittable(delete, in: app))
+        delete.tap()
+
+        let alert = app.alerts.firstMatch
+        XCTAssertTrue(alert.waitForExistence(timeout: 5))
+        alert.buttons["Cancel"].tap()
+
+        XCTAssertTrue(pauseRow(containing: "Pause 2", in: app).waitForExistence(timeout: 5), "Both pauses are still there")
+        XCTAssertTrue(pauseRow(containing: "Pause 1", in: app).label.contains("30 minutes"))
+    }
+
+    /// Recording a pause the driver took and never tapped anything for.
+    ///
+    /// It opens refused rather than pre-filled, because DashPilot observed
+    /// nothing about the break and has nothing to propose.
+    @MainActor
+    func testAddingAPauseThatWasNeverRecorded() throws {
+        let app = launchWithPausedHistory()
+        openFirstShift(in: app)
+
+        let add = app.buttons["addMissedPauseButton"]
+        XCTAssertTrue(scrollUntilHittable(add, in: app))
+        XCTAssertEqual(add.label, "Add a pause you did not record during the shift")
+        add.tap()
+
+        // `firstMatch`, because a SwiftUI `Label` is a glyph and a text under one
+        // identifier and reading `.label` off a query matching both is an error.
+        let refusal = app.descendants(matching: .any)
+            .matching(identifier: "shiftPauseEditorRefusal")
+            .firstMatch
+        XCTAssertTrue(refusal.waitForExistence(timeout: 5), "Nothing is suggested, so it opens with nothing valid")
+        XCTAssertTrue(
+            refusal.label.contains("A pause has to end after it started"),
+            "Showed: \(refusal.label)"
+        )
+        XCTAssertFalse(app.buttons["shiftPauseEditorSaveButton"].isEnabled)
+
+        // Five minutes inside the shift's first hour, which is before its first
+        // pause and long before its delivery. Both pickers open on the shift's
+        // own start, so only the minutes are moved: the hour a shift starts at
+        // depends on the machine's time zone, and a journey that typed one would
+        // be asserting where the machine is.
+        setTime(minute: "50", ofPicker: "shiftPauseStartPicker", in: app)
+        setTime(minute: "55", ofPicker: "shiftPauseEndPicker", in: app)
+
+        let summary = app.descendants(matching: .any)["shiftPauseEditorSummary"]
+        XCTAssertTrue(summary.waitForExistence(timeout: 5), "The stretch is now one the shift can record")
+        XCTAssertTrue(summary.label.hasPrefix("5 minutes paused"), "Showed: \(summary.label)")
+        app.buttons["shiftPauseEditorSaveButton"].tap()
+
+        // Numbered by when it began, so a pause added before the two recorded
+        // ones is `Pause 1` and the others move down.
+        let added = pauseRow(containing: "Pause 1", in: app)
+        XCTAssertTrue(added.waitForExistence(timeout: 5), "The shift records a third pause")
+        XCTAssertTrue(
+            added.label.contains("5 minutes"),
+            "and it is first, because it began first. Showed: \(added.label)"
+        )
+        XCTAssertTrue(pauseRow(containing: "Pause 3", in: app).exists, "There are three of them now")
+
+        let elapsed = app.descendants(matching: .any)["shiftDetailDuration"]
+        XCTAssertTrue(scrollToTop(reaching: elapsed, in: app))
+        XCTAssertTrue(
+            waitForLabel(app.descendants(matching: .any)["shiftDetailPausedTime"], toContain: "over 3 pauses"),
+            "The shift counts three pauses now"
+        )
+        XCTAssertEqual(
+            app.descendants(matching: .any)["shiftDetailWorkingTime"].label,
+            "3 hours, 5 minutes working time",
+            "and the added five minutes came out of the working time"
+        )
+        XCTAssertEqual(elapsed.label, "4 hours elapsed shift time", "The shift's own times did not move")
+    }
+
+    /// A shift that records no pause still offers to record one, and says so
+    /// rather than showing an empty section.
+    @MainActor
+    func testAShiftWithNoPausesStillOffersToRecordOne() throws {
+        let app = launchWithSeededHistory()
+        openFirstShift(in: app)
+
+        let none = app.staticTexts["shiftDetailNoPauses"]
+        XCTAssertTrue(scrollTo(none, in: app), "The section says the shift recorded no pause")
+        XCTAssertEqual(none.label, "No pauses recorded")
+        XCTAssertTrue(
+            app.buttons["addMissedPauseButton"].exists,
+            "and still offers the one correction a shift with no pauses needs"
+        )
+        XCTAssertFalse(app.buttons["editShiftPauseButton"].exists, "There is nothing to edit")
+        XCTAssertFalse(app.buttons["deleteShiftPauseButton"].exists, "and nothing to delete")
+    }
+
+    /// None of it is offered while a shift is running, which is where the driver
+    /// may be at a wheel.
+    @MainActor
+    func testPauseCorrectionIsNotOfferedOnARunningShift() throws {
+        let app = launchWithEmptyStore()
+
+        let startShift = app.buttons["startShiftButton"]
+        XCTAssertTrue(startShift.waitForExistence(timeout: 10))
+        startShift.tap()
+
+        XCTAssertTrue(app.buttons["pauseShiftButton"].waitForExistence(timeout: 5), "The shift is running")
+        for identifier in ["editShiftPauseButton", "deleteShiftPauseButton", "addMissedPauseButton"] {
+            XCTAssertFalse(app.buttons[identifier].exists, "\(identifier) is not offered on a running shift")
+        }
+
+        app.buttons["pauseShiftButton"].tap()
+        XCTAssertTrue(app.buttons["resumeShiftButton"].waitForExistence(timeout: 5), "and now it is paused")
+        for identifier in ["editShiftPauseButton", "deleteShiftPauseButton", "addMissedPauseButton"] {
+            XCTAssertFalse(
+                app.buttons[identifier].exists,
+                "\(identifier) is not offered on a paused shift either: the open pause is Resume's and End's"
+            )
+        }
+    }
+
     // MARK: Delivery earnings, from detail
 
     /// Records an amount against one finished delivery, then changes it.
@@ -3346,6 +3726,106 @@ final class DashPilotUITests: XCTestCase {
                 )
             )
             .firstMatch
+    }
+
+    /// One recorded pause's row on the detail screen, identified by what it
+    /// says.
+    ///
+    /// The row is one combined accessibility element, so its label is where the
+    /// printed facts can be read back as a sentence — which is also what
+    /// VoiceOver says.
+    @MainActor
+    private func pauseRow(containing text: String, in app: XCUIApplication) -> XCUIElement {
+        app.descendants(matching: .any)
+            .matching(
+                NSPredicate(
+                    format: "identifier == %@ AND label CONTAINS %@",
+                    "shiftDetailPauseRow",
+                    text
+                )
+            )
+            .firstMatch
+    }
+
+    /// One pause's Edit or Delete control, picked out by the pause its label
+    /// names rather than by where it sits.
+    ///
+    /// Every such button on the screen shares one identifier, and a pause is
+    /// renumbered when an earlier one is deleted, so matching on the label is
+    /// what makes a journey act on the pause it means.
+    @MainActor
+    private func pauseButton(
+        _ identifier: String,
+        containing text: String,
+        in app: XCUIApplication
+    ) -> XCUIElement {
+        app.buttons
+            .matching(NSPredicate(format: "identifier == %@ AND label CONTAINS %@", identifier, text))
+            .firstMatch
+    }
+
+    /// Sets the time one compact `DatePicker` holds.
+    ///
+    /// A compact date picker in a `Form` shows a date button and a time button;
+    /// tapping the time button reveals three wheels — hour, minute and, in a
+    /// twelve-hour locale, the meridiem. Every wheel a caller wants is set while
+    /// they are open once, because reopening between two of them is two more
+    /// taps that can land on a moving control.
+    ///
+    /// The wheels are then put away by tapping the **navigation bar**, which is
+    /// the one thing on this sheet that is both inert and reliably hittable. The
+    /// picker's own time button is not tapped again and neither is the section
+    /// heading: expanded wheels sit over the whole form, so iOS reports both as
+    /// not hittable and a journey that tried either would fail on its own
+    /// housekeeping rather than on the screen. Putting them away matters because
+    /// a caller that then sets the *other* picker has to be able to reach it.
+    ///
+    /// It returns once the picker's own button stops reading what it read
+    /// before, so a caller asserting on the form afterwards is asserting against
+    /// a picker that has finished moving.
+    @MainActor
+    private func setTime(
+        hour: String? = nil,
+        minute: String? = nil,
+        meridiem: String? = nil,
+        ofPicker identifier: String,
+        in app: XCUIApplication
+    ) {
+        let picker = app.datePickers[identifier]
+        XCTAssertTrue(picker.waitForExistence(timeout: 5), "\(identifier) is on screen")
+        XCTAssertTrue(picker.buttons.count > 1, "\(identifier) shows a date and a time")
+        let timeButton = picker.buttons.element(boundBy: picker.buttons.count - 1)
+        let before = timeButton.label
+        timeButton.tap()
+
+        let wheels = app.pickerWheels
+        XCTAssertTrue(wheels.firstMatch.waitForExistence(timeout: 5), "The time wheels are showing")
+        if let hour {
+            wheels.element(boundBy: 0).adjust(toPickerWheelValue: hour)
+        }
+        if let minute {
+            wheels.element(boundBy: 1).adjust(toPickerWheelValue: minute)
+        }
+        // Absent in a twenty-four-hour locale, where the hour alone is enough.
+        if let meridiem, wheels.count > 2 {
+            wheels.element(boundBy: 2).adjust(toPickerWheelValue: meridiem)
+        }
+
+        let changed = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "label != %@", before),
+            object: picker.buttons.element(boundBy: picker.buttons.count - 1)
+        )
+        XCTAssertEqual(
+            XCTWaiter().wait(for: [changed], timeout: 5),
+            .completed,
+            "\(identifier) records the time that was chosen rather than the one it opened on"
+        )
+
+        app.navigationBars.firstMatch.tap()
+        XCTAssertTrue(
+            waitForDisappearance(of: app.pickerWheels.firstMatch),
+            "The wheels close, so the rest of the form can be reached"
+        )
     }
 
     @MainActor
