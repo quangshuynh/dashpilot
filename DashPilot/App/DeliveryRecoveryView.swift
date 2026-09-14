@@ -127,9 +127,12 @@ struct DeliveryRecoveryView: View {
     /// The shift's deliveries that are recorded as delivered, under the numbers
     /// they have everywhere else.
     private var candidates: [Candidate] {
+        // A closure rather than `map(Candidate.init)`: the initializer is
+        // isolated to this actor, and passing it as a value hands a
+        // main-actor-isolated function to a nonisolated `map`.
         shift.numberedDeliveries
             .filter { $0.delivery.state == .delivered }
-            .map(Candidate.init)
+            .map { Candidate($0) }
     }
 
     @ViewBuilder
