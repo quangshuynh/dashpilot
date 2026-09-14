@@ -379,7 +379,10 @@ struct CompletedShiftDetailView: View {
         } footer: {
             Text(
                 """
-                Each pause is a stretch you recorded as not working, and together they are what this                 shift's working time subtracts. Correcting one changes the working time and the                 hourly figures over it; it never changes the shift's own start and end times, the                 route recorded during it, or any amount you entered.
+                Each pause is a stretch you recorded as not working, and together they are what this \
+                shift's working time subtracts. Correcting one changes the working time and the \
+                hourly figures over it; it never changes the shift's own start and end times, the \
+                route recorded during it, or any amount you entered.
                 """
             )
         }
