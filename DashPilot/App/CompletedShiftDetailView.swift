@@ -891,9 +891,9 @@ private struct DeliveryHistoryRow: View {
             available.append(.earnings)
         }
 
-        // Last, so the two controls a driver reaches for every day keep the
-        // places they have had, and the one that rewrites a recorded fact is
-        // read after them. Offered only where it would actually succeed: the
+        // Last, so the three controls that were already here keep the places
+        // they had, and the one that rewrites a recorded fact is met after
+        // them. Offered only where it would actually succeed: the
         // shift has to be over, the delivery has to be recorded as delivered,
         // and its timestamps have to be ones the correction will accept. A
         // control that always refuses is worse than no control, which is the
@@ -1107,9 +1107,13 @@ private struct DeliveryHistoryRow: View {
 ///
 /// A case rather than a closure held in a value: the row keeps deciding what
 /// each control says and does, and this only says which of them are there and
-/// in what order. The raw value is the accessibility identifier the control has
-/// always carried, so the identity the grid orders by is the identity a journey
-/// already looks the control up by.
+/// in what order. The raw value is the accessibility identifier, applied once at
+/// the grid, so the identity the grid orders by is the identity a journey looks
+/// the control up by and the two cannot drift apart.
+///
+/// The order is the order they are read, and it is why the historical correction
+/// is last: the three that were already here keep the places they had, and the
+/// one that rewrites a recorded fact is met after them.
 private enum DeliveryRowAction: String, Identifiable {
     case pickupPlace = "shiftDetailPickupPlaceButton"
     case pickupHistory = "shiftDetailPickupHistoryButton"
