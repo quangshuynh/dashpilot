@@ -1984,32 +1984,43 @@ final class DashPilotUITests: XCTestCase {
     /// Verified by mutation: putting the three back in one row fails this on the
     /// width assertion itself, at 104.7 points against the 160.8 it asks for,
     /// rather than on a timeout or on a wrapped word.
+    ///
+    /// The set is **four** on a delivered delivery in a finished shift, since
+    /// the historical correction joined it. That is what the grid is for: the
+    /// fourth action took the empty cell beside the third rather than costing
+    /// anything, and the widths below are the same widths.
     @MainActor
     func testCompletedDeliveryOffersEveryCorrectionWithRoomToReadIt() throws {
         let app = launchWithSeededHistory()
         openFirstShift(in: app)
 
         // The fixture's first delivery is the one with the whole set: it names a
-        // place, that place has recorded history, and it carries an amount.
+        // place, that place has recorded history, it carries an amount, and it
+        // is recorded as delivered in a shift that has ended.
         let card = deliveryCard(containing: "Delivery 1, delivered", in: app)
         XCTAssertTrue(scrollTo(card, in: app), "The delivery should be listed")
 
         let place = card.buttons["shiftDetailPickupPlaceButton"]
         let history = card.buttons["shiftDetailPickupHistoryButton"]
         let earnings = card.buttons["shiftDetailDeliveryEarningsButton"]
+        let correct = card.buttons["shiftDetailCorrectToCancelledButton"]
 
-        // Reaching the last of the three brings the other two with it: they are
-        // the two directly above it in the same card.
-        XCTAssertTrue(scrollUntilHittable(earnings, in: app), "Every action is reachable by scrolling")
+        // Reaching the last of the four brings the others with it: they are the
+        // three directly above it in the same card.
+        XCTAssertTrue(scrollUntilHittable(correct, in: app), "Every action is reachable by scrolling")
 
         // Each one still names the delivery it acts on, which is what makes it
         // usable with several cards on screen and nothing to look at.
         XCTAssertEqual(place.label, "Change pickup place for Delivery 1")
         XCTAssertEqual(history.label, "Recorded pickup waits at \(Self.noodles)")
         XCTAssertEqual(earnings.label, "Edit gross earnings for Delivery 1")
+        XCTAssertTrue(
+            correct.label.hasPrefix("Correct Delivery 1 to cancelled."),
+            "including the one that rewrites how the delivery ended: \(correct.label)"
+        )
 
         let width = app.windows.element(boundBy: 0).frame.width
-        for action in [place, history, earnings] {
+        for action in [place, history, earnings, correct] {
             XCTAssertTrue(action.isHittable, "Every action is tappable where it is: \(action.label)")
             XCTAssertGreaterThanOrEqual(
                 action.frame.height,
@@ -2043,16 +2054,23 @@ final class DashPilotUITests: XCTestCase {
             "Both are the width of a column, whatever each is called"
         )
 
-        // The odd one out keeps its column rather than being stretched across
-        // the card, so the left edge is the same down every delivery.
+        // The second line holds the other two, in the same two columns, so the
+        // left edge is the same down every delivery whatever each row offers.
         XCTAssertGreaterThan(earnings.frame.minY, place.frame.maxY - 1, "The third action is on the next line")
         XCTAssertEqual(
             earnings.frame.width,
             place.frame.width,
             accuracy: 1,
-            "A line holding one action still holds it in a column"
+            "and is the width of a column"
         )
         XCTAssertEqual(earnings.frame.minX, place.frame.minX, accuracy: 1, "Aligned with the column above it")
+        XCTAssertEqual(
+            correct.frame.minY,
+            earnings.frame.minY,
+            accuracy: 1,
+            "The fourth action shares the second line rather than starting a third"
+        )
+        XCTAssertEqual(correct.frame.minX, history.frame.minX, accuracy: 1, "in the second column")
 
         // And the controls still do what they did: the grid changed where they
         // are, not what they open.
@@ -2084,6 +2102,7 @@ final class DashPilotUITests: XCTestCase {
         let place = card.buttons["shiftDetailPickupPlaceButton"]
         let history = card.buttons["shiftDetailPickupHistoryButton"]
         let earnings = card.buttons["shiftDetailDeliveryEarningsButton"]
+        let correct = card.buttons["shiftDetailCorrectToCancelledButton"]
 
         XCTAssertTrue(
             scrollUntilHittable(place, in: app, maxSwipes: 30),
@@ -2091,7 +2110,7 @@ final class DashPilotUITests: XCTestCase {
         )
 
         let width = app.windows.element(boundBy: 0).frame.width
-        for action in [place, history, earnings] {
+        for action in [place, history, earnings, correct] {
             XCTAssertTrue(action.exists, "Nothing is dropped to keep the card short")
             XCTAssertGreaterThan(
                 action.frame.width,
@@ -2111,7 +2130,184 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertEqual(history.frame.minX, place.frame.minX, accuracy: 1, "Still one aligned column")
 
         // Reached by scrolling, like anything else this far down a long screen.
-        XCTAssertTrue(scrollUntilHittable(earnings, in: app, maxSwipes: 10), "And every action is still tappable")
+        XCTAssertTrue(scrollUntilHittable(correct, in: app, maxSwipes: 10), "And every action is still tappable")
+        XCTAssertGreaterThan(
+            correct.frame.minY,
+            earnings.frame.maxY - 1,
+            "The fourth action is under the third, not beside it"
+        )
+    }
+
+    // MARK: Correcting a historical completion to a cancellation
+
+    /// The whole journey, from a finished shift's own record.
+    ///
+    /// The claim is not only that the state changes. It is that the **time does
+    /// not**: the instant the row printed beside `Delivered` is the instant it
+    /// prints beside `Cancelled` afterwards, which is what keeps the shift's
+    /// delivery active time and every figure over it where they were.
+    @MainActor
+    func testCorrectingAHistoricalCompletionToACancellation() throws {
+        let app = launchWithSeededHistory()
+        openFirstShift(in: app)
+
+        let summary = app.staticTexts["shiftDetailDeliverySummary"]
+        XCTAssertTrue(scrollTo(summary, in: app), "The shift states how its deliveries ended")
+        XCTAssertEqual(summary.label, "2 deliveries completed. 1 delivery cancelled")
+
+        let card = deliveryCard(containing: "Delivery 1, delivered", in: app)
+        XCTAssertTrue(scrollTo(card, in: app), "The delivered delivery is listed")
+        let recordedTime = try XCTUnwrap(
+            Self.time(after: "Delivered at", in: deliveryRow(containing: "Delivery 1, delivered", in: app).label),
+            "The row states when it was recorded delivered"
+        )
+
+        let correct = card.buttons["shiftDetailCorrectToCancelledButton"]
+        XCTAssertTrue(scrollUntilHittable(correct, in: app), "and offers the correction")
+        XCTAssertEqual(
+            correct.label,
+            """
+            Correct Delivery 1 to cancelled. It stays a finished delivery, recorded as cancelled \
+            instead of delivered.
+            """,
+            "The control names its subject and says the delivery stays finished"
+        )
+        correct.tap()
+
+        let alert = app.alerts.firstMatch
+        XCTAssertTrue(alert.waitForExistence(timeout: 5), "The correction is confirmed before anything is written")
+        let confirm = alert.buttons.matching(identifier: "confirmCorrectToCancelledButton").firstMatch
+        XCTAssertTrue(confirm.exists)
+        XCTAssertEqual(confirm.label, "Correct Delivery 1", "The button repeats which delivery it acts on")
+        XCTAssertTrue(
+            alert.staticTexts.containing(
+                NSPredicate(format: "label CONTAINS %@", "Delivery 1 stays a finished delivery")
+            ).count > 0,
+            "The confirmation says the delivery stays finished rather than saying \"edit\""
+        )
+        XCTAssertTrue(
+            alert.staticTexts.containing(
+                NSPredicate(
+                    format: "label CONTAINS %@",
+                    "the time you recorded it as delivered becomes the time it was cancelled"
+                )
+            ).count > 0,
+            "and says where the cancellation time comes from"
+        )
+        confirm.tap()
+
+        let corrected = deliveryRow(containing: "Delivery 1, cancelled", in: app)
+        XCTAssertTrue(corrected.waitForExistence(timeout: 5), "The delivery is recorded as cancelled")
+        XCTAssertEqual(
+            Self.time(after: "Cancelled at", in: corrected.label),
+            recordedTime,
+            "at exactly the instant it had recorded as its completion. Showed: \(corrected.label)"
+        )
+        XCTAssertNil(
+            Self.time(after: "Delivered at", in: corrected.label),
+            "and the completion is gone rather than kept beside it"
+        )
+        XCTAssertFalse(
+            corrected.label.contains("Accepted to delivered"),
+            "The interval that needed a completion goes with it"
+        )
+        XCTAssertTrue(
+            corrected.label.contains("Picked up from \(Self.noodles)"),
+            "The pickup place stays recorded"
+        )
+        XCTAssertTrue(
+            corrected.label.contains("Gross earnings for Delivery 1"),
+            "and so does the amount, which a cancelled delivery may truthfully carry"
+        )
+
+        // The shift itself is still a finished shift, and its counts have moved
+        // by exactly one in each direction.
+        XCTAssertTrue(scrollUpUntilHittable(summary, in: app), "The summary is above the log")
+        XCTAssertEqual(
+            summary.label,
+            "1 delivery completed. 2 deliveries cancelled",
+            "The completion became a cancellation, and nothing is in progress"
+        )
+
+        // A second correction is not offered, because the row it acted on is no
+        // longer recorded as delivered.
+        let correctedCard = deliveryCard(containing: "Delivery 1, cancelled", in: app)
+        XCTAssertTrue(scrollTo(correctedCard, in: app))
+        XCTAssertFalse(
+            correctedCard.buttons["shiftDetailCorrectToCancelledButton"].exists,
+            "A control that would always refuse is not offered"
+        )
+        XCTAssertTrue(
+            correctedCard.buttons["shiftDetailDeliveryEarningsButton"].exists,
+            "and the corrections that still apply are still there"
+        )
+    }
+
+    /// Dismissing the confirmation writes nothing.
+    @MainActor
+    func testDismissingTheCancellationConfirmationChangesNothing() throws {
+        let app = launchWithSeededHistory()
+        openFirstShift(in: app)
+
+        let card = deliveryCard(containing: "Delivery 1, delivered", in: app)
+        XCTAssertTrue(scrollTo(card, in: app))
+        let correct = card.buttons["shiftDetailCorrectToCancelledButton"]
+        XCTAssertTrue(scrollUntilHittable(correct, in: app))
+        correct.tap()
+
+        let alert = app.alerts.firstMatch
+        XCTAssertTrue(alert.waitForExistence(timeout: 5))
+        alert.buttons["Cancel"].tap()
+
+        XCTAssertTrue(
+            deliveryRow(containing: "Delivery 1, delivered", in: app).waitForExistence(timeout: 5),
+            "The delivery is exactly as it was"
+        )
+        XCTAssertFalse(
+            deliveryRow(containing: "Delivery 1, cancelled", in: app).exists,
+            "and nothing was written"
+        )
+    }
+
+    /// A delivery the shift already records as cancelled has nothing to correct,
+    /// and a running shift has a better correction of its own.
+    @MainActor
+    func testTheHistoricalCorrectionIsOfferedNowhereElse() throws {
+        let app = launchWithSeededHistory()
+        openFirstShift(in: app)
+
+        let cancelled = deliveryCard(containing: "Delivery 2, cancelled", in: app)
+        XCTAssertTrue(scrollTo(cancelled, in: app), "The fixture records a cancelled delivery too")
+        XCTAssertFalse(
+            cancelled.buttons["shiftDetailCorrectToCancelledButton"].exists,
+            "A cancelled delivery is already terminal as what it was"
+        )
+
+        goBack(in: app)
+
+        // The running shift's own cards offer the lifecycle controls and the
+        // reopening, and never this one: while a shift is running a mis-tapped
+        // completion is reopened and finished properly.
+        let app2 = launchWithActiveDelivery()
+        XCTAssertTrue(app2.buttons["endShiftButton"].waitForExistence(timeout: 15), "The seeded shift is running")
+        XCTAssertTrue(scrollTo(app2.buttons["reopenDeliveryButton"], in: app2), "Reopening is what is offered there")
+        XCTAssertFalse(
+            app2.buttons["shiftDetailCorrectToCancelledButton"].exists,
+            "and the historical correction is not"
+        )
+    }
+
+    /// Reads the time a row's spoken label states for one event.
+    ///
+    /// The row is one combined accessibility element, so its label is where the
+    /// printed facts can be read back as a sentence. Returning `nil` for an
+    /// event the row does not state is the point: it is how the journey asserts
+    /// that the completion is **gone** rather than merely joined by a
+    /// cancellation.
+    private static func time(after event: String, in label: String) -> String? {
+        guard let range = label.range(of: "\(event) ") else { return nil }
+        let remainder = label[range.upperBound...]
+        return String(remainder.prefix(while: { $0 != "." }))
     }
 
     // MARK: Delivery earnings, from detail
