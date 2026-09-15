@@ -251,6 +251,29 @@ struct ExportFixture {
         return expense
     }
 
+    // MARK: Additional tips
+
+    /// One tip on a delivery, recorded `seconds` after its shift began.
+    ///
+    /// The instant is supplied rather than taken from the clock, so every
+    /// assertion about an exported timestamp is an assertion about a literal.
+    @discardableResult
+    func tip(
+        _ amount: String,
+        _ method: DeliveryTipMethod,
+        on delivery: Delivery,
+        recordedAfter seconds: TimeInterval
+    ) throws -> DeliveryTip {
+        let shiftStart = try #require(delivery.shift?.startedAt)
+        let tip = try delivery.recordAdditionalTip(
+            try money(amount),
+            method: method,
+            at: shiftStart.addingTimeInterval(seconds)
+        )
+        context.insert(tip)
+        return tip
+    }
+
     // MARK: Pickup places
 
     @discardableResult

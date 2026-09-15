@@ -140,7 +140,7 @@ struct ShiftExportRecordTests {
         // would push the driver into recording it somewhere it did not happen.
         #expect(cancelled.grossEarnings?.string == "3.00")
         // No completion, so no rate over one.
-        #expect(cancelled.grossPerDeliveryHour == nil)
+        #expect(cancelled.effectiveEarningsPerDeliveryHour == nil)
         #expect(cancelled.acceptedToDeliveredSeconds == nil)
 
         #expect(record.deliveredCount == 1)

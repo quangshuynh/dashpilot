@@ -318,8 +318,8 @@ struct ExpectedDeliveryEarningsTests {
         #expect(after.grossPerDeliveryActiveHour.amount == before.grossPerDeliveryActiveHour.amount)
         #expect(after.grossPerRecordedMile.amount == before.grossPerRecordedMile.amount)
         #expect(seeded.expectedEarnings == (try money("8.50")), "The expectation really is on the record")
-        #expect(seeded.grossPerDeliveryHour.amount == nil, "A delivery with no recorded amount has no rate")
-        #expect(delivery.grossPerDeliveryHour.amount == nil)
+        #expect(seeded.effectiveEarningsPerDeliveryHour.amount == nil, "A delivery with no recorded amount has no rate")
+        #expect(delivery.effectiveEarningsPerDeliveryHour.amount == nil)
     }
 
     @Test("An expectation-only delivery contributes nothing to a period's delivery earnings")

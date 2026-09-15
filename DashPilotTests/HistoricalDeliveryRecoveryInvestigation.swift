@@ -411,7 +411,7 @@ struct HistoricalDeliveryRecoveryInvestigation {
         #expect(delivery.grossEarnings == Money(minorUnits: 725))
         // The per-delivery rate goes, because it divides by acceptance to
         // completion and there is no completion any more.
-        #expect(delivery.grossPerDeliveryHour == .unavailable(.deliveryNotCompleted))
+        #expect(delivery.effectiveEarningsPerDeliveryHour == .unavailable(.deliveryNotCompleted))
         #expect(shift.periodRecord(for: .none).pickupWaits.count == 1)
     }
 }
