@@ -967,6 +967,11 @@ private struct DeliveryHistoryRow: View {
     /// shift's is: typing belongs after the driving, not during it.
     @State private var isEditingEarnings = false
 
+    /// The tips this delivery received outside that amount, in their own sheet
+    /// for the same reason, and a separate one because they are a list rather
+    /// than a field.
+    @State private var isEditingTips = false
+
     /// The correction awaiting confirmation. Nothing is written until it is
     /// confirmed, and dismissing the alert writes nothing at all.
     ///
@@ -982,6 +987,20 @@ private struct DeliveryHistoryRow: View {
     @Environment(\.modelContext) private var modelContext
 
     private var delivery: Delivery { numbered.delivery }
+
+    /// What this delivery actually paid, read once per body rather than
+    /// assembled separately by each row that needs part of it.
+    private var effectiveEarnings: EffectiveDeliveryEarnings { delivery.effectiveEarnings }
+
+    /// The tips row's label, which says how many facts stand behind the figure.
+    ///
+    /// A single tip is the commonest case and reads better without a count, and
+    /// a count is exactly what distinguishes two tips from one larger one.
+    private var additionalTipsTitle: String {
+        effectiveEarnings.additionalTipCount == 1
+            ? "Additional tip"
+            : "Additional tips (\(effectiveEarnings.additionalTipCount))"
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -1034,23 +1053,59 @@ private struct DeliveryHistoryRow: View {
                 // it. A "no amount recorded" line on every delivery would be
                 // noise on the ordinary case, and the control below already
                 // says whether there is one to add or to change.
+                //
+                // The label is `Gross earnings` on the ordinary delivery and
+                // `Platform pay` on one that also carries tips, which is the one
+                // place in the app the wording moves. Both name the same stored
+                // fact. A delivery with tips has the other half of its total on
+                // the very next line, and a first row still called `Gross
+                // earnings` would read as the whole of what was paid; a delivery
+                // with none has nothing to be one half of, and relabelling it
+                // would make every ordinary card say something new about
+                // nothing.
                 if let earnings = delivery.grossEarnings {
-                    LabeledContent("Gross earnings") {
+                    LabeledContent(effectiveEarnings.hasAdditionalTips ? "Platform pay" : "Gross earnings") {
                         Text(earnings.formatted(locale: locale))
                             .monospacedDigit()
                     }
                     .font(.footnote)
+                }
 
-                    // Only for a delivery that was actually delivered, and only
-                    // over its own lifecycle. Never summed with another row's.
-                    if let rate = delivery.grossPerDeliveryHour.amount {
-                        LabeledContent("Per delivery hour") {
-                            Text(rate.formatted(locale: locale))
+                // Both absent on the ordinary delivery, which is what keeps this
+                // card exactly the size it has always been for a driver who
+                // records no tips.
+                if let tipsTotal = effectiveEarnings.additionalTipsTotal {
+                    LabeledContent(additionalTipsTitle) {
+                        Text(tipsTotal.formatted(locale: locale))
+                            .monospacedDigit()
+                    }
+                    .font(.footnote)
+
+                    if let total = effectiveEarnings.amount {
+                        LabeledContent("Total recorded") {
+                            Text(total.formatted(locale: locale))
                                 .monospacedDigit()
                         }
                         .font(.footnote)
-                        .foregroundStyle(.secondary)
+                    } else {
+                        // Tips with no platform amount beside them. Said out
+                        // loud, because a tip figure standing alone on a row
+                        // would otherwise read as what the delivery earned.
+                        Text("No platform pay recorded, so there is no total.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
+                }
+
+                // Only for a delivery that was actually delivered, and only over
+                // its own lifecycle. Never summed with another row's.
+                if let rate = delivery.effectiveEarningsPerDeliveryHour.amount {
+                    LabeledContent("Per delivery hour") {
+                        Text(rate.formatted(locale: locale))
+                            .monospacedDigit()
+                    }
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
                 }
 
                 // Shown whether or not a gross amount is recorded, and always
@@ -1130,6 +1185,9 @@ private struct DeliveryHistoryRow: View {
         .sheet(isPresented: $isEditingEarnings) {
             DeliveryEarningsEditor(numbered: numbered)
         }
+        .sheet(isPresented: $isEditingTips) {
+            DeliveryTipsEditor(numbered: numbered)
+        }
     }
 
     // MARK: Actions
@@ -1157,6 +1215,11 @@ private struct DeliveryHistoryRow: View {
         // is not the rule; the model's is.
         if delivery.state.isFinished {
             available.append(.earnings)
+            // Beside the amount it sits beside on the row, and under the same
+            // rule: a tip is money for work that has finished, and
+            // `Delivery.recordAdditionalTip` refuses an unfinished delivery
+            // whatever this screen offers.
+            available.append(.additionalTips)
         }
 
         // Last, so the three controls that were already here keep the places
@@ -1249,12 +1312,25 @@ private struct DeliveryHistoryRow: View {
             .buttonStyle(.borderless)
             .accessibilityLabel(numbered.spokenEarningsLabel(hasEarnings: hasEarnings))
 
+        case .additionalTips:
+            let tipCount = delivery.additionalTips.count
+            Button {
+                isEditingTips = true
+            } label: {
+                DeliveryActionLabel(
+                    title: numbered.additionalTipsActionTitle(hasTips: tipCount > 0),
+                    systemImage: tipCount > 0 ? "pencil" : "plus.circle"
+                )
+            }
+            .buttonStyle(.borderless)
+            .accessibilityLabel(numbered.spokenAdditionalTipsLabel(tipCount: tipCount))
+
         case .correctToCancelled:
             Button {
                 correctionMessage = nil
                 pendingCancellation = .correct(
                     numbered,
-                    keepsRecordedEarnings: delivery.grossEarnings != nil
+                    keepsRecordedMoney: delivery.hasRecordedMoney
                 )
             } label: {
                 DeliveryActionLabel(
@@ -1350,10 +1426,30 @@ private struct DeliveryHistoryRow: View {
         // figure, and the rate names its denominator in full — "per hour" alone
         // would be heard as a wage.
         if let earnings = delivery.grossEarnings {
-            sentences.append(numbered.spokenEarnings(earnings.formatted(locale: locale)))
-            if let rate = delivery.grossPerDeliveryHour.amount {
-                sentences.append(numbered.spokenDeliveryHourRate(rate.formatted(locale: locale)))
+            let amount = earnings.formatted(locale: locale)
+            sentences.append(
+                effectiveEarnings.hasAdditionalTips
+                    ? numbered.spokenPlatformPayBesideTips(amount)
+                    : numbered.spokenEarnings(amount)
+            )
+        }
+        // Spoken in the order they are printed, and the total last, because a
+        // listener has to hear the two halves before the figure they add up to.
+        if let tipsTotal = effectiveEarnings.additionalTipsTotal {
+            sentences.append(
+                numbered.spokenAdditionalTips(
+                    tipsTotal.formatted(locale: locale),
+                    tipCount: effectiveEarnings.additionalTipCount
+                )
+            )
+            if let total = effectiveEarnings.amount {
+                sentences.append(numbered.spokenEffectiveEarnings(total.formatted(locale: locale)))
+            } else {
+                sentences.append(numbered.spokenNoPlatformPayBesideTips)
             }
+        }
+        if let rate = delivery.effectiveEarningsPerDeliveryHour.amount {
+            sentences.append(numbered.spokenDeliveryHourRate(rate.formatted(locale: locale)))
         }
         // Spoken last and with the distinction carried in the sentence itself,
         // because a listener has no column headings to fall back on. Which
@@ -1427,6 +1523,7 @@ private enum DeliveryRowAction: String, Identifiable {
     case pickupPlace = "shiftDetailPickupPlaceButton"
     case pickupHistory = "shiftDetailPickupHistoryButton"
     case earnings = "shiftDetailDeliveryEarningsButton"
+    case additionalTips = "shiftDetailDeliveryTipsButton"
     case correctToCancelled = "shiftDetailCorrectToCancelledButton"
 
     var id: String { rawValue }

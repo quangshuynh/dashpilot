@@ -121,6 +121,14 @@ nonisolated struct ExportDocumentEncoder: Equatable, Sendable {
     /// with the JSON's shift count. Expenses are in the JSON export, and the
     /// format picker says so before the driver chooses.
     ///
+    /// Individual additional tips, for the same reason expenses are absent and
+    /// with the same remedy. A delivery can carry several, each with its own
+    /// method and moment, and a table whose unit is a delivery cannot hold them
+    /// without repeating the delivery row or inventing a column per tip. What it
+    /// can hold honestly is how many there were, what they came to, and what the
+    /// delivery therefore paid, and all three are here; the tips themselves are
+    /// in the JSON export.
+    ///
     /// Identifiers are also absent. They are of no use in a spreadsheet and
     /// would push the columns a driver actually reads off the first screen.
     func csv(for document: ExportDocument) throws -> Data {
@@ -182,13 +190,31 @@ nonisolated struct ExportDocumentEncoder: Equatable, Sendable {
         "deliveryPickupWaitSeconds",
         "deliveryAcceptedToDeliveredSeconds",
         "deliveryGrossEarnings",
-        "deliveryGrossPerDeliveryHour",
+        // Renamed from `deliveryGrossPerDeliveryHour` by format version 4: the
+        // numerator moved from the platform amount to what the delivery
+        // actually paid. A rename rather than a silent redefinition, because a
+        // heading saying `gross` over a figure dividing something else is the
+        // one change no reader could detect. The column stays where it was, so
+        // a reader working by position is unaffected.
+        "deliveryEffectiveEarningsPerDeliveryHour",
         // Last, rather than beside `deliveryNumber` where it reads better.
         // Appending a column leaves every existing column at the position a
         // spreadsheet or a script already reads it from; inserting one moves all
         // of them, which is a breaking change and would bump the format version
         // on its own. Compatibility outranks the column order looking tidy.
-        "deliveryOfferNumber"
+        "deliveryOfferNumber",
+        // Appended for the same reason, by format version 4. Individual tips
+        // are not here: a tip has a method and a moment of its own, and a flat
+        // table whose unit is a delivery cannot hold several of them without
+        // repeating the delivery. What a spreadsheet can honestly hold is how
+        // many there were, what they came to, and what the delivery therefore
+        // paid; the tips themselves are in the JSON form.
+        "deliveryAdditionalTipCount",
+        "deliveryAdditionalTipsTotal",
+        // The column to sum for what deliveries actually paid. Empty, never
+        // `0.00`, wherever the platform amount was not recorded — a delivery
+        // holding a tip and no platform figure has no total to state.
+        "deliveryEffectiveEarnings"
     ]
 
     /// An absent value.
@@ -199,7 +225,7 @@ nonisolated struct ExportDocumentEncoder: Equatable, Sendable {
     /// distinction.
     private static let empty = ""
 
-    private static let emptyDeliveryFields = Array(repeating: empty, count: 13)
+    private static let emptyDeliveryFields = Array(repeating: empty, count: 16)
 
     private static func shiftFields(_ shift: ShiftExportRecord) -> [String] {
         [
@@ -244,12 +270,19 @@ nonisolated struct ExportDocumentEncoder: Equatable, Sendable {
             integer(delivery.pickupWaitSeconds),
             integer(delivery.acceptedToDeliveredSeconds),
             amount(delivery.grossEarnings),
-            amount(delivery.grossPerDeliveryHour),
+            amount(delivery.effectiveEarningsPerDeliveryHour),
             // Which offer of this shift the delivery arrived in. A grouping key
             // and not a quantity: two rows carrying the same number were
             // accepted together. Empty, never `0`, for a delivery recording no
             // offer, by the rule every other missing cell here follows.
-            integer(delivery.offerNumber)
+            integer(delivery.offerNumber),
+            // A count of recorded facts, so `0` is the honest value: a delivery
+            // with no tips recorded has none, and the total beside it is empty
+            // rather than `0.00` because no tip recorded is not a tip of
+            // nothing.
+            String(delivery.additionalTips.count),
+            amount(delivery.additionalTipsTotal),
+            amount(delivery.effectiveEarnings)
         ]
     }
 
