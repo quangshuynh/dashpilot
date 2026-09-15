@@ -1222,9 +1222,9 @@ private struct DeliveryHistoryRow: View {
             available.append(.additionalTips)
         }
 
-        // Last, so the three controls that were already here keep the places
-        // they had, and the one that rewrites a recorded fact is met after
-        // them. Offered only where it would actually succeed: the
+        // Last, so the controls that record and correct facts keep the places
+        // they had, and the one that rewrites how a delivery **ended** is met
+        // after all of them. Offered only where it would actually succeed: the
         // shift has to be over, the delivery has to be recorded as delivered,
         // and its timestamps have to be ones the correction will accept. A
         // control that always refuses is worse than no control, which is the

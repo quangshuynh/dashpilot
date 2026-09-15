@@ -97,13 +97,6 @@ nonisolated struct EffectiveDeliveryEarnings: Equatable, Sendable {
     /// Whether the delivery has an effective total at all, which is the same
     /// question as whether its platform pay was recorded.
     var isRecorded: Bool { amount != nil }
-
-    /// Whether the delivery records money the platform pay alone does not
-    /// describe.
-    ///
-    /// Asked by the surfaces that decide whether to name the platform figure as
-    /// one half of something rather than as the whole of what was paid.
-    var hasMoneyBeyondPlatformPay: Bool { hasAdditionalTips }
 }
 
 extension Delivery {

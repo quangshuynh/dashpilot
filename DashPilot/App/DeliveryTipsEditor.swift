@@ -83,7 +83,11 @@ struct DeliveryTipsEditor: View {
     @ViewBuilder
     private var summarySection: some View {
         Section {
-            LabeledContent(platformPayTitle) {
+            // The platform amount is called `Gross earnings` on the delivery's
+            // own row, where it may be the whole of what was paid. Here it is
+            // always one line of an answer to "what did this delivery pay", so
+            // it is named for the half of that it is.
+            LabeledContent("Platform pay") {
                 Text(earnings.platformPay?.formatted(locale: locale) ?? "Not recorded")
                     .monospacedDigit()
             }
@@ -143,13 +147,6 @@ struct DeliveryTipsEditor: View {
                 """
             )
         }
-    }
-
-    private var platformPayTitle: String {
-        // The platform amount is called `Gross earnings` everywhere it stands
-        // alone. On this screen it never stands alone, so it is named for the
-        // half of the total it is.
-        "Platform pay"
     }
 
     private var spokenPlatformPay: String {
