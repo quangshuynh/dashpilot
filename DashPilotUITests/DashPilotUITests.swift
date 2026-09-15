@@ -2909,7 +2909,10 @@ final class DashPilotUITests: XCTestCase {
         addTip("3.00", method: "Cash", in: app)
 
         // Editing opens on the stored amount and replaces it.
-        app.descendants(matching: .any).matching(identifier: "deliveryTipRow").firstMatch.tap()
+        let editTip = app.buttons["editDeliveryTipButton"].firstMatch
+        XCTAssertTrue(editTip.waitForExistence(timeout: 5))
+        XCTAssertEqual(editTip.label, "Edit tip 1 for Delivery 1", "The control names which tip it acts on")
+        editTip.tap()
         let field = app.textFields["deliveryTipAmountField"]
         XCTAssertTrue(field.waitForExistence(timeout: 5))
         XCTAssertEqual(field.value as? String, "3", "The editor opens on the stored amount")
@@ -2922,7 +2925,8 @@ final class DashPilotUITests: XCTestCase {
         )
 
         // Removing it takes the record away rather than reducing it to nothing.
-        app.descendants(matching: .any).matching(identifier: "deliveryTipRow").firstMatch.tap()
+        XCTAssertTrue(waitForDisappearance(of: app.textFields["deliveryTipAmountField"]))
+        app.buttons["editDeliveryTipButton"].firstMatch.tap()
         let remove = app.buttons["removeDeliveryTipButton"]
         XCTAssertTrue(remove.waitForExistence(timeout: 5))
         XCTAssertEqual(remove.label, "Remove this additional tip from Delivery 1")
@@ -4307,10 +4311,17 @@ final class DashPilotUITests: XCTestCase {
         option.tap()
 
         app.buttons["saveDeliveryTipButton"].tap()
+        // Waits for the entry sheet to be **gone**, not merely for the list
+        // behind it to be reachable. The list's own controls are in the
+        // hierarchy while the sheet animates away, so a journey that proceeds on
+        // those alone taps a sheet that is still on screen and the tap does
+        // nothing. That is a real race rather than a slow machine, and this is
+        // the deterministic end of it.
         XCTAssertTrue(
-            app.buttons["addDeliveryTipButton"].waitForExistence(timeout: 5),
-            "The sheet closes back to the list of tips"
+            waitForDisappearance(of: app.textFields["deliveryTipAmountField"]),
+            "The entry sheet closes back to the list of tips"
         )
+        XCTAssertTrue(app.buttons["addDeliveryTipButton"].waitForExistence(timeout: 5))
     }
 
     @MainActor

@@ -185,19 +185,34 @@ struct DeliveryTipsEditor: View {
     private var tipsSection: some View {
         Section {
             ForEach(Array(tips.enumerated()), id: \.element.id) { index, tip in
-                Button {
-                    message = nil
-                    edit = .correcting(tip)
-                } label: {
+                // The recorded facts, read as one element, with an explicit
+                // control under them — the shape a shift's recorded pauses
+                // already have on ``CompletedShiftDetailView``.
+                //
+                // The whole row was a `Button` first, and it is worth knowing
+                // why it is not: inside a `Form` a plain-styled button wrapping
+                // a row of text reports as a button and takes a tap without
+                // running its action, so the sheet never opened. That
+                // reproduced on an idle machine. A named control is also the
+                // better surface: a listener hears what pressing it does rather
+                // than a row that happens to be interactive.
+                VStack(alignment: .leading, spacing: 6) {
                     tipRow(number: index + 1, tip: tip)
+                        .accessibilityElement(children: .combine)
+                        .accessibilityLabel(spokenTip(number: index + 1, tip: tip))
+                        .accessibilityIdentifier("deliveryTipRow")
+
+                    Button {
+                        message = nil
+                        edit = .correcting(tip)
+                    } label: {
+                        Label("Edit Tip", systemImage: "pencil")
+                            .font(.footnote)
+                    }
+                    .buttonStyle(.borderless)
+                    .accessibilityLabel("Edit tip \(index + 1) for \(numbered.title)")
+                    .accessibilityIdentifier("editDeliveryTipButton")
                 }
-                .buttonStyle(.plain)
-                // Without this the tap only lands on the glyphs and text
-                // themselves rather than across the row.
-                .contentShape(Rectangle())
-                .accessibilityIdentifier("deliveryTipRow")
-                .accessibilityLabel(spokenTip(number: index + 1, tip: tip))
-                .accessibilityHint("Opens this tip for correcting or removing")
             }
 
             Button {
@@ -233,14 +248,18 @@ struct DeliveryTipsEditor: View {
     /// the row itself, never on the number, which is the rule ``NumberedPause``
     /// keeps for the same reason.
     private func tipRow(number: Int, tip: DeliveryTip) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            LabeledContent("Tip \(number)") {
-                Text(tip.amount.formatted(locale: locale))
-                    .monospacedDigit()
+        // Plain stacks rather than a `LabeledContent`, which inside a button's
+        // label is a row shape that reads as a control of its own.
+        HStack(alignment: .firstTextBaseline) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Tip \(number)")
+                Text(methodAndTime(of: tip))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
-            Text(methodAndTime(of: tip))
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            Spacer(minLength: 12)
+            Text(tip.amount.formatted(locale: locale))
+                .monospacedDigit()
         }
     }
 
