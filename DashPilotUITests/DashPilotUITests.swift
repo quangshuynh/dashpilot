@@ -4214,12 +4214,31 @@ final class DashPilotUITests: XCTestCase {
     /// is picked out by the place it names — read off the row's own label —
     /// rather than by an index into a query over the whole screen.
     @MainActor
+    /// Opens the pickup history of the delivery whose row says `text`, from
+    /// **that delivery's own card**.
+    ///
+    /// It used to find the button by the place its label names, taking
+    /// `firstMatch` over the whole screen. That is the right button only while
+    /// the deliveries name different places: once two are merged they all name
+    /// one, and `firstMatch` returns the topmost card's control while the screen
+    /// has been scrolled down to a later delivery. `tap()` then scrolls back up
+    /// on its own, which mostly worked and sometimes left the sheet arriving
+    /// after the assertion that waits for it. Scoping the query to the card
+    /// removes the ambiguity rather than widening a timeout around it.
+    ///
+    /// It then waits for the control to be **hittable** rather than merely to
+    /// exist, which is the pattern `scrollUntilHittable` exists for.
     private func openPickupHistory(from text: String, in app: XCUIApplication) {
-        let row = deliveryRow(containing: text, in: app)
-        XCTAssertTrue(scrollTo(row, in: app), "The delivery should be listed")
-        let button = pickupHistoryButton(near: row, in: app)
-        XCTAssertNotNil(button, "The delivery names a place, so its history is one tap away")
-        button?.tap()
+        let card = deliveryCard(containing: text, in: app)
+        XCTAssertTrue(scrollTo(card, in: app), "The delivery should be listed")
+
+        let button = card.buttons["shiftDetailPickupHistoryButton"]
+        XCTAssertTrue(
+            button.waitForExistence(timeout: 5),
+            "The delivery names a place, so its history is one tap away"
+        )
+        XCTAssertTrue(scrollUntilHittable(button, in: app), "and is somewhere a tap will land on it")
+        button.tap()
     }
 
     /// The pickup-history button belonging to one delivery, or `nil` when that
