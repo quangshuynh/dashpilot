@@ -49,10 +49,6 @@ struct DeliveryTipsEditor: View {
     /// first-class case rather than the absence of one.
     @State private var edit: TipEdit?
 
-    /// What the store said when a change was refused, stated on the screen
-    /// rather than swallowed.
-    @State private var message: String?
-
     private var delivery: Delivery { numbered.delivery }
 
     private var tips: [DeliveryTip] { delivery.additionalTipsInOrder }
@@ -61,25 +57,12 @@ struct DeliveryTipsEditor: View {
 
     var body: some View {
         NavigationStack {
+            // This screen makes no write of its own, so it states no refusal
+            // either: every one belongs to the entry sheet, which keeps the
+            // driver's typing and says what was refused beside it.
             Form {
                 summarySection
                 tipsSection
-
-                if let message {
-                    Section {
-                        Label(message, systemImage: "exclamationmark.triangle.fill")
-                            .font(.subheadline)
-                            .foregroundStyle(.red)
-                            .fixedSize(horizontal: false, vertical: true)
-                            // A `Label` is a glyph and a text under one
-                            // identifier, so VoiceOver would otherwise read the
-                            // glyph's name. The sentence is what a listener
-                            // needs.
-                            .accessibilityElement(children: .ignore)
-                            .accessibilityLabel(message)
-                            .accessibilityIdentifier("deliveryTipsMessage")
-                    }
-                }
             }
             .navigationTitle("Additional Tips")
             .navigationBarTitleDisplayMode(.inline)
@@ -203,7 +186,6 @@ struct DeliveryTipsEditor: View {
                         .accessibilityIdentifier("deliveryTipRow")
 
                     Button {
-                        message = nil
                         edit = .correcting(tip)
                     } label: {
                         Label("Edit Tip", systemImage: "pencil")
@@ -216,7 +198,6 @@ struct DeliveryTipsEditor: View {
             }
 
             Button {
-                message = nil
                 edit = .adding
             } label: {
                 Label("Add a Tip", systemImage: "plus.circle")
