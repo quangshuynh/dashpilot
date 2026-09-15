@@ -114,7 +114,7 @@ struct DeliveryOfferExportTests {
         let object = try object(try document(fixture, scope: .shift(shift.id), shifts: [shift]))
         let shiftObject = try #require((object["shifts"] as? [[String: Any]])?.first)
 
-        #expect(object["formatVersion"] as? Int == 3, "An added field is not a bump")
+        #expect(object["formatVersion"] as? Int == ExportFormat.version, "Offers are not what moved it")
         #expect(shiftObject["grossEarnings"] as? String == "100.00")
         #expect(shiftObject["deliveredCount"] as? Int == 3)
         #expect(shiftObject["cancelledCount"] as? Int == 0)
@@ -192,14 +192,20 @@ struct DeliveryOfferExportTests {
         let row = try #require(lines.dropFirst().first).split(separator: ",", omittingEmptySubsequences: false)
 
         #expect(lines.count == 2)
-        #expect(row.count == 36, "The empty delivery fields kept pace with the column list")
+        #expect(
+            row.count == ExportDocumentEncoder.columns.count,
+            "The empty delivery fields kept pace with the column list"
+        )
     }
 
     // MARK: The format's own statement
 
-    @Test("The version is unmoved, and the CSV explanation says the column is there")
+    @Test("Offer grouping did not move the version, and the CSV explanation says the column is there")
     func contractIsStated() {
-        #expect(ExportFormat.version == 3, "An added field and an appended column are not a bump")
+        // The format is at 4 now, moved by additional tips. Offer grouping is
+        // still not what moved it: an added field and an appended column are
+        // not a bump, which is the claim this suite has always made.
+        #expect(ExportFormat.version == 4)
         #expect(ExportFileFormat.csv.explanation.lowercased().contains("offer"))
     }
 }

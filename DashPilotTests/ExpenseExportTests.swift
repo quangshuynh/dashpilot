@@ -275,8 +275,8 @@ struct ExpenseExportTests {
             .document(for: .period(try day(fixture)), exportedAt: ExportFixture.start)
         let object = try object(document)
 
-        #expect(ExportFormat.version == 3)
-        #expect(object["formatVersion"] as? Int == 3)
+        #expect(ExportFormat.version == 4)
+        #expect(object["formatVersion"] as? Int == 4)
 
         // The version-2 top-level keys are all still there and still mean what
         // they meant: `expenses` was added beside them, and nothing at this level

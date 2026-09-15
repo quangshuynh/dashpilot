@@ -36,24 +36,22 @@ struct DeliveryOfferPersistenceTests {
 
     // MARK: Schema
 
-    /// The plan's own shape, asserted here because v12 is the current version.
+    /// Version 12's own shape, now that it is frozen.
     ///
-    /// The repository's convention is that the count of versions and stages
-    /// lives in the suite belonging to whichever version is current, so it is
-    /// updated in one place rather than in several. It moved here from
-    /// `ExpectedDeliveryEarningsPersistenceTests`, which owned it while v11 was
-    /// current.
-    @Test("Version 12 is the current version, and it is the one that adds the offer")
+    /// The plan's version and stage counts moved to `DeliveryTipPersistenceTests`
+    /// with v13, by the repository's convention that they live in the suite
+    /// belonging to whichever version is current. What stays here is the claim
+    /// this suite exists for: the current store still carries the offer, and the
+    /// frozen v12 describes exactly the shape a v12 store had.
+    @Test("Version 12 is the one that adds the offer, and the current store still carries it")
     func schemaVersion() throws {
         #expect(DashPilotSchemaV12.versionIdentifier == Schema.Version(12, 0, 0))
-        #expect(DashPilotMigrationPlan.schemas.count == 12)
-        #expect(DashPilotMigrationPlan.stages.count == 11)
-        #expect(DashPilotMigrationPlan.schemas.last is DashPilotSchemaV12.Type)
 
-        let entities = Set(ModelContainerFactory.currentSchema.entities.map(\.name))
+        let frozen = Schema(versionedSchema: DashPilotSchemaV12.self)
         #expect(
-            entities == ["Shift", "RouteSample", "Delivery", "PickupPlace", "Expense", "ShiftPause", "Offer"],
-            "v12 adds exactly one entity"
+            Set(frozen.entities.map(\.name))
+                == ["Shift", "RouteSample", "Delivery", "PickupPlace", "Expense", "ShiftPause", "Offer"],
+            "v12 adds exactly one entity, and held no tip"
         )
 
         let offer = try #require(ModelContainerFactory.currentSchema.entities.first { $0.name == "Offer" })
@@ -68,7 +66,8 @@ struct DeliveryOfferPersistenceTests {
         #expect(
             Set(delivery.properties.map(\.name)) == [
                 "id", "acceptedAt", "arrivedAtPickupAt", "pickedUpAt", "deliveredAt", "cancelledAt",
-                "shift", "offer", "pickupPlace", "grossEarningsAmount", "expectedEarningsAmount"
+                "shift", "offer", "pickupPlace", "grossEarningsAmount", "expectedEarningsAmount",
+                "additionalTips"
             ]
         )
 

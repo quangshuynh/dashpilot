@@ -391,7 +391,7 @@ struct DeliveryEarningsPersistenceTests {
             deliveries.allSatisfy { $0.grossEarnings == nil },
             "$25.00 each would be four figures the driver never typed, and nothing could tell them apart afterwards"
         )
-        #expect(deliveries.allSatisfy { $0.grossPerDeliveryHour == .unavailable(.earningsNotRecorded) })
+        #expect(deliveries.allSatisfy { $0.effectiveEarningsPerDeliveryHour == .unavailable(.earningsNotRecorded) })
     }
 
     @Test("A migrated delivery can then be given an amount")
@@ -423,7 +423,7 @@ struct DeliveryEarningsPersistenceTests {
 
         #expect(delivery.grossEarnings == Money(exact: "14.75"))
         #expect(delivery.deliveredAt == at(1_800), "Recording it changed nothing that was migrated")
-        #expect(delivery.grossPerDeliveryHour == .available(try #require(Money(exact: "35.4"))))
+        #expect(delivery.effectiveEarningsPerDeliveryHour == .available(try #require(Money(exact: "35.4"))))
     }
 
     @Test("Every earlier store still reaches version 7, with no fabricated amount", arguments: [1, 2, 3, 4, 5, 6])

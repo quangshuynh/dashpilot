@@ -614,7 +614,7 @@ struct HistoricalDeliveryCancellationServiceTests {
         #expect(corrected["number"] as? Int == 1)
         // Derived from a completion the delivery no longer records, so both go.
         #expect(corrected["acceptedToDeliveredSeconds"] is NSNull)
-        #expect(corrected["grossPerDeliveryHour"] is NSNull)
+        #expect(corrected["effectiveEarningsPerDeliveryHour"] is NSNull)
         // The recorded amount and the recorded wait are facts of their own.
         // A quoted decimal string, which is how every amount in this format is
         // written: a JSON number would be read back as a binary float.
@@ -654,8 +654,8 @@ struct HistoricalDeliveryCancellationServiceTests {
         // Both `deliveredAt` and `cancelledAt` were already in the format, and
         // `cancelled` was already one of the states a delivery could be exported
         // in. Nothing was added, removed, renamed or redefined.
-        #expect(object["formatVersion"] as? Int == 3)
-        #expect(ExportFormat.version == 3)
+        #expect(object["formatVersion"] as? Int == 4)
+        #expect(ExportFormat.version == 4)
     }
 
     @Test("CSV says the same thing through the columns it already has")

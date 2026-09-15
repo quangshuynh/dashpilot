@@ -377,7 +377,7 @@ struct ExportFormatVersionTests {
         let document = try service(fixture).document(for: .shift(shift.id), exportedAt: ExportFixture.start)
 
         #expect(document.formatVersion == ExportFormat.version)
-        #expect(ExportFormat.version == 3)
+        #expect(ExportFormat.version == 4)
         // The file version and the store's schema version are different numbers
         // describing different things, and must never be assumed equal.
         #expect(ExportFormat.version != DashPilotSchemaV9.versionIdentifier.major)

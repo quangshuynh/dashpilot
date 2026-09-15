@@ -240,7 +240,7 @@ struct DeliveryRecoveryTests {
             try delivery.setGrossEarnings(Money(minorUnits: 1000))
         }
         // A rate needs a completion, so the delivery states none while reopened.
-        #expect(delivery.grossPerDeliveryHour == .unavailable(.deliveryNotCompleted))
+        #expect(delivery.effectiveEarningsPerDeliveryHour == .unavailable(.deliveryNotCompleted))
     }
 
     @Test("An expectation survives, and can be corrected again while the delivery is open")

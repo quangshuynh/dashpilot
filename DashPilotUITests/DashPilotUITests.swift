@@ -2797,6 +2797,251 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertFalse(row.label.contains("Gross earnings"), "Removed is not $0.00: \(row.label)")
     }
 
+    // MARK: Additional tips, from detail
+
+    /// Records a tip a delivery received outside the platform's own amount, and
+    /// reads the three figures back off the row.
+    ///
+    /// The whole flow happens after the driving, so the journey drives a
+    /// delivery to completion first and asserts the running shift offered no tip
+    /// control at any point.
+    @MainActor
+    func testAddsAnAdditionalTipToAFinishedDelivery() throws {
+        let app = launchWithEmptyStore()
+        completeAShiftWithADelivery(in: app)
+        openFirstShift(in: app)
+
+        let row = deliveryRow(containing: "Delivery 1, delivered", in: app)
+        XCTAssertTrue(scrollTo(row, in: app))
+        recordDeliveryAmount("10.00", in: app)
+        XCTAssertTrue(waitForLabel(row, toContain: "Gross earnings for Delivery 1, $10.00"))
+
+        let tipsButton = app.buttons["shiftDetailDeliveryTipsButton"].firstMatch
+        XCTAssertTrue(tipsButton.waitForExistence(timeout: 5))
+        XCTAssertEqual(
+            tipsButton.label,
+            "Add an additional tip to Delivery 1",
+            "The control names the delivery it acts on, and says there are none yet"
+        )
+        tipsButton.tap()
+
+        addTip("5.00", method: "Cash", in: app)
+
+        // The three figures, stated in the order they add up in.
+        XCTAssertTrue(
+            waitForLabel(app.descendants(matching: .any)["deliveryTipsPlatformPay"], toContain: "$10.00")
+        )
+        XCTAssertTrue(
+            waitForLabel(app.descendants(matching: .any)["deliveryTipsAdditionalTotal"], toContain: "$5.00")
+        )
+        let total = app.descendants(matching: .any)["deliveryTipsEffectiveTotal"]
+        XCTAssertTrue(waitForLabel(total, toContain: "$15.00"), "Showed: \(total.label)")
+        XCTAssertTrue(
+            total.label.contains("platform pay and tips together"),
+            "The spoken sentence says what the figure is made of: \(total.label)"
+        )
+
+        app.buttons["closeDeliveryTipsButton"].tap()
+
+        // And the row itself, where the platform amount is now named as one half.
+        XCTAssertTrue(waitForLabel(row, toContain: "Platform pay for Delivery 1, $10.00"))
+        XCTAssertTrue(row.label.contains("not the whole of what it paid"), "Showed: \(row.label)")
+        XCTAssertTrue(row.label.contains("1 additional tip for Delivery 1, $5.00"), "Showed: \(row.label)")
+        XCTAssertTrue(row.label.contains("Total recorded for Delivery 1, $15.00"), "Showed: \(row.label)")
+        XCTAssertEqual(
+            app.buttons["shiftDetailDeliveryTipsButton"].firstMatch.label,
+            "Edit the 1 additional tip recorded for Delivery 1"
+        )
+    }
+
+    /// Two tips of different methods stay two records, and the delivery reports
+    /// all three of them.
+    @MainActor
+    func testADeliveryCanHoldSeveralAdditionalTips() throws {
+        let app = launchWithEmptyStore()
+        completeAShiftWithADelivery(in: app)
+        openFirstShift(in: app)
+
+        let row = deliveryRow(containing: "Delivery 1, delivered", in: app)
+        XCTAssertTrue(scrollTo(row, in: app))
+        recordDeliveryAmount("10.00", in: app)
+
+        app.buttons["shiftDetailDeliveryTipsButton"].firstMatch.tap()
+        addTip("3.00", method: "Cash", in: app)
+        addTip("5.00", method: "Platform", in: app)
+
+        XCTAssertTrue(
+            waitForCount(app.descendants(matching: .any).matching(identifier: "deliveryTipRow"), toEqual: 2),
+            "Two tips are two records rather than one doubled one"
+        )
+
+        let rows = app.descendants(matching: .any).matching(identifier: "deliveryTipRow")
+        XCTAssertTrue(rows.element(boundBy: 0).label.contains("$3.00"))
+        XCTAssertTrue(
+            rows.element(boundBy: 0).label.contains("by cash"),
+            "Each says how it arrived: \(rows.element(boundBy: 0).label)"
+        )
+        XCTAssertTrue(rows.element(boundBy: 1).label.contains("$5.00"))
+        XCTAssertTrue(rows.element(boundBy: 1).label.contains("by platform"))
+
+        XCTAssertTrue(
+            waitForLabel(app.descendants(matching: .any)["deliveryTipsEffectiveTotal"], toContain: "$18.00")
+        )
+
+        app.buttons["closeDeliveryTipsButton"].tap()
+        XCTAssertTrue(waitForLabel(row, toContain: "2 additional tips for Delivery 1, $8.00"))
+        XCTAssertTrue(row.label.contains("Total recorded for Delivery 1, $18.00"), "Showed: \(row.label)")
+    }
+
+    /// Correcting one tip replaces it, and removing one takes the record away
+    /// while leaving the platform amount exactly as it was.
+    @MainActor
+    func testEditsAndRemovesAnAdditionalTip() throws {
+        let app = launchWithEmptyStore()
+        completeAShiftWithADelivery(in: app)
+        openFirstShift(in: app)
+
+        let row = deliveryRow(containing: "Delivery 1, delivered", in: app)
+        XCTAssertTrue(scrollTo(row, in: app))
+        recordDeliveryAmount("10.00", in: app)
+
+        app.buttons["shiftDetailDeliveryTipsButton"].firstMatch.tap()
+        addTip("3.00", method: "Cash", in: app)
+
+        // Editing opens on the stored amount and replaces it.
+        app.descendants(matching: .any).matching(identifier: "deliveryTipRow").firstMatch.tap()
+        let field = app.textFields["deliveryTipAmountField"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        XCTAssertEqual(field.value as? String, "3", "The editor opens on the stored amount")
+        clear(field, in: app)
+        field.typeText("4.50")
+        app.buttons["saveDeliveryTipButton"].tap()
+
+        XCTAssertTrue(
+            waitForLabel(app.descendants(matching: .any)["deliveryTipsEffectiveTotal"], toContain: "$14.50")
+        )
+
+        // Removing it takes the record away rather than reducing it to nothing.
+        app.descendants(matching: .any).matching(identifier: "deliveryTipRow").firstMatch.tap()
+        let remove = app.buttons["removeDeliveryTipButton"]
+        XCTAssertTrue(remove.waitForExistence(timeout: 5))
+        XCTAssertEqual(remove.label, "Remove this additional tip from Delivery 1")
+        remove.tap()
+
+        XCTAssertTrue(
+            waitForCount(app.descendants(matching: .any).matching(identifier: "deliveryTipRow"), toEqual: 0)
+        )
+        XCTAssertFalse(
+            app.descendants(matching: .any)["deliveryTipsAdditionalTotal"].exists,
+            "No tip recorded is not a tip of nothing, so there is no total of them"
+        )
+        XCTAssertTrue(
+            waitForLabel(app.descendants(matching: .any)["deliveryTipsPlatformPay"], toContain: "$10.00"),
+            "And what the platform paid is untouched by any of it"
+        )
+
+        app.buttons["closeDeliveryTipsButton"].tap()
+        XCTAssertTrue(waitForLabel(row, toContain: "Gross earnings for Delivery 1, $10.00"))
+        XCTAssertFalse(row.label.contains("additional tip"), "Showed: \(row.label)")
+    }
+
+    /// A tip of nothing is refused, in the words of a tip, and nothing is
+    /// recorded.
+    @MainActor
+    func testATipOfNothingIsRefused() throws {
+        let app = launchWithEmptyStore()
+        completeAShiftWithADelivery(in: app)
+        openFirstShift(in: app)
+
+        let row = deliveryRow(containing: "Delivery 1, delivered", in: app)
+        XCTAssertTrue(scrollTo(row, in: app))
+        recordDeliveryAmount("10.00", in: app)
+
+        app.buttons["shiftDetailDeliveryTipsButton"].firstMatch.tap()
+        app.buttons["addDeliveryTipButton"].tap()
+
+        let field = app.textFields["deliveryTipAmountField"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        field.tap()
+        field.typeText("0")
+        app.buttons["saveDeliveryTipButton"].tap()
+
+        let message = app.descendants(matching: .any)["deliveryTipValidationMessage"]
+        XCTAssertTrue(message.waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            message.label.lowercased().contains("more than nothing"),
+            "The refusal says what a tip has to be: \(message.label)"
+        )
+
+        app.buttons["cancelDeliveryTipButton"].tap()
+        XCTAssertTrue(
+            waitForCount(app.descendants(matching: .any).matching(identifier: "deliveryTipRow"), toEqual: 0)
+        )
+    }
+
+    /// A delivery carrying tips and no platform amount says there is no total,
+    /// rather than showing the tips as what it earned.
+    @MainActor
+    func testTipsWithoutAPlatformAmountStateNoTotal() throws {
+        let app = launchWithEmptyStore()
+        completeAShiftWithADelivery(in: app)
+        openFirstShift(in: app)
+
+        let row = deliveryRow(containing: "Delivery 1, delivered", in: app)
+        XCTAssertTrue(scrollTo(row, in: app))
+
+        app.buttons["shiftDetailDeliveryTipsButton"].firstMatch.tap()
+        addTip("5.00", method: "Cash", in: app)
+
+        XCTAssertTrue(
+            waitForLabel(
+                app.descendants(matching: .any)["deliveryTipsPlatformPay"],
+                toContain: "No platform pay recorded for Delivery 1"
+            )
+        )
+        XCTAssertFalse(
+            app.descendants(matching: .any)["deliveryTipsEffectiveTotal"].exists,
+            "There is no total, because half of what the delivery paid was never written down"
+        )
+        let notice = app.descendants(matching: .any)["deliveryTipsNoPlatformPayNotice"]
+        XCTAssertTrue(notice.waitForExistence(timeout: 5))
+        XCTAssertTrue(notice.label.contains("no total"), "Showed: \(notice.label)")
+
+        app.buttons["closeDeliveryTipsButton"].tap()
+        XCTAssertTrue(waitForLabel(row, toContain: "1 additional tip for Delivery 1, $5.00"))
+        XCTAssertFalse(row.label.contains("Total recorded"), "Showed: \(row.label)")
+    }
+
+    /// The earnings editor states the tips already recorded, so a driver is not
+    /// invited to add them into the platform amount a second time.
+    @MainActor
+    func testTheEarningsEditorSaysTheTipsAreAlreadyRecorded() throws {
+        let app = launchWithEmptyStore()
+        completeAShiftWithADelivery(in: app)
+        openFirstShift(in: app)
+
+        let row = deliveryRow(containing: "Delivery 1, delivered", in: app)
+        XCTAssertTrue(scrollTo(row, in: app))
+        recordDeliveryAmount("10.00", in: app)
+
+        app.buttons["shiftDetailDeliveryTipsButton"].firstMatch.tap()
+        addTip("5.00", method: "Cash", in: app)
+        app.buttons["closeDeliveryTipsButton"].tap()
+
+        app.buttons["shiftDetailDeliveryEarningsButton"].firstMatch.tap()
+        let stated = app.descendants(matching: .any)["deliveryEarningsAdditionalTips"]
+        XCTAssertTrue(stated.waitForExistence(timeout: 5))
+        XCTAssertTrue(stated.label.contains("$5.00"), "Showed: \(stated.label)")
+        XCTAssertEqual(
+            app.textFields["deliveryEarningsAmountField"].value as? String,
+            "10",
+            "The field holds the platform amount alone, with the tip stated beside it rather than inside it"
+        )
+        app.buttons["cancelDeliveryEarningsButton"].tap()
+
+        XCTAssertTrue(waitForLabel(row, toContain: "Total recorded for Delivery 1, $15.00"))
+    }
+
     /// Two deliveries the driver worked at the same time hold their own amounts,
     /// and editing one leaves the other exactly as it was.
     @MainActor
@@ -2813,7 +3058,7 @@ final class DashPilotUITests: XCTestCase {
             "Showed: \(first.label)"
         )
         XCTAssertTrue(
-            first.label.contains("$35.40 gross earnings per recorded delivery hour"),
+            first.label.contains("$35.40 earned per recorded delivery hour"),
             "The rate names its denominator in full: \(first.label)"
         )
 
@@ -4013,6 +4258,10 @@ final class DashPilotUITests: XCTestCase {
                 app.buttons["shiftDetailDeliveryEarningsButton"].exists,
                 "Earnings entry must not be offered while the driver may be driving"
             )
+            XCTAssertFalse(
+                app.buttons["shiftDetailDeliveryTipsButton"].exists,
+                "And neither is tip entry, which is the same typing at the same wheel"
+            )
             action.tap()
         }
 
@@ -4022,9 +4271,46 @@ final class DashPilotUITests: XCTestCase {
             app.buttons["shiftDetailDeliveryEarningsButton"].exists,
             "Not even once the delivery has finished, while the shift is still running"
         )
+        XCTAssertFalse(app.buttons["shiftDetailDeliveryTipsButton"].exists)
         endButton.tap()
 
         XCTAssertTrue(rows(in: app).firstMatch.waitForExistence(timeout: 5))
+    }
+
+    /// Records an amount against the first finished delivery on screen.
+    @MainActor
+    private func recordDeliveryAmount(_ text: String, in app: XCUIApplication) {
+        app.buttons["shiftDetailDeliveryEarningsButton"].firstMatch.tap()
+        typeDeliveryAmount(text, in: app)
+        app.buttons["saveDeliveryEarningsButton"].tap()
+    }
+
+    /// Records one additional tip from the tips sheet, which must already be
+    /// open.
+    ///
+    /// The method control is a segmented picker rather than a wheel, so its
+    /// options are ordinary buttons and no overlay is left covering the form
+    /// afterwards.
+    @MainActor
+    private func addTip(_ amount: String, method: String, in app: XCUIApplication) {
+        let add = app.buttons["addDeliveryTipButton"]
+        XCTAssertTrue(add.waitForExistence(timeout: 5))
+        add.tap()
+
+        let field = app.textFields["deliveryTipAmountField"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        field.tap()
+        field.typeText(amount)
+
+        let option = app.buttons[method]
+        XCTAssertTrue(option.waitForExistence(timeout: 5), "The method picker offers \(method)")
+        option.tap()
+
+        app.buttons["saveDeliveryTipButton"].tap()
+        XCTAssertTrue(
+            app.buttons["addDeliveryTipButton"].waitForExistence(timeout: 5),
+            "The sheet closes back to the list of tips"
+        )
     }
 
     @MainActor
