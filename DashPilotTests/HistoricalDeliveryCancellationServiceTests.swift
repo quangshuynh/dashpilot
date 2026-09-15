@@ -675,7 +675,7 @@ struct HistoricalDeliveryCancellationServiceTests {
             $0.split(separator: ",", omittingEmptySubsequences: false).map(String.init)
         }
         let header = try #require(records.first)
-        #expect(header.count == 36)
+        #expect(header.count == ExportDocumentEncoder.columns.count)
         let rows = records.dropFirst().map { Dictionary(uniqueKeysWithValues: zip(header, $0)) }
         #expect(rows.count == 2)
 
@@ -685,7 +685,7 @@ struct HistoricalDeliveryCancellationServiceTests {
         #expect(corrected["deliveryDeliveredAt"] == "")
         #expect(corrected["deliveryCancelledAt"] == ExportTimestamp.string(at(1_500)))
         #expect(corrected["deliveryAcceptedToDeliveredSeconds"] == "")
-        #expect(corrected["deliveryGrossPerDeliveryHour"] == "")
+        #expect(corrected["deliveryEffectiveEarningsPerDeliveryHour"] == "")
         // Untouched by the correction.
         #expect(corrected["deliveryNumber"] == "1")
         #expect(corrected["deliveryOfferNumber"] == "1")

@@ -146,18 +146,20 @@ struct DeliveryOfferExportTests {
         let lines = text.split(separator: "\r\n", omittingEmptySubsequences: true)
         let header = try #require(lines.first).split(separator: ",", omittingEmptySubsequences: false)
 
-        #expect(header.count == 36)
-        #expect(header.last == "deliveryOfferNumber", "Appended, so no existing column moved")
+        #expect(header.count == ExportDocumentEncoder.columns.count)
+        // Appended at its own version, and still at index 35: format version 4
+        // appended three more columns after it rather than moving it.
+        #expect(header[35] == "deliveryOfferNumber", "Appended, so no existing column moved")
 
         // Every column that existed before is still at the index it was at. The
         // first and last of the old set are enough to pin the whole run.
         #expect(header.first == "shiftStartedAt")
-        #expect(header[34] == "deliveryGrossPerDeliveryHour")
+        #expect(header[34] == "deliveryEffectiveEarningsPerDeliveryHour", "Renamed in place by version 4")
         #expect(header[23] == "deliveryNumber")
 
         let rows = lines.dropFirst().map { $0.split(separator: ",", omittingEmptySubsequences: false) }
         #expect(rows.count == 3)
-        #expect(rows.allSatisfy { $0.count == 36 }, "Every row matches the header")
+        #expect(rows.allSatisfy { $0.count == header.count }, "Every row matches the header")
         #expect(rows.map { String($0[23]) } == ["1", "2", "3"])
         #expect(rows.map { String($0[35]) } == ["1", "1", "2"], "Two rows share an offer; the third does not")
     }
@@ -177,7 +179,7 @@ struct DeliveryOfferExportTests {
         let lines = text.split(separator: "\r\n", omittingEmptySubsequences: true)
         let row = try #require(lines.dropFirst().first).split(separator: ",", omittingEmptySubsequences: false)
 
-        #expect(row.count == 36)
+        #expect(row.count == ExportDocumentEncoder.columns.count)
         #expect(row[35].isEmpty, "An empty cell, never a 0 a spreadsheet would group by")
     }
 

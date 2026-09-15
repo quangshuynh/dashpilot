@@ -1667,6 +1667,38 @@ enum DashPilotSchemaV12: VersionedSchema {
     }
 }
 
+extension DashPilotSchemaV12.Delivery {
+    /// Builds the one-delivery offer a delivery recorded before offers existed
+    /// belongs in, and attaches this delivery to it.
+    ///
+    /// **The v11 to v12 migration's only write**, in the shapes that migration
+    /// actually runs against. It lives here rather than on the current
+    /// `Delivery` because the store at that point is v12-shaped, and the current
+    /// model describes a store that also holds tips.
+    ///
+    /// It is written as a single operation so the migration cannot do anything
+    /// but give an ungrouped delivery its own offer.
+    ///
+    /// Returns `nil`, changing nothing, in the two cases where there is no
+    /// truthful offer to build:
+    ///
+    /// - the delivery already records one, so the caller would be overwriting a
+    ///   grouping the driver's own work produced
+    /// - the delivery is attached to no shift, which is a store the app cannot
+    ///   produce. The row is left exactly as it is, for the reason nothing else
+    ///   in the app repairs, reparents or deletes one.
+    ///
+    /// The offer takes this delivery's own acceptance timestamp, because that is
+    /// the only acceptance the store records and it is a real one: the driver
+    /// tapped it.
+    func makeHistoricalOffer() -> DashPilotSchemaV12.Offer? {
+        guard offer == nil, let shift else { return nil }
+        let historical = DashPilotSchemaV12.Offer(shift: shift, acceptedAt: acceptedAt)
+        offer = historical
+        return historical
+    }
+}
+
 /// Version 13 of the persisted schema: the store records tips a delivery
 /// received **outside** what the platform recorded paying for it.
 ///
@@ -2012,7 +2044,22 @@ enum DashPilotMigrationPlan: SchemaMigrationPlan {
     /// already holding an offer, which a v11 store cannot contain but a
     /// re-entrant migration could present, and a delivery attached to no shift
     /// at all, which has no shift for an offer to belong to. See
-    /// ``Delivery/makeHistoricalOffer()``.
+    /// ``DashPilotSchemaV12/Delivery/makeHistoricalOffer()``.
+    ///
+    /// ## It reads the frozen v12 models, and that is load-bearing
+    ///
+    /// The store this closure runs against is **v12-shaped**, and the
+    /// file-scope `Delivery` has moved on: as of v13 it declares a collection of
+    /// tips that a v12 store has no table for. Fetching the current type here
+    /// traps inside SwiftData, which is not a test failure a reader would
+    /// recognise as one — it takes down the whole test process and reports as a
+    /// thousand unrelated crashes.
+    ///
+    /// So the stage is written against `DashPilotSchemaV12`'s own copies, which
+    /// describe the store exactly as it is at this moment, and it keeps doing so
+    /// however far the current models move afterwards. **Every custom stage
+    /// added later must do the same**: a migration between two frozen versions
+    /// may only speak in those two versions' types.
     static let v11ToV12 = MigrationStage.custom(
         fromVersion: DashPilotSchemaV11.self,
         toVersion: DashPilotSchemaV12.self,
@@ -2021,7 +2068,7 @@ enum DashPilotMigrationPlan: SchemaMigrationPlan {
         // it rather than a way to protect it.
         willMigrate: nil,
         didMigrate: { context in
-            let deliveries = try context.fetch(FetchDescriptor<Delivery>())
+            let deliveries = try context.fetch(FetchDescriptor<DashPilotSchemaV12.Delivery>())
             var created = 0
             var skipped = 0
             for delivery in deliveries {
