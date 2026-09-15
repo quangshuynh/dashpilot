@@ -154,6 +154,18 @@ and one they cannot.
   because the driver typed one against it, after the delivery finished. DashPilot never splits a
   shift total between deliveries, never adds a shift total up from them, and never reads a missing
   amount as zero.
+- **Additional tips are manual too, and nothing checks them.** DashPilot cannot tell whether a tip
+  was already inside what the platform recorded paying, so nothing detects a tip recorded twice. The
+  screens say plainly that a tip already in the platform's amount must not be recorded again, and
+  that is the whole of the protection.
+- **A delivery carrying tips and no platform amount has no total**, and one is not invented from the
+  tips. Such a delivery paid the tips plus an amount nobody wrote down, so it contributes nothing to
+  any subtotal and counts as uncovered, exactly as a delivery with no amount at all does.
+- **A tip records when it was written down, not when it arrived.** There is no editable "when the
+  money changed hands" field, and correcting a tip never moves the moment it was recorded.
+- **There is no cash-on-delivery accounting.** DashPilot stores no order total, no cash collected for
+  an order, no platform deduction, no reimbursement and no customer balance. A tip is money that
+  reached the driver, and nothing anywhere describes money that passed through them.
 - **Expected pay may only be recorded while a delivery is in progress**, and cannot be added
   afterwards. Once a delivery is delivered or cancelled the fact worth recording is what it paid, so
   the model refuses a late expectation; an existing one can still be removed. A delivery that

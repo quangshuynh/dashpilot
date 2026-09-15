@@ -648,8 +648,8 @@ struct StackedDeliveryEarningsTests {
         // Both ran thirty minutes, so both are $30.00 per recorded delivery
         // hour — even though between them they covered forty minutes of the
         // shift, not an hour. This is exactly why these figures are never added.
-        #expect(pair.first.grossPerDeliveryHour == .available(try #require(Money(exact: "30"))))
-        #expect(pair.second.grossPerDeliveryHour == .available(try #require(Money(exact: "30"))))
+        #expect(pair.first.effectiveEarningsPerDeliveryHour == .available(try #require(Money(exact: "30"))))
+        #expect(pair.second.effectiveEarningsPerDeliveryHour == .available(try #require(Money(exact: "30"))))
 
         let activeTime = fixture.shift.deliveryActiveTime()
         #expect(activeTime.duration == 2_400, "The shift's own figure unions the intervals rather than adding them")
@@ -659,7 +659,7 @@ struct StackedDeliveryEarningsTests {
 // MARK: - The delivery's own hourly figure
 
 @MainActor
-@Suite("Gross per recorded delivery hour")
+@Suite("Earned per recorded delivery hour")
 struct DeliveryEarningsRateTests {
     @Test("A delivered delivery divides its amount by its own elapsed lifecycle")
     func derivesTheRate() throws {
@@ -669,7 +669,7 @@ struct DeliveryEarningsRateTests {
         try fixture.deliveries.setGrossEarnings(try #require(Money(exact: "14.75")), on: delivery)
 
         // 14.75 over half an hour.
-        #expect(delivery.grossPerDeliveryHour == .available(try #require(Money(exact: "29.5"))))
+        #expect(delivery.effectiveEarningsPerDeliveryHour == .available(try #require(Money(exact: "29.5"))))
     }
 
     @Test("A fractional duration divides exactly, without binary floating point")
@@ -680,7 +680,7 @@ struct DeliveryEarningsRateTests {
         try fixture.deliveries.setGrossEarnings(try #require(Money(exact: "10.00")), on: delivery)
 
         // A third of an hour: 10.00 / (1/3) is exactly 30.
-        #expect(delivery.grossPerDeliveryHour == .available(try #require(Money(exact: "30"))))
+        #expect(delivery.effectiveEarningsPerDeliveryHour == .available(try #require(Money(exact: "30"))))
     }
 
     @Test("An amount that does not divide evenly keeps the calculation's scale")
@@ -690,7 +690,7 @@ struct DeliveryEarningsRateTests {
         try fixture.endShift()
         try fixture.deliveries.setGrossEarnings(try #require(Money(exact: "10.00")), on: delivery)
 
-        let rate = try #require(delivery.grossPerDeliveryHour.amount)
+        let rate = try #require(delivery.effectiveEarningsPerDeliveryHour.amount)
         // 10.00 over three quarters of an hour, kept to the calculation's scale
         // and rounded only for display.
         #expect(rate.amount == Decimal(string: "13.333333"))
@@ -704,7 +704,7 @@ struct DeliveryEarningsRateTests {
         try fixture.endShift()
         try fixture.deliveries.setGrossEarnings(.zero, on: delivery)
 
-        #expect(delivery.grossPerDeliveryHour == .available(.zero))
+        #expect(delivery.effectiveEarningsPerDeliveryHour == .available(.zero))
     }
 
     @Test("No amount produces no rate, and says which input is missing")
@@ -712,8 +712,8 @@ struct DeliveryEarningsRateTests {
         let fixture = try EarningsFixture()
         let delivery = try fixture.deliver(acceptedAt: 5, lasting: 30)
 
-        #expect(delivery.grossPerDeliveryHour == .unavailable(.earningsNotRecorded))
-        #expect(delivery.grossPerDeliveryHour.amount == nil, "Never a zero standing in for an absence")
+        #expect(delivery.effectiveEarningsPerDeliveryHour == .unavailable(.earningsNotRecorded))
+        #expect(delivery.effectiveEarningsPerDeliveryHour.amount == nil, "Never a zero standing in for an absence")
     }
 
     @Test("A delivery accepted and delivered in the same moment has no denominator")
@@ -727,7 +727,7 @@ struct DeliveryEarningsRateTests {
         try fixture.deliveries.setGrossEarnings(try #require(Money(exact: "14.75")), on: delivery)
 
         #expect(delivery.completedDuration == 0)
-        #expect(delivery.grossPerDeliveryHour == .unavailable(.zeroDuration))
+        #expect(delivery.effectiveEarningsPerDeliveryHour == .unavailable(.zeroDuration))
     }
 
     @Test("A cancelled delivery has an amount but no hourly figure")
@@ -739,7 +739,7 @@ struct DeliveryEarningsRateTests {
 
         #expect(cancelled.grossEarnings == Money(exact: "3.25"), "The amount is shown")
         #expect(
-            cancelled.grossPerDeliveryHour == .unavailable(.deliveryNotCompleted),
+            cancelled.effectiveEarningsPerDeliveryHour == .unavailable(.deliveryNotCompleted),
             "There is no such thing as a cancelled hourly rate in DashPilot"
         )
     }
@@ -749,7 +749,7 @@ struct DeliveryEarningsRateTests {
         let fixture = try EarningsFixture()
         let running = try fixture.deliveries.startDelivery(at: fixture.at(5))
 
-        #expect(running.grossPerDeliveryHour == .unavailable(.deliveryNotCompleted))
+        #expect(running.effectiveEarningsPerDeliveryHour == .unavailable(.deliveryNotCompleted))
     }
 
     @Test("Every reason can be explained to the driver")
@@ -772,6 +772,6 @@ struct DeliveryEarningsRateTests {
         // The same amount over the same 45 minutes, once as a shift and once as
         // a delivery: one definition of an amount per hour, so one answer.
         let metrics = fixture.shift.metrics(for: .none)
-        #expect(delivery.grossPerDeliveryHour.amount == metrics.grossPerWorkingHour.amount)
+        #expect(delivery.effectiveEarningsPerDeliveryHour.amount == metrics.grossPerWorkingHour.amount)
     }
 }

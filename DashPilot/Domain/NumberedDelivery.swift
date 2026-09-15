@@ -226,6 +226,95 @@ nonisolated struct NumberedDelivery: Identifiable {
         "Gross earnings for \(title), \(formattedAmount)"
     }
 
+    // MARK: Additional tips
+
+    /// What the additional-tips control prints, which depends only on whether
+    /// any tip is already recorded.
+    ///
+    /// It does **not** name the delivery, exactly as
+    /// ``earningsActionTitle(hasEarnings:)`` does not: it sits inside a card
+    /// that has already named itself, in a grid cell about half a phone wide.
+    /// VoiceOver hears the full subject through
+    /// ``spokenAdditionalTipsLabel(tipCount:)``.
+    ///
+    /// **"Tips", never "earnings".** The word the app uses for the platform's
+    /// own recorded amount stays reserved for it, so two controls one cell apart
+    /// on the same card cannot be read as two ways of doing the same thing.
+    func additionalTipsActionTitle(hasTips: Bool) -> String {
+        hasTips ? "Edit Tips" : "Add a Tip"
+    }
+
+    /// What VoiceOver hears for that control, named for its delivery like every
+    /// other one, and saying how many tips are already there.
+    ///
+    /// The count is spoken because it is the whole difference between the two
+    /// states of this control, and a listener choosing between rows in a log of
+    /// finished deliveries has no badge to look at.
+    func spokenAdditionalTipsLabel(tipCount: Int) -> String {
+        switch tipCount {
+        case 0: "Add an additional tip to \(title)"
+        case 1: "Edit the 1 additional tip recorded for \(title)"
+        default: "Edit the \(tipCount) additional tips recorded for \(title)"
+        }
+    }
+
+    /// The platform-recorded amount spoken for a delivery that **also** carries
+    /// tips, where ``spokenEarnings(_:)`` alone would be heard as the whole of
+    /// what the delivery paid.
+    ///
+    /// The trailing clause is the point. A listener has no rows to compare, so
+    /// the sentence has to say that this figure is one part of a total rather
+    /// than the total, in the same way the expected-pay sentences say what they
+    /// are not.
+    func spokenPlatformPayBesideTips(_ formattedAmount: String) -> String {
+        "Platform pay for \(title), \(formattedAmount). This is not the whole of what it paid."
+    }
+
+    /// The tips a delivery received, spoken with the delivery and with how many
+    /// facts stand behind the figure.
+    func spokenAdditionalTips(_ formattedAmount: String, tipCount: Int) -> String {
+        let noun = tipCount == 1 ? "1 additional tip" : "\(tipCount) additional tips"
+        return "\(noun) for \(title), \(formattedAmount), recorded outside what the platform paid"
+    }
+
+    /// What the delivery paid altogether, spoken with the delivery it belongs
+    /// to.
+    ///
+    /// Said last, after both halves, because it is the figure the two before it
+    /// add up to and a listener needs them in that order to hear it as a sum.
+    func spokenEffectiveEarnings(_ formattedAmount: String) -> String {
+        "Total recorded for \(title), \(formattedAmount), platform pay and tips together"
+    }
+
+    /// Said on a delivery carrying tips and **no** platform amount, where there
+    /// is no total to state.
+    ///
+    /// It is the one sentence that keeps a tip from being read as the delivery's
+    /// earnings: what the platform paid is missing, so what the delivery paid is
+    /// unknown, and the tip is the part of it that was written down.
+    var spokenNoPlatformPayBesideTips: String {
+        """
+        No platform pay recorded for \(title), so there is no total for it. The tips above are what \
+        has been recorded.
+        """
+    }
+
+    /// One tip on the editor's list, spoken with what it was, how it arrived and
+    /// when it was recorded.
+    ///
+    /// The number is a position in the list rather than anything stored, for the
+    /// reason ``NumberedPause`` carries one: it is what lets a listener tell two
+    /// identical tips apart, and it is never a claim about the tip itself.
+    static func spokenTip(
+        number: Int,
+        amount: String,
+        method: DeliveryTipMethod?,
+        recordedAt: String
+    ) -> String {
+        let arrival = method.map { "by \($0.spokenTitle)" } ?? "with no method recorded"
+        return "Tip \(number), \(amount), \(arrival), recorded at \(recordedAt)"
+    }
+
     /// The delivery's own hourly figure, spoken with the delivery it belongs to
     /// and with the denominator named in full.
     ///
@@ -233,6 +322,6 @@ nonisolated struct NumberedDelivery: Identifiable {
     /// delivery hour* everywhere, printed and spoken, because the denominator is
     /// one delivery's own elapsed lifecycle and nothing else.
     func spokenDeliveryHourRate(_ formattedAmount: String) -> String {
-        "\(formattedAmount) gross earnings per recorded delivery hour, for \(title)"
+        "\(formattedAmount) earned per recorded delivery hour, for \(title)"
     }
 }

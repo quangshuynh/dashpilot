@@ -20,26 +20,28 @@ rather than a store reset.
 | 10.0.0 | Removes the `Shift.routeSamples` relationship. `RouteSample.shift` is unchanged, and no stored value moves |
 | 11.0.0 | Adds `Delivery.expectedEarningsAmount`, an optional `Decimal` holding what the driver expects an active delivery to pay |
 | 12.0.0 | Adds the `Offer` entity, an optional `Delivery.offer` reference and a `Shift.offers` relationship. Backfills one offer per existing delivery |
+| 13.0.0 | Adds the `DeliveryTip` entity and a cascading `Delivery.additionalTips` relationship. Backfills nothing |
 
-The current version is **v12**. Field-level detail is on [Data model](../reference/data-model.md).
+The current version is **v13**. Field-level detail is on [Data model](../reference/data-model.md).
 
-`DashPilotSchemaV1` through `DashPilotSchemaV11` hold frozen copies of their models rather than
+`DashPilotSchemaV1` through `DashPilotSchemaV12` hold frozen copies of their models rather than
 reusing the file-scope types, which have moved on. The plan then describes where a store is coming
 from as truthfully as where it is going, and the copies are never used at runtime outside
 migration.
 
-`DashPilotSchemaV11` was frozen in the interval that added v12, and the freeze was forced the way
-v10's was: v12 adds an entity and a reference to it on `Delivery`, so reusing the file-scope types
-under v11 would describe every pre-v12 store as one that already recorded which deliveries were
-accepted together. It did not, and a version that claims otherwise cannot be used to prove a
-migration preserved anything. Each version gets its copies as the plan moves past it.
+`DashPilotSchemaV12` was frozen in the interval that added v13, and the freeze was forced the way
+v11's was: v13 adds an entity and a cascading collection of it on `Delivery`, so reusing the
+file-scope types under v12 would describe every pre-v13 store as one that already recorded tips
+received outside the platform's own figure. It did not, and a version that claims otherwise cannot be
+used to prove a migration preserved anything. Each version gets its copies as the plan moves past
+it.
 
-## Every stage but the last is lightweight, deliberately
+## Every stage but one is lightweight, deliberately
 
-Every step up to v11 is purely additive, and each time the decision not to backfill was the
-substantive one. v10 is the only one that removes anything, and it removes a relationship rather
-than any stored value. v12 is the first custom stage, and it is custom because it has something to
-transform rather than because it has something to tidy.
+Every step but v12 is purely additive, and each time the decision not to backfill was the substantive
+one. v10 is the only one that removes anything, and it removes a relationship rather than any stored
+value. v12 is the only custom stage, and it is custom because it has something to transform rather
+than because it has something to tidy.
 
 ### v1 to v2
 
@@ -223,6 +225,26 @@ are derived from exactly what they were derived from before. See
 Two rows are left alone rather than repaired: a delivery already holding an offer, which a v11 store
 cannot contain but a re-entrant migration could present, and a delivery attached to no shift at all,
 which has no shift for an offer to belong to.
+
+### v12 to v13
+
+One new entity and one new empty cascading collection, applied lightweight.
+
+**There is nothing to backfill, and that is a claim rather than a shrug.** A delivery carrying no tip
+is the ordinary shape in this build as well: it is what a delivery with nothing beyond the platform's
+own figure looks like, its effective earnings are its recorded gross to the cent, and every subtotal,
+coverage count, rate and exported value derived from a migrated store is therefore the figure it
+already was. That is the difference from v11 to v12, which had to write because a delivery holding no
+offer was a row this app cannot produce.
+
+**Splitting a historical amount into pay and tip is the inference this stage refuses**, and it is the
+tempting one, because for many deliveries the driver really did add a cash tip into the figure they
+typed. A v12 store holds no evidence of which ones: a round number, a larger than usual amount and a
+plain hand-typed figure are indistinguishable. Guessing would put a split into a driver's history on
+the app's authority, and no later screen or export could tell it from one they recorded.
+
+Migrated deliveries keep no tips, and the interface offers to add one rather than showing one. See
+[Additional tips](../product/earnings-and-metrics.md#additional-tips-are-separate-recorded-facts).
 
 ## Proving a migration rather than assuming it
 

@@ -275,8 +275,8 @@ struct ExpenseExportTests {
             .document(for: .period(try day(fixture)), exportedAt: ExportFixture.start)
         let object = try object(document)
 
-        #expect(ExportFormat.version == 3)
-        #expect(object["formatVersion"] as? Int == 3)
+        #expect(ExportFormat.version == 4)
+        #expect(object["formatVersion"] as? Int == 4)
 
         // The version-2 top-level keys are all still there and still mean what
         // they meant: `expenses` was added beside them, and nothing at this level
@@ -344,11 +344,12 @@ struct ExpenseExportTests {
         let lines = csv.split(separator: "\r\n", omittingEmptySubsequences: false).filter { !$0.isEmpty }
 
         // The count moved to 35 in format version 3, which added the two paused
-        // and working columns and the pause count, and to 36 when offer grouping
-        // appended `deliveryOfferNumber` without moving anything. What this test
+        // and working columns and the pause count, to 36 when offer grouping
+        // appended `deliveryOfferNumber`, and to 39 when additional tips
+        // appended three more. None of them moved anything. What this test
         // asserts is the part expenses did not change: the table is still one
         // row per delivery and holds no cost.
-        #expect(ExportDocumentEncoder.columns.count == 36)
+        #expect(ExportDocumentEncoder.columns.count == 39)
         #expect(lines.count == 2, "A header and one delivery row: no second table was appended")
         #expect(lines.first?.contains("expense") == false)
         // The row shape a spreadsheet parses stays one shape all the way down.

@@ -46,7 +46,12 @@ struct ShiftPausePersistenceTests {
         #expect(DashPilotSchemaV9.versionIdentifier == Schema.Version(9, 0, 0))
 
         let entities = Set(ModelContainerFactory.currentSchema.entities.map(\.name))
-        #expect(entities == ["Shift", "RouteSample", "Delivery", "PickupPlace", "Expense", "ShiftPause", "Offer"])
+        #expect(
+            entities == [
+                "Shift", "RouteSample", "Delivery", "PickupPlace", "Expense", "ShiftPause", "Offer",
+                "DeliveryTip"
+            ]
+        )
 
         let pause = try #require(ModelContainerFactory.currentSchema.entities.first { $0.name == "ShiftPause" })
         #expect(Set(pause.properties.map(\.name)) == ["id", "startedAt", "endedAt", "shift"])

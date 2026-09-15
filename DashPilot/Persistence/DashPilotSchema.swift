@@ -1473,14 +1473,297 @@ enum DashPilotSchemaV11: VersionedSchema {
 /// **Every pre-v12 delivery becomes its own one-delivery offer**, and no two
 /// historical deliveries are ever put in the same one. See ``v11ToV12``.
 ///
-/// This version reuses the file-scope models rather than freezing copies,
-/// because it *is* the current shape. It gets frozen copies of its own the first
-/// time v13 moves them on, exactly as v11 did above.
+/// This version is **frozen** with copies of all seven of its models, forced the
+/// way v11's freeze was: v13 adds a `DeliveryTip` entity and a cascading
+/// collection of them on `Delivery`, so reusing the file-scope types here would
+/// describe every pre-v13 store as one that already recorded tips received
+/// outside the platform's own figure.
 enum DashPilotSchemaV12: VersionedSchema {
     static var versionIdentifier: Schema.Version { Schema.Version(12, 0, 0) }
 
     static var models: [any PersistentModel.Type] {
         [Shift.self, RouteSample.self, Delivery.self, PickupPlace.self, Expense.self, ShiftPause.self, Offer.self]
+    }
+
+    /// The v12 shift, unchanged from v11 apart from the offers it gained there,
+    /// and unchanged by v13.
+    @Model
+    nonisolated final class Shift {
+        @Attribute(.unique) private(set) var id: UUID
+        private(set) var startedAt: Date
+        private(set) var endedAt: Date?
+
+        @Relationship(deleteRule: .cascade, inverse: \Delivery.shift)
+        private(set) var deliveries: [Delivery] = []
+
+        @Relationship(deleteRule: .cascade, inverse: \ShiftPause.shift)
+        private(set) var pauses: [ShiftPause] = []
+
+        @Relationship(deleteRule: .cascade, inverse: \Offer.shift)
+        private(set) var offers: [Offer] = []
+
+        private(set) var grossEarningsAmount: Decimal?
+
+        init(
+            id: UUID = UUID(),
+            startedAt: Date,
+            endedAt: Date? = nil,
+            grossEarningsAmount: Decimal? = nil
+        ) {
+            self.id = id
+            self.startedAt = startedAt
+            self.endedAt = endedAt
+            self.grossEarningsAmount = grossEarningsAmount
+        }
+    }
+
+    /// The v12 route sample, unchanged in shape since v3.
+    @Model
+    nonisolated final class RouteSample {
+        private(set) var timestamp: Date
+        private(set) var latitude: Double
+        private(set) var longitude: Double
+        private(set) var horizontalAccuracy: Double
+        private(set) var captureSessionID: UUID?
+        private(set) var shift: Shift?
+
+        init(
+            shift: Shift,
+            timestamp: Date,
+            latitude: Double,
+            longitude: Double,
+            horizontalAccuracy: Double,
+            captureSessionID: UUID?
+        ) {
+            self.timestamp = timestamp
+            self.latitude = latitude
+            self.longitude = longitude
+            self.horizontalAccuracy = horizontalAccuracy
+            self.captureSessionID = captureSessionID
+            self.shift = shift
+        }
+    }
+
+    /// The v12 delivery: two monetary columns, an offer, and **no tips**.
+    ///
+    /// This is the shape v13 moves, and the reason this version had to be
+    /// frozen. A v12 store records one amount per delivery, because no build
+    /// that wrote one could record money that arrived outside it.
+    @Model
+    nonisolated final class Delivery {
+        @Attribute(.unique) private(set) var id: UUID
+        private(set) var acceptedAt: Date
+        private(set) var arrivedAtPickupAt: Date?
+        private(set) var pickedUpAt: Date?
+        private(set) var deliveredAt: Date?
+        private(set) var cancelledAt: Date?
+        private(set) var shift: Shift?
+        private(set) var offer: Offer?
+        private(set) var pickupPlace: PickupPlace?
+        private(set) var grossEarningsAmount: Decimal?
+        private(set) var expectedEarningsAmount: Decimal?
+
+        init(
+            id: UUID = UUID(),
+            shift: Shift,
+            offer: Offer? = nil,
+            acceptedAt: Date,
+            arrivedAtPickupAt: Date? = nil,
+            pickedUpAt: Date? = nil,
+            deliveredAt: Date? = nil,
+            cancelledAt: Date? = nil,
+            pickupPlace: PickupPlace? = nil,
+            grossEarningsAmount: Decimal? = nil,
+            expectedEarningsAmount: Decimal? = nil
+        ) {
+            self.id = id
+            self.acceptedAt = acceptedAt
+            self.arrivedAtPickupAt = arrivedAtPickupAt
+            self.pickedUpAt = pickedUpAt
+            self.deliveredAt = deliveredAt
+            self.cancelledAt = cancelledAt
+            self.shift = shift
+            self.offer = offer
+            self.pickupPlace = pickupPlace
+            self.grossEarningsAmount = grossEarningsAmount
+            self.expectedEarningsAmount = expectedEarningsAmount
+        }
+    }
+
+    /// The v12 offer, unchanged by v13.
+    @Model
+    nonisolated final class Offer {
+        @Attribute(.unique) private(set) var id: UUID
+        private(set) var acceptedAt: Date
+        private(set) var shift: Shift?
+
+        @Relationship(deleteRule: .cascade, inverse: \Delivery.offer)
+        private(set) var deliveries: [Delivery] = []
+
+        init(id: UUID = UUID(), shift: Shift, acceptedAt: Date) {
+            self.id = id
+            self.acceptedAt = acceptedAt
+            self.shift = shift
+        }
+    }
+
+    /// The v12 pickup place, unchanged from v6.
+    @Model
+    nonisolated final class PickupPlace {
+        @Attribute(.unique) private(set) var id: UUID
+        private(set) var displayName: String
+        private(set) var normalizedName: String
+        private(set) var createdAt: Date
+
+        @Relationship(deleteRule: .nullify, inverse: \Delivery.pickupPlace)
+        private(set) var deliveries: [Delivery] = []
+
+        init(id: UUID = UUID(), displayName: String, normalizedName: String, createdAt: Date) {
+            self.id = id
+            self.displayName = displayName
+            self.normalizedName = normalizedName
+            self.createdAt = createdAt
+        }
+    }
+
+    /// The v12 expense, unchanged from v8.
+    @Model
+    nonisolated final class Expense {
+        @Attribute(.unique) private(set) var id: UUID
+        private(set) var occurredAt: Date
+        private(set) var amountValue: Decimal
+        private(set) var categoryRawValue: String
+        private(set) var note: String?
+
+        init(
+            id: UUID = UUID(),
+            occurredAt: Date,
+            amountValue: Decimal,
+            categoryRawValue: String,
+            note: String? = nil
+        ) {
+            self.id = id
+            self.occurredAt = occurredAt
+            self.amountValue = amountValue
+            self.categoryRawValue = categoryRawValue
+            self.note = note
+        }
+    }
+
+    /// The v12 shift pause, unchanged from v9.
+    @Model
+    nonisolated final class ShiftPause {
+        @Attribute(.unique) private(set) var id: UUID
+        private(set) var startedAt: Date
+        private(set) var endedAt: Date?
+        private(set) var shift: Shift?
+
+        init(id: UUID = UUID(), shift: Shift, startedAt: Date, endedAt: Date? = nil) {
+            self.id = id
+            self.startedAt = startedAt
+            self.endedAt = endedAt
+            self.shift = shift
+        }
+    }
+}
+
+extension DashPilotSchemaV12.Delivery {
+    /// Builds the one-delivery offer a delivery recorded before offers existed
+    /// belongs in, and attaches this delivery to it.
+    ///
+    /// **The v11 to v12 migration's only write**, in the shapes that migration
+    /// actually runs against. It lives here rather than on the current
+    /// `Delivery` because the store at that point is v12-shaped, and the current
+    /// model describes a store that also holds tips.
+    ///
+    /// It is written as a single operation so the migration cannot do anything
+    /// but give an ungrouped delivery its own offer.
+    ///
+    /// Returns `nil`, changing nothing, in the two cases where there is no
+    /// truthful offer to build:
+    ///
+    /// - the delivery already records one, so the caller would be overwriting a
+    ///   grouping the driver's own work produced
+    /// - the delivery is attached to no shift, which is a store the app cannot
+    ///   produce. The row is left exactly as it is, for the reason nothing else
+    ///   in the app repairs, reparents or deletes one.
+    ///
+    /// The offer takes this delivery's own acceptance timestamp, because that is
+    /// the only acceptance the store records and it is a real one: the driver
+    /// tapped it.
+    func makeHistoricalOffer() -> DashPilotSchemaV12.Offer? {
+        guard offer == nil, let shift else { return nil }
+        let historical = DashPilotSchemaV12.Offer(shift: shift, acceptedAt: acceptedAt)
+        offer = historical
+        return historical
+    }
+}
+
+/// Version 13 of the persisted schema: the store records tips a delivery
+/// received **outside** what the platform recorded paying for it.
+///
+/// One new entity, `DeliveryTip`, and one new cascading collection of them on
+/// `Delivery`. Nothing else anywhere changes shape: no attribute is renamed,
+/// retyped or removed, and not one stored value moves, so every shift, route
+/// sample, capture session, offer, delivery timestamp, pickup place, recorded
+/// amount, expected amount, pause and expense carries over untouched.
+///
+/// ## What the version is for
+///
+/// Up to v12 a delivery held exactly one amount, and it had to stand for
+/// everything the delivery paid. A driver handed cash at the door either left it
+/// unrecorded or added it into the platform's figure, which makes the stored
+/// number something no platform ever said. `DeliveryTip` gives that money its
+/// own row, with the method it arrived by, so `grossEarningsAmount` can go on
+/// meaning exactly what it has always meant.
+///
+/// ## Why rows rather than one more column
+///
+/// A second `Decimal` on `Delivery` was the cheaper option and is the thing this
+/// version must not do. Tips arrive as separate events with separate methods,
+/// and one mutable column collapses them into a figure the driver has to
+/// maintain by hand: correcting the cash half means remembering the platform
+/// half and doing the arithmetic. It would also have no room for the method,
+/// which is the part a driver acts on, since cash is already in their pocket and
+/// a platform tip is not. See ``DeliveryTip``.
+///
+/// ## Why this migrates lightweight
+///
+/// There is nothing to derive, backfill or reinterpret, and that is not the same
+/// argument the offer stage could not make. That stage had to write, because a
+/// migrated delivery holding no offer would have been a row the app cannot
+/// produce, and every screen would have carried a second reading for history
+/// forever. A delivery holding **no tips** is the ordinary case in this build
+/// too: it is what every delivery with nothing beyond the platform's own figure
+/// looks like, and its effective earnings are its platform pay to the cent, which
+/// is exactly the figure a v12 store already reported. Not one previously
+/// derived total, rate, coverage count or exported value moves.
+///
+/// **The inference it refuses is the obvious one.** A v12 store cannot say which
+/// of a driver's recorded amounts already had a tip folded into it, and nothing
+/// in it is evidence either way: an amount ending in a round number, an amount
+/// larger than its neighbours, and an amount the driver typed by hand all look
+/// the same. Splitting a historical figure into pay and tip would be inventing
+/// the split on the app's authority, and no later screen or export could tell an
+/// invented one from a recorded one.
+///
+/// This version reuses the file-scope models rather than freezing copies,
+/// because it *is* the current shape. It gets frozen copies of its own the first
+/// time v14 moves them on, exactly as v12 did above.
+enum DashPilotSchemaV13: VersionedSchema {
+    static var versionIdentifier: Schema.Version { Schema.Version(13, 0, 0) }
+
+    static var models: [any PersistentModel.Type] {
+        [
+            Shift.self,
+            RouteSample.self,
+            Delivery.self,
+            PickupPlace.self,
+            Expense.self,
+            ShiftPause.self,
+            Offer.self,
+            DeliveryTip.self
+        ]
     }
 }
 
@@ -1503,12 +1786,16 @@ enum DashPilotMigrationPlan: SchemaMigrationPlan {
             DashPilotSchemaV9.self,
             DashPilotSchemaV10.self,
             DashPilotSchemaV11.self,
-            DashPilotSchemaV12.self
+            DashPilotSchemaV12.self,
+            DashPilotSchemaV13.self
         ]
     }
 
     static var stages: [MigrationStage] {
-        [v1ToV2, v2ToV3, v3ToV4, v4ToV5, v5ToV6, v6ToV7, v7ToV8, v8ToV9, v9ToV10, v10ToV11, v11ToV12]
+        [
+            v1ToV2, v2ToV3, v3ToV4, v4ToV5, v5ToV6, v6ToV7, v7ToV8, v8ToV9, v9ToV10, v10ToV11, v11ToV12,
+            v12ToV13
+        ]
     }
 
     /// V1 → V2 is lightweight.
@@ -1757,7 +2044,22 @@ enum DashPilotMigrationPlan: SchemaMigrationPlan {
     /// already holding an offer, which a v11 store cannot contain but a
     /// re-entrant migration could present, and a delivery attached to no shift
     /// at all, which has no shift for an offer to belong to. See
-    /// ``Delivery/makeHistoricalOffer()``.
+    /// ``DashPilotSchemaV12/Delivery/makeHistoricalOffer()``.
+    ///
+    /// ## It reads the frozen v12 models, and that is load-bearing
+    ///
+    /// The store this closure runs against is **v12-shaped**, and the
+    /// file-scope `Delivery` has moved on: as of v13 it declares a collection of
+    /// tips that a v12 store has no table for. Fetching the current type here
+    /// traps inside SwiftData, which is not a test failure a reader would
+    /// recognise as one: it takes down the whole test process and reports as a
+    /// thousand unrelated crashes.
+    ///
+    /// So the stage is written against `DashPilotSchemaV12`'s own copies, which
+    /// describe the store exactly as it is at this moment, and it keeps doing so
+    /// however far the current models move afterwards. **Every custom stage
+    /// added later must do the same**: a migration between two frozen versions
+    /// may only speak in those two versions' types.
     static let v11ToV12 = MigrationStage.custom(
         fromVersion: DashPilotSchemaV11.self,
         toVersion: DashPilotSchemaV12.self,
@@ -1766,7 +2068,7 @@ enum DashPilotMigrationPlan: SchemaMigrationPlan {
         // it rather than a way to protect it.
         willMigrate: nil,
         didMigrate: { context in
-            let deliveries = try context.fetch(FetchDescriptor<Delivery>())
+            let deliveries = try context.fetch(FetchDescriptor<DashPilotSchemaV12.Delivery>())
             var created = 0
             var skipped = 0
             for delivery in deliveries {
@@ -1786,5 +2088,34 @@ enum DashPilotMigrationPlan: SchemaMigrationPlan {
                 "Migrated to schema 12: \(created, privacy: .public) one-delivery offers recorded, \(skipped, privacy: .public) deliveries left ungrouped"
             )
         }
+    )
+
+    /// V12 → V13 is lightweight.
+    ///
+    /// The step adds the `DeliveryTip` entity and an empty cascading collection
+    /// of them on `Delivery`, and SwiftData can do both without being told how.
+    ///
+    /// **There is nothing to backfill, and that is a claim rather than a
+    /// shrug.** A delivery carrying no tip is the ordinary shape in this build
+    /// as well: it is what a delivery with nothing beyond the platform's own
+    /// figure looks like, its effective earnings are its recorded gross to the
+    /// cent, and every subtotal, coverage count, rate and exported value derived
+    /// from a migrated store is therefore the figure it already was. That is the
+    /// difference from ``v11ToV12``, which had to write because a delivery
+    /// holding no offer was a row this app cannot produce.
+    ///
+    /// **Splitting a historical amount into pay and tip is the inference this
+    /// stage refuses**, and it is the tempting one, because for many deliveries
+    /// the driver really did add a cash tip into the figure they typed. A v12
+    /// store holds no evidence of which ones: a round number, a larger than
+    /// usual amount and a plain hand-typed figure are indistinguishable. Guessing
+    /// would put a split into a driver's history on the app's authority, and no
+    /// later screen or export could tell it from one they recorded.
+    ///
+    /// A `willMigrate`/`didMigrate` pair that touches every delivery for no
+    /// reason is a way to lose a driver's history, not a way to protect it.
+    static let v12ToV13 = MigrationStage.lightweight(
+        fromVersion: DashPilotSchemaV12.self,
+        toVersion: DashPilotSchemaV13.self
     )
 }

@@ -275,6 +275,9 @@ struct ShiftPauseMetricsTests {
     /// a redefinition are what the format's own rule bumps for.
     @Test("The renamed rate and the redefined non-delivery field moved the format version")
     func formatVersionMoved() {
-        #expect(ExportFormat.version == 3)
+        // It moved to 3 here and to 4 since, for additional tips. What this
+        // asserts is that a rename and a redefinition are bumping changes, and
+        // the version has not gone backwards.
+        #expect(ExportFormat.version >= 3)
     }
 }

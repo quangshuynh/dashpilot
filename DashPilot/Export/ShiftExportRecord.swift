@@ -38,6 +38,14 @@ import Foundation
 ///   nowhere else: no shift field, no summary figure and no rate in this format
 ///   is derived from it, and the two are never added, compared or substituted
 ///   for one another here.
+/// - **What the platform paid is not everything the delivery paid.**
+///   ``DeliveryExportRecord/grossEarnings`` is the platform-recorded amount,
+///   unchanged and meaning exactly what it always has;
+///   ``DeliveryExportRecord/additionalTips`` are the tips that reached the
+///   driver outside it, each one its own record with its own method and moment;
+///   and ``DeliveryExportRecord/effectiveEarnings`` is the two together, `null`
+///   where the platform amount was never recorded. A consumer that sums the
+///   first column alone is summing platform pay, which is what its name says.
 ///
 /// ## What is deliberately absent
 ///
@@ -334,14 +342,56 @@ nonisolated struct DeliveryExportRecord: Equatable, Sendable, Codable {
     /// earnings figure is adding an expectation to a record of payment.
     let expectedEarnings: ExportAmount?
 
-    /// This delivery's amount over its own lifecycle. Never summed or averaged
-    /// with another delivery's: overlapping deliveries share minutes.
-    let grossPerDeliveryHour: ExportAmount?
+    /// Every tip this delivery received **outside** ``grossEarnings``, one
+    /// record each, oldest first. Always present, and `[]` where none was
+    /// recorded.
+    ///
+    /// Individual facts rather than one summed figure, deliberately. A tip has a
+    /// method and a moment as well as an amount, and the method is the part a
+    /// driver acts on: cash was handed over at the door and is already theirs,
+    /// while a platform tip arrives in a payout. A single total would say only
+    /// how much and would make the file unable to answer either of the other two
+    /// questions. ``additionalTipsTotal`` is offered beside them for a consumer
+    /// that wants the sum without doing it, never instead of them.
+    ///
+    /// **None of this is inside ``grossEarnings``.** A tip the platform folded
+    /// into what it recorded paying is part of that amount and is not here.
+    let additionalTips: [DeliveryTipExportRecord]
+
+    /// ``additionalTips`` added up, or `null` where none was recorded.
+    ///
+    /// `null` rather than `"0.00"`, by the rule every other absence here
+    /// follows: no tip recorded is not a tip of nothing.
+    let additionalTipsTotal: ExportAmount?
+
+    /// What this delivery actually paid: ``grossEarnings`` plus
+    /// ``additionalTipsTotal``.
+    ///
+    /// **`null` whenever ``grossEarnings`` is `null`**, even where tips were
+    /// recorded, and that is the field's whole point. A delivery carrying a cash
+    /// tip and no platform amount did not earn the tip; it earned the tip plus
+    /// an amount nobody wrote down, and a file that reported the tip as the
+    /// delivery's earnings would be inventing the rest. The same delivery
+    /// contributes nothing to `summary.deliveryEarnings` and counts against its
+    /// coverage, exactly as a delivery with no amount at all always has.
+    let effectiveEarnings: ExportAmount?
+
+    /// This delivery's ``effectiveEarnings`` over its own lifecycle. Never
+    /// summed or averaged with another delivery's: overlapping deliveries share
+    /// minutes.
+    ///
+    /// Renamed from `grossPerDeliveryHour`, which is half of why this format is
+    /// at version 4. The numerator moved from the platform amount to what the
+    /// delivery actually paid, and a name saying `gross` while dividing
+    /// something else is the one change a reader could not detect.
+    let effectiveEarningsPerDeliveryHour: ExportAmount?
 
     private enum CodingKeys: String, CodingKey {
         case id, number, offerNumber, state, acceptedAt, arrivedAtPickupAt, pickedUpAt, deliveredAt, cancelledAt
         case pickupPlaceName, pickupWaitSeconds, acceptedToDeliveredSeconds
-        case grossEarnings, expectedEarnings, grossPerDeliveryHour
+        case grossEarnings, expectedEarnings
+        case additionalTips, additionalTipsTotal, effectiveEarnings
+        case effectiveEarningsPerDeliveryHour
     }
 
     func encode(to encoder: any Encoder) throws {
@@ -360,7 +410,55 @@ nonisolated struct DeliveryExportRecord: Equatable, Sendable, Codable {
         try container.encodeAlways(acceptedToDeliveredSeconds, forKey: .acceptedToDeliveredSeconds)
         try container.encodeAlways(grossEarnings, forKey: .grossEarnings)
         try container.encodeAlways(expectedEarnings, forKey: .expectedEarnings)
-        try container.encodeAlways(grossPerDeliveryHour, forKey: .grossPerDeliveryHour)
+        try container.encode(additionalTips, forKey: .additionalTips)
+        try container.encodeAlways(additionalTipsTotal, forKey: .additionalTipsTotal)
+        try container.encodeAlways(effectiveEarnings, forKey: .effectiveEarnings)
+        try container.encodeAlways(effectiveEarningsPerDeliveryHour, forKey: .effectiveEarningsPerDeliveryHour)
+    }
+}
+
+/// One tip a delivery received outside what the platform recorded paying for it.
+///
+/// Three facts and nothing else: what it was, how it arrived, and when the
+/// driver recorded it. There is no payer, no order reference, no payout batch
+/// and no identifier of anything outside DashPilot, because none of that is
+/// recorded: a tip is here because the driver typed it.
+nonisolated struct DeliveryTipExportRecord: Equatable, Sendable, Codable {
+    /// The tip's own persisted identifier, for the reason
+    /// ``DeliveryExportRecord/id`` is exported.
+    let id: UUID
+
+    /// Always present, and always more than zero: a tip of nothing is refused
+    /// on the way in rather than stored, so there is no absence to express here.
+    let amount: ExportAmount
+
+    /// `cash` or `platform`, which is ``DeliveryTipMethod``'s own vocabulary, or
+    /// `null` for a stored value this build cannot name.
+    ///
+    /// `null` rather than a guess. Both words say something definite about where
+    /// the money came from, and picking one for an unrecognised value would
+    /// invent it; the amount is still exact and still counts, because how much
+    /// arrived is a separate question from how it arrived.
+    let method: DeliveryTipMethod?
+
+    /// When the driver **recorded** the tip.
+    ///
+    /// Not when the money changed hands, and the field is named for what it is.
+    /// DashPilot never asked for that second time and does not hold it; no
+    /// figure anywhere is derived from this one, and a tip belongs to the period
+    /// its delivery's shift does.
+    let recordedAt: Date
+
+    private enum CodingKeys: String, CodingKey {
+        case id, amount, method, recordedAt
+    }
+
+    func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(amount, forKey: .amount)
+        try container.encodeAlways(method, forKey: .method)
+        try container.encode(recordedAt, forKey: .recordedAt)
     }
 }
 

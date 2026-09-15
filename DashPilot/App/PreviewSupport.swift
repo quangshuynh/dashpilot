@@ -1176,6 +1176,71 @@ enum PreviewSupport {
             .modelContainer(container)
     }
 
+    /// The additional-tips screen over a synthetic delivered delivery.
+    ///
+    /// The delivery records a platform amount either way, because the screen's
+    /// point is the relationship between that amount and the tips beside it.
+    /// With tips it shows two of them, one by each method, which is the shape
+    /// the summary's three figures are worth looking at on.
+    @MainActor
+    static func deliveryTipsEditor(withRecordedTips: Bool) -> some View {
+        let (container, delivery) = tippedDelivery(recordingTips: withRecordedTips)
+        return DeliveryTipsEditor(numbered: NumberedDelivery(number: 1, delivery: delivery))
+            .modelContainer(container)
+    }
+
+    /// The tip entry sheet, adding one or correcting one already recorded.
+    @MainActor
+    static func deliveryTipEntryEditor(correctingExisting: Bool) -> some View {
+        let (container, delivery) = tippedDelivery(recordingTips: correctingExisting)
+        return DeliveryTipEntryEditor(
+            numbered: NumberedDelivery(number: 1, delivery: delivery),
+            tip: correctingExisting ? delivery.additionalTipsInOrder.first : nil
+        )
+        .modelContainer(container)
+    }
+
+    /// One finished delivery paying `$10.00`, optionally carrying a `$3.00` cash
+    /// tip and a `$5.00` platform tip.
+    ///
+    /// Invented amounts, like every other figure here, and chosen so the three
+    /// summary figures are all different: `$10.00` platform, `$8.00` in tips and
+    /// `$18.00` recorded altogether.
+    @MainActor
+    private static func tippedDelivery(recordingTips: Bool) -> (ModelContainer, Delivery) {
+        let container = emptyContainer()
+        let context = container.mainContext
+        let start = Date(timeIntervalSince1970: 1_756_000_000)
+
+        let shift = Shift(startedAt: start)
+        try? shift.end(at: start.addingTimeInterval(4 * 3600))
+        context.insert(shift)
+
+        let delivery = insertedDelivery(on: shift, acceptedAt: start.addingTimeInterval(300), in: context)
+        try? delivery.markArrivedAtPickup(at: start.addingTimeInterval(600))
+        try? delivery.markPickedUp(at: start.addingTimeInterval(1_020))
+        try? delivery.markDelivered(at: start.addingTimeInterval(1_800))
+        context.insert(delivery)
+        try? delivery.setGrossEarnings(Money(minorUnits: 1_000))
+
+        if recordingTips {
+            for (minorUnits, method, offset) in [
+                (300, DeliveryTipMethod.cash, 1_860.0),
+                (500, DeliveryTipMethod.platform, 5_400.0)
+            ] {
+                guard let tip = try? delivery.recordAdditionalTip(
+                    Money(minorUnits: minorUnits),
+                    method: method,
+                    at: start.addingTimeInterval(offset)
+                ) else { continue }
+                context.insert(tip)
+            }
+        }
+
+        try? context.save()
+        return (container, delivery)
+    }
+
     /// The expected-pay editor over a synthetic delivery **in progress**.
     ///
     /// Still active, because a finished delivery is one this editor is never

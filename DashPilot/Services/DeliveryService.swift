@@ -66,6 +66,13 @@ nonisolated enum DeliveryLifecycleError: Error {
     case invalidRecovery(DeliveryRecoveryRefusal)
     /// A historical correction was refused by the delivery's own timestamps.
     case invalidCancellation(HistoricalCancellationRefusal)
+    /// An additional tip was refused by the delivery or by the amount itself.
+    ///
+    /// Its own case rather than ``invalidTransition(_:)``, for the reason
+    /// ``invalidOffer(_:)`` is one: a tip is not a lifecycle event, and the
+    /// sentences it needs are about money that arrived outside the platform's
+    /// figure rather than about a delivery advancing.
+    case invalidTip(DeliveryTipError)
     /// The delivery model rejected the transition.
     case invalidTransition(DeliveryError)
     /// The shift refused to record the offer as described.
@@ -88,6 +95,7 @@ nonisolated extension DeliveryLifecycleError: Equatable {
         case (.deliveryNotOnAShift, .deliveryNotOnAShift): true
         case let (.invalidRecovery(lhsError), .invalidRecovery(rhsError)): lhsError == rhsError
         case let (.invalidCancellation(lhsError), .invalidCancellation(rhsError)): lhsError == rhsError
+        case let (.invalidTip(lhsError), .invalidTip(rhsError)): lhsError == rhsError
         case let (.invalidTransition(lhsError), .invalidTransition(rhsError)): lhsError == rhsError
         case let (.invalidOffer(lhsError), .invalidOffer(rhsError)): lhsError == rhsError
         case (.storeUnavailable, .storeUnavailable): true
@@ -167,6 +175,15 @@ nonisolated extension DeliveryLifecycleError: LocalizedError {
             "Gross earnings cannot be negative."
         case .invalidTransition(.negativeExpectedEarnings):
             "An expected amount cannot be negative."
+        case .invalidTip(.amountNotPositive):
+            """
+            An additional tip has to be more than nothing. A delivery that received no tip simply has \
+            none recorded.
+            """
+        case .invalidTip(.deliveryNotFinished):
+            "An additional tip can be recorded once the delivery has been delivered or cancelled."
+        case .invalidTip(.tipNotOnADelivery):
+            "That tip is not recorded against a delivery, so it cannot be changed."
         case .invalidOffer(.deliveryCountNotPositive):
             "An offer has to contain at least one delivery."
         case .invalidOffer(.shiftAlreadyEnded):
@@ -836,6 +853,136 @@ struct DeliveryService {
         delivery.clearExpectedEarnings()
         try saveEarnings(describing: "remove expected")
         AppLog.earnings.info("Delivery expected amount removed")
+    }
+
+    // MARK: Additional tips
+
+    /// Records a tip one finished delivery received **outside** what the
+    /// platform recorded paying for it, and returns the row.
+    ///
+    /// The model enforces the invariants, a finished delivery and an amount above
+    /// zero, and ``Delivery/recordAdditionalTip(_:method:at:)`` is the only
+    /// thing that builds the row, so a screen is never the only thing keeping
+    /// either rule. This adds the insert, the save and the same rollback rule
+    /// every other write here uses, so a tip can never be showing in the
+    /// interface while the store holds nothing.
+    ///
+    /// **Nothing here reads or writes ``Delivery/grossEarnings``**, on this
+    /// delivery or on any other. The platform figure stays exactly as the driver
+    /// recorded it, including whatever the platform already folded into it; this
+    /// records money that arrived beside it. The two are added only on demand,
+    /// by ``EffectiveDeliveryEarnings``, and no total is stored anywhere.
+    ///
+    /// It requires no running shift, for the reason
+    /// ``setGrossEarnings(_:on:)`` does not: recording an amount is a review
+    /// action performed afterwards, from a completed shift's history, precisely
+    /// so that nobody is asked to type a figure while they may be driving.
+    ///
+    /// The row is inserted explicitly rather than left to the inverse
+    /// relationship, for the reason ``ShiftPauseCorrectionService`` inserts a
+    /// pause explicitly: a failed save must roll back exactly what this call put
+    /// in.
+    ///
+    /// - Parameter date: when the tip is being recorded. Defaulted to now, and
+    ///   injectable so a test can pin it; it is never a claim about when the
+    ///   money changed hands.
+    /// - Throws: ``DeliveryLifecycleError/invalidTip(_:)`` if the delivery or the
+    ///   amount is not one a tip can be recorded against, or
+    ///   ``DeliveryLifecycleError/storeUnavailable(underlying:)`` if the write
+    ///   fails.
+    @discardableResult
+    func addAdditionalTip(
+        _ amount: Money,
+        method: DeliveryTipMethod,
+        on delivery: Delivery,
+        at date: Date = .now
+    ) throws -> DeliveryTip {
+        let tip: DeliveryTip
+        do {
+            tip = try delivery.recordAdditionalTip(amount, method: method, at: date)
+        } catch let error as DeliveryTipError {
+            AppLog.earnings.notice(
+                "Delivery rejected an additional tip: \(String(describing: error), privacy: .public)"
+            )
+            throw DeliveryLifecycleError.invalidTip(error)
+        }
+
+        context.insert(tip)
+        try saveEarnings(describing: "add an additional tip")
+
+        // Structural only: which operation, and which method it was recorded
+        // under. Never the amount, never the delivery, never when.
+        AppLog.earnings.info("Additional tip recorded (\(method.rawValue, privacy: .public))")
+        return tip
+    }
+
+    /// Corrects what one recorded tip was and how it arrived.
+    ///
+    /// Replaces both values together, through ``DeliveryTip/update(amount:method:)``,
+    /// so a row is never momentarily half corrected. The row keeps its identity
+    /// and its ``DeliveryTip/recordedAt``: correcting a tip is not deleting one
+    /// and recording another, and rewriting a historical timestamp is a decision
+    /// this version deliberately does not make.
+    ///
+    /// The delivery's own state is **not** re-checked. The rule that a tip may
+    /// only be recorded against a finished delivery is about creating one; a tip
+    /// that already exists describes money that already arrived, and a delivery
+    /// reopened from a mistaken completion must not make the driver unable to
+    /// fix a typo in it. That is the same reading ``Delivery/setGrossEarnings(_:)``
+    /// takes of an amount it already holds.
+    ///
+    /// - Throws: ``DeliveryLifecycleError/invalidTip(_:)`` or
+    ///   ``DeliveryLifecycleError/storeUnavailable(underlying:)``.
+    func updateAdditionalTip(_ tip: DeliveryTip, amount: Money, method: DeliveryTipMethod) throws {
+        try requireOnADelivery(tip)
+
+        do {
+            try tip.update(amount: amount, method: method)
+        } catch let error as DeliveryTipError {
+            // Nothing has been mutated: the model validates before it assigns.
+            AppLog.earnings.notice(
+                "Delivery tip rejected a correction: \(String(describing: error), privacy: .public)"
+            )
+            throw DeliveryLifecycleError.invalidTip(error)
+        }
+
+        try saveEarnings(describing: "correct an additional tip")
+        AppLog.earnings.info("Additional tip corrected (\(method.rawValue, privacy: .public))")
+    }
+
+    /// Removes a tip the driver recorded by mistake.
+    ///
+    /// The claim it records is "this tip never arrived", which is why the row is
+    /// deleted rather than reduced to nothing: a tip of `$0.00` is refused
+    /// everywhere else in this feature precisely because it says nothing.
+    ///
+    /// One transaction: the row is marked deleted and a single save follows, so
+    /// a store that refuses the write leaves the tip exactly where it was. The
+    /// delivery's recorded gross is untouched either way.
+    ///
+    /// - Throws: ``DeliveryLifecycleError/invalidTip(_:)`` or
+    ///   ``DeliveryLifecycleError/storeUnavailable(underlying:)``.
+    func deleteAdditionalTip(_ tip: DeliveryTip) throws {
+        try requireOnADelivery(tip)
+
+        context.delete(tip)
+        try saveEarnings(describing: "delete an additional tip")
+
+        AppLog.earnings.info("Additional tip removed")
+    }
+
+    /// Refuses to change a tip that is attached to no delivery.
+    ///
+    /// Through the ordinary API this cannot happen: a tip is created against a
+    /// delivery and cascades away with it. It is checked anyway, for the reason
+    /// ``validateShift(of:)`` is checked: a store holding one is a structural
+    /// fault, and the row is left exactly as it is rather than repaired,
+    /// reparented or deleted.
+    private func requireOnADelivery(_ tip: DeliveryTip) throws {
+        guard tip.delivery != nil else {
+            AppLog.earnings.fault("Refused a tip change: the tip is attached to no delivery")
+            throw DeliveryLifecycleError.invalidTip(.tipNotOnADelivery)
+        }
     }
 
     /// Saves an earnings change, and rolls back if the store refuses.

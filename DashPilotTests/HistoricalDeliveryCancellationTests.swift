@@ -253,12 +253,12 @@ struct HistoricalDeliveryCancellationTests {
         let delivery = try makeDeliveredDelivery()
         try delivery.setGrossEarnings(Money(minorUnits: 1_200))
         #expect(delivery.completedDuration == 1_200)
-        #expect(delivery.grossPerDeliveryHour.amount != nil)
+        #expect(delivery.effectiveEarningsPerDeliveryHour.amount != nil)
 
         try delivery.correctCompletionToCancellation()
 
         #expect(delivery.completedDuration == nil)
-        #expect(delivery.grossPerDeliveryHour == .unavailable(.deliveryNotCompleted))
+        #expect(delivery.effectiveEarningsPerDeliveryHour == .unavailable(.deliveryNotCompleted))
     }
 
     @Test("A recorded gross amount stays recorded, and so does an expectation")
@@ -483,7 +483,7 @@ struct HistoricalDeliveryCancellationTests {
     @Test("The prompt names the delivery in all three of its parts")
     func thePromptNamesItsSubject() {
         let numbered = NumberedDelivery(number: 2, delivery: Delivery(shift: Shift(startedAt: start), acceptedAt: at(300)))
-        let prompt = HistoricalCancellationPrompt.correct(numbered, keepsRecordedEarnings: false)
+        let prompt = HistoricalCancellationPrompt.correct(numbered, keepsRecordedMoney: false)
 
         #expect(prompt.title == "Correct Delivery 2 to Cancelled?")
         #expect(prompt.detail.contains("Delivery 2"))
@@ -493,7 +493,7 @@ struct HistoricalDeliveryCancellationTests {
     @Test("The prompt states the three facts the correction turns on")
     func thePromptStatesTheConsequences() {
         let numbered = NumberedDelivery(number: 1, delivery: Delivery(shift: Shift(startedAt: start), acceptedAt: at(300)))
-        let prompt = HistoricalCancellationPrompt.correct(numbered, keepsRecordedEarnings: false)
+        let prompt = HistoricalCancellationPrompt.correct(numbered, keepsRecordedMoney: false)
 
         // It stays terminal.
         #expect(prompt.detail.contains("stays a finished delivery"))
@@ -505,15 +505,19 @@ struct HistoricalDeliveryCancellationTests {
         #expect(prompt.detail.contains(HistoricalCancellationPrompt.unchangedStatement))
     }
 
+    /// The sentence covers every kind of money the delivery may hold, the
+    /// platform amount or an additional tip or both, because a correction that
+    /// preserved one and not the other would be a different promise.
     @Test("The money sentence appears only where there is money")
     func thePromptNamesEarningsOnlyWhereThereAreSome() {
         let numbered = NumberedDelivery(number: 1, delivery: Delivery(shift: Shift(startedAt: start), acceptedAt: at(300)))
 
-        let withEarnings = HistoricalCancellationPrompt.correct(numbered, keepsRecordedEarnings: true)
-        let without = HistoricalCancellationPrompt.correct(numbered, keepsRecordedEarnings: false)
+        let withMoney = HistoricalCancellationPrompt.correct(numbered, keepsRecordedMoney: true)
+        let without = HistoricalCancellationPrompt.correct(numbered, keepsRecordedMoney: false)
 
-        #expect(withEarnings.detail.contains("gross earnings you recorded against it stay recorded"))
-        #expect(without.detail.contains("gross earnings") == false)
+        #expect(withMoney.detail.contains("Everything you recorded it as paying, tips included, stays recorded"))
+        #expect(without.detail.contains("stays recorded") == false)
+        #expect(without.detail.contains("tips") == false)
     }
 
     /// The rule the recovery screen already keeps, applied to a second
@@ -521,7 +525,7 @@ struct HistoricalDeliveryCancellationTests {
     @Test("Nothing in the wording says Edit, and nothing carries a figure")
     func theWordingPromisesNoEditor() {
         let numbered = NumberedDelivery(number: 1, delivery: Delivery(shift: Shift(startedAt: start), acceptedAt: at(300)))
-        let prompt = HistoricalCancellationPrompt.correct(numbered, keepsRecordedEarnings: true)
+        let prompt = HistoricalCancellationPrompt.correct(numbered, keepsRecordedMoney: true)
         let sentences = [
             prompt.title,
             prompt.detail,

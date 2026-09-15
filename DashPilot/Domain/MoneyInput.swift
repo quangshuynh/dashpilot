@@ -44,6 +44,16 @@ nonisolated enum MoneyInputSubject: Sendable {
     /// because they are not recording any. The parsing rules are identical; only
     /// the two sentences differ.
     case expectedEarnings
+    /// A tip a delivery received outside what the platform recorded paying for
+    /// it. Required, and refused at zero by the model rather than here.
+    ///
+    /// Its own subject for the reason ``expectedEarnings`` is: a driver typing
+    /// what somebody handed them at a door should not be told that *gross
+    /// earnings* cannot be negative, because they are not recording any. The
+    /// parsing rules are identical; only the two sentences differ, and the
+    /// positive-amount rule lives on ``DeliveryTip`` where it cannot be
+    /// bypassed.
+    case additionalTip
     /// What a recorded expense cost. Required: an expense with no amount is not
     /// a record of anything.
     case expense
@@ -57,6 +67,7 @@ nonisolated extension MoneyInputError {
             switch subject {
             case .grossEarnings: "Enter an amount, or cancel to leave no amount recorded."
             case .expectedEarnings: "Enter what you expect this delivery to pay, or cancel to leave none."
+            case .additionalTip: "Enter what the tip was, for example 5.00."
             case .expense: "Enter what this expense cost, for example 42.10."
             }
         case .notANumber:
@@ -67,6 +78,7 @@ nonisolated extension MoneyInputError {
             switch subject {
             case .grossEarnings: "Gross earnings cannot be negative."
             case .expectedEarnings: "An expected amount cannot be negative."
+            case .additionalTip: "A tip cannot be a negative amount. Enter what you received."
             case .expense: "An expense cannot be a negative amount. Enter what it cost."
             }
         case .tooLarge:

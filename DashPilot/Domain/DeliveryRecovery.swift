@@ -193,13 +193,14 @@ nonisolated struct DeliveryRecoveryPrompt: Equatable {
     ///   - delivery: the delivery being reopened, named as the screen names it.
     ///   - restored: the state it returns to, derived by ``DeliveryRecovery``
     ///     rather than chosen here.
-    ///   - keepsRecordedEarnings: whether an amount is already recorded against
-    ///     it. Stated only when there is one, because a sentence about money on
-    ///     a delivery carrying none invites the driver to look for some.
+    ///   - keepsRecordedMoney: whether any money is already recorded against
+    ///     it: a platform amount, an additional tip, or both. Stated only when
+    ///     there is some, because a sentence about money on a delivery carrying
+    ///     none invites the driver to look for some.
     static func reopen(
         _ delivery: NumberedDelivery,
         restoredTo restored: DeliveryState,
-        keepsRecordedEarnings: Bool
+        keepsRecordedMoney: Bool
     ) -> Self {
         Self(
             title: "Reopen \(delivery.title)?",
@@ -208,8 +209,8 @@ nonisolated struct DeliveryRecoveryPrompt: Equatable {
                 \(delivery.title) becomes active again, \(restored.statusDescription.lowercased()), \
                 and only the delivered time is removed.
                 """,
-                keepsRecordedEarnings
-                    ? "The gross earnings you recorded against it stay recorded."
+                keepsRecordedMoney
+                    ? "Everything you recorded it as paying, tips included, stays recorded."
                     : nil,
                 unchangedStatement
             ]

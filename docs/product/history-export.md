@@ -42,9 +42,9 @@ therefore carries none, because no expense belongs to a shift. See
 
 ## Export format version
 
-Every file states `formatVersion: 3`.
+Every file states `formatVersion: 4`.
 
-**This is not the SwiftData schema version**, which is currently v12. The two describe different
+**This is not the SwiftData schema version**, which is currently v13. The two describe different
 things and are free to move independently:
 
 - The schema version describes how a database is laid out on one device. Nothing outside the app has
@@ -57,9 +57,59 @@ a change to what the file says does not pretend the store changed. The version i
 an existing field's meaning changes or a field is removed; adding a field is additive, and a reader
 that ignores unknown keys keeps working.
 
-Exports are never called "v12".
+Exports are never called "v13".
 
 ### Version history
+
+#### 4: tips received outside what the platform recorded paying
+
+A delivery can now carry any number of
+[additional tips](earnings-and-metrics.md#additional-tips-are-separate-recorded-facts), and the app
+reports what a delivery **actually** paid as the platform's own amount plus those tips. Evaluated
+against the rule above and **moved**, because one field was renamed and one changed meaning:
+
+- **Renamed.** `shifts[].deliveries[].grossPerDeliveryHour` is now
+  `effectiveEarningsPerDeliveryHour`, and the CSV's `deliveryGrossPerDeliveryHour` is now
+  `deliveryEffectiveEarningsPerDeliveryHour`. The numerator moved from the platform amount to what
+  the delivery actually paid. A rename rather than a silent redefinition, for the reason
+  `grossPerElapsedHour` became `grossPerWorkingHour` in version 3: a name saying `gross` over a
+  figure dividing something else is the one change no reader could detect.
+- **Redefined.** `summary.deliveryEarnings.recordedTotal` now adds up what the period's deliveries
+  actually paid, tips included, where it added up their platform amounts alone. The name still says
+  exactly what the figure is, so it is redefined rather than renamed, which is the judgement
+  `nonDeliverySeconds` got in version 3. No previously exported file would carry a different number,
+  because no store written before this build holds a tip; the definition moved, and a version that
+  only moved when values did would describe one build rather than the contract.
+  `contributingDeliveryCount` and `totalDeliveryCount` are unchanged: a delivery contributes when its
+  **platform** amount was recorded, which is the rule they have always applied.
+
+Four fields were **added**, which on their own would not have moved it:
+
+- `shifts[].deliveries[].additionalTips`, one record per tip, always present and `[]` where none was
+  recorded, each carrying its amount, its method (`cash`, `platform`, or `null` for a stored word this
+  build cannot name) and when the driver recorded it.
+- `shifts[].deliveries[].additionalTipsTotal`, which is `null` and never `"0.00"` where none was recorded.
+- `shifts[].deliveries[].effectiveEarnings`, the two together, and `null` wherever `grossEarnings`
+  is, tips or no tips.
+- Three **appended** CSV columns, `deliveryAdditionalTipCount`, `deliveryAdditionalTipsTotal` and
+  `deliveryEffectiveEarnings`, taking it from 36 columns to 39. Appending leaves every existing
+  column where a positional reader already finds it.
+
+**`deliveries[].grossEarnings` is not redefined**, and that is the load-bearing decision. It is still
+the platform-recorded amount every earlier file stated, including whatever the platform folded into
+it. Widening it to absorb tips was the cheaper option and would have been the version that quietly
+changed a number a driver had already taken to a spreadsheet. The new total sits **beside** it, so a
+consumer summing the old field is still summing what its name says.
+
+**The tips are individual records rather than one summed figure.** A tip has a method and a moment as
+well as an amount, and the method is the part a driver acts on: cash is already in their pocket, a
+platform tip arrives in a payout. One `additionalTips` amount would have carried the arithmetic and
+lost both other facts, in a file that is the only way anything leaves DashPilot.
+
+**`effectiveEarnings` is `null` wherever `grossEarnings` is.** Such a delivery paid the tips plus an
+amount nobody wrote down, so there is no total to state; it contributes nothing to the summary
+subtotal and counts against its coverage, which is what a delivery with no amount at all has always
+done.
 
 #### Still 3: which deliveries were accepted together
 
@@ -204,8 +254,10 @@ non-delivery time, the three derived rates, the delivered and cancelled counts, 
 ### Per delivery
 
 Every lifecycle timestamp that was recorded, the state it ended in, the pickup place name if one was
-recorded, the recorded pickup wait, acceptance-to-delivery duration, the amount recorded against that
-delivery, and that delivery's own gross per recorded delivery hour.
+recorded, the recorded pickup wait, acceptance-to-delivery duration, the platform amount recorded
+against that delivery, each additional tip with its method and the moment it was recorded, those
+tips' total, what the delivery paid altogether, and that delivery's own earnings per recorded
+delivery hour.
 
 ### Per expense (JSON only)
 
@@ -291,6 +343,11 @@ is exactly where they get lost.
 - **A recorded pickup wait is not a predicted one.** `pickupWaitSeconds` exists only when both ends
   of the wait were recorded and are in order. A delivery cancelled before its pickup exports no wait
   rather than a wait of zero.
+- **What the platform paid is not everything the delivery paid.** `grossEarnings` is the
+  platform-recorded amount, unchanged and meaning exactly what it always has; `additionalTips` are
+  the tips that reached the driver outside it; `effectiveEarnings` is the two together, and `null`
+  where the platform amount was never recorded. A consumer summing the first field alone is summing
+  platform pay, which is what its name says.
 - **Gross is gross.** No gross figure in the file has anything subtracted from it. The recorded
   expenses and the net after them are separate fields beside them, and every gross field keeps the
   word.
@@ -334,7 +391,13 @@ the full key set, and so every record in an array is the same shape.
 column saying which accepted offer the delivery came in. A shift with no deliveries still gets a row,
 with the delivery columns empty. Records end `\r\n`, per RFC 4180, and the file is UTF-8.
 
-Three things are **not** in the CSV.
+Four things are **not** in the CSV.
+
+**The individual additional tips.** A delivery can carry several, each with its own method and
+moment, and a table whose unit is a delivery cannot hold them without repeating the delivery row or
+inventing a column per tip. What a spreadsheet can hold honestly is how many there were, what they
+came to and what the delivery therefore paid, and all three are there; the tips themselves are in the
+JSON form.
 
 **What a delivery was expected to pay.** A spreadsheet column is a thing people sum, and an amount
 that is explicitly *not* earnings sitting one column from one that is, in a table whose whole
