@@ -4,7 +4,7 @@ import Foundation
 ///
 /// ## Why this is not the schema version
 ///
-/// The store is at schema v11 and will move on. That number describes how
+/// The store is at schema v13 and will move on. That number describes how
 /// SwiftData lays out a database on one device, and nothing outside the app has
 /// ever seen it. This one describes a **file a driver has already taken
 /// somewhere else** — a spreadsheet, a folder, an accountant's inbox — and the
@@ -18,6 +18,73 @@ import Foundation
 /// keeps working.
 ///
 /// ## Version history
+///
+/// ### 4: tips received outside what the platform recorded paying
+///
+/// A delivery can now carry any number of additional tips — cash at the door, or
+/// a tip the platform added after the amount the driver recorded — and the app
+/// reports what a delivery **actually** paid as the two together. Evaluated
+/// against the rule above and bumped, because one field was renamed and one
+/// changed meaning:
+///
+/// - **Renamed:** `shifts[].deliveries[].grossPerDeliveryHour` is now
+///   `effectiveEarningsPerDeliveryHour`, and the CSV's
+///   `deliveryGrossPerDeliveryHour` is now
+///   `deliveryEffectiveEarningsPerDeliveryHour`. The numerator moved from the
+///   platform-recorded amount to what the delivery actually paid. A rename
+///   rather than a silent redefinition, for the reason `grossPerElapsedHour`
+///   became `grossPerWorkingHour` in version 3: a name saying `gross` over a
+///   figure dividing something else is the one change no reader could detect.
+/// - **Redefined:** `summary.deliveryEarnings.recordedTotal` now adds up what
+///   the period's deliveries actually paid, tips included, where it added up
+///   their platform amounts alone. The name still says exactly what the figure
+///   is — the total recorded against individual deliveries — so it is redefined
+///   rather than renamed, which is the same judgement `nonDeliverySeconds` got
+///   in version 3. **No previously exported file would carry a different
+///   number**, because no store written before this build holds a tip; the
+///   definition moved, and a version that only moved when values did would be
+///   describing this build rather than the contract.
+///   `contributingDeliveryCount` and `totalDeliveryCount` are unchanged in
+///   meaning: a delivery contributes when its **platform** amount was recorded,
+///   which is the rule they have always applied.
+///
+/// Four fields were **added**, which on their own would not have bumped it:
+/// `shifts[].deliveries[].additionalTips` (always present, `[]` where none was
+/// recorded), `additionalTipsTotal`, `effectiveEarnings`, and the CSV's three
+/// **appended** columns `deliveryAdditionalTipCount`,
+/// `deliveryAdditionalTipsTotal` and `deliveryEffectiveEarnings`, taking it from
+/// 36 to 39. Appending leaves every existing column where a positional reader
+/// already finds it.
+///
+/// **`deliveries[].grossEarnings` is not redefined, and that is the load-bearing
+/// decision.** It is still the platform-recorded amount for the delivery,
+/// including whatever the platform folded into it, exactly as every file before
+/// this one stated it. Widening it to absorb tips was the cheaper option and
+/// would have been the version that quietly changed a number a driver had
+/// already taken to a spreadsheet. The new total sits **beside** it instead, and
+/// a consumer summing the old column is still summing platform pay, which is
+/// what its name says.
+///
+/// **The tips are individual records rather than one summed figure**, and that
+/// is the other substantive decision. A tip has a method and a moment as well as
+/// an amount, and the method is what a driver acts on: cash is already in their
+/// pocket, a platform tip arrives in a payout. A single `additionalTips` amount
+/// would have carried the arithmetic and lost both other facts, in a file that
+/// is the only way anything leaves DashPilot. The total is offered beside the
+/// records for a consumer that only wants the sum, never instead of them.
+///
+/// **`effectiveEarnings` is `null` wherever `grossEarnings` is**, even on a
+/// delivery carrying tips. Such a delivery paid the tips plus an amount nobody
+/// wrote down, so there is no total to state, and it contributes nothing to the
+/// summary subtotal and counts against its coverage — which is what a delivery
+/// with no amount at all has always done.
+///
+/// **The CSV carries no individual tip**, for the reason it carries no expense:
+/// its unit is a delivery, one row each, and several tips with their own methods
+/// and moments cannot go in a flat row without repeating the delivery. The three
+/// appended columns say how many there were, what they came to and what the
+/// delivery therefore paid, which is what a spreadsheet can hold honestly. The
+/// tips themselves are in the JSON form.
 ///
 /// ### Still 3: which deliveries were accepted together
 ///
@@ -84,7 +151,7 @@ import Foundation
 /// get flattened, and the answer to that is to carry the distinction, not to
 /// drop the value.
 ///
-/// **It is in JSON only, and the CSV form is unchanged at 35 columns.** That is
+/// **It is in JSON only, and the CSV form was unchanged at 35 columns.** That is
 /// a decision rather than an oversight, and it is the same one that keeps
 /// expenses out of the CSV. A spreadsheet column is a thing people sum. An
 /// amount that is explicitly *not* earnings, sitting one column away from one
@@ -123,7 +190,7 @@ import Foundation
 /// had, the wall-clock length of the shift with pauses included, and is not
 /// redefined.
 ///
-/// **The CSV form moves with it**, from 32 columns to 34:
+/// **The CSV form moves with it**, from 32 columns to 35:
 /// `shiftPausedSeconds`, `shiftWorkingSeconds` and `shiftPauseCount` are added,
 /// and `shiftGrossPerElapsedHour` becomes `shiftGrossPerWorkingHour`. A
 /// spreadsheet reading by column position is broken by an insertion wherever it
@@ -187,8 +254,8 @@ import Foundation
 nonisolated enum ExportFormat {
     /// The current format version, written into every export.
     ///
-    /// Not the store's schema version, which is unrelated and currently 11.
-    static let version = 3
+    /// Not the store's schema version, which is unrelated and currently 13.
+    static let version = 4
 
     /// What produced the file. A product name and nothing more — no build, no
     /// device, no identifier of any kind.
@@ -239,20 +306,23 @@ nonisolated enum ExportFileFormat: String, CaseIterable, Sendable, Hashable, Ide
         switch self {
         case .json:
             """
-            The complete record: every shift, every delivery recorded during it, the expenses you \
-            recorded, and — for a day, week, month or range — the summary with the counts each \
-            figure was worked out from.
+            The complete record: every shift, every delivery recorded during it, each additional tip \
+            with how it reached you, the expenses you recorded, and — for a day, week, month or \
+            range — the summary with the counts each figure was worked out from.
             """
         case .csv:
             """
-            One row per recorded delivery, with its shift's own figures repeated on it, and a column \
-            saying which accepted offer each delivery came in, for opening in a spreadsheet. Three \
-            things are not included. The period summary: each of its figures is \
-            paired with the number of shifts behind it, and a single flat table cannot keep that \
-            pairing. Your recorded expenses: an expense belongs to a date rather than to a shift or a \
-            delivery, so it has no row in a table of deliveries and DashPilot will not invent one. \
-            What you expected a delivery to pay: it is not earnings, and a column of it beside one \
-            that is would be summed as though it were. Export JSON for all three.
+            One row per recorded delivery, with its shift's own figures repeated on it, a column \
+            saying which accepted offer each delivery came in, and what each delivery paid in total, \
+            for opening in a spreadsheet. Four things are not included. The period summary: each of \
+            its figures is paired with the number of shifts behind it, and a single flat table cannot \
+            keep that pairing. Your recorded expenses: an expense belongs to a date rather than to a \
+            shift or a delivery, so it has no row in a table of deliveries and DashPilot will not \
+            invent one. Your additional tips one by one: a delivery can have several, each with its \
+            own method and time, and a row per delivery has nowhere to put them — the count and the \
+            total are here instead. What you expected a delivery to pay: it is not earnings, and a \
+            column of it beside one that is would be summed as though it were. Export JSON for all \
+            four.
             """
         }
     }

@@ -71,7 +71,13 @@ nonisolated struct PeriodEarningsExport: Equatable, Sendable, Codable {
     }
 }
 
-/// The amounts recorded against individual deliveries in the period.
+/// What individual deliveries in the period actually paid, added up.
+///
+/// Each delivery contributes its platform-recorded amount **plus every
+/// additional tip recorded against it**, which is what format version 4 moved.
+/// A delivery whose platform amount was never recorded contributes nothing, tips
+/// or no tips, and counts against ``contributingDeliveryCount``: it paid the
+/// tips plus an amount nobody wrote down, so there is no total of it to add.
 ///
 /// **A separate record, never the period's earnings.** It is here so a driver
 /// can see how much of their delivery-by-delivery bookkeeping they filled in.
@@ -82,7 +88,11 @@ nonisolated struct PeriodEarningsExport: Equatable, Sendable, Codable {
 nonisolated struct PeriodDeliveryEarningsExport: Equatable, Sendable, Codable {
     let recordedTotal: ExportAmount?
 
-    /// Deliveries in the period that carry an amount.
+    /// Deliveries in the period that carry a platform-recorded amount.
+    ///
+    /// Unchanged in meaning by format version 4: additional tips widen what a
+    /// contributing delivery contributes and never make a non-contributing one
+    /// contribute.
     let contributingDeliveryCount: Int
 
     /// Finished deliveries in the period, whether or not they carry one.

@@ -239,8 +239,15 @@ nonisolated struct PeriodMetrics: Equatable, Sendable {
 
     // MARK: Delivery earnings coverage
 
-    /// The amounts recorded against individual deliveries in the period, added
-    /// up, or `nil` when none was recorded.
+    /// What individual deliveries in the period actually paid, added up, or
+    /// `nil` when nothing was recorded.
+    ///
+    /// Each delivery contributes its **effective** earnings: the
+    /// platform-recorded amount plus every additional tip recorded against it. A
+    /// delivery whose platform amount is missing contributes nothing, tips or
+    /// no tips, and is counted as uncovered by ``deliveryEarningsCoverage`` —
+    /// see ``EffectiveDeliveryEarnings`` for why half a delivery is not a
+    /// smaller delivery.
     ///
     /// **A separate fact, never the period's earnings.** It is reported so a
     /// driver can see how much of their delivery-by-delivery record they have
@@ -253,6 +260,10 @@ nonisolated struct PeriodMetrics: Equatable, Sendable {
 
     /// The deliveries behind ``recordedDeliveryEarnings``, out of the terminal
     /// deliveries in the period.
+    ///
+    /// A delivery contributes when its **platform pay** was recorded, which is
+    /// the same rule it has always been: additional tips widen what a covered
+    /// delivery contributes and never turn an uncovered one into a covered one.
     let deliveryEarningsCoverage: MetricCoverage
 
     // MARK: Expenses

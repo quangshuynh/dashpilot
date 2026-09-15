@@ -117,6 +117,37 @@ struct DeliveryEarningsEditor: View {
                     Text(grossEarningsExplanation)
                 }
 
+                // Stated, not editable, and only where there are any: the one
+                // thing a driver might otherwise do on this screen is add a tip
+                // they have already recorded into the amount above, and the way
+                // to prevent that is to show them it is already recorded.
+                if let tipsTotal = delivery.effectiveEarnings.additionalTipsTotal {
+                    Section {
+                        LabeledContent("Additional tips") {
+                            Text(tipsTotal.formatted(locale: locale))
+                                .monospacedDigit()
+                        }
+                        .accessibilityElement(children: .combine)
+                        .accessibilityLabel(
+                            numbered.spokenAdditionalTips(
+                                tipsTotal.formatted(locale: locale),
+                                tipCount: delivery.effectiveEarnings.additionalTipCount
+                            )
+                        )
+                        .accessibilityIdentifier("deliveryEarningsAdditionalTips")
+                    } header: {
+                        Text("Already Recorded Separately")
+                    } footer: {
+                        Text(
+                            """
+                            Tips you recorded as reaching you outside the platform's amount. Do not \
+                            add them into the field above as well. Edit them from Edit Tips on the \
+                            delivery.
+                            """
+                        )
+                    }
+                }
+
                 if hasRecordedEarnings {
                     Section {
                         Button("Remove Earnings", role: .destructive, action: remove)
@@ -176,17 +207,19 @@ struct DeliveryEarningsEditor: View {
     /// the whole distinction this screen exists to keep.
     private var grossEarningsExplanation: String {
         let shared = """
-            It is separate from the amount recorded for the shift: DashPilot never splits a shift \
-            total between deliveries, never adds one up from them, and does not mind if they differ.
+            Whatever the platform already included in it, a tip included, is part of this amount: \
+            record a tip separately only if it reached you outside it. It is separate from the amount \
+            recorded for the shift: DashPilot never splits a shift total between deliveries, never \
+            adds one up from them, and does not mind if they differ.
             """
 
         if !hasRecordedEarnings, delivery.expectedEarnings != nil {
             return """
-                What this delivery actually paid. The field starts from what you expected, so change \
-                it if it differs. Nothing is recorded until you save. \(shared)
+                What the platform paid for this delivery. The field starts from what you expected, so \
+                change it if it differs. Nothing is recorded until you save. \(shared)
                 """
         }
-        return "What this delivery paid, as you choose to record it. \(shared)"
+        return "What the platform paid for this delivery, as you choose to record it. \(shared)"
     }
 
     /// The expected figure spoken with what it is not, in the phrasing that
