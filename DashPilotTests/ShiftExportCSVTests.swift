@@ -144,7 +144,7 @@ struct ShiftExportCSVTests {
             "shiftRecordedDistanceMetres", "shiftRecordedDistanceMiles",
             "shiftGrossPerWorkingHour", "shiftGrossPerDeliveryActiveHour", "shiftGrossPerRecordedMile",
             "deliveryPickupWaitSeconds", "deliveryDeliveredAt",
-            "deliveryGrossEarnings", "deliveryGrossPerDeliveryHour"
+            "deliveryGrossEarnings", "deliveryEffectiveEarningsPerDeliveryHour"
         ] {
             #expect(row[column] == "", "\(column) should be empty when nothing was recorded")
         }

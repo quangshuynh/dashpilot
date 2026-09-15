@@ -48,7 +48,7 @@ struct ShiftExportJSONTests {
         let shift = try fixture.completedShift()
         let object = try object(try document(fixture, scope: .shift(shift.id), shifts: [shift]))
 
-        #expect(object["formatVersion"] as? Int == 3)
+        #expect(object["formatVersion"] as? Int == 4)
         #expect(object["producer"] as? String == "DashPilot")
         // The store's schema version and the file's format version are unrelated
         // numbers that move independently. If a future change ever made them the

@@ -169,12 +169,19 @@ total, even if its deliveries carry amounts.
 
 ### The delivery subtotal is reported separately
 
-The amounts recorded against deliveries appear as their own labelled fact:
+What the period's deliveries actually paid appears as its own labelled fact:
 
 ```
 Recorded on deliveries
 $24.25 recorded across 2 of 4 deliveries
 ```
+
+Each delivery contributes its **effective earnings**: the platform-recorded amount plus every
+[additional tip](earnings-and-metrics.md#additional-tips-are-separate-recorded-facts) recorded
+against it. A delivery whose platform amount was never recorded contributes nothing, tips or no
+tips, and counts against the coverage above: it paid the tips plus an amount nobody wrote down, so
+there is no total of it to add. That is the same rule a delivery with no amount at all has always
+been under.
 
 It is never called the period's earnings, and **nothing derives a shortfall**.
 `shift total − delivery subtotal` is not computed and not shown: the difference

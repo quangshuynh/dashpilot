@@ -380,7 +380,7 @@ struct DeliveryRecoveryServiceTests {
             afterCorrection.unfinishedIntervalCount == 1,
             "Its active time is derived exactly as any unfinished delivery's is: not measured, not invented"
         )
-        #expect(delivery.grossPerDeliveryHour == .unavailable(.deliveryNotCompleted))
+        #expect(delivery.effectiveEarningsPerDeliveryHour == .unavailable(.deliveryNotCompleted))
     }
 
     // MARK: The Live Activity

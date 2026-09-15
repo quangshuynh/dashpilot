@@ -30,6 +30,10 @@ meaning the same thing: gross, manually recorded, and associated with that deliv
 driver said so. It is not profit, net earnings, a wage, taxable income or a payout any platform
 confirmed.
 
+It is the amount **the platform recorded paying** for that delivery, including whatever the platform
+already folded into it. Money that reached the driver outside it is recorded separately, as an
+[additional tip](#additional-tips-are-separate-recorded-facts).
+
 Recording one is optional and it is never required to finish a delivery. A delivery marked delivered
 with no amount is a complete, valid record.
 
@@ -84,9 +88,85 @@ had answered.
   it is — recorded waits — and no amount enters it. Grouping earnings by place needs careful
   missing-data semantics that have not been worked out, and a figure printed beside a business's
   name reads as a judgement of it.
-- **No tips or base-pay breakdown.** One amount per delivery, because one amount is what the driver
-  can state without guessing.
+- **No base-pay breakdown.** The platform's own amount stays one figure, because one figure is what
+  the driver can state without guessing how the platform arrived at it. Tips that arrived *outside*
+  that figure are recorded separately and are not a breakdown of it.
 - **No reconciliation screen**, for the reasons above.
+
+## Additional tips are separate recorded facts
+
+A finished delivery may carry **any number of additional tips**: money that reached the driver
+outside what the platform recorded paying for it. Cash handed over at the door, or a tip the platform
+added after the amount the driver recorded.
+
+Each one holds three facts and nothing else:
+
+| Fact | Meaning |
+| --- | --- |
+| Amount | What arrived. Always more than nothing |
+| Method | `Cash` or `Platform`, saying whether it is already in the driver's pocket or still coming |
+| Recorded at | When the driver wrote it down. **Not** when the money changed hands |
+
+### They are rows, not a second amount column
+
+Tips arrive as separate events. A driver handed cash at the door and then given a platform tip that
+evening has two facts to record, with two methods and two moments. One editable "tips" figure would
+make them do the arithmetic themselves, and would throw away the method, which is the part they act
+on.
+
+So each tip is its own record. Correcting one leaves the others exactly as they are, and nothing
+anywhere stores a total.
+
+### The platform's own amount is never rewritten
+
+Recording a tip does not touch the delivery's gross amount. That figure stays exactly what the driver
+recorded, including a tip the platform folded into it, which is the whole of why the two are kept
+apart.
+
+!!! warning "A tip already inside the platform's amount must not be recorded again"
+
+    If the platform included a tip in what it paid for the delivery, that tip **is part of the
+    gross amount** and recording it here as well counts it twice. The tips screen and the earnings
+    editor both say so, and the editor states the tips already recorded beside the field rather than
+    leaving the driver to remember them.
+
+### What a delivery actually paid
+
+**Effective earnings** are the two together:
+
+`gross earnings + sum(additional tips)`
+
+- `$10.00` platform pay, no tips: `$10.00`
+- `$10.00` platform pay and a `$5.00` cash tip: `$15.00`
+- `$10.00` platform pay and a `$3.00` cash tip and a `$5.00` platform tip: `$18.00`
+
+A delivery with no tips is the ordinary case and reports exactly what it always did.
+
+### A missing platform amount has no total
+
+**When the gross amount is missing there is no effective total, tips or no tips.** A delivery
+carrying a `$5.00` cash tip and no recorded platform pay did not earn `$5.00`; it earned `$5.00` plus
+an amount nobody has written down.
+
+The delivery's row states the tips it holds and says there is no total, rather than showing the tips
+under a heading that would read as what the delivery earned. In every aggregate it contributes
+nothing and counts as **not covered**, which is exactly what a delivery with no amount at all has
+always done. See [period summaries](period-summaries.md).
+
+### A tip of nothing is refused
+
+A tip must be more than zero, which is stricter than the rule for a gross amount. A recorded `$0.00`
+gross says *this delivery paid nothing*, which is a real thing to record; a `$0.00` tip says nothing
+at all, and the way to record that no tip arrived is to record none.
+
+### What a tip is not
+
+- **Not cash-on-delivery accounting.** DashPilot stores no order total, no cash collected for an
+  order, no platform deduction, no reimbursement and no customer balance. A tip is money that reached
+  the driver, and nothing here describes money that passed through them.
+- **Not a correction to the platform's figure**, and not a confirmation of expected pay. Recording
+  one changes neither.
+- **Not read from anywhere.** DashPilot sees no delivery platform and no payout.
 
 ## Expected pay is not earnings
 
@@ -238,7 +318,11 @@ deliveries add less to the denominator than two consecutive ones would.
 
 Where a delivered delivery carries an amount, its row shows one more figure:
 
-`gross earnings ÷ (deliveredAt − acceptedAt)`, in hours — **gross per recorded delivery hour**.
+`effective earnings ÷ (deliveredAt − acceptedAt)`, in hours: **earned per recorded delivery hour**.
+
+The numerator is what the delivery **actually paid**: the platform's own amount plus every additional
+tip recorded against it. A delivery whose platform amount is missing has no rate at all, tips or no
+tips, because half a numerator gives a wrong rate rather than a smaller one.
 
 The denominator is that one delivery's own elapsed lifecycle and nothing else. It is not an hourly
 wage, an active shift rate or a driving rate, and it says nothing about what the driver was doing
@@ -253,8 +337,8 @@ while the delivery was open.
     figure that spans deliveries is the shift's delivery active time, which unions their intervals
     rather than adding their durations.
 
-It is absent, with the reason stated, for a delivery with no amount recorded, for a delivery that
-covered no measurable time, and for one that was **not delivered**:
+It is absent, with the reason stated, for a delivery with no platform amount recorded, for a delivery
+that covered no measurable time, and for one that was **not delivered**:
 
 - A **cancelled** delivery has no completion to measure to. Its recorded amount is shown, and that
   is the whole of what DashPilot claims about it — there is no such thing as a cancelled hourly rate

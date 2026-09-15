@@ -147,7 +147,7 @@ struct DeliveryRecoveryView: View {
                         prompt: .reopen(
                             candidate.numbered,
                             restoredTo: restored,
-                            keepsRecordedEarnings: candidate.numbered.delivery.grossEarnings != nil
+                            keepsRecordedMoney: candidate.numbered.delivery.hasRecordedMoney
                         )
                     )
                 }

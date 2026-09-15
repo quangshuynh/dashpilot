@@ -1,6 +1,6 @@
 import Foundation
 
-/// Why one delivery has no gross-per-hour figure.
+/// Why one delivery has no earnings-per-hour figure.
 ///
 /// Kept apart for the reason every other absence in this project is: "no amount
 /// was entered" and "the amount entered was zero" are different statements, and
@@ -19,8 +19,12 @@ nonisolated enum DeliveryRateUnavailability: CaseIterable, Equatable, Sendable {
     /// amount the driver was paid, and showing that amount is the whole of what
     /// DashPilot claims about it.
     case deliveryNotCompleted
-    /// The driver has not recorded what this delivery paid. Not the same as
-    /// `$0.00`.
+    /// The driver has not recorded what the platform paid for this delivery.
+    /// Not the same as `$0.00`.
+    ///
+    /// It is the reason even for a delivery carrying additional tips. A tip is
+    /// half of what the delivery paid, and a rate over half a numerator is not a
+    /// smaller rate, it is a wrong one. See ``EffectiveDeliveryEarnings``.
     case earningsNotRecorded
     /// The delivery's lifecycle covered no measurable time — accepted and
     /// delivered in the same instant, including one clamped there by a
@@ -38,14 +42,14 @@ nonisolated extension DeliveryRateUnavailability {
         case .deliveryNotCompleted:
             "This rate is worked out for deliveries that were completed, over the time from accepting one to delivering it."
         case .earningsNotRecorded:
-            "Add what this delivery paid to see this rate."
+            "Add what the platform paid for this delivery to see this rate."
         case .zeroDuration:
             "This delivery was accepted and delivered in the same moment, so there is no time to divide by."
         }
     }
 }
 
-/// A delivery's gross earnings per hour of its own lifecycle, or the reason
+/// A delivery's effective earnings per hour of its own lifecycle, or the reason
 /// there is not one.
 ///
 /// ## What the denominator is
@@ -64,12 +68,22 @@ nonisolated extension DeliveryRateUnavailability {
 /// the shift's delivery active time, which unions their intervals rather than
 /// adding their durations. See ``DeliveryActiveTimeCalculator``.
 ///
+/// ## What the numerator is
+///
+/// **Effective earnings**: what the platform recorded paying for the delivery
+/// plus every additional tip recorded against it. That is what the delivery
+/// actually paid, so it is what a figure calling itself the delivery's hourly
+/// rate has to divide. A delivery whose platform pay is missing has no rate at
+/// all, tips or no tips, because half a numerator gives a wrong rate rather than
+/// a smaller one. See ``EffectiveDeliveryEarnings``.
+///
 /// ## What it is not
 ///
 /// Not an hourly wage, not an active shift rate and not a driving rate. The
-/// numerator is gross — nothing for fuel, wear, insurance or tax is subtracted
-/// anywhere in DashPilot — and the denominator measures how long the delivery
-/// was open, which says nothing about what the driver was doing during it.
+/// numerator is gross of everything, because nothing for fuel, wear, insurance
+/// or tax is subtracted anywhere in DashPilot, and the denominator measures how long
+/// the delivery was open, which says nothing about what the driver was doing
+/// during it.
 nonisolated enum DeliveryEarningsRate: Equatable, Sendable {
     case available(Money)
     case unavailable(DeliveryRateUnavailability)
@@ -94,26 +108,28 @@ nonisolated enum DeliveryEarningsRate: Equatable, Sendable {
 }
 
 extension Delivery {
-    /// This delivery's gross earnings per hour of its own recorded lifecycle.
+    /// This delivery's effective earnings per hour of its own recorded
+    /// lifecycle.
     ///
     /// Derived on demand and never stored, like every other rate in DashPilot: a
-    /// stored figure would be a second answer to a question the amount and the
-    /// timestamps already answer, and it would keep the old answer after either
-    /// changed.
+    /// stored figure would be a second answer to a question the amounts and the
+    /// timestamps already answer, and it would keep the old answer after any of
+    /// them changed.
     ///
-    /// Both inputs come from this delivery alone — the amount the driver typed
-    /// against it, and ``completedDuration``, which exists only for a delivery
-    /// that was actually delivered. No other delivery's timing, and no part of
-    /// the shift's own amount, enters the calculation, so two stacked deliveries
-    /// produce two independent figures however far their lifecycles overlap.
+    /// Every input comes from this delivery alone: the platform amount the
+    /// driver typed against it, the tips they recorded against it, and
+    /// ``completedDuration``, which exists only for a delivery that was actually
+    /// delivered. No other delivery's timing, and no part of the shift's own
+    /// amount, enters the calculation, so two stacked deliveries produce two
+    /// independent figures however far their lifecycles overlap.
     ///
     /// The arithmetic is ``ShiftMetricsCalculator/grossPerHour(of:over:)``, the
     /// one definition of an amount per hour in the app, so this figure and the
     /// shift's two hourly rates round identically.
-    var grossPerDeliveryHour: DeliveryEarningsRate {
+    var effectiveEarningsPerDeliveryHour: DeliveryEarningsRate {
         guard let completedDuration else { return .unavailable(.deliveryNotCompleted) }
-        guard let grossEarnings else { return .unavailable(.earningsNotRecorded) }
-        guard let rate = ShiftMetricsCalculator.grossPerHour(of: grossEarnings, over: completedDuration) else {
+        guard let earnings = effectiveEarnings.amount else { return .unavailable(.earningsNotRecorded) }
+        guard let rate = ShiftMetricsCalculator.grossPerHour(of: earnings, over: completedDuration) else {
             return .unavailable(.zeroDuration)
         }
         return .available(rate)

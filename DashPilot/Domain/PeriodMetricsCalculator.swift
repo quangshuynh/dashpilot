@@ -53,8 +53,14 @@ nonisolated struct PeriodShiftRecord: Equatable, Sendable {
     /// The distinct pickup places the shift's deliveries named.
     let pickupPlaceIDs: Set<UUID>
 
-    /// The amounts recorded against individual finished deliveries, one entry
-    /// each. A delivery with no amount contributes no entry — never a zero.
+    /// What individual finished deliveries actually paid, one entry each.
+    ///
+    /// Each entry is a delivery's **effective** earnings: the platform-recorded
+    /// amount plus every additional tip recorded against it. A delivery with no
+    /// platform amount contributes no entry, never a zero and never the tips
+    /// alone, because a delivery holding a tip and no platform figure paid the
+    /// tip plus something nobody has written down. See
+    /// ``EffectiveDeliveryEarnings``.
     let recordedDeliveryEarnings: [Money]
 
     /// Finished deliveries in the shift, whether or not they carry an amount.
@@ -388,7 +394,11 @@ extension Shift {
             deliverySummary: deliverySummary,
             pickupWaits: deliveries.compactMap(PickupWaitSample.init),
             pickupPlaceIDs: Set(deliveries.compactMap { $0.pickupPlace?.id }),
-            recordedDeliveryEarnings: deliveries.compactMap(\.grossEarnings),
+            // Effective earnings, so a delivery's tips are counted as the
+            // earnings they are. A delivery with no platform amount contributes
+            // nothing at all and is counted as uncovered below, exactly as it
+            // was before tips existed.
+            recordedDeliveryEarnings: deliveries.compactMap { $0.effectiveEarnings.amount },
             terminalDeliveryCount: deliveries.filter(\.state.isFinished).count
         )
     }

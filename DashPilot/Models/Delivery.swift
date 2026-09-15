@@ -68,6 +68,16 @@ nonisolated enum DeliveryError: Error, Equatable {
 /// matching numbers do not make them the same fact, and the only thing that ever
 /// writes a gross amount is the driver recording one.
 ///
+/// ## Additional tips are recorded facts of their own
+///
+/// A delivery may also carry any number of ``DeliveryTip`` rows: money that
+/// reached the driver **outside** ``grossEarnings``, in cash at the door or
+/// through the platform after the amount they recorded. They are rows rather
+/// than one more amount column because they are separate events with separate
+/// methods, and ``grossEarnings`` is never rewritten to absorb one. What the
+/// delivery actually paid is the two together, derived on demand by
+/// ``EffectiveDeliveryEarnings`` and stored nowhere.
+///
 /// ## State lives in the timestamps
 ///
 /// There is no persisted `state` column and no set of booleans. ``state`` is
@@ -219,6 +229,27 @@ nonisolated final class Delivery {
     /// from paid `6.25` instead. Confirming an amount records a gross beside
     /// this one; it does not overwrite or erase it.
     private var expectedEarningsAmount: Decimal?
+
+    /// Tips this delivery received **outside** ``grossEarningsAmount``, in no
+    /// guaranteed order.
+    ///
+    /// Rows rather than a second amount column, and that is the decision to
+    /// remember. Tips arrive as separate events with separate methods, cash at
+    /// the door and then a platform tip that evening, and one mutable column would
+    /// collapse them into a figure the driver has to maintain by hand and would
+    /// throw away which of them is already in their pocket. See ``DeliveryTip``.
+    ///
+    /// **Nothing here is inside ``grossEarningsAmount``.** That column stays the
+    /// platform-recorded pay for this delivery, whatever the platform already
+    /// folded into it, and recording a tip never touches it. The sum of the two
+    /// is derived on demand by ``EffectiveDeliveryEarnings`` and stored nowhere.
+    ///
+    /// The delete rule is `.cascade`, for the reason a shift's deliveries
+    /// cascade: a tip recorded against a delivery means nothing apart from it.
+    /// Deleting a shift therefore cascades to its deliveries and on to their
+    /// tips, so no tip is ever left pointing at a delivery that has gone.
+    @Relationship(deleteRule: .cascade, inverse: \DeliveryTip.delivery)
+    private(set) var additionalTips: [DeliveryTip] = []
 
     /// - Parameter offer: the accepted offer this delivery came in. Defaulted to
     ///   `nil` so that a fixture exercising the lifecycle alone does not have to
@@ -527,6 +558,45 @@ nonisolated final class Delivery {
         expectedEarningsAmount = nil
     }
 
+    // MARK: Additional tips
+
+    /// Records a tip this delivery received outside what the platform recorded
+    /// paying for it, and returns the row.
+    ///
+    /// **The only place a ``DeliveryTip`` is created**, so the two rules that
+    /// decide whether a tip can be recorded at all cannot be bypassed by a
+    /// screen, a test or a future caller. It lives here because
+    /// ``additionalTips`` is declared here, and it is written as one operation
+    /// for the reason ``move(into:)`` is: a caller cannot make a row and then
+    /// decide which delivery it belongs to.
+    ///
+    /// Two invariants, both on the model:
+    ///
+    /// - Only a **finished** delivery can receive one, the rule
+    ///   ``setGrossEarnings(_:)`` keeps and for the same reason. A cancelled
+    ///   delivery may carry a tip: a customer who was waiting when an order fell
+    ///   through can still have handed over cash, and refusing to record it
+    ///   would force the driver to attribute it somewhere it did not happen.
+    /// - The amount must be **more than zero**, which is stricter than a gross
+    ///   amount's rule and deliberately so: a recorded `$0.00` gross says this
+    ///   delivery paid nothing, while a `$0.00` tip says nothing at all. See
+    ///   ``DeliveryTipError/amountNotPositive``.
+    ///
+    /// **Nothing here touches ``grossEarningsAmount`` or
+    /// ``expectedEarningsAmount``**, on this delivery or on any other. A tip is
+    /// money that arrived beside the platform's figure, not a correction to it
+    /// and not a confirmation of an expectation.
+    ///
+    /// The row is returned rather than inserted here, because inserting into a
+    /// store is a decision about a `ModelContext` and belongs to
+    /// ``DeliveryService``, which makes the one save that follows it.
+    ///
+    /// - Throws: ``DeliveryTipError``.
+    func recordAdditionalTip(_ amount: Money, method: DeliveryTipMethod, at date: Date) throws -> DeliveryTip {
+        guard state.isFinished else { throw DeliveryTipError.deliveryNotFinished }
+        return try DeliveryTip(delivery: self, amount: amount, method: method, recordedAt: date)
+    }
+
     /// The two rules every transition shares: a finished delivery does not
     /// transition again, and the lifecycle does not run backwards.
     private func validateTransition(at date: Date) throws {
@@ -578,12 +648,19 @@ extension Delivery {
     /// Builds the one-delivery offer a delivery recorded before offers existed
     /// belongs in, and attaches this delivery to it.
     ///
-    /// **The v11 to v12 migration's only write.** It lives here because
-    /// ``offer``'s setter does, and it is written as a single operation so that
-    /// the migration cannot do anything but give an ungrouped delivery its own
-    /// offer.
+    /// **The shape the v11 to v12 migration writes**, expressed in the current
+    /// models. The migration itself no longer calls this: it runs against a
+    /// v12-shaped store and speaks in `DashPilotSchemaV12`'s own frozen copies,
+    /// which is why the same operation exists there too. This one stays because
+    /// it is the only way an ungrouped delivery in a **current** store gains its
+    /// own offer, and because a test describing what a migrated store holds has
+    /// to be able to build one.
     ///
-    /// It is not the only way a delivery's offer changes any more. ``move(into:)``
+    /// It lives here because ``offer``'s setter does, and it is written as a
+    /// single operation so that no caller can attach a delivery to an offer it
+    /// then fills in.
+    ///
+    /// It is not the only way a delivery's offer changes. ``move(into:)``
     /// corrects the grouping of deliveries that already exist, under invariants
     /// this method does not need: there is nothing to correct about a delivery
     /// that records no offer at all.

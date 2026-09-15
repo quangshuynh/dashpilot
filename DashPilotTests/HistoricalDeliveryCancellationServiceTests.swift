@@ -614,7 +614,7 @@ struct HistoricalDeliveryCancellationServiceTests {
         #expect(corrected["number"] as? Int == 1)
         // Derived from a completion the delivery no longer records, so both go.
         #expect(corrected["acceptedToDeliveredSeconds"] is NSNull)
-        #expect(corrected["grossPerDeliveryHour"] is NSNull)
+        #expect(corrected["effectiveEarningsPerDeliveryHour"] is NSNull)
         // The recorded amount and the recorded wait are facts of their own.
         // A quoted decimal string, which is how every amount in this format is
         // written: a JSON number would be read back as a binary float.
@@ -654,8 +654,8 @@ struct HistoricalDeliveryCancellationServiceTests {
         // Both `deliveredAt` and `cancelledAt` were already in the format, and
         // `cancelled` was already one of the states a delivery could be exported
         // in. Nothing was added, removed, renamed or redefined.
-        #expect(object["formatVersion"] as? Int == 3)
-        #expect(ExportFormat.version == 3)
+        #expect(object["formatVersion"] as? Int == 4)
+        #expect(ExportFormat.version == 4)
     }
 
     @Test("CSV says the same thing through the columns it already has")
@@ -675,7 +675,7 @@ struct HistoricalDeliveryCancellationServiceTests {
             $0.split(separator: ",", omittingEmptySubsequences: false).map(String.init)
         }
         let header = try #require(records.first)
-        #expect(header.count == 36)
+        #expect(header.count == ExportDocumentEncoder.columns.count)
         let rows = records.dropFirst().map { Dictionary(uniqueKeysWithValues: zip(header, $0)) }
         #expect(rows.count == 2)
 
@@ -685,7 +685,7 @@ struct HistoricalDeliveryCancellationServiceTests {
         #expect(corrected["deliveryDeliveredAt"] == "")
         #expect(corrected["deliveryCancelledAt"] == ExportTimestamp.string(at(1_500)))
         #expect(corrected["deliveryAcceptedToDeliveredSeconds"] == "")
-        #expect(corrected["deliveryGrossPerDeliveryHour"] == "")
+        #expect(corrected["deliveryEffectiveEarningsPerDeliveryHour"] == "")
         // Untouched by the correction.
         #expect(corrected["deliveryNumber"] == "1")
         #expect(corrected["deliveryOfferNumber"] == "1")

@@ -6,7 +6,7 @@ import Foundation
 /// export, and it holds **no rule of its own**: every figure it writes comes
 /// from a calculation the app already defines — ``ShiftMetricsCalculator`` for
 /// the rates, ``DeliveryActiveTimeCalculator`` for the unioned active time,
-/// ``Delivery/pickupWait`` for the wait, ``Delivery/grossPerDeliveryHour`` for a
+/// ``Delivery/pickupWait`` for the wait, ``Delivery/effectiveEarningsPerDeliveryHour`` for a
 /// delivery's own rate. A second definition here would be a file that disagrees
 /// with the screen it was exported from.
 ///
@@ -94,6 +94,7 @@ nonisolated extension DeliveryExportRecord {
     ///   delivery.
     init(_ numbered: NumberedDelivery, offerNumber: Int?) {
         let delivery = numbered.delivery
+        let effective = delivery.effectiveEarnings
         self.init(
             id: delivery.id,
             number: numbered.number,
@@ -109,6 +110,8 @@ nonisolated extension DeliveryExportRecord {
             pickupPlaceName: delivery.pickupPlace?.displayName,
             pickupWaitSeconds: ExportDuration.seconds(delivery.pickupWait),
             acceptedToDeliveredSeconds: ExportDuration.seconds(delivery.completedDuration),
+            // The platform-recorded amount alone, unchanged and meaning exactly
+            // what it always has. Tips are beside it rather than inside it.
             grossEarnings: ExportAmount.recorded(delivery.grossEarnings),
             // Written from its own column, and read by nothing else in this
             // file. There is no expected-per-hour figure, no expected subtotal
@@ -116,8 +119,27 @@ nonisolated extension DeliveryExportRecord {
             // rate over an expectation would be a claim about what the driver
             // would have earned.
             expectedEarnings: ExportAmount.recorded(delivery.expectedEarnings),
-            grossPerDeliveryHour: ExportAmount.recorded(delivery.grossPerDeliveryHour.amount)
+            // The individual facts, in the order the app numbers them. The two
+            // derived figures below come from the same
+            // `EffectiveDeliveryEarnings` the screen reads, so a file and the
+            // history it was exported from cannot disagree.
+            additionalTips: delivery.additionalTipsInOrder.map(DeliveryTipExportRecord.init),
+            additionalTipsTotal: ExportAmount.recorded(effective.additionalTipsTotal),
+            effectiveEarnings: ExportAmount.recorded(effective.amount),
+            effectiveEarningsPerDeliveryHour: ExportAmount.recorded(
+                delivery.effectiveEarningsPerDeliveryHour.amount
+            )
         )
+    }
+}
+
+nonisolated extension DeliveryTipExportRecord {
+    /// One recorded tip as an export record.
+    ///
+    /// The method is carried as the domain's own word, or as an absence for a
+    /// stored value this build cannot name. See ``DeliveryTip/method``.
+    init(_ tip: DeliveryTip) {
+        self.init(id: tip.id, amount: ExportAmount(tip.amount), method: tip.method, recordedAt: tip.recordedAt)
     }
 }
 
