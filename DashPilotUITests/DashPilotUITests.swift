@@ -2009,10 +2009,13 @@ final class DashPilotUITests: XCTestCase {
     /// width assertion itself, at 104.7 points against the 160.8 it asks for,
     /// rather than on a timeout or on a wrapped word.
     ///
-    /// The set is **four** on a delivered delivery in a finished shift, since
-    /// the historical correction joined it. That is what the grid is for: the
-    /// fourth action took the empty cell beside the third rather than costing
-    /// anything, and the widths below are the same widths.
+    /// The set is **five** on a delivered delivery in a finished shift, since the
+    /// historical correction and the additional tips joined it. That is what the
+    /// grid is for: each new action took the next cell rather than costing
+    /// anything, and the widths below are the same widths. Five is also the case
+    /// worth pinning, because it is the odd one: the last control keeps its
+    /// column instead of stretching across the row it has to itself, which is
+    /// what keeps the left edge the same down the whole list.
     @MainActor
     func testCompletedDeliveryOffersEveryCorrectionWithRoomToReadIt() throws {
         let app = launchWithSeededHistory()
@@ -2027,10 +2030,11 @@ final class DashPilotUITests: XCTestCase {
         let place = card.buttons["shiftDetailPickupPlaceButton"]
         let history = card.buttons["shiftDetailPickupHistoryButton"]
         let earnings = card.buttons["shiftDetailDeliveryEarningsButton"]
+        let tips = card.buttons["shiftDetailDeliveryTipsButton"]
         let correct = card.buttons["shiftDetailCorrectToCancelledButton"]
 
-        // Reaching the last of the four brings the others with it: they are the
-        // three directly above it in the same card.
+        // Reaching the last of the five brings the others with it: they are the
+        // four directly above it in the same card.
         XCTAssertTrue(scrollUntilHittable(correct, in: app), "Every action is reachable by scrolling")
 
         // Each one still names the delivery it acts on, which is what makes it
@@ -2038,13 +2042,14 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertEqual(place.label, "Change pickup place for Delivery 1")
         XCTAssertEqual(history.label, "Recorded pickup waits at \(Self.noodles)")
         XCTAssertEqual(earnings.label, "Edit gross earnings for Delivery 1")
+        XCTAssertEqual(tips.label, "Add an additional tip to Delivery 1")
         XCTAssertTrue(
             correct.label.hasPrefix("Correct Delivery 1 to cancelled."),
             "including the one that rewrites how the delivery ended: \(correct.label)"
         )
 
         let width = app.windows.element(boundBy: 0).frame.width
-        for action in [place, history, earnings, correct] {
+        for action in [place, history, earnings, tips, correct] {
             XCTAssertTrue(action.isHittable, "Every action is tappable where it is: \(action.label)")
             XCTAssertGreaterThanOrEqual(
                 action.frame.height,
@@ -2078,7 +2083,7 @@ final class DashPilotUITests: XCTestCase {
             "Both are the width of a column, whatever each is called"
         )
 
-        // The second line holds the other two, in the same two columns, so the
+        // The second line holds the next two, in the same two columns, so the
         // left edge is the same down every delivery whatever each row offers.
         XCTAssertGreaterThan(earnings.frame.minY, place.frame.maxY - 1, "The third action is on the next line")
         XCTAssertEqual(
@@ -2089,12 +2094,24 @@ final class DashPilotUITests: XCTestCase {
         )
         XCTAssertEqual(earnings.frame.minX, place.frame.minX, accuracy: 1, "Aligned with the column above it")
         XCTAssertEqual(
-            correct.frame.minY,
+            tips.frame.minY,
             earnings.frame.minY,
             accuracy: 1,
             "The fourth action shares the second line rather than starting a third"
         )
-        XCTAssertEqual(correct.frame.minX, history.frame.minX, accuracy: 1, "in the second column")
+        XCTAssertEqual(tips.frame.minX, history.frame.minX, accuracy: 1, "in the second column")
+
+        // The fifth has a line to itself, and this is the assertion the odd
+        // count exists for: it keeps its column instead of stretching across the
+        // row, so the left edge does not move and the empty cell stays empty.
+        XCTAssertGreaterThan(correct.frame.minY, earnings.frame.maxY - 1, "The fifth action starts a third line")
+        XCTAssertEqual(correct.frame.minX, place.frame.minX, accuracy: 1, "in the first column")
+        XCTAssertEqual(
+            correct.frame.width,
+            place.frame.width,
+            accuracy: 1,
+            "and at a column's width rather than the whole row's"
+        )
 
         // And the controls still do what they did: the grid changed where they
         // are, not what they open.
@@ -2126,6 +2143,7 @@ final class DashPilotUITests: XCTestCase {
         let place = card.buttons["shiftDetailPickupPlaceButton"]
         let history = card.buttons["shiftDetailPickupHistoryButton"]
         let earnings = card.buttons["shiftDetailDeliveryEarningsButton"]
+        let tips = card.buttons["shiftDetailDeliveryTipsButton"]
         let correct = card.buttons["shiftDetailCorrectToCancelledButton"]
 
         XCTAssertTrue(
@@ -2134,7 +2152,7 @@ final class DashPilotUITests: XCTestCase {
         )
 
         let width = app.windows.element(boundBy: 0).frame.width
-        for action in [place, history, earnings, correct] {
+        for action in [place, history, earnings, tips, correct] {
             XCTAssertTrue(action.exists, "Nothing is dropped to keep the card short")
             XCTAssertGreaterThan(
                 action.frame.width,
@@ -2154,11 +2172,17 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertEqual(history.frame.minX, place.frame.minX, accuracy: 1, "Still one aligned column")
 
         // Reached by scrolling, like anything else this far down a long screen.
-        XCTAssertTrue(scrollUntilHittable(correct, in: app, maxSwipes: 10), "And every action is still tappable")
+        XCTAssertTrue(scrollUntilHittable(tips, in: app, maxSwipes: 10), "And every action is still tappable")
         XCTAssertGreaterThan(
-            correct.frame.minY,
+            tips.frame.minY,
             earnings.frame.maxY - 1,
             "The fourth action is under the third, not beside it"
+        )
+        XCTAssertTrue(scrollUntilHittable(correct, in: app, maxSwipes: 10))
+        XCTAssertGreaterThan(
+            correct.frame.minY,
+            tips.frame.maxY - 1,
+            "and the fifth under the fourth, all the way down"
         )
     }
 
