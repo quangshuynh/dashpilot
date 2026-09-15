@@ -648,12 +648,19 @@ extension Delivery {
     /// Builds the one-delivery offer a delivery recorded before offers existed
     /// belongs in, and attaches this delivery to it.
     ///
-    /// **The v11 to v12 migration's only write.** It lives here because
-    /// ``offer``'s setter does, and it is written as a single operation so that
-    /// the migration cannot do anything but give an ungrouped delivery its own
-    /// offer.
+    /// **The shape the v11 to v12 migration writes**, expressed in the current
+    /// models. The migration itself no longer calls this: it runs against a
+    /// v12-shaped store and speaks in `DashPilotSchemaV12`'s own frozen copies,
+    /// which is why the same operation exists there too. This one stays because
+    /// it is the only way an ungrouped delivery in a **current** store gains its
+    /// own offer, and because a test describing what a migrated store holds has
+    /// to be able to build one.
     ///
-    /// It is not the only way a delivery's offer changes any more. ``move(into:)``
+    /// It lives here because ``offer``'s setter does, and it is written as a
+    /// single operation so that no caller can attach a delivery to an offer it
+    /// then fills in.
+    ///
+    /// It is not the only way a delivery's offer changes. ``move(into:)``
     /// corrects the grouping of deliveries that already exist, under invariants
     /// this method does not need: there is nothing to correct about a delivery
     /// that records no offer at all.

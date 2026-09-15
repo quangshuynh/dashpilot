@@ -937,7 +937,10 @@ struct ShiftPauseCorrectionServiceTests {
             $0.split(separator: ",", omittingEmptySubsequences: false).map(String.init)
         }
         let header = try #require(records.first)
-        #expect(header.count == 36, "No column was added for pause editing")
+        #expect(
+            header.count == ExportDocumentEncoder.columns.count,
+            "No column was added for pause editing; the count has moved since for other reasons"
+        )
         let row = try #require(records.dropFirst().first.map { Dictionary(uniqueKeysWithValues: zip(header, $0)) })
 
         #expect(row["shiftPauseCount"] == "2")

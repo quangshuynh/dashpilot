@@ -505,15 +505,19 @@ struct HistoricalDeliveryCancellationTests {
         #expect(prompt.detail.contains(HistoricalCancellationPrompt.unchangedStatement))
     }
 
+    /// The sentence covers every kind of money the delivery may hold — the
+    /// platform amount, an additional tip, or both — because a correction that
+    /// preserved one and not the other would be a different promise.
     @Test("The money sentence appears only where there is money")
     func thePromptNamesEarningsOnlyWhereThereAreSome() {
         let numbered = NumberedDelivery(number: 1, delivery: Delivery(shift: Shift(startedAt: start), acceptedAt: at(300)))
 
-        let withEarnings = HistoricalCancellationPrompt.correct(numbered, keepsRecordedMoney: true)
+        let withMoney = HistoricalCancellationPrompt.correct(numbered, keepsRecordedMoney: true)
         let without = HistoricalCancellationPrompt.correct(numbered, keepsRecordedMoney: false)
 
-        #expect(withEarnings.detail.contains("gross earnings you recorded against it stay recorded"))
-        #expect(without.detail.contains("gross earnings") == false)
+        #expect(withMoney.detail.contains("Everything you recorded it as paying, tips included, stays recorded"))
+        #expect(without.detail.contains("stays recorded") == false)
+        #expect(without.detail.contains("tips") == false)
     }
 
     /// The rule the recovery screen already keeps, applied to a second
