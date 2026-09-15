@@ -152,7 +152,7 @@ nonisolated struct HistoricalCancellationPrompt: Equatable {
     /// - Parameters:
     ///   - delivery: the delivery being corrected, named as the screen names it.
     ///   - keepsRecordedMoney: whether any money is already recorded against
-    ///     it — a platform amount, an additional tip, or both. Stated only when
+    ///     it: a platform amount, an additional tip, or both. Stated only when
     ///     there is some, because a sentence about money on a delivery carrying
     ///     none invites the driver to look for some.
     static func correct(_ delivery: NumberedDelivery, keepsRecordedMoney: Bool) -> Self {

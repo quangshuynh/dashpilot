@@ -194,7 +194,7 @@ nonisolated struct DeliveryRecoveryPrompt: Equatable {
     ///   - restored: the state it returns to, derived by ``DeliveryRecovery``
     ///     rather than chosen here.
     ///   - keepsRecordedMoney: whether any money is already recorded against
-    ///     it — a platform amount, an additional tip, or both. Stated only when
+    ///     it: a platform amount, an additional tip, or both. Stated only when
     ///     there is some, because a sentence about money on a delivery carrying
     ///     none invites the driver to look for some.
     static func reopen(

@@ -245,8 +245,8 @@ nonisolated struct PeriodMetrics: Equatable, Sendable {
     /// Each delivery contributes its **effective** earnings: the
     /// platform-recorded amount plus every additional tip recorded against it. A
     /// delivery whose platform amount is missing contributes nothing, tips or
-    /// no tips, and is counted as uncovered by ``deliveryEarningsCoverage`` —
-    /// see ``EffectiveDeliveryEarnings`` for why half a delivery is not a
+    /// no tips, and is counted as uncovered by ``deliveryEarningsCoverage``.
+    /// See ``EffectiveDeliveryEarnings`` for why half a delivery is not a
     /// smaller delivery.
     ///
     /// **A separate fact, never the period's earnings.** It is reported so a

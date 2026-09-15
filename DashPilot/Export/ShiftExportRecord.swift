@@ -432,8 +432,8 @@ nonisolated struct DeliveryTipExportRecord: Equatable, Sendable, Codable {
     /// on the way in rather than stored, so there is no absence to express here.
     let amount: ExportAmount
 
-    /// `cash` or `platform` — ``DeliveryTipMethod``'s own vocabulary — or `null`
-    /// for a stored value this build cannot name.
+    /// `cash` or `platform`, which is ``DeliveryTipMethod``'s own vocabulary, or
+    /// `null` for a stored value this build cannot name.
     ///
     /// `null` rather than a guess. Both words say something definite about where
     /// the money came from, and picking one for an unrecognised value would

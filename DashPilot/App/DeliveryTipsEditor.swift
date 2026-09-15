@@ -23,7 +23,7 @@ import SwiftUI
 /// ## The three figures at the top, and the sentence under them
 ///
 /// The summary states the platform amount, the tips, and what the delivery
-/// therefore paid — in that order, because the third is the first two added.
+/// therefore paid, in that order, because the third is the first two added.
 /// Under it sits the only warning this feature needs: **a tip the platform
 /// already included in what it paid is part of that amount and must not be
 /// recorded again here.** It is stated on the screen where a tip is entered
@@ -33,7 +33,7 @@ import SwiftUI
 /// A delivery with tips and **no** platform amount states that instead of a
 /// total, and does not offer one. It paid the tips plus an amount nobody has
 /// written down, and a screen showing the tips alone under the word "Total"
-/// would be inventing the rest — see ``EffectiveDeliveryEarnings``.
+/// would be inventing the rest. See ``EffectiveDeliveryEarnings``.
 struct DeliveryTipsEditor: View {
     let numbered: NumberedDelivery
 
@@ -169,7 +169,7 @@ struct DeliveryTipsEditor: View {
         Section {
             ForEach(Array(tips.enumerated()), id: \.element.id) { index, tip in
                 // The recorded facts, read as one element, with an explicit
-                // control under them — the shape a shift's recorded pauses
+                // control under them, which is the shape a shift's recorded pauses
                 // already have on ``CompletedShiftDetailView``.
                 //
                 // The whole row was a `Button` first, and it is worth knowing
@@ -225,7 +225,7 @@ struct DeliveryTipsEditor: View {
     /// recorded.
     ///
     /// The number is a position in this list rather than anything stored, and it
-    /// is not stable — removing a tip renumbers the rest. Every control acts on
+    /// is not stable, because removing a tip renumbers the rest. Every control acts on
     /// the row itself, never on the number, which is the rule ``NumberedPause``
     /// keeps for the same reason.
     private func tipRow(number: Int, tip: DeliveryTip) -> some View {

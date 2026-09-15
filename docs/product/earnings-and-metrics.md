@@ -104,7 +104,7 @@ Each one holds three facts and nothing else:
 | Fact | Meaning |
 | --- | --- |
 | Amount | What arrived. Always more than nothing |
-| Method | `Cash` or `Platform` — whether it is already in the driver's pocket or still coming |
+| Method | `Cash` or `Platform`, saying whether it is already in the driver's pocket or still coming |
 | Recorded at | When the driver wrote it down. **Not** when the money changed hands |
 
 ### They are rows, not a second amount column
@@ -151,7 +151,7 @@ an amount nobody has written down.
 The delivery's row states the tips it holds and says there is no total, rather than showing the tips
 under a heading that would read as what the delivery earned. In every aggregate it contributes
 nothing and counts as **not covered**, which is exactly what a delivery with no amount at all has
-always done — see [period summaries](period-summaries.md).
+always done. See [period summaries](period-summaries.md).
 
 ### A tip of nothing is refused
 
@@ -318,7 +318,7 @@ deliveries add less to the denominator than two consecutive ones would.
 
 Where a delivered delivery carries an amount, its row shows one more figure:
 
-`effective earnings ÷ (deliveredAt − acceptedAt)`, in hours — **earned per recorded delivery hour**.
+`effective earnings ÷ (deliveredAt − acceptedAt)`, in hours: **earned per recorded delivery hour**.
 
 The numerator is what the delivery **actually paid**: the platform's own amount plus every additional
 tip recorded against it. A delivery whose platform amount is missing has no rate at all, tips or no

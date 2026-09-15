@@ -46,8 +46,8 @@ nonisolated enum DeliveryTipError: Error, Equatable {
 /// its own fact with its own method and its own moment, and folding them into
 /// one number means a driver correcting the cash figure has to remember what the
 /// platform one was and do the arithmetic themselves. It would also throw away
-/// the method, which is the part a driver actually acts on — cash is already in
-/// their pocket, a platform tip is still coming.
+/// the method, which is the part a driver actually acts on: cash is already in
+/// their pocket, and a platform tip is still coming.
 ///
 /// Rows also keep the distinction the whole app is built on: several recorded
 /// facts, never one derived summary. ``EffectiveDeliveryEarnings`` adds them up
@@ -91,7 +91,7 @@ nonisolated final class DeliveryTip {
     /// one: the store describes storage, and a stored value an older build
     /// cannot name must read as something rather than fail a fetch. Unlike an
     /// expense category there is no neutral case to fall back on, so it reads as
-    /// **no method** — see ``method``.
+    /// **no method**. See ``method``.
     private var methodRawValue: String
 
     /// When the driver recorded this tip.
@@ -112,7 +112,7 @@ nonisolated final class DeliveryTip {
     /// that way, not because a tip without a delivery is meaningful: the
     /// initializer requires one, ``DeliveryService`` records one only against a
     /// finished delivery, and `Delivery.additionalTips` cascades on delete so a
-    /// tip cannot outlive the delivery it describes — or the shift that
+    /// tip cannot outlive the delivery it describes, or the shift that
     /// delivery belongs to, which cascades to the delivery first.
     private(set) var delivery: Delivery?
 

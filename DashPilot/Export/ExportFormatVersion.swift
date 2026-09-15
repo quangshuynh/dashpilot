@@ -21,8 +21,8 @@ import Foundation
 ///
 /// ### 4: tips received outside what the platform recorded paying
 ///
-/// A delivery can now carry any number of additional tips — cash at the door, or
-/// a tip the platform added after the amount the driver recorded — and the app
+/// A delivery can now carry any number of additional tips, in cash at the door or
+/// through the platform after the amount the driver recorded, and the app
 /// reports what a delivery **actually** paid as the two together. Evaluated
 /// against the rule above and bumped, because one field was renamed and one
 /// changed meaning:
@@ -38,7 +38,7 @@ import Foundation
 /// - **Redefined:** `summary.deliveryEarnings.recordedTotal` now adds up what
 ///   the period's deliveries actually paid, tips included, where it added up
 ///   their platform amounts alone. The name still says exactly what the figure
-///   is — the total recorded against individual deliveries — so it is redefined
+///   is, the total recorded against individual deliveries, so it is redefined
 ///   rather than renamed, which is the same judgement `nonDeliverySeconds` got
 ///   in version 3. **No previously exported file would carry a different
 ///   number**, because no store written before this build holds a tip; the
@@ -76,7 +76,7 @@ import Foundation
 /// **`effectiveEarnings` is `null` wherever `grossEarnings` is**, even on a
 /// delivery carrying tips. Such a delivery paid the tips plus an amount nobody
 /// wrote down, so there is no total to state, and it contributes nothing to the
-/// summary subtotal and counts against its coverage — which is what a delivery
+/// summary subtotal and counts against its coverage, which is what a delivery
 /// with no amount at all has always done.
 ///
 /// **The CSV carries no individual tip**, for the reason it carries no expense:
@@ -307,8 +307,8 @@ nonisolated enum ExportFileFormat: String, CaseIterable, Sendable, Hashable, Ide
         case .json:
             """
             The complete record: every shift, every delivery recorded during it, each additional tip \
-            with how it reached you, the expenses you recorded, and — for a day, week, month or \
-            range — the summary with the counts each figure was worked out from.
+            with how it reached you, the expenses you recorded, and, for a day, week, month or \
+            range, the summary with the counts each figure was worked out from.
             """
         case .csv:
             """
@@ -319,7 +319,7 @@ nonisolated enum ExportFileFormat: String, CaseIterable, Sendable, Hashable, Ide
             keep that pairing. Your recorded expenses: an expense belongs to a date rather than to a \
             shift or a delivery, so it has no row in a table of deliveries and DashPilot will not \
             invent one. Your additional tips one by one: a delivery can have several, each with its \
-            own method and time, and a row per delivery has nowhere to put them — the count and the \
+            own method and time, and a row per delivery has nowhere to put them. The count and the \
             total are here instead. What you expected a delivery to pay: it is not earnings, and a \
             column of it beside one that is would be summed as though it were. Export JSON for all \
             four.
