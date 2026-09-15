@@ -15,7 +15,7 @@ import Foundation
 /// difference worth stating: there is no neutral third case. ``ExpenseCategory``
 /// has ``ExpenseCategory/other``, which claims nothing and is therefore a safe
 /// home for a stored word this build cannot name. A tip method has no such
-/// case — `cash` and `platform` are both substantive claims — so a stored word
+/// case, because `cash` and `platform` are both substantive claims, so a stored word
 /// this build cannot name reads as **no method**, which is what ``stored(_:)``
 /// returns. See ``DeliveryTip/method``.
 nonisolated enum DeliveryTipMethod: String, CaseIterable, Sendable, Hashable, Identifiable, Codable {

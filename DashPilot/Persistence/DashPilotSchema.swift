@@ -2052,7 +2052,7 @@ enum DashPilotMigrationPlan: SchemaMigrationPlan {
     /// file-scope `Delivery` has moved on: as of v13 it declares a collection of
     /// tips that a v12 store has no table for. Fetching the current type here
     /// traps inside SwiftData, which is not a test failure a reader would
-    /// recognise as one — it takes down the whole test process and reports as a
+    /// recognise as one: it takes down the whole test process and reports as a
     /// thousand unrelated crashes.
     ///
     /// So the stage is written against `DashPilotSchemaV12`'s own copies, which

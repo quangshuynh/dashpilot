@@ -234,8 +234,8 @@ nonisolated final class Delivery {
     /// guaranteed order.
     ///
     /// Rows rather than a second amount column, and that is the decision to
-    /// remember. Tips arrive as separate events with separate methods — cash at
-    /// the door, then a platform tip that evening — and one mutable column would
+    /// remember. Tips arrive as separate events with separate methods, cash at
+    /// the door and then a platform tip that evening, and one mutable column would
     /// collapse them into a figure the driver has to maintain by hand and would
     /// throw away which of them is already in their pocket. See ``DeliveryTip``.
     ///

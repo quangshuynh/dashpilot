@@ -137,7 +137,7 @@ nonisolated extension DeliveryTipExportRecord {
     /// One recorded tip as an export record.
     ///
     /// The method is carried as the domain's own word, or as an absence for a
-    /// stored value this build cannot name — see ``DeliveryTip/method``.
+    /// stored value this build cannot name. See ``DeliveryTip/method``.
     init(_ tip: DeliveryTip) {
         self.init(id: tip.id, amount: ExportAmount(tip.amount), method: tip.method, recordedAt: tip.recordedAt)
     }

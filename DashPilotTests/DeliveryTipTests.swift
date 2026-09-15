@@ -8,9 +8,9 @@ import Testing
 /// amount into what the delivery actually paid.
 ///
 /// The claims this suite exists for are a pair. **Several tips stay several
-/// facts** — two tips on one delivery are two events with two methods, and
+/// facts**: two tips on one delivery are two events with two methods, and
 /// nothing collapses them into one mutable figure. And **a missing platform
-/// amount has no total** — a delivery carrying a tip and no recorded pay earned
+/// amount has no total**: a delivery carrying a tip and no recorded pay earned
 /// the tip plus an amount nobody wrote down, so there is no effective figure to
 /// state and none is invented.
 ///

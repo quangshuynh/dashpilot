@@ -212,7 +212,7 @@ nonisolated struct ExportDocumentEncoder: Equatable, Sendable {
         "deliveryAdditionalTipCount",
         "deliveryAdditionalTipsTotal",
         // The column to sum for what deliveries actually paid. Empty, never
-        // `0.00`, wherever the platform amount was not recorded — a delivery
+        // `0.00`, wherever the platform amount was not recorded: a delivery
         // holding a tip and no platform figure has no total to state.
         "deliveryEffectiveEarnings"
     ]

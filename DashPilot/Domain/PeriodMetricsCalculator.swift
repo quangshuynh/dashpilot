@@ -57,7 +57,7 @@ nonisolated struct PeriodShiftRecord: Equatable, Sendable {
     ///
     /// Each entry is a delivery's **effective** earnings: the platform-recorded
     /// amount plus every additional tip recorded against it. A delivery with no
-    /// platform amount contributes no entry — never a zero, and never the tips
+    /// platform amount contributes no entry, never a zero and never the tips
     /// alone, because a delivery holding a tip and no platform figure paid the
     /// tip plus something nobody has written down. See
     /// ``EffectiveDeliveryEarnings``.

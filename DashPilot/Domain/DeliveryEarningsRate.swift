@@ -80,8 +80,8 @@ nonisolated extension DeliveryRateUnavailability {
 /// ## What it is not
 ///
 /// Not an hourly wage, not an active shift rate and not a driving rate. The
-/// numerator is gross of everything — nothing for fuel, wear, insurance or tax
-/// is subtracted anywhere in DashPilot — and the denominator measures how long
+/// numerator is gross of everything, because nothing for fuel, wear, insurance
+/// or tax is subtracted anywhere in DashPilot, and the denominator measures how long
 /// the delivery was open, which says nothing about what the driver was doing
 /// during it.
 nonisolated enum DeliveryEarningsRate: Equatable, Sendable {
@@ -116,7 +116,7 @@ extension Delivery {
     /// timestamps already answer, and it would keep the old answer after any of
     /// them changed.
     ///
-    /// Every input comes from this delivery alone — the platform amount the
+    /// Every input comes from this delivery alone: the platform amount the
     /// driver typed against it, the tips they recorded against it, and
     /// ``completedDuration``, which exists only for a delivery that was actually
     /// delivered. No other delivery's timing, and no part of the shift's own

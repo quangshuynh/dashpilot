@@ -85,11 +85,11 @@ against the rule above and **moved**, because one field was renamed and one chan
 
 Four fields were **added**, which on their own would not have moved it:
 
-- `shifts[].deliveries[].additionalTips` — one record per tip, always present and `[]` where none was
+- `shifts[].deliveries[].additionalTips`, one record per tip, always present and `[]` where none was
   recorded, each carrying its amount, its method (`cash`, `platform`, or `null` for a stored word this
   build cannot name) and when the driver recorded it.
-- `shifts[].deliveries[].additionalTipsTotal` — `null`, never `"0.00"`, where none was recorded.
-- `shifts[].deliveries[].effectiveEarnings` — the two together, and `null` wherever `grossEarnings`
+- `shifts[].deliveries[].additionalTipsTotal`, which is `null` and never `"0.00"` where none was recorded.
+- `shifts[].deliveries[].effectiveEarnings`, the two together, and `null` wherever `grossEarnings`
   is, tips or no tips.
 - Three **appended** CSV columns, `deliveryAdditionalTipCount`, `deliveryAdditionalTipsTotal` and
   `deliveryEffectiveEarnings`, taking it from 36 columns to 39. Appending leaves every existing

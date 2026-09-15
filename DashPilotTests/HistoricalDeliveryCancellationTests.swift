@@ -505,8 +505,8 @@ struct HistoricalDeliveryCancellationTests {
         #expect(prompt.detail.contains(HistoricalCancellationPrompt.unchangedStatement))
     }
 
-    /// The sentence covers every kind of money the delivery may hold — the
-    /// platform amount, an additional tip, or both — because a correction that
+    /// The sentence covers every kind of money the delivery may hold, the
+    /// platform amount or an additional tip or both, because a correction that
     /// preserved one and not the other would be a different promise.
     @Test("The money sentence appears only where there is money")
     func thePromptNamesEarningsOnlyWhereThereAreSome() {

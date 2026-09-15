@@ -860,8 +860,8 @@ struct DeliveryService {
     /// Records a tip one finished delivery received **outside** what the
     /// platform recorded paying for it, and returns the row.
     ///
-    /// The model enforces the invariants — a finished delivery, an amount above
-    /// zero — and ``Delivery/recordAdditionalTip(_:method:at:)`` is the only
+    /// The model enforces the invariants, a finished delivery and an amount above
+    /// zero, and ``Delivery/recordAdditionalTip(_:method:at:)`` is the only
     /// thing that builds the row, so a screen is never the only thing keeping
     /// either rule. This adds the insert, the save and the same rollback rule
     /// every other write here uses, so a tip can never be showing in the
