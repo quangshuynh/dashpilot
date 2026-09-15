@@ -63,15 +63,6 @@ nonisolated enum DeliveryTipMethod: String, CaseIterable, Sendable, Hashable, Id
         }
     }
 
-    /// The icon beside the label. Decoration only: every surface states the
-    /// method in words as well, because an icon is not a label to VoiceOver.
-    var systemImage: String {
-        switch self {
-        case .cash: "banknote"
-        case .platform: "iphone"
-        }
-    }
-
     /// Reads a method back out of the store.
     ///
     /// `nil` for a word this build cannot name, which is the honest answer
