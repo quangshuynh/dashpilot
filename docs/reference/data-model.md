@@ -127,6 +127,7 @@ none are kept, because nothing implemented reads them.
 | `pickupPlace` | `PickupPlace?` | Optional and often absent. A reference, so two deliveries from one place share a row. Nullify on delete |
 | `grossEarningsAmount` | `Decimal?` | Private. What this one delivery paid, as the driver typed it. `nil` means no amount recorded, which is not zero. Unrelated to `Shift.grossEarningsAmount` |
 | `expectedEarningsAmount` | `Decimal?` | Private. What the driver expects this delivery to pay, entered while it was active. **Not earnings**: nothing counts it, and it never becomes the column above. `nil` means none recorded, which is not zero |
+| `additionalTips` | `[DeliveryTip]` | Tips received **outside** `grossEarningsAmount`. Cascades on delete, so deleting a shift reaches its deliveries and on to their tips. Empty is the ordinary case |
 
 Derived, never stored:
 
@@ -140,7 +141,10 @@ Derived, never stored:
 | `grossEarnings` | The stored decimal as a `Money`, or `nil` |
 | `expectedEarnings` | The stored expected decimal as a `Money`, or `nil`. No rate is derived from it, here or anywhere |
 | `hasUnconfirmedExpectedEarnings` | An expectation is recorded and no gross amount is. The state the completion confirmation and the history screen offer to resolve |
-| `grossPerDeliveryHour` | A `DeliveryEarningsRate`: the amount over this delivery's own `completedDuration`, or the reason there is none |
+| `additionalTipsInOrder` | The tips oldest first, with identity breaking a tie, so the list's numbering is repeatable |
+| `effectiveEarnings` | An `EffectiveDeliveryEarnings`: the platform amount, the tips, and what the two come to. The total is `nil` whenever the platform amount is, tips or no tips |
+| `hasRecordedMoney` | A platform amount **or** a tip. Asked by the corrections that promise not to touch what the driver recorded |
+| `effectiveEarningsPerDeliveryHour` | A `DeliveryEarningsRate`: the **effective** earnings over this delivery's own `completedDuration`, or the reason there is none |
 | `acceptedBefore(_:_:)` | The total, repeatable order over deliveries: acceptance ascending, identity breaking a tie |
 | `makeHistoricalOffer()` | The v11 to v12 migration's one write: the one-delivery offer a delivery recorded before offers existed belongs in. `nil`, changing nothing, for a delivery that already holds one or belongs to no shift |
 | `move(into:)` | The one place a delivery's grouping changes. Returns the offer it left, so the caller can decide what happens to an offer left holding nothing. Refuses another shift's offer, the offer it is already in, and an offer accepted after this delivery was |
@@ -167,6 +171,31 @@ free to report an expectation as earnings, and each reader that was missed would
 silently. A separate column fails the other way: a reader that has not been taught about
 expectations cannot see them, which is exactly what every aggregate in the app wants. Finishing a
 delivery never moves a value from one column to the other.
+
+## `DeliveryTip`
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `id` | `UUID` | Unique attribute |
+| `amountValue` | `Decimal` | Private. Always more than zero: a tip of nothing is refused on the way in, so there is no missing-versus-zero question to ask about it |
+| `methodRawValue` | `String` | Private. `DeliveryTipMethod`'s raw value. Read back through `stored(_:)`, which returns **no method** for a word this build cannot name, because both cases are substantive claims and neither may stand in for an unknown one |
+| `recordedAt` | `Date` | When the driver wrote the tip down. Never edited, and **not** when the money changed hands |
+| `delivery` | `Delivery?` | The delivery this tip was received for. Optional only because SwiftData models the inverse of a to-many that way; the initializer requires one |
+
+`Delivery.recordAdditionalTip(_:method:at:)` is the **only** thing that creates one, so the two rules
+it keeps cannot be bypassed: the delivery has to be finished, and the amount has to be more than
+nothing. `update(amount:method:)` replaces both values together and moves no timestamp. There is no
+"when it arrived" field and no picker for one: correcting a historical timestamp is its own decision
+with its own rules, and a field that looked like the moment money changed hands while holding the
+moment it was typed would be the worst of both.
+
+A tip is a **separate recorded fact**, never a rewrite of `Delivery.grossEarningsAmount`. That column
+stays the platform-recorded pay, including whatever the platform already folded into it. What the
+delivery actually paid is the two added on demand by `EffectiveDeliveryEarnings`, and no total is
+stored anywhere. See [Earnings and metrics](../product/earnings-and-metrics.md).
+
+It is **not** cash-on-delivery accounting: no order total, no cash collected, no platform deduction,
+no reimbursement and no customer balance is stored anywhere in DashPilot.
 
 ## `Offer`
 
@@ -303,8 +332,9 @@ shifts, deliveries, days or miles. See [Recorded expenses](../product/expenses.m
 | 10.0.0 | Removes `Shift.routeSamples`. `RouteSample.shift` is unchanged, and no stored value moves |
 | 11.0.0 | Adds `Delivery.expectedEarningsAmount`. No existing attribute moves, and no delivery gains one |
 | 12.0.0 | Adds `Offer`, `Delivery.offer` and `Shift.offers`. The first custom stage: every existing delivery is given a one-delivery offer of its own, and no two are grouped together |
+| 13.0.0 | Adds `DeliveryTip` and `Delivery.additionalTips`. Lightweight, and nothing is backfilled: a delivery holding no tip is the ordinary shape in this build too, so every figure a migrated store derives is the figure it already was |
 
-Every step so far is a lightweight stage, and none backfills a value. See
+Every step but 12.0.0 is a lightweight stage, and none but that one writes a value. See
 [Migrations](../architecture/migrations.md).
 
 Two capabilities needed no version of their own. Supporting several concurrent deliveries changed no
@@ -318,6 +348,8 @@ none either — it is unioned from timestamps already stored, every time it is s
 | Type | Purpose |
 | --- | --- |
 | `Money` | `Decimal`-backed monetary value. Unrounded in memory, rounded only for display |
+| `DeliveryTipMethod` | `cash` or `platform`, and a closed set. A stored word this build cannot name reads as **no method**, because there is no neutral third case for one to fall back on |
+| `EffectiveDeliveryEarnings` | A delivery's platform amount plus its recorded tips. The total is absent whenever the platform amount is |
 | `MoneyInput` | Locale-aware parsing of what a decimal pad produces, with typed rejections |
 | `RoutePoint`, `LocationSample` | Framework-free position values used by the filter and calculator |
 | `RouteSampleFilter` | The capture acceptance policy and its rejection reasons |
