@@ -63,6 +63,7 @@ struct ShiftLiveActivity: Widget {
                         .accessibilityLabel("Recorded mileage")
                         .accessibilityValue(state.spokenMileageLine)
                     ShiftActivityDeliveryLine(state: state)
+                    ShiftActivityDeliveryTimers(state: state)
                     ShiftActivityControls(state: state)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -119,6 +120,8 @@ struct ShiftActivityLockScreenView: View {
                 .accessibilityValue(state.spokenMileageLine)
 
             ShiftActivityDeliveryLine(state: state)
+
+            ShiftActivityDeliveryTimers(state: state)
 
             ShiftActivityControls(state: state)
         }
@@ -183,6 +186,73 @@ struct ShiftActivityDeliveryLine: View {
                 .compactMap { $0 }
                 .joined(separator: ". ")
         )
+    }
+}
+
+/// How long each delivery in progress has been open.
+///
+/// ## One line per delivery, and the system counts each of them
+///
+/// `Delivery 1 · 18:04`, one row per open order, drawn from that delivery's own
+/// acceptance instant. **Counted by the system, not pushed by the app**, for
+/// exactly the reason the shift's own clock is: an anchor stays correct for as
+/// long as the delivery is open, and a duration written into the snapshot would
+/// be wrong a second later.
+///
+/// Nothing is added together. Two stacked orders are two lifecycles running
+/// over the same minutes, and one combined figure would be longer than the
+/// shift and would belong to neither of them.
+///
+/// A delivered or cancelled delivery simply has no row: the app derives the
+/// list from the deliveries that are open, so finishing one stops its clock by
+/// removing it rather than by freezing it at a number that looks live.
+///
+/// ## Two elements per row, deliberately
+///
+/// The label and the figure are separate, like the shift's clock and its
+/// heading. Combining them would freeze the count into whatever this snapshot
+/// was built at, and a listener would be told a duration that stopped moving.
+/// The label goes on the name, ahead of the figure, so VoiceOver says what the
+/// number that follows measures.
+struct ShiftActivityDeliveryTimers: View {
+    let state: ShiftActivityAttributes.ContentState
+
+    var body: some View {
+        if !state.activeDeliveryTimers.isEmpty {
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(state.drawnDeliveryTimers, id: \.self) { timer in
+                    row(for: timer)
+                }
+
+                if let notice = state.undrawnDeliveryTimerNotice {
+                    Text(notice)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .accessibilityLabel(state.spokenUndrawnDeliveryTimerNotice ?? notice)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private func row(for timer: ShiftActivityDeliveryTimer) -> some View {
+        HStack(spacing: 4) {
+            // The subject, and the one element carrying a spoken label. The
+            // middle dot is hidden from VoiceOver for the reason it is
+            // everywhere else in this app: it is punctuation, not a word.
+            Text(timer.title)
+                .accessibilityLabel(timer.spokenLabel)
+            Text(verbatim: "·")
+                .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
+            // Left unlabelled on purpose. The system draws and speaks this one
+            // from the anchor, so any label of ours would replace a live figure
+            // with the one this snapshot happened to carry.
+            Text(timerInterval: timer.timerRange, countsDown: false)
+                .monospacedDigit()
+        }
+        .font(.caption)
+        .lineLimit(1)
     }
 }
 
