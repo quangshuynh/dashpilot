@@ -58,7 +58,15 @@ struct OlderHistoryWeeksView: View {
             ForEach(weeks) { group in
                 Section {
                     ForEach(group.elements) { shift in
-                        NavigationLink(value: shift) {
+                        // A link to the screen rather than to the value the root
+                        // pushes by. A `navigationDestination(for:)` belongs to
+                        // the view that declares it, and this screen is itself
+                        // pushed onto that stack, so a value-based link here
+                        // finds no destination and a row tap does nothing. The
+                        // destination is the same view either way.
+                        NavigationLink {
+                            CompletedShiftDetailView(shift: shift)
+                        } label: {
                             CompletedShiftRow(shift: shift)
                         }
                         .accessibilityIdentifier("olderWeekShiftRow")
@@ -110,9 +118,6 @@ struct OlderHistoryWeeksView: View {
 #Preview("Older weeks") {
     NavigationStack {
         OlderHistoryWeeksView()
-            .navigationDestination(for: Shift.self) { shift in
-                CompletedShiftDetailView(shift: shift)
-            }
     }
     .modelContainer(PreviewSupport.olderWeeksContainer())
 }
