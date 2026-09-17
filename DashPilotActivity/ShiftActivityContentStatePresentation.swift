@@ -103,6 +103,63 @@ nonisolated extension ShiftActivityAttributes.ContentState {
         return parts.joined(separator: ". ")
     }
 
+    // MARK: How long each delivery has been open
+
+    /// How many delivery timers the card draws before it stops adding lines.
+    ///
+    /// A presentation limit and nothing else: it decides how many rows fit, not
+    /// which delivery matters. A Lock Screen card has a fixed height, and the
+    /// controls sit **below** these lines, so an unbounded list would push the
+    /// buttons a driver reaches for off the bottom of the card. Three covers
+    /// every stack this work ordinarily produces; beyond it the count is stated
+    /// rather than the lines drawn, because a dropped row that says nothing is
+    /// the one outcome that would mislead.
+    static var maximumDrawnDeliveryTimers: Int { 3 }
+
+    /// The timers the card draws, in the order the shift accepted them.
+    ///
+    /// The order is the shift's own acceptance order, which is the order every
+    /// other numbered surface in the app uses. It is an ordering rather than a
+    /// ranking: nothing here says the first one is the delivery that matters.
+    var drawnDeliveryTimers: [ShiftActivityDeliveryTimer] {
+        Array(activeDeliveryTimers.prefix(Self.maximumDrawnDeliveryTimers))
+    }
+
+    /// How many open deliveries have no line of their own on the card.
+    var undrawnDeliveryTimerCount: Int {
+        max(0, activeDeliveryTimers.count - Self.maximumDrawnDeliveryTimers)
+    }
+
+    /// `"1 more also active"`, or `nil` when every open delivery has a line.
+    ///
+    /// Short, because it shares a card with the controls. It states a count and
+    /// claims nothing about how long those deliveries have been running: the
+    /// app is where their timers are.
+    var undrawnDeliveryTimerNotice: String? {
+        guard undrawnDeliveryTimerCount > 0 else { return nil }
+        return "\(undrawnDeliveryTimerCount) more also active"
+    }
+
+    /// The same fact with the noun restored, because a listener has no line
+    /// above it to read the subject from.
+    var spokenUndrawnDeliveryTimerNotice: String? {
+        guard undrawnDeliveryTimerCount > 0 else { return nil }
+        let count = undrawnDeliveryTimerCount
+        return "\(count) more \(Self.noun(count)) also active. Open DashPilot for their timers."
+    }
+
+    /// Each drawn timer as one frozen spoken sentence, for the one presentation
+    /// with no live element of its own.
+    ///
+    /// Frozen at ``asOf``, exactly as ``spokenWorkingTime`` is, and for the same
+    /// reason: ``spokenSummary`` is a single string handed to a glyph, and a
+    /// string cannot count. Every surface that has room for an element draws the
+    /// system's live timer instead.
+    var spokenDeliveryTimerLines: [String] {
+        drawnDeliveryTimers.map { $0.spokenElapsed(asOf: asOf) }
+            + [spokenUndrawnDeliveryTimerNotice].compactMap { $0 }
+    }
+
     /// The whole snapshot as one spoken description, for a surface that reads as
     /// a single element.
     var spokenSummary: String {
@@ -111,6 +168,7 @@ nonisolated extension ShiftActivityAttributes.ContentState {
         sentences.append(spokenMileageLine)
         sentences.append(spokenDeliveryLine)
         if let deliveryStatus { sentences.append(deliveryStatus) }
+        sentences.append(contentsOf: spokenDeliveryTimerLines)
         return sentences.joined(separator: ". ")
     }
 

@@ -171,6 +171,263 @@ struct ShiftActivityContentTests {
         )
     }
 
+    // MARK: How long the deliveries in progress have been open
+
+    @Test("One delivery in progress is counted from its own acceptance instant")
+    func countsTheOneDeliveryFromItsOwnAcceptance() throws {
+        let context = try makeContext()
+        let shift = try startedShift(in: context)
+        let delivery = try DeliveryService(context: context).startDelivery(at: at(10))
+
+        let state = shift.activityContentState(for: .none, asOf: at(1_090), locale: locale)
+        let timer = try #require(state.activeDeliveryTimers.first)
+
+        #expect(state.activeDeliveryTimers.count == 1)
+        #expect(
+            timer.startedAt == delivery.acceptedAt,
+            "The delivery's own acceptedAt, which is where every other duration derived from it starts"
+        )
+        #expect(timer.timerRange.lowerBound == delivery.acceptedAt)
+        #expect(
+            timer.timerRange.upperBound == .distantFuture,
+            "A delivery that runs long keeps counting rather than stopping at a horizon"
+        )
+    }
+
+    @Test("The timer names the delivery the way the rest of the app names it")
+    func namesTheDeliveryAsTheAppDoes() throws {
+        let context = try makeContext()
+        let shift = try startedShift(in: context)
+        let deliveries = DeliveryService(context: context)
+        let first = try deliveries.startDelivery(at: at(10))
+        try deliveries.markArrivedAtPickup(first, at: at(12))
+        try deliveries.markPickedUp(first, at: at(15))
+        try deliveries.markDelivered(first, at: at(20))
+        _ = try deliveries.startDelivery(at: at(30))
+
+        let state = shift.activityContentState(for: .none, asOf: at(40), locale: locale)
+        let timer = try #require(state.activeDeliveryTimers.first)
+        let numbered = try #require(shift.numberedActiveDeliveries.first)
+
+        #expect(timer.title == numbered.title)
+        #expect(
+            timer.title == NumberedDelivery.title(number: 2),
+            "Numbering runs over the whole shift, so the second delivery stays Delivery 2"
+        )
+    }
+
+    @Test("The anchor does not move as time passes, so nothing has to be pushed to keep it right")
+    func holdsTheDeliveryAnchorStillAsTimePasses() throws {
+        let context = try makeContext()
+        let shift = try startedShift(in: context)
+        _ = try DeliveryService(context: context).startDelivery(at: at(10))
+
+        let early = shift.activityContentState(for: .none, asOf: at(60), locale: locale)
+        let later = shift.activityContentState(for: .none, asOf: at(3_600), locale: locale)
+
+        #expect(early.activeDeliveryTimers == later.activeDeliveryTimers)
+        #expect(
+            ShiftActivityUpdatePolicy.change(from: early, to: later) == .none,
+            "A clock the system draws from an anchor is not a reason to hand over a snapshot"
+        )
+    }
+
+    @Test("The elapsed figure is the time since the delivery was accepted, spoken with its subject")
+    func speaksHowLongTheDeliveryHasBeenActive() throws {
+        let context = try makeContext()
+        let shift = try startedShift(in: context)
+        _ = try DeliveryService(context: context).startDelivery(at: at(10))
+
+        let state = shift.activityContentState(for: .none, asOf: at(1_090), locale: locale)
+        let timer = try #require(state.activeDeliveryTimers.first)
+
+        #expect(timer.elapsed(asOf: at(1_090)) == 1_080, "Eighteen minutes since it was accepted")
+        #expect(timer.elapsed(asOf: at(10)) == 0)
+        #expect(
+            timer.elapsed(asOf: at(0)) == 0,
+            "A reference date before the acceptance is clamped rather than counted backwards"
+        )
+
+        let spoken = timer.spokenElapsed(asOf: at(1_090))
+        #expect(spoken.contains("Delivery 1"))
+        #expect(spoken.contains("18"))
+        #expect(!spoken.contains(":"), "A colon is heard as punctuation, not as a time")
+
+        #expect(
+            timer.spokenLabel == "How long Delivery 1 has been active",
+            "The live figure is left unlabelled, so the label beside it has to say what it measures"
+        )
+    }
+
+    @Test("A delivered delivery stops counting by leaving the card, not by freezing")
+    func stopsCountingOnceTheDeliveryIsDelivered() throws {
+        let context = try makeContext()
+        let shift = try startedShift(in: context)
+        let deliveries = DeliveryService(context: context)
+        let delivery = try deliveries.startDelivery(at: at(10))
+
+        #expect(shift.activityContentState(for: .none, asOf: at(20), locale: locale).activeDeliveryTimers.count == 1)
+
+        try deliveries.markArrivedAtPickup(delivery, at: at(100))
+        try deliveries.markPickedUp(delivery, at: at(300))
+        try deliveries.markDelivered(delivery, at: at(600))
+        let after = shift.activityContentState(for: .none, asOf: at(900), locale: locale)
+
+        #expect(after.activeDeliveryTimers.isEmpty, "A terminal delivery is not an active one")
+        #expect(after.completedDeliveryCount == 1)
+        #expect(
+            delivery.completedDuration == 590,
+            "And the finished delivery's own duration is the one it always was"
+        )
+    }
+
+    @Test("A cancelled delivery stops counting in exactly the same way")
+    func stopsCountingOnceTheDeliveryIsCancelled() throws {
+        let context = try makeContext()
+        let shift = try startedShift(in: context)
+        let deliveries = DeliveryService(context: context)
+        let delivery = try deliveries.startDelivery(at: at(10))
+        try deliveries.cancelDelivery(delivery, at: at(600))
+
+        let after = shift.activityContentState(for: .none, asOf: at(900), locale: locale)
+
+        #expect(after.activeDeliveryTimers.isEmpty)
+        #expect(after.completedDeliveryCount == 0, "A cancellation is not a completion")
+        #expect(after.deliveryLine == "No delivery in progress")
+    }
+
+    @Test("A reopened delivery counts from the acceptance it always had")
+    func countsAReopenedDeliveryFromItsOriginalAcceptance() throws {
+        let context = try makeContext()
+        let shift = try startedShift(in: context)
+        let deliveries = DeliveryService(context: context)
+        let delivery = try deliveries.startDelivery(at: at(10))
+        try deliveries.markArrivedAtPickup(delivery, at: at(100))
+        try deliveries.markPickedUp(delivery, at: at(300))
+        try deliveries.markDelivered(delivery, at: at(600))
+        try deliveries.reopenDelivered(delivery)
+
+        let after = shift.activityContentState(for: .none, asOf: at(700), locale: locale)
+        let timer = try #require(after.activeDeliveryTimers.first)
+
+        #expect(
+            timer.startedAt == at(10),
+            "Reopening clears the completion and nothing else, so the clock resumes from the acceptance"
+        )
+    }
+
+    @Test("Stacked deliveries each carry their own timer, and nothing adds them together")
+    func countsEachStackedDeliverySeparately() throws {
+        let context = try makeContext()
+        let shift = try startedShift(in: context)
+        let deliveries = DeliveryService(context: context)
+        _ = try deliveries.startDelivery(at: at(10))
+        _ = try deliveries.startDelivery(at: at(610))
+
+        let state = shift.activityContentState(for: .none, asOf: at(1_210), locale: locale)
+
+        #expect(state.activeDeliveryTimers.map(\.title) == ["Delivery 1", "Delivery 2"])
+        #expect(state.activeDeliveryTimers.map(\.startedAt) == [at(10), at(610)])
+        #expect(state.activeDeliveryTimers.map { $0.elapsed(asOf: at(1_210)) } == [1_200, 600])
+        #expect(
+            !state.activeDeliveryTimers.contains { $0.elapsed(asOf: at(1_210)) == 1_800 },
+            "Two overlapping lifecycles are not half an hour of anything"
+        )
+        #expect(
+            state.deliveryStatus == nil,
+            "Naming one of two orders is still refused; naming both of their clocks is not the same thing"
+        )
+    }
+
+    @Test("Finishing one of two leaves the other counting under the number it already had")
+    func leavesTheRemainingStackedDeliveryCounting() throws {
+        let context = try makeContext()
+        let shift = try startedShift(in: context)
+        let deliveries = DeliveryService(context: context)
+        let first = try deliveries.startDelivery(at: at(10))
+        _ = try deliveries.startDelivery(at: at(610))
+        try deliveries.markArrivedAtPickup(first, at: at(700))
+        try deliveries.markPickedUp(first, at: at(800))
+        try deliveries.markDelivered(first, at: at(900))
+
+        let state = shift.activityContentState(for: .none, asOf: at(1_000), locale: locale)
+        let timer = try #require(state.activeDeliveryTimers.first)
+
+        #expect(state.activeDeliveryTimers.count == 1)
+        #expect(timer.title == "Delivery 2", "Finishing one does not renumber the other")
+        #expect(timer.startedAt == at(610))
+    }
+
+    @Test("Beyond three open orders the card states the remainder rather than dropping it silently")
+    func statesTheOpenDeliveriesItHasNoRoomToDraw() throws {
+        let context = try makeContext()
+        let shift = try startedShift(in: context)
+        let deliveries = DeliveryService(context: context)
+        for step in 0..<4 { _ = try deliveries.startDelivery(at: at(Double(10 + step * 10))) }
+
+        let state = shift.activityContentState(for: .none, asOf: at(1_000), locale: locale)
+
+        #expect(state.activeDeliveryTimers.count == 4, "The snapshot carries every one of them")
+        #expect(state.drawnDeliveryTimers.map(\.title) == ["Delivery 1", "Delivery 2", "Delivery 3"])
+        #expect(state.undrawnDeliveryTimerCount == 1)
+        #expect(state.undrawnDeliveryTimerNotice == "1 more also active")
+        #expect(state.spokenUndrawnDeliveryTimerNotice?.contains("1 more delivery") == true)
+
+        // Three is the last count that fits, so nothing is stated for it.
+        try deliveries.cancelDelivery(try #require(shift.numberedActiveDeliveries.last).delivery, at: at(1_100))
+        let three = shift.activityContentState(for: .none, asOf: at(1_200), locale: locale)
+        #expect(three.drawnDeliveryTimers.count == 3)
+        #expect(three.undrawnDeliveryTimerCount == 0)
+        #expect(three.undrawnDeliveryTimerNotice == nil)
+    }
+
+    @Test("A shift with nothing open carries no timer at all")
+    func carriesNoTimerWithNothingOpen() throws {
+        let context = try makeContext()
+        let service = ShiftService(context: context)
+        let shift = try service.startShift(at: start)
+
+        #expect(shift.activityContentState(for: .none, asOf: at(60), locale: locale).activeDeliveryTimers.isEmpty)
+        #expect(shift.activityContentState(for: .none, asOf: at(60), locale: locale).undrawnDeliveryTimerNotice == nil)
+
+        try service.pauseActiveShift(at: at(120))
+        #expect(
+            shift.activityContentState(for: .none, asOf: at(180), locale: locale).activeDeliveryTimers.isEmpty,
+            "Pausing is refused while a delivery is open, so a paused card has nothing to count"
+        )
+    }
+
+    @Test("The timers change nothing about the controls the card already offered")
+    func leavesTheExistingControlsExactlyAsTheyWere() throws {
+        let context = try makeContext()
+        let service = ShiftService(context: context)
+        let shift = try service.startShift(at: start)
+        let deliveries = DeliveryService(context: context)
+
+        let quiet = shift.activityContentState(for: .none, asOf: at(5), locale: locale)
+        #expect(quiet.controls == [.startDelivery, .pause, .end])
+        #expect(quiet.controlNotice == nil)
+
+        let delivery = try deliveries.startDelivery(at: at(10))
+        let carrying = shift.activityContentState(for: .none, asOf: at(20), locale: locale)
+        #expect(carrying.controls == [.deliveryStep(.arriveAtPickup), .startDelivery])
+        #expect(carrying.activeDeliveryTimers.count == 1)
+        #expect(carrying.controlNotice == nil)
+
+        _ = try deliveries.startDelivery(at: at(30))
+        let stacked = shift.activityContentState(for: .none, asOf: at(40), locale: locale)
+        #expect(stacked.controls == [.startDelivery], "The step is still withheld, for the reason it always was")
+        #expect(stacked.activeDeliveryTimers.count == 2, "And both orders are still counted")
+        #expect(stacked.controlNotice?.contains("Several deliveries") == true)
+
+        try deliveries.markArrivedAtPickup(delivery, at: at(50))
+        try deliveries.markPickedUp(delivery, at: at(60))
+        try deliveries.markDelivered(delivery, at: at(70))
+        let afterOne = shift.activityContentState(for: .none, asOf: at(80), locale: locale)
+        #expect(afterOne.controls == [.deliveryStep(.arriveAtPickup), .startDelivery])
+        #expect(afterOne.controlNotice == nil)
+    }
+
     // MARK: Which controls are offered
 
     @Test("A running shift with nothing open offers Start Delivery, Pause and End")
@@ -462,6 +719,10 @@ struct ShiftActivityContentTests {
         try deliveries.markArrivedAtPickup(delivery, at: at(20))
         _ = try PickupPlaceService(context: context).assignPlace(named: "Corner Cafe", to: delivery, at: at(25))
 
+        // A second order, so the timer lines and the remainder notice are both
+        // part of what the sweep reads.
+        try deliveries.setExpectedEarnings(try #require(Money(exact: "12.25")), on: try deliveries.startDelivery(at: at(30)))
+
         let state = shift.activityContentState(for: shift.recordedDistance(), asOf: at(60), locale: locale)
 
         // Everything the surface can print, in one place.
@@ -476,8 +737,12 @@ struct ShiftActivityContentTests {
             state.spokenSummary,
             state.compactDeliveryCount,
             state.deliveryStatus,
-            state.controlNotice
-        ].compactMap { $0 } + state.controls.flatMap { [$0.title, $0.spokenLabel] }
+            state.controlNotice,
+            state.undrawnDeliveryTimerNotice,
+            state.spokenUndrawnDeliveryTimerNotice
+        ].compactMap { $0 }
+            + state.controls.flatMap { [$0.title, $0.spokenLabel] }
+            + state.activeDeliveryTimers.flatMap { [$0.title, $0.spokenLabel, $0.spokenElapsed(asOf: at(60))] }
 
         for line in printed {
             #expect(!line.contains("$"), "No amount reaches a Lock Screen: \(line)")
@@ -490,6 +755,12 @@ struct ShiftActivityContentTests {
             #expect(!line.contains("40.0"), "No coordinate: \(line)")
             #expect(!line.contains("-75.0"), "No coordinate: \(line)")
         }
+
+        #expect(state.activeDeliveryTimers.count == 2, "The timers really were part of that sweep")
+        #expect(
+            state.activeDeliveryTimers.allSatisfy { $0.title.hasPrefix("Delivery ") },
+            "A timer names a delivery by its position in the shift and by nothing else"
+        )
     }
 
     @Test("The snapshot encodes and decodes as the same snapshot")
@@ -506,6 +777,11 @@ struct ShiftActivityContentTests {
 
         #expect(decoded == state)
         #expect(decoded.controls == [.deliveryStep(.arriveAtPickup), .startDelivery])
+        #expect(
+            decoded.activeDeliveryTimers == state.activeDeliveryTimers,
+            "The anchor has to survive the encoding, or the clock the extension draws is not this delivery's"
+        )
+        #expect(decoded.activeDeliveryTimers.map(\.startedAt) == [at(10)])
     }
 
     // MARK: The working clock the system draws

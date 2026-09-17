@@ -37,6 +37,20 @@ nonisolated extension ShiftActivityDeliveryStep {
     }
 }
 
+nonisolated extension ShiftActivityDeliveryTimer {
+    /// The counting anchor for one delivery in progress.
+    ///
+    /// The mapping exists because the widget extension cannot see
+    /// ``NumberedDelivery`` or ``Delivery``. It maps and never decides: the
+    /// name is ``NumberedDelivery/title``'s, which is the app's one definition
+    /// of what a delivery is called, and the instant is the delivery's own
+    /// `acceptedAt`, which is where every other duration derived from this
+    /// delivery already starts.
+    init(_ numbered: NumberedDelivery) {
+        self.init(title: numbered.title, startedAt: numbered.delivery.acceptedAt)
+    }
+}
+
 /// What the shift's Live Activity is told, derived from what the app already
 /// knows about the shift.
 ///
@@ -73,6 +87,16 @@ nonisolated extension ShiftActivityDeliveryStep {
 /// A control is a courtesy and never a permission. Pressing one runs
 /// ``IntentLifecycleService``, which asks the store, so a snapshot that is a
 /// moment out of date costs a refusal sentence rather than a wrong write.
+///
+/// ## The delivery timers are not that decision
+///
+/// Every delivery in progress gets its own counting anchor, and nothing chooses
+/// between them. A step has to know which delivery a tap belongs to, which with
+/// two open has no answer; a timer says which delivery it is counting, so the
+/// ambiguity the step refuses does not arise. The anchors are never combined:
+/// two stacked lifecycles run over the same minutes, and adding them would
+/// produce a figure longer than the shift, which is the same reason
+/// ``DeliveryActiveTimeCalculator`` unions intervals instead of summing them.
 nonisolated enum ShiftActivityContent {
     /// The snapshot to hand ActivityKit.
     ///
@@ -81,11 +105,16 @@ nonisolated enum ShiftActivityContent {
     ///   - deliveryInProgress: the state of the **one** delivery in progress, or
     ///     `nil` when there is none or when there is more than one. Resolved by
     ///     ``UnambiguousDelivery`` rather than by anything here.
+    ///   - activeDeliveryTimers: one counting anchor per delivery in progress,
+    ///     in acceptance order. **Every** open delivery, resolved by nothing:
+    ///     a timer names the delivery it belongs to, so unlike a step it needs
+    ///     no answer to which delivery the driver meant.
     ///   - asOf: the instant the figures were read at.
     ///   - locale: the locale the mileage sentence is written in.
     static func state(
         of metrics: ActiveShiftMetrics,
         deliveryInProgress: DeliveryState?,
+        activeDeliveryTimers: [ShiftActivityDeliveryTimer],
         asOf: Date,
         locale: Locale = .autoupdatingCurrent
     ) -> ShiftActivityAttributes.ContentState {
@@ -100,6 +129,7 @@ nonisolated enum ShiftActivityContent {
             activeDeliveryCount: metrics.deliverySummary.inProgress,
             completedDeliveryCount: metrics.deliverySummary.completed,
             deliveryStatus: deliveryInProgress?.statusDescription,
+            activeDeliveryTimers: activeDeliveryTimers,
             controls: controls(for: metrics, nextStep: step)
         )
     }
@@ -139,9 +169,17 @@ extension Shift {
         asOf referenceDate: Date,
         locale: Locale = .autoupdatingCurrent
     ) -> ShiftActivityAttributes.ContentState {
-        ShiftActivityContent.state(
+        // Numbered rather than bare, because a timer has to say which delivery
+        // it belongs to, and `NumberedDelivery` is the one place that decides
+        // what a delivery is called. The ordering and the filter are the ones
+        // `activeDeliveries` already applies, so the delivery a step is
+        // resolved for is the same delivery it always was.
+        let active = numberedActiveDeliveries
+
+        return ShiftActivityContent.state(
             of: activeMetrics(for: recordedDistance, asOf: referenceDate),
-            deliveryInProgress: UnambiguousDelivery.target(among: activeDeliveries)?.state,
+            deliveryInProgress: UnambiguousDelivery.target(among: active)?.delivery.state,
+            activeDeliveryTimers: active.map(ShiftActivityDeliveryTimer.init),
             asOf: referenceDate,
             locale: locale
         )

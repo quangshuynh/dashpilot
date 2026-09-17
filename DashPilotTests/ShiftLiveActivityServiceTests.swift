@@ -580,6 +580,7 @@ struct ShiftActivityUpdatePolicyTests {
         active: Int = 0,
         completed: Int = 0,
         status: String? = nil,
+        timers: [ShiftActivityDeliveryTimer] = [],
         controls: [ShiftActivityControl] = [.pause, .end]
     ) -> ShiftActivityAttributes.ContentState {
         ShiftActivityAttributes.ContentState(
@@ -591,6 +592,7 @@ struct ShiftActivityUpdatePolicyTests {
             activeDeliveryCount: active,
             completedDeliveryCount: completed,
             deliveryStatus: status,
+            activeDeliveryTimers: timers,
             controls: controls
         )
     }
@@ -622,6 +624,38 @@ struct ShiftActivityUpdatePolicyTests {
             ShiftActivityUpdatePolicy.change(from: base, to: state(status: "Waiting at the pickup")) == .material
         )
         #expect(ShiftActivityUpdatePolicy.change(from: base, to: state(controls: [])) == .material)
+    }
+
+    /// The one case every count on the card hides: an order finishing at the
+    /// moment another is accepted. Nothing else moves, and without the timers
+    /// in the comparison the surface would keep counting a delivery that had
+    /// already been delivered.
+    @Test("One delivery replacing another is material even though every count is unchanged")
+    func swappingTheCountedDeliveryIsMaterial() {
+        let first = ShiftActivityDeliveryTimer(title: "Delivery 1", startedAt: start)
+        let second = ShiftActivityDeliveryTimer(title: "Delivery 2", startedAt: start.addingTimeInterval(900))
+
+        let before = state(active: 1, status: "Heading to the pickup", timers: [first])
+        let after = state(active: 1, status: "Heading to the pickup", timers: [second])
+
+        #expect(before.activeDeliveryCount == after.activeDeliveryCount)
+        #expect(before.completedDeliveryCount == after.completedDeliveryCount)
+        #expect(before.deliveryStatus == after.deliveryStatus)
+        #expect(before.controls == after.controls)
+        #expect(ShiftActivityUpdatePolicy.change(from: before, to: after) == .material)
+    }
+
+    @Test("A delivery timer that has not moved is not a change, however late the snapshot is")
+    func anUnchangedDeliveryTimerIsNotAChange() {
+        let timer = ShiftActivityDeliveryTimer(title: "Delivery 1", startedAt: start)
+
+        let earlier = state(workingDuration: 600, asOf: 600, active: 1, timers: [timer])
+        let later = state(workingDuration: 7_200, asOf: 7_200, active: 1, timers: [timer])
+
+        #expect(
+            ShiftActivityUpdatePolicy.change(from: earlier, to: later) == .none,
+            "The anchor is the whole of what the system needs, so an hour later is still the same card"
+        )
     }
 
     @Test("Only the route moving is a route change")

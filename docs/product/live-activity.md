@@ -18,12 +18,49 @@ act on the wrong one.
 | `4.5 mi recorded · partial route` | What the retained route supports, with the marker that qualifies it |
 | `2 in progress · 5 delivered` | How the shift's deliveries stand |
 | `Waiting at the pickup` | What the one delivery in progress is doing, and only when there is exactly one |
+| `Delivery 1 · 18:04` | How long that delivery has been open, counting, one line per delivery in progress |
 
 Every one of those is the app's own figure rather than a second calculation. The working duration is
 `Shift.workingDuration(asOf:)`, the same one every hourly rate divides by and the same one a spoken
 confirmation reports. The mileage sentence is `RouteQuality`'s, so the Lock Screen and the app cannot
 drift into describing the same route differently, and the partial marker travels with the figure
 wherever the figure goes. See [Recorded mileage](recorded-mileage.md).
+
+## How long a delivery has been open
+
+Under the delivery counts, each delivery in progress gets a line of its own:
+
+> `Delivery 1 · 18:04`
+
+The number is the one the app calls that delivery everywhere else, taken from the order the shift
+accepted them in. It is not a platform order number and it names nothing outside the app. See
+[Offers and deliveries](delivery-lifecycle.md#offers-and-deliveries).
+
+The clock counts from the delivery's own **accepted** timestamp, which is the instant every other
+duration derived from that delivery starts at: the stretch it contributes to the shift's delivery
+active time, and the duration a finished delivery reports. Nothing new is measured and nothing is
+stored. It is not adjusted for pauses, because a delivery's own elapsed lifecycle never has been and
+a shift cannot be paused while a delivery is open.
+
+**Nothing is added together.** A driver carrying two orders has two lifecycles running over the same
+minutes, so one combined figure would be longer than the shift has been running and would belong to
+neither order. The card therefore counts each of them separately, exactly as the app unions
+overlapping deliveries rather than summing them. See
+[Delivery lifecycle](delivery-lifecycle.md#stacked-deliveries).
+
+**A delivered or cancelled delivery has no line.** It stops counting by leaving the card, not by
+freezing at a number that still looks live, and the duration that delivery finally reports is
+unchanged by any of this.
+
+Past three open orders the card states the remainder rather than drawing a fourth line
+(`1 more also active`): the controls sit below these lines, and pushing the buttons a driver reaches
+for off the bottom of a fixed-height card would be worse than saying how many timers are in the app.
+
+VoiceOver reads the delivery's name as its own element ahead of the figure, as
+`How long Delivery 1 has been active`, so the count that follows is heard as a duration of something
+rather than as a bare number. The figure itself is left unlabelled for the same reason the shift's
+clock is: the system speaks it from the anchor, and a label of ours would replace a live duration
+with whatever the snapshot was built at.
 
 ## What it never shows
 
@@ -97,7 +134,11 @@ driver's tap into a record they did not mean. So the card offers no step at all 
 > Several deliveries are in progress. Open DashPilot to record a step.
 
 The status line goes too: a card that named one of two orders would be picking one on the driver's
-behalf. The refusal lifts by itself once one of them has been delivered or cancelled. This is the
+behalf. The refusal lifts by itself once one of them has been delivered or cancelled.
+
+**The timers stay**, and they stay for the same reason Start Delivery does. A step has to know which
+order a tap belongs to, and with two open there is no answer; a clock says which delivery it is
+counting, so there is nothing for it to be wrong about. This is the
 same rule the spoken step follows, from the same place in the code. See
 [Voice and system actions](voice-actions.md#the-rule-that-exists-only-off-screen).
 
@@ -116,10 +157,18 @@ and the system draws a clock from it: while the shift runs, working time grows a
 wall-clock time does, so one anchor stays correct for the length of the shift with no updates at all.
 While the shift is paused the figure does not move, so it is drawn once.
 
+**Each delivery's clock is free in the same way.** The card carries the instant that delivery was
+accepted rather than how long it has been open, so the system counts it and the app pushes nothing
+for as long as the delivery runs.
+
 What is left to update is the route figure, which waits **30 seconds** between changes, and anything
-that changes what the card means: pausing, resuming, a delivery starting or advancing, a control
-appearing or disappearing. Those go over at once, because a driver who paused and saw no
+that changes what the card means: pausing, resuming, a delivery starting, advancing or finishing, a
+control appearing or disappearing. Those go over at once, because a driver who paused and saw no
 acknowledgement would reasonably press it again.
+
+**Which deliveries are being counted is one of those things.** An order finishing at the moment
+another is accepted leaves every count on the card where it was, so the list of clocks is compared
+directly; without that the card would keep counting an order that had already been delivered.
 
 ## It follows the store, never the other way round
 
