@@ -108,6 +108,11 @@ derived legitimately from device sensors and stored history is typed by the driv
   per recorded mile, with the reason stated whenever a rate cannot be derived, its deliveries listed
   with their recorded events and any amount recorded against them, and a confirmed delete that
   removes the shift's route positions and deliveries with it.
+- **History scoped to the working week**: completed shifts for the current Monday-to-Sunday week,
+  with the week and its dates named above the list, and every earlier week grouped by week behind
+  **View Older Weeks**. Nothing is deleted, archived or aged out: the scope decides what is shown
+  where, and every shift is still exported, still counted by every period summary and still one tap
+  from its own detail screen.
 - **Recorded operating expenses**: fuel, parking and tolls, maintenance, supplies or other, each
   with an amount, a date, and an optional short note. An expense belongs to a **date** rather than to
   a shift, so nothing is attributed to work the driver did not attribute it to and no cost is divided
