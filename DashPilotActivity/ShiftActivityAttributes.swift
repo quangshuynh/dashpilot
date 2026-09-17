@@ -53,6 +53,10 @@ nonisolated struct ShiftActivityAttributes: ActivityAttributes, Sendable {
     /// shift is paused, how the deliveries stand, and the one or two controls
     /// that apply.
     ///
+    /// It also carries **how long each delivery in progress has been open**,
+    /// as the instant it was accepted rather than as a duration, so the clock
+    /// counts without the app pushing anything.
+    ///
     /// It carries **no money in any form**: no recorded gross, no hourly figure,
     /// no per-mile figure, no total and no projection. It carries **no
     /// recommendation, no goal, no place name, no address and no coordinate**
@@ -119,6 +123,29 @@ nonisolated struct ShiftActivityAttributes: ActivityAttributes, Sendable {
         /// also `nil` with none in progress, because there is nothing to say.
         let deliveryStatus: String?
 
+        /// A counting anchor for each delivery in progress, in the order the
+        /// shift accepted them.
+        ///
+        /// **One entry per open delivery, and nothing combined.** Deliveries
+        /// stack, so a driver carrying two orders has two lifecycles running
+        /// over the same minutes; adding them together would produce a figure
+        /// that is no delivery's duration and longer than the shift has been
+        /// running. The same reason `DeliveryActiveTimeCalculator` unions
+        /// intervals rather than summing them applies to a Lock Screen, where
+        /// there is no column heading to correct the reading.
+        ///
+        /// Empty whenever nothing is open, which is what makes a delivered or
+        /// cancelled delivery **stop counting**: a terminal delivery is not an
+        /// active one, so its anchor is simply no longer here. Nothing is
+        /// frozen, held or counted down.
+        ///
+        /// This list is deliberately **not** the resolution
+        /// ``deliveryStatus`` and ``controls`` are built from. Those need to
+        /// know which delivery a driver meant, which with two open has no
+        /// answer; a timer names the delivery it belongs to, so it needs no
+        /// such answer and none is invented for it.
+        let activeDeliveryTimers: [ShiftActivityDeliveryTimer]
+
         /// The controls this shift may offer, in the order they are shown.
         ///
         /// **Decided by the app, from the shift's own stored facts**, never by
@@ -139,6 +166,7 @@ nonisolated struct ShiftActivityAttributes: ActivityAttributes, Sendable {
             activeDeliveryCount: Int,
             completedDeliveryCount: Int,
             deliveryStatus: String?,
+            activeDeliveryTimers: [ShiftActivityDeliveryTimer],
             controls: [ShiftActivityControl]
         ) {
             self.isPaused = isPaused
@@ -149,6 +177,7 @@ nonisolated struct ShiftActivityAttributes: ActivityAttributes, Sendable {
             self.activeDeliveryCount = activeDeliveryCount
             self.completedDeliveryCount = completedDeliveryCount
             self.deliveryStatus = deliveryStatus
+            self.activeDeliveryTimers = activeDeliveryTimers
             self.controls = controls
         }
     }
