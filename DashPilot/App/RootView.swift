@@ -10,6 +10,8 @@ struct RootView: View {
     /// to catch up whenever the store changes.
     @Environment(ShiftLiveActivityService.self) private var liveActivity
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.calendar) private var calendar
+    @Environment(\.locale) private var locale
 
     /// Unfinished shifts, newest first.
     ///
@@ -30,7 +32,27 @@ struct RootView: View {
     /// Exporting every completed shift.
     @State private var isExportingHistory = false
 
+    /// What "now" is, for deciding which Monday-to-Sunday week History is
+    /// showing.
+    ///
+    /// Read when the screen appears, again whenever the app returns to the
+    /// foreground, and again the moment the week itself ends. A driver working
+    /// through Sunday night is exactly the person who would otherwise be left
+    /// reading a list headed `This Week` that is describing the week before,
+    /// with the shift they just finished filed under Older Weeks.
+    @State private var now = Date.now
+
     private var activeShift: Shift? { unfinishedShifts.first }
+
+    /// The completed shifts split into the current week and the weeks before
+    /// it.
+    ///
+    /// ``HistoryWeek`` owns every rule here, including which week is current
+    /// and which week a shift belongs to. This screen chooses nothing; it draws
+    /// one side of the split and hands the other to ``OlderHistoryWeeksView``.
+    private var history: HistoryWeekPartition<Shift>? {
+        HistoryWeek.partition(completedShifts, by: \.startedAt, asOf: now, calendar: calendar)
+    }
 
     var body: some View {
         NavigationStack {
@@ -114,7 +136,7 @@ struct RootView: View {
                         .accessibilityIdentifier("exportAllHistoryButton")
                     }
 
-                    ForEach(completedShifts) { shift in
+                    ForEach(currentWeekShifts) { shift in
                         // The whole row is one destination: a finished shift is
                         // a thing to open, not a row with controls scattered
                         // across it. Everything that was a button here now
@@ -124,12 +146,36 @@ struct RootView: View {
                         }
                         .accessibilityIdentifier("completedShiftRow")
                     }
-                } header: {
-                    Text("History")
-                } footer: {
-                    if completedShifts.isEmpty {
-                        Text("Completed shifts will appear here.")
+
+                    // Last in the section, under the week it is an alternative
+                    // to, and styled as an ordinary row rather than as the
+                    // prominent thing on screen: this week is what History is
+                    // for, and the older weeks are where a driver goes when they
+                    // want something else. Absent when there is nothing older,
+                    // because a screen that would open on an empty list is not
+                    // worth offering.
+                    if let history, history.hasOtherWeeks {
+                        NavigationLink {
+                            OlderHistoryWeeksView()
+                        } label: {
+                            Label {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("View Older Weeks")
+                                    Text(olderWeeksSummary(history))
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            } icon: {
+                                Image(systemName: "calendar.badge.clock")
+                            }
+                        }
+                        .accessibilityLabel("View older weeks. \(olderWeeksSummary(history))")
+                        .accessibilityIdentifier("olderHistoryWeeksLink")
                     }
+                } header: {
+                    historyHeader
+                } footer: {
+                    historyFooter
                 }
             }
             .navigationTitle("DashPilot")
@@ -178,9 +224,22 @@ struct RootView: View {
                 // they did not ask it to keep.
                 ShiftExportService(context: modelContext).purgeTemporaryExports()
             }
+            // Restarted whenever the week on screen changes, which is what makes
+            // one sleep enough: the task for the week that has just begun is
+            // started by the same state change that ended the last one.
+            .task(id: history?.currentWeek.week.end) {
+                guard let end = history?.currentWeek.week.end else { return }
+                await advancePastWeekEnd(end)
+            }
             .onChange(of: scenePhase) { _, phase in
                 switch phase {
                 case .active:
+                    // The week History is scoped to is decided by the clock, and
+                    // a driver can leave the app on Sunday night and return on
+                    // Monday. Re-read here as well as at the boundary itself,
+                    // because a suspended device does not run the sleep above on
+                    // time.
+                    now = .now
                     // Location permission and the system-wide Location Services
                     // switch are changed outside the app, and Core Location
                     // reports neither while DashPilot is backgrounded, so both
@@ -226,6 +285,95 @@ struct RootView: View {
                 Text(error.errorDescription ?? "The shift could not be updated.")
             }
         }
+    }
+
+    /// The shifts the default list draws: the current Monday-to-Sunday week's.
+    ///
+    /// Falls back to every completed shift if the calendar cannot describe the
+    /// week containing now. That is not reachable with any ordinary calendar,
+    /// and the fallback is deliberately the permissive one: a driver seeing
+    /// more history than the screen intended can still find their work, and a
+    /// driver seeing none cannot.
+    private var currentWeekShifts: [Shift] {
+        history?.currentWeek.elements ?? completedShifts
+    }
+
+    /// The section heading, and under it the week it is scoped to.
+    ///
+    /// The scope is in the heading rather than in a row of its own because a
+    /// row costs the list height that history itself wants, and rather than in
+    /// the footer alone because the footer sits below however many shifts the
+    /// week holds. `.textCase(nil)` on the second line keeps the dates out of
+    /// the heading's own uppercasing, which makes a month abbreviation harder
+    /// to read than it needs to be.
+    @ViewBuilder
+    private var historyHeader: some View {
+        if let week = history?.currentWeek.week {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("History")
+                Text("\(week.title(asOf: now, calendar: calendar, locale: locale)) · \(week.rangeStatement(calendar: calendar, locale: locale))")
+                    .font(.caption)
+                    .textCase(nil)
+                    .foregroundStyle(.secondary)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("History. \(week.spokenTitle(asOf: now, calendar: calendar, locale: locale))")
+        } else {
+            Text("History")
+        }
+    }
+
+    /// What the section says under itself, which depends on what the driver is
+    /// and is not being shown.
+    ///
+    /// An empty current week is never left looking like an empty app: if there
+    /// is older work, the footer says so and the control to reach it is the row
+    /// directly above.
+    @ViewBuilder
+    private var historyFooter: some View {
+        if completedShifts.isEmpty {
+            Text("Completed shifts will appear here.")
+        } else if currentWeekShifts.isEmpty {
+            Text("No completed shifts in this week yet. Earlier weeks are under View Older Weeks.")
+                .accessibilityIdentifier("emptyCurrentWeekNotice")
+        } else if history?.hasOtherWeeks == true {
+            Text("History shows the week you are in. Everything before it is under View Older Weeks.")
+        }
+    }
+
+    /// How much is waiting behind the older-weeks control.
+    ///
+    /// Counts and nothing else. Neither word says *older*, because
+    /// ``HistoryWeekPartition/otherWeeks`` also carries a week later than this
+    /// one where a device clock has been moved backwards, and the screen it
+    /// opens names every week by its own dates.
+    private func olderWeeksSummary(_ history: HistoryWeekPartition<Shift>) -> String {
+        let weeks = history.otherWeeks.count
+        let shifts = history.otherWeekRecordCount
+        let weekText = weeks == 1 ? "1 week" : "\(weeks) weeks"
+        let shiftText = shifts == 1 ? "1 shift" : "\(shifts) shifts"
+        return "\(weekText) · \(shiftText)"
+    }
+
+    /// Moves ``now`` on when the week on screen ends.
+    ///
+    /// Sleeps exactly once, until the week's own exclusive end, rather than
+    /// polling: the boundary instant is a date the calendar has already worked
+    /// out. Waking re-reads the clock, which rebuilds the partition, and the
+    /// task is restarted by its own `id` for the week that has just begun.
+    ///
+    /// The sleep is a duration on a monotonic clock, so a device suspended
+    /// across the boundary can wake late. That is what the scene-phase read
+    /// below covers: returning to the app always re-reads the clock.
+    private func advancePastWeekEnd(_ end: Date) async {
+        let interval = end.timeIntervalSince(.now)
+        guard interval > 0 else {
+            now = .now
+            return
+        }
+        try? await Task.sleep(for: .seconds(interval))
+        guard !Task.isCancelled else { return }
+        now = .now
     }
 
     private var isShowingLifecycleError: Binding<Bool> {
@@ -312,183 +460,6 @@ private struct StartShiftPanel: View {
             .accessibilityIdentifier("startShiftButton")
         }
         .padding(.vertical, 8)
-    }
-}
-
-/// One finished shift in history: what shift it was, and roughly how it went.
-///
-/// Deliberately three lines and no controls. The row's job is to be scanned and
-/// tapped; everything it used to carry inline — the second rate, the route's
-/// segments and gaps, the earnings editor, and now deletion — belongs to
-/// ``CompletedShiftDetailView``, which has the room to explain it.
-///
-/// What survives here is what a driver picking a shift out of a list needs:
-/// when it ran, how long it lasted, what it paid, what its route recorded, and
-/// the one rate that answers "how did this shift go" — gross earnings per shift
-/// hour. The per-recorded-mile rate needs its denominator explained to be read
-/// correctly, and that explanation is a detail-screen thing.
-private struct CompletedShiftRow: View {
-    let shift: Shift
-
-    /// Measured when the row appears rather than inside `body`.
-    ///
-    /// A shift's route can hold thousands of positions, and a view's body is
-    /// re-evaluated whenever the list redraws. Nothing is cached in the store —
-    /// the number is still derived from the route every time the row is built.
-    @State private var recordedDistance: RouteDistance?
-
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @Environment(\.locale) private var locale
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            heading
-            Text(schedule)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-            if let summary {
-                Text(summary)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
-                    // Wrap rather than truncate. The first thing a truncation
-                    // takes is the end of "recorded", which is the word that
-                    // makes the mileage honest.
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-        .padding(.vertical, 4)
-        .task(id: shift.id) { recordedDistance = shift.recordedDistance() }
-        // One element so VoiceOver reads the shift as a shift rather than three
-        // unrelated fragments, with an explicit label because the abbreviations
-        // that read well — "mi", "/hr", "·" — are poor to hear.
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(accessibilityLabel)
-    }
-
-    /// The date, with the recorded amount alongside it — or under it once the
-    /// text is large enough that two items cannot share a line without one of
-    /// them being truncated. A shortened date and a shortened amount are both
-    /// worse than a second line.
-    @ViewBuilder
-    private var heading: some View {
-        let date = Text(shift.startedAt, format: .dateTime.weekday(.abbreviated).month().day())
-            .font(.headline)
-
-        if dynamicTypeSize.isAccessibilitySize {
-            date
-            recordedEarnings
-        } else {
-            HStack(alignment: .firstTextBaseline) {
-                date
-                Spacer(minLength: 8)
-                recordedEarnings
-            }
-        }
-    }
-
-    /// The amount, and only the amount. The rate derived from it is a separate
-    /// line, in a smaller style, so the figure the driver actually recorded is
-    /// never confused with the one DashPilot worked out.
-    @ViewBuilder
-    private var recordedEarnings: some View {
-        if let earnings = shift.grossEarnings {
-            Text(earnings.formatted(locale: locale))
-                .font(.headline)
-                .monospacedDigit()
-        }
-    }
-
-    /// The third line: what the route recorded, and the shift's hourly rate.
-    ///
-    /// Both are omitted when they do not exist. An unavailable rate leaves
-    /// nothing behind — no dash, no `$0.00` — because a shift with no amount
-    /// recorded and a shift that paid nothing are different facts; the detail
-    /// screen is where the difference is explained.
-    private var summary: String? {
-        guard let quality else { return nil }
-        var parts = [quality.mileageStatement(locale: locale)]
-        if let marker = quality.partialMarker {
-            parts.append(marker)
-        }
-        if let hourly = metrics?.grossPerWorkingHour.amount {
-            parts.append("\(hourly.formatted(locale: locale))/hr")
-        }
-        return parts.joined(separator: " · ")
-    }
-
-    /// When the shift ran and how long it was worked.
-    ///
-    /// The duration here is the **working** one, because it is the figure the
-    /// rate on the line below divides by; a row showing elapsed time beside a
-    /// per-working-hour rate would not multiply out. A shift that was paused
-    /// says so, so the shorter figure is not read as a mistake.
-    private var schedule: String {
-        let started = shift.startedAt.formatted(date: .omitted, time: .shortened)
-        guard let endedAt = shift.endedAt, let working = shift.completedWorkingDuration else {
-            return started
-        }
-        let ended = endedAt.formatted(date: .omitted, time: .shortened)
-        var line = "\(started) – \(ended) · \(DurationText.short(working))"
-        if pauseCount > 0 {
-            line += pauseCount == 1 ? " · 1 pause" : " · \(pauseCount) pauses"
-        }
-        return line
-    }
-
-    /// How many stretches the driver paused this shift for.
-    private var pauseCount: Int { shift.completedPausedTime?.intervalCount ?? 0 }
-
-    /// What VoiceOver says instead of the abbreviations.
-    ///
-    /// Sentences rather than separators, spelled-out miles, and the partial
-    /// route stated as a claim rather than as a two-word marker — the marker is
-    /// legible beside the figure it qualifies and unintelligible on its own.
-    private var accessibilityLabel: String {
-        var sentences = [shift.startedAt.formatted(date: .complete, time: .omitted)]
-
-        if let endedAt = shift.endedAt, let working = shift.completedWorkingDuration {
-            let started = shift.startedAt.formatted(date: .omitted, time: .shortened)
-            let ended = endedAt.formatted(date: .omitted, time: .shortened)
-            sentences.append("\(started) to \(ended)")
-            sentences.append("\(DurationText.spoken(working)) worked")
-            if let paused = shift.completedPausedTime, paused.hasPauses {
-                sentences.append("\(DurationText.spoken(paused.duration)) paused")
-            }
-        }
-
-        if let earnings = shift.grossEarnings {
-            sentences.append("\(earnings.formatted(locale: locale)) gross earnings recorded")
-        } else {
-            sentences.append("No earnings recorded")
-        }
-
-        if let quality {
-            sentences.append(quality.spokenMileageStatement(locale: locale))
-        }
-
-        if let hourly = metrics?.grossPerWorkingHour.amount {
-            sentences.append("\(hourly.formatted(locale: locale)) gross earnings per working hour")
-        }
-
-        return sentences.joined(separator: ". ")
-    }
-
-    private var quality: RouteQuality? {
-        recordedDistance.map(RouteQuality.init)
-    }
-
-    /// The rates this shift can support, derived from the amount recorded on it
-    /// and the distance measured above.
-    ///
-    /// Deriving them here rather than in `.task` is deliberate: the expensive
-    /// part is measuring the route, which happens once, and the rates are two
-    /// divisions over the result. Recomputing them with the body is what keeps
-    /// them correct the moment the driver adds, changes or removes an amount.
-    /// Nothing is calculated in this view — ``ShiftMetricsCalculator`` owns
-    /// every rule, including which rates exist at all.
-    private var metrics: ShiftMetrics? {
-        recordedDistance.map { shift.metrics(for: $0) }
     }
 }
 
