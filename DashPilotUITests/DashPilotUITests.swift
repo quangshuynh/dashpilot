@@ -31,6 +31,12 @@ final class DashPilotUITests: XCTestCase {
     /// Must match `LaunchArgument.seededPausedHistory`, for the same reason.
     private static let seededPausedHistoryArgument = "-dashpilot-seeded-paused-history"
 
+    /// Must match `LaunchArgument.seededOlderWeeks`, for the same reason.
+    private static let seededOlderWeeksArgument = "-dashpilot-seeded-older-weeks"
+
+    /// Must match `LaunchArgument.seededOlderWeeksOnly`, for the same reason.
+    private static let seededOlderWeeksOnlyArgument = "-dashpilot-seeded-older-weeks-only"
+
     /// Must match `LaunchArgument.stubbedLocation`, for the same reason.
     private static let stubbedLocationArgument = "-dashpilot-stubbed-location"
 
@@ -659,6 +665,156 @@ final class DashPilotUITests: XCTestCase {
         wait(for: [settling], timeout: 2)
 
         XCTAssertEqual(counts.value as? String, "1 delivery in progress")
+    }
+
+    // MARK: History weeks
+
+    /// Launches against a throwaway store holding completed shifts in three
+    /// different weeks.
+    ///
+    /// History is scoped to the current Monday-to-Sunday week, and no journey
+    /// can tap its way to a shift dated last month: ending a shift records the
+    /// clock. The fixture holds, by the rules of the driver's own calendar:
+    ///
+    /// - **this week, Tuesday**: three hours paying `$70.00`
+    /// - **last week, Wednesday**: four hours paying `$55.00`
+    /// - **three weeks ago**: two shifts, paying `$41.00` and `$33.00`
+    ///
+    /// The gap between last week and three weeks ago is the point of the shape:
+    /// a week nobody worked must not appear as an empty group, and two shifts in
+    /// one week must appear under one heading.
+    ///
+    /// - Parameter includingCurrentWeek: `false` launches the same store without
+    ///   its current-week shift, which is the empty-current-week state.
+    @MainActor
+    private func launchWithOlderWeeks(includingCurrentWeek: Bool = true) -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments.append(
+            includingCurrentWeek ? Self.seededOlderWeeksArgument : Self.seededOlderWeeksOnlyArgument
+        )
+        launchInPortrait(app)
+        return app
+    }
+
+    /// Everything on screen whose label contains `text`.
+    ///
+    /// Used for the negative claims below. A `List` renders only the rows near
+    /// the viewport, so this is asserted after scrolling the whole section into
+    /// reach rather than on a fresh launch, and the positives beside it are what
+    /// show the query itself works.
+    @MainActor
+    private func elements(containing text: String, in app: XCUIApplication) -> XCUIElementQuery {
+        app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", text))
+    }
+
+    @MainActor
+    private func olderWeekRows(in app: XCUIApplication) -> XCUIElementQuery {
+        app.descendants(matching: .any).matching(identifier: "olderWeekShiftRow")
+    }
+
+    /// History lists the week the driver is in, and says which week that is.
+    @MainActor
+    func testHistoryShowsThisWeekOnly() throws {
+        let app = launchWithOlderWeeks()
+
+        let history = rows(in: app)
+        XCTAssertTrue(history.firstMatch.waitForExistence(timeout: 10))
+        XCTAssertTrue(
+            waitForCount(history, toEqual: 1),
+            "Only the current week's shift is listed, not the fixture's four"
+        )
+        XCTAssertTrue(
+            waitForLabel(history.firstMatch, toContain: "$70.00"),
+            "And it is this week's shift: \(history.firstMatch.label)"
+        )
+
+        let header = app.descendants(matching: .any)["historyHeader"]
+        XCTAssertTrue(header.waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            header.label.contains("This Week"),
+            "The heading says what the list is scoped to: \(header.label)"
+        )
+
+        // The older shifts are absent from this screen rather than merely
+        // further down it: the section is scrolled to its end first, so an
+        // unrendered row cannot pass for a hidden one.
+        let older = app.buttons["olderHistoryWeeksLink"]
+        XCTAssertTrue(scrollUntilHittable(older, in: app), "The older-weeks control is reachable")
+        XCTAssertEqual(elements(containing: "$55.00", in: app).count, 0, "Last week's shift is not in this list")
+        XCTAssertEqual(elements(containing: "$41.00", in: app).count, 0)
+        XCTAssertEqual(elements(containing: "$33.00", in: app).count, 0)
+
+        XCTAssertTrue(
+            older.label.contains("3 weeks") && older.label.contains("3 shifts"),
+            "The control says how much is behind it: \(older.label)"
+        )
+    }
+
+    /// The older work is one tap away, grouped by the week it was done in.
+    @MainActor
+    func testOlderWeeksAreGroupedAndReachable() throws {
+        let app = launchWithOlderWeeks()
+
+        let older = app.buttons["olderHistoryWeeksLink"]
+        XCTAssertTrue(scrollUntilHittable(older, in: app, maxSwipes: 12))
+        older.tap()
+
+        let rows = olderWeekRows(in: app)
+        XCTAssertTrue(rows.firstMatch.waitForExistence(timeout: 10))
+        XCTAssertTrue(waitForCount(rows, toEqual: 3), "Every shift outside this week is here")
+
+        // Newest week first, so last week's shift leads.
+        XCTAssertTrue(
+            waitForLabel(rows.element(boundBy: 0), toContain: "$55.00"),
+            "The newest older week is first: \(rows.element(boundBy: 0).label)"
+        )
+
+        let headings = app.descendants(matching: .any).matching(identifier: "olderWeekHeader")
+        XCTAssertEqual(headings.count, 2, "Two weeks hold shifts, and the empty weeks between them do not")
+        XCTAssertFalse(headings.element(boundBy: 0).label.isEmpty, "A week names the days it covers")
+
+        // This week's shift stayed on the screen it belongs to.
+        XCTAssertEqual(elements(containing: "$70.00", in: app).count, 0)
+    }
+
+    /// An older shift is a shift, not a summary: it opens the same detail screen
+    /// the current week's rows open, with its own recorded amount.
+    @MainActor
+    func testAnOlderShiftOpensItsOwnDetail() throws {
+        let app = launchWithOlderWeeks()
+
+        let older = app.buttons["olderHistoryWeeksLink"]
+        XCTAssertTrue(scrollUntilHittable(older, in: app, maxSwipes: 12))
+        older.tap()
+
+        let rows = olderWeekRows(in: app)
+        XCTAssertTrue(rows.firstMatch.waitForExistence(timeout: 10))
+        rows.firstMatch.tap()
+
+        let earnings = app.descendants(matching: .any)["shiftDetailEarnings"]
+        XCTAssertTrue(earnings.waitForExistence(timeout: 5), "The same detail screen opens")
+        XCTAssertTrue(
+            earnings.label.contains("$55.00"),
+            "And it is the tapped shift's own amount: \(earnings.label)"
+        )
+    }
+
+    /// A week the driver has not worked yet says so, and does not quietly fill
+    /// itself with the week before.
+    @MainActor
+    func testAnEmptyCurrentWeekSaysSoAndKeepsTheOlderWeeksReachable() throws {
+        let app = launchWithOlderWeeks(includingCurrentWeek: false)
+
+        let notice = app.descendants(matching: .any)["emptyCurrentWeekNotice"]
+        XCTAssertTrue(scrollUntilHittable(notice, in: app, maxSwipes: 12), "The empty week states itself")
+        XCTAssertEqual(rows(in: app).count, 0, "Nothing older was pulled forward to fill the list")
+        XCTAssertEqual(elements(containing: "$55.00", in: app).count, 0)
+
+        let older = app.buttons["olderHistoryWeeksLink"]
+        XCTAssertTrue(older.exists, "The work that does exist is still one tap away")
+        older.tap()
+
+        XCTAssertTrue(waitForCount(olderWeekRows(in: app), toEqual: 3), "All three older shifts are there")
     }
 
     // MARK: Detail

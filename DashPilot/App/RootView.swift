@@ -318,6 +318,7 @@ struct RootView: View {
             }
             .accessibilityElement(children: .combine)
             .accessibilityLabel("History. \(week.spokenTitle(asOf: now, calendar: calendar, locale: locale))")
+            .accessibilityIdentifier("historyHeader")
         } else {
             Text("History")
         }
