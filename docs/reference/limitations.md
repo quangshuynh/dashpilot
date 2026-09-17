@@ -115,6 +115,13 @@ and one they cannot.
 - **No delivery cancellation, amount or expense can be reached from it**, and there is no Home
   Screen or Lock Screen widget of any kind. A delivery started from the card by mistake is cancelled
   in the app, which keeps it in history.
+- **Past three open deliveries, the card stops drawing a clock per order** and states how many more
+  are running. The controls sit below those lines on a card of fixed height, and pushing them off
+  the bottom would be worse than sending a driver to the app for the fourth timer.
+- **A delivery's clock is its elapsed lifecycle, and nothing more.** It counts from the moment the
+  driver recorded accepting the order, which says nothing about whether they were driving, waiting
+  or parked during it, and it is not reduced by a shift pause. A shift cannot be paused while a
+  delivery is open, so the case does not arise in data the app can produce.
 - **A paused figure is written `19:57` where the app writes `0:19:57`.** The system draws the running
   clock without an hour field until there is one, and the two figures share a place on the card, so
   the paused one follows the system rather than the app.
