@@ -244,10 +244,19 @@ preferable to leaving a driver unable to end their shift until the clock catches
 
 ## History
 
-Completed shifts appear in a list, each row a compact summary and a single tap target:
+History shows **the week the driver is in**, Monday through Sunday, and nothing else. The heading
+says so and names the dates it covers:
 
 ```text
-Sat, Aug 23                              $86.25
+HISTORY
+This Week · Sep 14 – 20, 2026
+```
+
+Completed shifts in that week appear under it, newest first, each row a compact summary and a single
+tap target:
+
+```text
+Sat, Sep 19                              $86.25
 5:46 PM - 8:46 PM · 3 hr
 4.5 mi recorded · partial route · $28.75/hr
 ```
@@ -260,6 +269,39 @@ Three lines, no controls. Only figures that exist appear: an unavailable rate le
 no dash and no `$0.00`. At accessibility text sizes the date and the amount stack rather than share
 a line, and the summary wraps rather than truncating, because the first thing a truncation takes is
 the end of "recorded", which is the word that makes the mileage honest.
+
+### The week, and the weeks before it
+
+A week runs from **Monday 00:00 to the following Monday 00:00**, in the driver's own time zone. The
+boundary is half-open, so a shift started at exactly Monday midnight belongs to the week that is
+beginning and to that week only. Which week a shift belongs to is decided by the same instant every
+other period in the app uses, its **start**: a shift worked from Sunday evening into Monday morning
+is a Sunday shift, and is not split.
+
+The boundary comes from `Calendar`, never from a count of seconds. A week holding a daylight-saving
+change is 167 or 169 hours and is still one week, and a week running from December into January is
+one week in two years.
+
+History's week always starts on Monday, which is the one place it differs from a period summary's
+week: that one starts on the day the driver's **device** says a week starts, which in the United
+States is Sunday. Both screens name the dates they cover, so the difference is readable rather than
+hidden. Nothing else differs, and no figure moves.
+
+Everything before this week is under **View Older Weeks**, a row at the end of the History section,
+present only when there is something older. It says how much is behind it (`3 weeks · 3 shifts`) and
+opens a screen of the same rows, grouped by the week they were worked in, newest week first, each
+group headed by the dates it covers and footed by how many shifts it holds. A week nobody worked is
+absent rather than shown empty.
+
+**Nothing is deleted, archived or aged out.** This is what is shown where, and nothing else: every
+completed shift is still in the store, still exported, still counted by every period summary, and
+still one tap from its own detail screen. A shift that leaves the current week at Monday midnight
+moves from one list to the other, and the app does not have to be relaunched for it to do so.
+
+If the current week holds nothing, History says that the week holds nothing and leaves the older
+weeks where they are. It does not reach back for the last shift worked to avoid an empty list: a
+week with no work in it is a fact, and filling it with the week before would be the screen answering
+a question nobody asked.
 
 ## Shift detail
 
