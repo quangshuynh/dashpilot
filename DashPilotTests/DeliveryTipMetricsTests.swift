@@ -114,6 +114,35 @@ struct DeliveryTipMetricsTests {
         #expect(delivery.effectiveEarningsPerDeliveryHour.amount == Money(exact: "20.00"))
     }
 
+    @Test("Every recorded tip enters the rate, not merely the first or the largest")
+    func rateReadsAllOfTheTips() throws {
+        let context = try context()
+        // Three tips of deliberately different sizes, one of them small enough
+        // that a rate reading only the largest would round to the same figure as
+        // a rate reading two of them. $10.00 plus $3.00, $2.00 and $0.25 is
+        // $15.25 over half an hour, which is $30.50 an hour.
+        let shift = try shift(
+            in: context,
+            deliveries: [(
+                gross: Money(exact: "10.00"),
+                tips: [
+                    (Money(exact: "3.00")!, .cash),
+                    (Money(exact: "2.00")!, .platform),
+                    (Money(exact: "0.25")!, .cash)
+                ]
+            )]
+        )
+        let delivery = try #require(shift.deliveriesInOrder.first)
+
+        #expect(delivery.effectiveEarnings.additionalTipCount == 3, "Three tips stay three rows")
+        #expect(delivery.effectiveEarnings.amount == Money(exact: "15.25"))
+        #expect(delivery.effectiveEarningsPerDeliveryHour.amount == Money(exact: "30.50"))
+        #expect(
+            ShiftMetricsCalculator.grossPerHour(of: Money(exact: "13.00")!, over: 1_800) == Money(exact: "26.00"),
+            "Which is visibly not the figure the platform amount and the largest tip alone produce"
+        )
+    }
+
     // MARK: The shift's own list
 
     @Test("A shift's recorded delivery amounts are what its deliveries actually paid")
