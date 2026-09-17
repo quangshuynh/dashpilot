@@ -364,7 +364,7 @@ none either — it is unioned from timestamps already stored, every time it is s
 | `DateRangeUnion` | The one sweep that merges overlapping stretches, shared by paused time and delivery active time |
 | `ShiftMetrics`, `ShiftMetricsCalculator` | The three derived rates, working duration, and their precision rules |
 | `ShiftRate`, `ShiftRateUnavailability` | An available shift rate, or the reason there is none |
-| `DeliveryEarningsRate`, `DeliveryRateUnavailability` | One delivery's gross per recorded delivery hour, or the reason there is none |
+| `DeliveryEarningsRate`, `DeliveryRateUnavailability` | What one delivery earned per recorded delivery hour, or the reason there is none |
 | `LocationAuthorization` and its enums | Permission facts, condition precedence and recovery |
 | `ShiftLifecycleError` | Refused start, pause, resume, end and delete transitions |
 | `DeliveryState`, `DeliveryAction` | The five lifecycle states, the one action each offers next, and the wording |
@@ -394,9 +394,9 @@ elapsed time, for the same reason: a stored answer can disagree with the rows be
 crash, a failed save or a migration, and a derived one cannot. A delivery's state is derived the same way, and so is the `Delivery 1` / `Delivery 2`
 numbering the interface shows for concurrent deliveries — it is counted from the acceptance
 timestamps rather than stored beside them. A pickup place's recency is derived from the deliveries
-that reference it, for the same reason. A delivery's gross per recorded delivery hour is derived from
-its own amount and its own two timestamps, every time it is shown, and is never added to another
-delivery's. A period's recorded expense total, its split by category and the net
+that reference it, for the same reason. What a delivery earned per recorded delivery hour is derived
+from its own effective earnings and its own two timestamps, every time it is shown, and is never
+added to another delivery's. A period's recorded expense total, its split by category and the net
 after it are derived from the expense rows the same way, and no cost per hour, per mile or per
 delivery exists at all. The store holds timestamps, positions, the optional amounts a driver typed
 against a shift and against individual deliveries, the costs they entered, and the names and notes

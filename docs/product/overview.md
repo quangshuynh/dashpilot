@@ -106,8 +106,9 @@ detail screen, never during a running shift.
 own, through the same input layer and from the same completed-shift screen. It is an independent
 fact: DashPilot never splits the shift's amount between deliveries, never adds one up from them, and
 never treats a difference between the two as an error. A delivered delivery with an amount also
-shows gross per recorded delivery hour, over its own accepted-to-delivered interval — a figure that
-is never summed across deliveries, because stacked lifecycles overlap. See
+shows what it earned per recorded delivery hour: its effective earnings, platform pay and every
+recorded tip together, over its own accepted-to-delivered interval. That figure is never summed
+across deliveries, because stacked lifecycles overlap. See
 [Earnings and metrics](earnings-and-metrics.md#per-delivery-gross-earnings).
 
 **Completed-shift metrics.** Gross earnings per working shift hour, per active delivery hour and per

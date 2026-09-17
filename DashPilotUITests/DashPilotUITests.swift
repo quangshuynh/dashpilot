@@ -3123,6 +3123,95 @@ final class DashPilotUITests: XCTestCase {
         )
     }
 
+    /// A finished delivery states what it paid per hour of its own lifecycle,
+    /// and that figure is nobody else's.
+    ///
+    /// The fixture makes all four claims assertable at once. Delivery 1 ran
+    /// twenty-five minutes for $14.75, so $35.40 an hour. Delivery 3 ran thirty
+    /// minutes for $9.50, so $19.00 an hour, and it was accepted while delivery
+    /// 2 was still open: two lifecycles over the same minutes, two independent
+    /// figures, neither dividing shared time between them. Delivery 2 was
+    /// cancelled and has no such figure at all, because there is no completion
+    /// to measure to.
+    ///
+    /// The rate is read off the row's own accessibility label, which is what a
+    /// VoiceOver user hears and where the denominator is named in full. "Per
+    /// hour" alone would be heard as a wage.
+    @MainActor
+    func testACompletedDeliveryStatesItsOwnEffectiveHourlyRate() throws {
+        let app = launchWithSeededHistory()
+        openFirstShift(in: app)
+
+        let first = deliveryRow(containing: "Delivery 1, delivered", in: app)
+        XCTAssertTrue(scrollTo(first, in: app))
+        XCTAssertTrue(
+            first.label.contains("$35.40 earned per recorded delivery hour"),
+            "$14.75 over twenty-five minutes, with the denominator named: \(first.label)"
+        )
+
+        let second = deliveryRow(containing: "Delivery 2, cancelled", in: app)
+        XCTAssertTrue(scrollTo(second, in: app))
+        XCTAssertFalse(
+            second.label.contains("per recorded delivery hour"),
+            "There is no such thing as a cancelled hourly rate: \(second.label)"
+        )
+
+        let third = deliveryRow(containing: "Delivery 3, delivered", in: app)
+        XCTAssertTrue(scrollTo(third, in: app))
+        XCTAssertTrue(
+            third.label.contains("$19.00 earned per recorded delivery hour"),
+            "$9.50 over its own thirty minutes, not over the time it shared with delivery 2: \(third.label)"
+        )
+    }
+
+    /// A tip recorded against a finished delivery moves its hourly figure
+    /// straight away, and moves nobody else's.
+    ///
+    /// $14.75 over twenty-five minutes is $35.40 an hour; a $5.00 cash tip makes
+    /// it $19.75 over the same twenty-five minutes, which is $47.40. Nothing is
+    /// recalculated on a schedule and nothing is stored: the figure is derived
+    /// from the rows every time the screen reads it.
+    @MainActor
+    func testRecordingATipMovesThatDeliverysHourlyRate() throws {
+        let app = launchWithSeededHistory()
+        openFirstShift(in: app)
+
+        let first = deliveryRow(containing: "Delivery 1, delivered", in: app)
+        XCTAssertTrue(scrollTo(first, in: app))
+        XCTAssertTrue(first.label.contains("$35.40 earned per recorded delivery hour"), "Showed: \(first.label)")
+
+        // From this delivery's own card rather than firstMatch over the screen,
+        // for the reason `openPickupHistory` scopes its query: five controls per
+        // card put the topmost one a long scroll away from the named row.
+        let card = deliveryCard(containing: "Delivery 1, delivered", in: app)
+        let tips = card.buttons["shiftDetailDeliveryTipsButton"]
+        XCTAssertTrue(tips.waitForExistence(timeout: 5))
+        XCTAssertTrue(scrollUntilHittable(tips, in: app), "and is somewhere a tap will land on it")
+        tips.tap()
+
+        addTip("5.00", method: "Cash", in: app)
+        app.buttons["closeDeliveryTipsButton"].tap()
+
+        XCTAssertTrue(scrollTo(first, in: app))
+        XCTAssertTrue(
+            waitForLabel(first, toContain: "$47.40 earned per recorded delivery hour"),
+            "The tip is half of what the delivery paid, so the rate divides both halves: \(first.label)"
+        )
+        XCTAssertTrue(
+            first.label.contains("Total recorded for Delivery 1, $19.75"),
+            "and the total it divides is on the same row: \(first.label)"
+        )
+
+        // The delivery it overlapped is untouched: a tip is a fact about one
+        // delivery, and no figure here is allocated across deliveries.
+        let third = deliveryRow(containing: "Delivery 3, delivered", in: app)
+        XCTAssertTrue(scrollTo(third, in: app))
+        XCTAssertTrue(
+            third.label.contains("$19.00 earned per recorded delivery hour"),
+            "Showed: \(third.label)"
+        )
+    }
+
     /// Editing a delivery's amount does not touch what the shift recorded.
     @MainActor
     func testEditingADeliveryAmountLeavesTheShiftTotalUnchanged() throws {
