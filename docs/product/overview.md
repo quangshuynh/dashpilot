@@ -83,11 +83,14 @@ No intent takes a dictated value, and nothing offers to cancel a delivery or rec
 
 **The shift on the Lock Screen.** A running shift puts one Live Activity on the Lock Screen, and in
 the Dynamic Island on the hardware that has one. It shows the working time, what the route has
-recorded, how the deliveries stand and the controls that apply, and it carries no amount, no rate,
+recorded, how the deliveries stand, how long each delivery in progress has been open, and the
+controls that apply, and it carries no amount, no rate,
 no place and no coordinate. Pressing a control runs the same service the app's own button runs, so a
 shift paused from the Lock Screen is refused by the same rule. **Start Delivery** is offered on every
 running shift, because it names no existing order and always means record one more; with two
 deliveries open the card offers no step at all, because there is no "the delivery" to offer one for.
+Each open delivery keeps its own clock, counted from the moment it was accepted, and two are never
+added together.
 See
 [The shift on the Lock Screen](live-activity.md).
 

@@ -474,6 +474,9 @@ order over the whole shift. This is **presentation only**:
 - Numbering runs over every delivery in the shift, so finishing one does not renumber the others.
 - Every control acts on the **persisted delivery**, not on its number or its row, so even a
   renumbering could not send an event to the wrong record.
+- The same numbers name the clocks the [Live Activity](live-activity.md#how-long-a-delivery-has-been-open)
+  runs for the deliveries in progress, so a driver reads `Delivery 2` on the Lock Screen and on the
+  card in the app.
 
 ## Ending a shift with deliveries running
 
