@@ -183,10 +183,10 @@ and one they cannot.
 - **"Active" says nothing about what the driver was doing.** It means a recorded delivery had not
   reached a terminal state. It is not driving, working, productive or billable time, and
   non-delivery time is not idle time.
-- **The one per-delivery rate is gross per recorded delivery hour**, over that delivery's own
-  accepted-to-delivered interval. It is not a wage, it exists only for a delivered delivery with a
-  recorded amount, and because stacked lifecycles overlap it is never summed, averaged or ranked
-  across a shift.
+- **The one per-delivery rate is what it earned per recorded delivery hour**, its effective earnings
+  over that delivery's own accepted-to-delivered interval. It is not a wage, it exists only for a
+  delivered delivery whose platform amount was recorded, and because stacked lifecycles overlap it is
+  never summed, averaged or ranked across a shift.
 - **No per-delivery mileage, and so no per-delivery cost.** Route distance is measured for a shift
   and never assigned to an individual delivery.
 - **No cancelled hourly rate.** A cancelled delivery may hold an amount, and showing that amount is
@@ -222,7 +222,7 @@ and one they cannot.
   reopens one, so a driver who corrects the wrong row has no remedy but deleting the shift. The
   correction is confirmed by a sentence naming the delivery for exactly that reason.
 - **Correcting a completion removes the two figures that needed one.** The delivery's accepted to
-  delivered duration and its gross per recorded delivery hour both go, because each needs a
+  delivered duration and what it earned per recorded delivery hour both go, because each needs a
   completion to measure to. That is their existing definition rather than a decision this correction
   made, and it means a driver who corrects a delivery loses a figure they may have been reading.
 - **A historical correction is in the app only**, on the finished shift's own record. Not on the

@@ -761,6 +761,91 @@ struct DeliveryEarningsRateTests {
         )
     }
 
+    @Test("Recording, correcting and removing a tip each move the rate at once")
+    func tipsMoveTheRateImmediately() throws {
+        let fixture = try EarningsFixture()
+        let delivery = try fixture.deliver(acceptedAt: 5, lasting: 30)
+        try fixture.endShift()
+        try fixture.deliveries.setGrossEarnings(try #require(Money(exact: "10.00")), on: delivery)
+
+        // Half an hour throughout, so every figure below is twice the effective
+        // total and the arithmetic is readable at a glance.
+        #expect(delivery.effectiveEarningsPerDeliveryHour == .available(try #require(Money(exact: "20"))))
+
+        let tip = try fixture.deliveries.addAdditionalTip(
+            try #require(Money(exact: "2.50")),
+            method: .cash,
+            on: delivery,
+            at: fixture.at(40)
+        )
+        #expect(delivery.effectiveEarningsPerDeliveryHour == .available(try #require(Money(exact: "25"))))
+
+        try fixture.deliveries.addAdditionalTip(
+            try #require(Money(exact: "2.50")),
+            method: .platform,
+            on: delivery,
+            at: fixture.at(41)
+        )
+        #expect(delivery.effectiveEarningsPerDeliveryHour == .available(try #require(Money(exact: "30"))))
+
+        // A correction is not a second tip: the row keeps its identity and the
+        // rate follows the new amount rather than adding to the old one.
+        try fixture.deliveries.updateAdditionalTip(tip, amount: try #require(Money(exact: "5.00")), method: .cash)
+        #expect(delivery.effectiveEarnings.additionalTipCount == 2)
+        #expect(delivery.effectiveEarningsPerDeliveryHour == .available(try #require(Money(exact: "35"))))
+
+        // And a tip that never arrived leaves no trace in the figure.
+        try fixture.deliveries.deleteAdditionalTip(tip)
+        #expect(delivery.effectiveEarnings.additionalTipCount == 1)
+        #expect(delivery.effectiveEarningsPerDeliveryHour == .available(try #require(Money(exact: "25"))))
+    }
+
+    @Test("An expectation recorded on the delivery contributes nothing to its rate")
+    func expectedPayNeverEntersTheRate() throws {
+        // Two deliveries built from the same timestamps and the same recorded
+        // amount, differing in one thing: the second recorded what the driver
+        // expected to be paid, while it was still active and could. If the
+        // expectation entered the arithmetic anywhere, the two rates would
+        // differ, and $8.50 is deliberately nothing like the $10.00 recorded.
+        let plain = try EarningsFixture()
+        let withoutExpectation = try plain.deliver(acceptedAt: 5, lasting: 30)
+        try plain.endShift()
+        try plain.deliveries.setGrossEarnings(try #require(Money(exact: "10.00")), on: withoutExpectation)
+
+        let seeded = try EarningsFixture()
+        let withExpectation = try seeded.deliveries.startDelivery(at: seeded.at(5))
+        try seeded.deliveries.setExpectedEarnings(try #require(Money(exact: "8.50")), on: withExpectation)
+        try seeded.deliveries.markArrivedAtPickup(withExpectation, at: seeded.at(15))
+        try seeded.deliveries.markPickedUp(withExpectation, at: seeded.at(20))
+        try seeded.deliveries.markDelivered(withExpectation, at: seeded.at(35))
+        try seeded.endShift()
+        try seeded.deliveries.setGrossEarnings(try #require(Money(exact: "10.00")), on: withExpectation)
+
+        #expect(withExpectation.expectedEarnings == Money(exact: "8.50"), "The expectation really is on the record")
+        #expect(
+            withExpectation.effectiveEarningsPerDeliveryHour == withoutExpectation.effectiveEarningsPerDeliveryHour,
+            "An expectation is a fourth independent fact and enters no rate"
+        )
+        #expect(withExpectation.effectiveEarningsPerDeliveryHour == .available(try #require(Money(exact: "20"))))
+
+        // And it does not make a rate exist where the recorded half is missing:
+        // an expectation is what a delivery was thought to be worth, never what
+        // it paid, so a delivery carrying only one has nothing to divide.
+        let expectationOnly = try EarningsFixture()
+        let unrecorded = try expectationOnly.deliveries.startDelivery(at: expectationOnly.at(5))
+        try expectationOnly.deliveries.setExpectedEarnings(
+            try #require(Money(exact: "8.50")),
+            on: unrecorded
+        )
+        try expectationOnly.deliveries.markArrivedAtPickup(unrecorded, at: expectationOnly.at(15))
+        try expectationOnly.deliveries.markPickedUp(unrecorded, at: expectationOnly.at(20))
+        try expectationOnly.deliveries.markDelivered(unrecorded, at: expectationOnly.at(35))
+        try expectationOnly.endShift()
+
+        #expect(unrecorded.effectiveEarningsPerDeliveryHour == .unavailable(.earningsNotRecorded))
+        #expect(unrecorded.effectiveEarningsPerDeliveryHour.amount == nil)
+    }
+
     @Test("It rounds exactly as the shift's own hourly rates do")
     func sharesTheShiftRateArithmetic() throws {
         let fixture = try EarningsFixture()

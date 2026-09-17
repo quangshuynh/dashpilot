@@ -182,8 +182,8 @@ the delivery is active, which is a rule about writing rather than about holding;
 becomes editable again with the delivery.
 
 Its **delivery active time** derives exactly as any unfinished delivery's does: the interval is open,
-so it is counted as unfinished rather than measured, and its gross per recorded delivery hour is
-unavailable until it is delivered again. The shift counts it among the deliveries in progress rather
+so it is counted as unfinished rather than measured, and what it earned per recorded delivery hour
+is unavailable until it is delivered again. The shift counts it among the deliveries in progress rather
 than the completed ones, because that is what it is.
 
 Nothing about **which deliveries arrived together** moves. The offer keeps its deliveries, its
@@ -244,8 +244,8 @@ one with some of each reads `Partly completed, partly cancelled`. No offer times
 membership is rewritten.
 
 Two derived figures go with the completion, by their own existing definitions rather than by any
-decision made here: the delivery's **accepted to delivered** duration, and its **gross per recorded
-delivery hour**. Both need a completion to measure to, and a cancelled delivery has none. Deriving
+decision made here: the delivery's **accepted to delivered** duration, and what it **earned per
+recorded delivery hour**. Both need a completion to measure to, and a cancelled delivery has none. Deriving
 them to the cancellation instead would put a figure in the same column as deliveries that finished.
 
 ### Money is not deleted
@@ -601,14 +601,15 @@ earnings per active delivery hour derived from them, are on
 ### Gross earnings
 
 Each finished delivery may carry one optional amount the driver typed for it, and a delivered one
-that carries an amount also shows `gross earnings ÷ its own accepted-to-delivered interval` — *gross
-per recorded delivery hour*. Both are absent when nothing was recorded, and neither is ever
-substituted with zero.
+that carries an amount also shows `effective earnings ÷ its own accepted-to-delivered interval`:
+*earned per recorded delivery hour*. The numerator is what the delivery actually paid, the platform
+amount and every recorded tip together, so recording a tip moves the figure at once. Both are absent
+when nothing was recorded, and neither is ever substituted with zero.
 
 That rate covers **one delivery's own lifecycle**. Because stacked lifecycles overlap, these figures
 are never summed, averaged or compared across a shift; the figure that spans deliveries is the
 shift's delivery active time above. A cancelled delivery may hold an amount and never gets an hourly
-figure — there is no cancelled hourly rate in DashPilot.
+figure, because there is no cancelled hourly rate in DashPilot.
 
 The shift's own amount and a delivery's amount are **independent facts**. Nothing splits one into
 the other, adds one up from the other, or reports a difference between them as a problem. The full
