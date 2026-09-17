@@ -744,8 +744,10 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertEqual(elements(containing: "$41.00", in: app).count, 0)
         XCTAssertEqual(elements(containing: "$33.00", in: app).count, 0)
 
+        // Two weeks, three shifts: the fixture's two older weeks, one holding a
+        // single shift and one holding two.
         XCTAssertTrue(
-            older.label.contains("3 weeks") && older.label.contains("3 shifts"),
+            older.label.contains("2 weeks") && older.label.contains("3 shifts"),
             "The control says how much is behind it: \(older.label)"
         )
     }
