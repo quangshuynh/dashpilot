@@ -52,6 +52,12 @@ enum AppModelContainer {
         if LaunchArgument.isPresent(LaunchArgument.seededPickupHistory) {
             return try PreviewSupport.seededPickupHistoryContainer()
         }
+        if LaunchArgument.isPresent(LaunchArgument.seededOlderWeeks) {
+            return try PreviewSupport.seededOlderWeeksContainer()
+        }
+        if LaunchArgument.isPresent(LaunchArgument.seededOlderWeeksOnly) {
+            return try PreviewSupport.seededOlderWeeksContainer(includingCurrentWeek: false)
+        }
         if LaunchArgument.isPresent(LaunchArgument.seededHistory) {
             return try PreviewSupport.seededHistoryContainer(includingActiveShift: false)
         }
