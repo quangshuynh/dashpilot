@@ -62,6 +62,7 @@ test cannot see, such as a screen that renders a sentence the model never claime
 | Shift export service | Every scope, an overnight shift counted once, empty scopes and running shifts refused, file names and their absence of content, exports replacing rather than accumulating, an existing file never overwritten, a write failure surfaced, and errors that name no path |
 | Shift export privacy | No coordinate in either format, the route reduced to a measurement and its coverage, no normalised pickup key, no catalogue bookkeeping and no store internals |
 | Expense record | What an expense accepts and refuses, a recorded zero distinct from none, an edit replacing every fact at once and a refused edit changing nothing, the note's trimming and length rule counted in characters, the closed category set and its stored words, no category implying a tax treatment, and an unrecognised stored word reading as `other` |
+| History weeks | The week History is scoped to, and the split that decides which screen a shift is drawn on: a week starting on Monday whatever the device's own first weekday is, Sunday closing the working week rather than opening the next one, a shift at Monday midnight in the week beginning, a week across New Year and one across a daylight-saving change, the time zone deciding which week a moment is in, older shifts grouped newest week first with two in one week under one heading and an unworked week absent rather than empty, a current week present but empty, the Monday transition moving a shift between the two sides, a shift dated after this week still listed rather than hidden, every shift claimed by exactly one side, and the wording following the Monday week rather than the device's |
 | Period comparison | The span a period is compared against — a calendar unit back, a month keeping its own length, an equal-length range before a chosen one, whole days across a daylight saving change, and a chosen range still having no selection to step to — then the comparison itself: two period results and never an average of the periods inside them, a missing figure subtracted from nothing, the five reasons a percentage is withheld, expenses never carrying one, coverage printed for both sides, differing lengths stated rather than scaled, non-neighbouring periods refused, and the words a change may be described in |
 | Period expenses | Totals and category subtotals, missing distinct from an explicit zero, membership by the expense's own timestamp across a half-open boundary and a 23-hour day, a month totalled from its own records, a day holding costs but no shift, the net's two refusals and its negative case, the gross figures unchanged by any of it, no coverage pair invented for expenses, and the words the net may and may not use |
 | Expense persistence | The v7 to v8 migration with every earlier record intact and no expense fabricated from mileage or earnings, the plan's version and stage counts asserted here once, an expense with no relationship to a shift, a round trip through a reopened store, deleting a shift leaving expenses alone, and the service's refusals |
@@ -149,7 +150,7 @@ a period locale and a comma locale side by side.
 
 ## Launch arguments
 
-Debug builds accept ten arguments, all used only by UI tests and screenshots:
+Debug builds accept twelve arguments, all used only by UI tests and screenshots:
 
 | Argument | Effect |
 | --- | --- |
@@ -162,6 +163,8 @@ Debug builds accept ten arguments, all used only by UI tests and screenshots:
 | `-dashpilot-seeded-expected-pay` | Opens an in-memory store holding a running shift with two deliveries waiting at their pickups, alike except that one records what it is expected to pay |
 | `-dashpilot-seeded-stacked-offer` | Opens an in-memory store holding a running shift with one offer of two deliveries and a later add-on offer of one |
 | `-dashpilot-seeded-malformed-offer` | Opens an in-memory store holding a running shift with one offer of two deliveries and one offer holding no deliveries at all, which is a row the app cannot produce |
+| `-dashpilot-seeded-older-weeks` | Opens an in-memory store holding completed shifts in three different weeks: one in the current one, one in the week before it and two in the week three back, so History's scope can be asserted end to end |
+| `-dashpilot-seeded-older-weeks-only` | The same store without its current-week shift, which is the empty-current-week state |
 | `-dashpilot-stubbed-location` | Replaces Core Location with the stub providers, reporting When In Use at full accuracy and producing no positions |
 | `-dashpilot-simulated-route` | Replaces Core Location with a synthetic vehicle driving in a straight line, so a journey can watch a live mileage figure move; it implies the permission stub above |
 
@@ -199,7 +202,22 @@ because nothing reconciles them.
 
 The period-summary and period-comparison fixtures are anchored to **today**: the summary shows the
 period the driver is actually in, so a fixture pinned to a fixed instant would open on an empty one.
-Their offsets stay fixed and only the anchor moves. The summary fixture's three expenses are dated
+Their offsets stay fixed and only the anchor moves.
+
+The three seeded-history fixtures now follow the same rule, for the same reason: History is scoped to
+the current Monday-to-Sunday week, so the instant in 2025 they used to hang from would open the app
+on an empty week with everything they seed behind View Older Weeks. Their offsets are unchanged and
+their anchor is 09:00 on the **Tuesday** of the current week, which is far enough into it that the
+30-hour offset the general fixture reaches back with still lands inside. The anchor is derived from
+the week rather than from the clock, so a fixture holds the same shape whichever day the suite is run
+on; one consequence, accepted deliberately, is that a run in the first hours of a Monday seeds
+synthetic shifts a little way into the future.
+
+The older-weeks fixture is the one thing none of them can be. A journey cannot tap its way to a shift
+dated last month, because ending a shift records the clock, so three weeks are seeded at launch: one
+shift this week, one last week, and two three weeks back. The gap is part of the shape, because a
+week nobody worked must not appear as an empty group, and the two shifts in one week must appear
+under one heading rather than two. The summary fixture's three expenses are dated
 rather than attached to its shifts, which is what makes a recorded total, a category split and a net
 after recorded expenses reachable end to end without typing.
 
