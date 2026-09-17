@@ -30,9 +30,11 @@ there is nothing to configure, disable or trust.
   [Voice and system actions](../product/voice-actions.md).
 - **The Lock Screen carries no money, no place and no position.** A Live Activity is readable by
   whoever is standing beside the phone without unlocking it, so the shift's card carries the working
-  time, what the route has recorded, how the deliveries stand and the controls that apply, and
+  time, what the route has recorded, how the deliveries stand, how long each delivery in progress
+  has been open, and the controls that apply, and
   nothing else: no amount, no rate, no total, no recommendation, no address, no pickup place and no
-  coordinate. The card is a picture of the store the app requested; there is no push token, no remote
+  coordinate. A delivery is named on the card by its position in the shift (`Delivery 2`), which is
+  a local count and not a platform order number. The card is a picture of the store the app requested; there is no push token, no remote
   update and nothing that leaves the device. See
   [The shift on the Lock Screen](../product/live-activity.md).
 - **Export is the one way data leaves, and it is a user action.** DashPilot writes a JSON or CSV file
