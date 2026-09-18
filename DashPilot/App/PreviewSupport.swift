@@ -50,6 +50,36 @@ enum PreviewSupport {
         return anchor
     }
 
+    /// The instant the fixtures holding a **running** shift hang their offsets
+    /// from: ``historyWeekReference(now:calendar:)``, or now, whichever is
+    /// earlier.
+    ///
+    /// A running shift is not in History, so this looks like it should not
+    /// matter. It matters the moment a journey **ends** one: the shift it
+    /// finalises carries the fixture's `startedAt`, and a shift dated in 2025
+    /// lands behind View Older Weeks rather than in the list the journey is
+    /// about to read. Three journeys failed exactly that way.
+    ///
+    /// The `min` is what the completed-history fixtures do not need. Their
+    /// shifts are already over, so a date a few hours into the future is only
+    /// odd; a *running* shift dated in the future has been running for a
+    /// negative length of time, and the panel would draw it. Taking the earlier
+    /// of the two keeps the anchor fixed for most of the week and pins it to the
+    /// clock on the Monday and Tuesday morning where the week has not reached
+    /// it yet.
+    ///
+    /// **The one window it does not cover** is the first 90 minutes of a Monday,
+    /// where the offsets below reach back past the week's own start. Accepted
+    /// rather than solved: solving it means a fixture that changes shape by
+    /// weekday, which is worth less than a fixture that is the same every time
+    /// it is read.
+    static func runningShiftReference(
+        now: Date = .now,
+        calendar: Calendar = .autoupdatingCurrent
+    ) -> Date {
+        min(now, historyWeekReference(now: now, calendar: calendar))
+    }
+
     static func populatedContainer(
         referenceDate: Date = historyWeekReference(),
         includingActiveShift: Bool = true
@@ -182,7 +212,7 @@ enum PreviewSupport {
     }
 
     static func activeDeliveryContainer(
-        referenceDate: Date = Date(timeIntervalSince1970: 1_756_000_000)
+        referenceDate: Date = runningShiftReference()
     ) -> ModelContainer {
         // Previews cannot meaningfully recover from a container failure.
         try! seededActiveDeliveryContainer(referenceDate: referenceDate)
@@ -195,7 +225,7 @@ enum PreviewSupport {
     /// `Delivery 1` delivered, `Delivery 2` accepted and `Delivery 3` picked up.
     /// Every timestamp is an invented offset from the fixture's reference date.
     static func seededActiveDeliveryContainer(
-        referenceDate: Date = Date(timeIntervalSince1970: 1_756_000_000)
+        referenceDate: Date = runningShiftReference()
     ) throws -> ModelContainer {
         let container = try ModelContainerFactory.makeInMemoryContainer()
         let context = ModelContext(container)
@@ -260,7 +290,7 @@ enum PreviewSupport {
     /// already. Debug builds only, and in memory, like every fixture here. The
     /// amount and the offsets are invented.
     static func seededExpectedPayContainer(
-        referenceDate: Date = Date(timeIntervalSince1970: 1_756_000_000)
+        referenceDate: Date = runningShiftReference()
     ) throws -> ModelContainer {
         let container = try ModelContainerFactory.makeInMemoryContainer()
         let context = ModelContext(container)
@@ -292,7 +322,7 @@ enum PreviewSupport {
     /// The stacked-offer fixture, for a preview, which cannot recover from a
     /// container failure.
     static func stackedOfferContainer(
-        referenceDate: Date = Date(timeIntervalSince1970: 1_756_000_000)
+        referenceDate: Date = runningShiftReference()
     ) -> ModelContainer {
         try! seededStackedOfferContainer(referenceDate: referenceDate)
     }
@@ -318,7 +348,7 @@ enum PreviewSupport {
     /// seeded rather than recorded. Debug builds only, and in memory, like every
     /// fixture here. Every offset is invented.
     static func seededStackedOfferContainer(
-        referenceDate: Date = Date(timeIntervalSince1970: 1_756_000_000)
+        referenceDate: Date = runningShiftReference()
     ) throws -> ModelContainer {
         let container = try ModelContainerFactory.makeInMemoryContainer()
         let context = ModelContext(container)
@@ -350,7 +380,7 @@ enum PreviewSupport {
     }
 
     static func malformedOfferContainer(
-        referenceDate: Date = Date(timeIntervalSince1970: 1_756_000_000)
+        referenceDate: Date = runningShiftReference()
     ) -> ModelContainer {
         try! seededMalformedOfferContainer(referenceDate: referenceDate)
     }
@@ -371,7 +401,7 @@ enum PreviewSupport {
     ///
     /// Debug builds only, and in memory. Every offset is invented.
     static func seededMalformedOfferContainer(
-        referenceDate: Date = Date(timeIntervalSince1970: 1_756_000_000)
+        referenceDate: Date = runningShiftReference()
     ) throws -> ModelContainer {
         let container = try ModelContainerFactory.makeInMemoryContainer()
         let context = ModelContext(container)
