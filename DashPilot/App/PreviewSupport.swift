@@ -11,8 +11,77 @@ enum PreviewSupport {
         try! ModelContainerFactory.makeInMemoryContainer()
     }
 
+    /// The instant the seeded-history fixtures hang their offsets from: **09:00
+    /// on the Tuesday of the current History week**.
+    ///
+    /// ## Why these fixtures stopped being pinned to an epoch constant
+    ///
+    /// History is scoped to the current Monday-to-Sunday week, so a fixture
+    /// dated in 2025 now opens the app on an empty week with everything it
+    /// seeded behind View Older Weeks. That is the same problem the period
+    /// fixtures already had, and this is the same answer they gave: keep the
+    /// offsets fixed and move only the anchor.
+    ///
+    /// ## Why the Tuesday, and why 09:00
+    ///
+    /// The offsets below reach as far as 30 hours back, so the anchor has to sit
+    /// at least that far into the week for everything to land inside it.
+    /// Tuesday 09:00 is 33 hours after Monday 00:00, which clears it, and it is
+    /// derived from the week rather than from `now`, so a fixture holds the same
+    /// shape whichever day of the week the suite is run on.
+    ///
+    /// It is a whole hour of wall-clock time in the driver's own calendar, which
+    /// is what the paused-history fixture needs for its pauses to land on clean
+    /// minutes.
+    ///
+    /// One consequence, and it is deliberate: a suite run in the first hours of
+    /// a Monday seeds synthetic shifts a little way into the future. Determinism
+    /// is worth more here than a fixture that would otherwise have to choose
+    /// between straddling the week boundary and changing shape by weekday, and
+    /// nothing in the app reads a completed shift's date as a claim about the
+    /// past.
+    static func historyWeekReference(
+        now: Date = .now,
+        calendar: Calendar = .autoupdatingCurrent
+    ) -> Date {
+        guard let week = HistoryWeek(containing: now, calendar: calendar),
+              let anchor = HistoryWeek.mondayFirst(calendar)
+                  .date(byAdding: DateComponents(day: 1, hour: 9), to: week.start) else { return now }
+        return anchor
+    }
+
+    /// The instant the fixtures holding a **running** shift hang their offsets
+    /// from: ``historyWeekReference(now:calendar:)``, or now, whichever is
+    /// earlier.
+    ///
+    /// A running shift is not in History, so this looks like it should not
+    /// matter. It matters the moment a journey **ends** one: the shift it
+    /// finalises carries the fixture's `startedAt`, and a shift dated in 2025
+    /// lands behind View Older Weeks rather than in the list the journey is
+    /// about to read. Three journeys failed exactly that way.
+    ///
+    /// The `min` is what the completed-history fixtures do not need. Their
+    /// shifts are already over, so a date a few hours into the future is only
+    /// odd; a *running* shift dated in the future has been running for a
+    /// negative length of time, and the panel would draw it. Taking the earlier
+    /// of the two keeps the anchor fixed for most of the week and pins it to the
+    /// clock on the Monday and Tuesday morning where the week has not reached
+    /// it yet.
+    ///
+    /// **The one window it does not cover** is the first 90 minutes of a Monday,
+    /// where the offsets below reach back past the week's own start. Accepted
+    /// rather than solved: solving it means a fixture that changes shape by
+    /// weekday, which is worth less than a fixture that is the same every time
+    /// it is read.
+    static func runningShiftReference(
+        now: Date = .now,
+        calendar: Calendar = .autoupdatingCurrent
+    ) -> Date {
+        min(now, historyWeekReference(now: now, calendar: calendar))
+    }
+
     static func populatedContainer(
-        referenceDate: Date = Date(timeIntervalSince1970: 1_756_000_000),
+        referenceDate: Date = historyWeekReference(),
         includingActiveShift: Bool = true
     ) -> ModelContainer {
         // Previews cannot meaningfully recover from a container failure.
@@ -22,7 +91,7 @@ enum PreviewSupport {
     /// The same synthetic history, built through a throwing call so a UI test
     /// launch can report a store failure rather than trapping inside it.
     static func seededHistoryContainer(
-        referenceDate: Date = Date(timeIntervalSince1970: 1_756_000_000),
+        referenceDate: Date = historyWeekReference(),
         includingActiveShift: Bool = true
     ) throws -> ModelContainer {
         let container = try ModelContainerFactory.makeInMemoryContainer()
@@ -143,7 +212,7 @@ enum PreviewSupport {
     }
 
     static func activeDeliveryContainer(
-        referenceDate: Date = Date(timeIntervalSince1970: 1_756_000_000)
+        referenceDate: Date = runningShiftReference()
     ) -> ModelContainer {
         // Previews cannot meaningfully recover from a container failure.
         try! seededActiveDeliveryContainer(referenceDate: referenceDate)
@@ -156,7 +225,7 @@ enum PreviewSupport {
     /// `Delivery 1` delivered, `Delivery 2` accepted and `Delivery 3` picked up.
     /// Every timestamp is an invented offset from the fixture's reference date.
     static func seededActiveDeliveryContainer(
-        referenceDate: Date = Date(timeIntervalSince1970: 1_756_000_000)
+        referenceDate: Date = runningShiftReference()
     ) throws -> ModelContainer {
         let container = try ModelContainerFactory.makeInMemoryContainer()
         let context = ModelContext(container)
@@ -221,7 +290,7 @@ enum PreviewSupport {
     /// already. Debug builds only, and in memory, like every fixture here. The
     /// amount and the offsets are invented.
     static func seededExpectedPayContainer(
-        referenceDate: Date = Date(timeIntervalSince1970: 1_756_000_000)
+        referenceDate: Date = runningShiftReference()
     ) throws -> ModelContainer {
         let container = try ModelContainerFactory.makeInMemoryContainer()
         let context = ModelContext(container)
@@ -253,7 +322,7 @@ enum PreviewSupport {
     /// The stacked-offer fixture, for a preview, which cannot recover from a
     /// container failure.
     static func stackedOfferContainer(
-        referenceDate: Date = Date(timeIntervalSince1970: 1_756_000_000)
+        referenceDate: Date = runningShiftReference()
     ) -> ModelContainer {
         try! seededStackedOfferContainer(referenceDate: referenceDate)
     }
@@ -279,7 +348,7 @@ enum PreviewSupport {
     /// seeded rather than recorded. Debug builds only, and in memory, like every
     /// fixture here. Every offset is invented.
     static func seededStackedOfferContainer(
-        referenceDate: Date = Date(timeIntervalSince1970: 1_756_000_000)
+        referenceDate: Date = runningShiftReference()
     ) throws -> ModelContainer {
         let container = try ModelContainerFactory.makeInMemoryContainer()
         let context = ModelContext(container)
@@ -311,7 +380,7 @@ enum PreviewSupport {
     }
 
     static func malformedOfferContainer(
-        referenceDate: Date = Date(timeIntervalSince1970: 1_756_000_000)
+        referenceDate: Date = runningShiftReference()
     ) -> ModelContainer {
         try! seededMalformedOfferContainer(referenceDate: referenceDate)
     }
@@ -332,7 +401,7 @@ enum PreviewSupport {
     ///
     /// Debug builds only, and in memory. Every offset is invented.
     static func seededMalformedOfferContainer(
-        referenceDate: Date = Date(timeIntervalSince1970: 1_756_000_000)
+        referenceDate: Date = runningShiftReference()
     ) throws -> ModelContainer {
         let container = try ModelContainerFactory.makeInMemoryContainer()
         let context = ModelContext(container)
@@ -571,6 +640,91 @@ enum PreviewSupport {
     }
 
     /// One completed synthetic shift, inserted and returned.
+    /// A throwaway store holding completed shifts in **three different weeks**,
+    /// for reading what History shows by default and what it keeps behind View
+    /// Older Weeks.
+    ///
+    /// No other fixture can answer this. Every one of them is anchored inside
+    /// one week on purpose, and a journey cannot tap its way into a shift dated
+    /// last month: ending a shift records the clock. Seeding three weeks is the
+    /// only way to assert end to end that the default list is scoped, that a
+    /// shift outside the week is genuinely absent from it rather than merely
+    /// scrolled past, and that the same shift is reachable one tap away.
+    ///
+    /// The amounts are what the journeys read, so each one is distinct and none
+    /// of them is a figure another fixture uses:
+    ///
+    /// | Week | Shifts | Recorded |
+    /// | --- | --- | --- |
+    /// | this week, Tuesday | one | `$70.00` |
+    /// | last week, Wednesday | one | `$55.00` |
+    /// | three weeks ago, Tuesday and Thursday | two | `$41.00`, `$33.00` |
+    ///
+    /// The gap between last week and three weeks ago is deliberate: a week
+    /// holding nothing must not appear as an empty group, and two shifts in one
+    /// older week must appear under one heading rather than two.
+    ///
+    /// No route, no delivery and no expense anywhere. What is under test is
+    /// which rows are on which screen, and a row's other figures have their own
+    /// fixtures and their own journeys.
+    ///
+    /// - Parameter includingCurrentWeek: `false` seeds the older weeks alone,
+    ///   which is the empty-current-week state. It is a parameter rather than a
+    ///   second fixture so that both launches describe the same store minus one
+    ///   shift, and a journey asserting an empty week is asserting the absence
+    ///   of exactly that row.
+    ///
+    /// Every time and amount is invented. Debug builds only, and in memory, so
+    /// it can never touch a real store.
+    static func olderWeeksContainer(
+        now: Date = .now,
+        includingCurrentWeek: Bool = true
+    ) -> ModelContainer {
+        // Previews cannot meaningfully recover from a container failure.
+        try! seededOlderWeeksContainer(now: now, includingCurrentWeek: includingCurrentWeek)
+    }
+
+    /// The same fixture, built through a throwing call so a UI test launch can
+    /// report a store failure rather than trapping inside it.
+    static func seededOlderWeeksContainer(
+        now: Date = .now,
+        calendar: Calendar = .autoupdatingCurrent,
+        includingCurrentWeek: Bool = true
+    ) throws -> ModelContainer {
+        let container = try ModelContainerFactory.makeInMemoryContainer()
+        let context = ModelContext(container)
+
+        let mondayFirst = HistoryWeek.mondayFirst(calendar)
+        guard let thisWeek = HistoryWeek(containing: now, calendar: calendar) else { return container }
+
+        /// A whole number of calendar days and hours from a week's Monday, asked
+        /// of the calendar rather than added as seconds, so a week holding a
+        /// daylight-saving transition still lands on the hour named here.
+        func moment(weeksAgo: Int, day: Int, hour: Int) -> Date? {
+            guard let weekStart = mondayFirst.date(byAdding: .weekOfYear, value: -weeksAgo, to: thisWeek.start) else {
+                return nil
+            }
+            return mondayFirst.date(byAdding: DateComponents(day: day, hour: hour), to: weekStart)
+        }
+
+        func seed(weeksAgo: Int, day: Int, hour: Int, hours: Double, amount: Int) {
+            guard let start = moment(weeksAgo: weeksAgo, day: day, hour: hour) else { return }
+            let shift = shift(startingAt: start, hours: hours, in: context)
+            try? shift.setGrossEarnings(Money(minorUnits: amount))
+        }
+
+        if includingCurrentWeek {
+            seed(weeksAgo: 0, day: 1, hour: 9, hours: 3, amount: 7_000)
+        }
+        seed(weeksAgo: 1, day: 2, hour: 10, hours: 4, amount: 5_500)
+        seed(weeksAgo: 3, day: 1, hour: 11, hours: 2, amount: 4_100)
+        seed(weeksAgo: 3, day: 3, hour: 16, hours: 3, amount: 3_300)
+
+        try? context.save()
+
+        return container
+    }
+
     private static func shift(startingAt start: Date, hours: Double, in context: ModelContext) -> Shift {
         let shift = Shift(startedAt: start)
         try? shift.end(at: start.addingTimeInterval(hours * 3600))
@@ -654,7 +808,7 @@ enum PreviewSupport {
     /// all, so it offers no history to open. The 41-minute wait is kept rather
     /// than trimmed, which is the whole reason the median is the headline.
     static func pickupHistoryContainer(
-        referenceDate: Date = Date(timeIntervalSince1970: 1_756_000_000)
+        referenceDate: Date = historyWeekReference()
     ) -> ModelContainer {
         // Previews cannot meaningfully recover from a container failure.
         try! seededPickupHistoryContainer(referenceDate: referenceDate)
@@ -663,7 +817,7 @@ enum PreviewSupport {
     /// The same fixture, built through a throwing call so a UI test launch can
     /// report a store failure rather than trapping inside it.
     static func seededPickupHistoryContainer(
-        referenceDate: Date = Date(timeIntervalSince1970: 1_756_000_000)
+        referenceDate: Date = historyWeekReference()
     ) throws -> ModelContainer {
         let container = try ModelContainerFactory.makeInMemoryContainer()
         let context = ModelContext(container)
@@ -715,18 +869,20 @@ enum PreviewSupport {
 
     // MARK: A finished shift that was paused
 
-    /// The anchor this fixture's offsets hang from: a **whole hour**, unlike the
-    /// round-ish epoch the other fixtures use.
+    /// The anchor this fixture's offsets hang from: a **whole hour**, which is
+    /// what ``historyWeekReference(now:calendar:)`` gives it.
     ///
     /// Every offset below is a whole number of minutes, so a pause lands on a
     /// clean clock minute in any time zone whose offset is a whole number of
-    /// minutes — which is all of them. That is what lets a journey set a minute
+    /// minutes, which is all of them. That is what lets a journey set a minute
     /// wheel to `45` and know exactly what the corrected pause is, rather than
-    /// inheriting the forty seconds the other fixtures' anchor carries.
-    static let pausedHistoryReference = Date(timeIntervalSince1970: 1_755_997_200)
+    /// inheriting the seconds a round-ish epoch constant would carry.
+    static func pausedHistoryReference(now: Date = .now) -> Date {
+        historyWeekReference(now: now)
+    }
 
     static func pausedHistoryContainer(
-        referenceDate: Date = pausedHistoryReference
+        referenceDate: Date = pausedHistoryReference()
     ) -> ModelContainer {
         // Previews cannot meaningfully recover from a container failure.
         try! seededPausedHistoryContainer(referenceDate: referenceDate)
@@ -759,7 +915,7 @@ enum PreviewSupport {
     /// Every time is invented. Debug builds only, and in memory, so it can never
     /// touch a real store.
     static func seededPausedHistoryContainer(
-        referenceDate: Date = pausedHistoryReference
+        referenceDate: Date = pausedHistoryReference()
     ) throws -> ModelContainer {
         let container = try ModelContainerFactory.makeInMemoryContainer()
         let context = ModelContext(container)
