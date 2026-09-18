@@ -137,6 +137,32 @@ nonisolated enum LaunchArgument {
     /// it can never touch a real store.
     static let seededPausedHistory = "-dashpilot-seeded-paused-history"
 
+    /// Runs against a throwaway store holding completed shifts in three
+    /// different weeks: one in the current one, one in the week before it and
+    /// two in the week three back.
+    ///
+    /// History is scoped to the current Monday-to-Sunday week, and every other
+    /// fixture sits inside one week on purpose. A journey cannot tap its way to
+    /// a shift dated last month either, because ending a shift records the
+    /// clock. This is what lets the scope itself be asserted end to end: which
+    /// rows the default list holds, that a shift outside the week is genuinely
+    /// absent from it, and that it is one tap away under View Older Weeks.
+    ///
+    /// Every time and amount is invented. Debug builds only, and in memory, so
+    /// it can never touch a real store.
+    static let seededOlderWeeks = "-dashpilot-seeded-older-weeks"
+
+    /// The fixture above **without** its current-week shift, which is the empty
+    /// current week.
+    ///
+    /// A separate argument rather than a separate fixture: the two launches
+    /// describe the same store minus one row, so a journey asserting that
+    /// History says the week holds nothing is asserting the absence of exactly
+    /// the row the other launch shows.
+    ///
+    /// Debug builds only, and in memory.
+    static let seededOlderWeeksOnly = "-dashpilot-seeded-older-weeks-only"
+
     /// Runs with Core Location replaced by the stub the tests and previews use,
     /// reporting When In Use with full accuracy and producing no positions.
     ///
@@ -187,7 +213,9 @@ nonisolated enum LaunchArgument {
         seededExpectedPay,
         seededStackedOffer,
         seededMalformedOffer,
-        seededPausedHistory
+        seededPausedHistory,
+        seededOlderWeeks,
+        seededOlderWeeksOnly
     ]
 
     /// Whether this launch is running over synthetic, in-memory data.

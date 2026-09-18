@@ -442,6 +442,28 @@ and one they cannot.
 - **No import.** An exported file cannot be read back in. There is no restore, no merge and no way to
   move history onto another device through the app.
 
+## History
+
+- **History shows one week, and there is no way to widen it.** The default list is the current
+  Monday-to-Sunday week and the older weeks are a separate screen. There is no All Shifts list, no
+  search, no filter by date, amount or pickup place, and no setting for how much History shows.
+- **History's week always starts on Monday; a period summary's week starts on the day the device
+  says a week starts.** For a driver whose calendar starts the week on Sunday, the two screens
+  describe weeks a day apart. Both name the dates they cover, so the difference is readable rather
+  than hidden, but nothing reconciles them and no figure follows History's week.
+- **The older weeks are a list, not a summary.** Each group is headed by its dates and footed by how
+  many shifts it holds. No earnings, mileage or rate is totalled per week there; that is what the
+  [period summary](../product/period-summaries.md) is for, and a second set of weekly figures
+  computed somewhere else is exactly the drift this project designs against.
+- **Every completed shift is loaded to build the two lists.** The rows are rendered lazily and a
+  route is measured only when its row appears, so what a long history costs is memory for the shift
+  records rather than work per row. There is no paging, no fetch limit and no cursor, and nothing has
+  been measured against a store holding years of work.
+- **A shift with a wrong date is filed by that date.** DashPilot does not detect a device clock that
+  was wrong when a shift was recorded. A shift stored with a date in a future week is listed under
+  Older Weeks rather than in the current one, which keeps it reachable but is the wrong heading for
+  it; correcting a recorded shift's start or end time is not possible at all.
+
 ## History export
 
 - **Completed shifts only.** A running shift is never exported, and there is no export control on

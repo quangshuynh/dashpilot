@@ -19,6 +19,10 @@ not already show, and nothing recorded is turned into a stronger claim on the wa
 | A chosen range | `Export Range`, on the period summary with **Custom** selected | Every completed shift that started within the selected dates, the expenses dated in them, plus that range's summary |
 | All history | `Export All History`, in the History section | Every completed shift and every recorded expense in the store |
 
+`Export All History` means all of it. The History section it sits in shows the current week only, but
+the scope is the store: a file that held one week under a control saying *all history* would be the
+app's most misleading claim.
+
 **Only completed shifts are exported.** A running shift has no finalised duration and no final
 amount, and a file claiming to be its record would be out of date before it finished writing. There
 is no export control on a running shift, and the export layer refuses one even if a scope names it.
