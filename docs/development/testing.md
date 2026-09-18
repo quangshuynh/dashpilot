@@ -213,6 +213,13 @@ the week rather than from the clock, so a fixture holds the same shape whichever
 on; one consequence, accepted deliberately, is that a run in the first hours of a Monday seeds
 synthetic shifts a little way into the future.
 
+The four fixtures holding a **running** shift moved for a less obvious reason. A running shift is not
+in History, so their dates look irrelevant; they stop being irrelevant the moment a journey **ends**
+one, because the shift it finalises carries the fixture's start date. Three journeys did exactly that
+and read an empty list. They hang from the same anchor **or now, whichever is earlier**: a completed
+shift dated a few hours ahead is only odd, while a running shift dated ahead has been running for a
+negative length of time.
+
 The older-weeks fixture is the one thing none of them can be. A journey cannot tap its way to a shift
 dated last month, because ending a shift records the clock, so three weeks are seeded at launch: one
 shift this week, one last week, and two three weeks back. The gap is part of the shape, because a
