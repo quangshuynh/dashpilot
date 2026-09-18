@@ -298,47 +298,50 @@ struct RootView: View {
         history?.currentWeek.elements ?? completedShifts
     }
 
-    /// The section heading, and under it the week it is scoped to.
+    /// The section heading, naming the week the list is scoped to.
     ///
-    /// The scope is in the heading rather than in a row of its own because a
-    /// row costs the list height that history itself wants, and rather than in
-    /// the footer alone because the footer sits below however many shifts the
-    /// week holds. `.textCase(nil)` on the second line keeps the dates out of
-    /// the heading's own uppercasing, which makes a month abbreviation harder
-    /// to read than it needs to be.
+    /// **One line, and that is a constraint rather than a preference.** The
+    /// first build put the dates on a second line under the word, and it cost
+    /// nine red journeys: the header sits above the rows, so every point it
+    /// grows pushes the list down, and the second `completedShiftRow` fell out
+    /// of what the `List` had rendered. Nine journeys that open or count a
+    /// second shift failed on a row that existed in the store and not in the
+    /// accessibility tree. The dates moved to the footer, which is below the
+    /// rows and can grow freely.
+    ///
+    /// VoiceOver still hears the dates here, because a listener has no footer
+    /// in view to read afterwards.
     @ViewBuilder
     private var historyHeader: some View {
         if let week = history?.currentWeek.week {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("History")
-                Text("\(week.title(asOf: now, calendar: calendar, locale: locale)) · \(week.rangeStatement(calendar: calendar, locale: locale))")
-                    .font(.caption)
-                    .textCase(nil)
-                    .foregroundStyle(.secondary)
-            }
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel("History. \(week.spokenTitle(asOf: now, calendar: calendar, locale: locale))")
-            .accessibilityIdentifier("historyHeader")
+            Text("History · \(week.title(asOf: now, calendar: calendar, locale: locale))")
+                .accessibilityLabel("History. \(week.spokenTitle(asOf: now, calendar: calendar, locale: locale))")
+                .accessibilityIdentifier("historyHeader")
         } else {
             Text("History")
         }
     }
 
-    /// What the section says under itself, which depends on what the driver is
-    /// and is not being shown.
+    /// What the section says under itself: which days it is showing, and what
+    /// it is not showing.
     ///
-    /// An empty current week is never left looking like an empty app: if there
-    /// is older work, the footer says so and the control to reach it is the row
-    /// directly above.
+    /// Below the rows, so it may be as long as it needs to be. An empty current
+    /// week is never left looking like an empty app: if there is older work the
+    /// footer says so, and the control to reach it is the row directly above.
     @ViewBuilder
     private var historyFooter: some View {
         if completedShifts.isEmpty {
             Text("Completed shifts will appear here.")
-        } else if currentWeekShifts.isEmpty {
-            Text("No completed shifts in this week yet. Earlier weeks are under View Older Weeks.")
-                .accessibilityIdentifier("emptyCurrentWeekNotice")
-        } else if history?.hasOtherWeeks == true {
-            Text("History shows the week you are in. Everything before it is under View Older Weeks.")
+        } else if let week = history?.currentWeek.week {
+            let dates = week.rangeStatement(calendar: calendar, locale: locale)
+            if currentWeekShifts.isEmpty {
+                Text("No completed shifts in \(dates) yet. Earlier weeks are under View Older Weeks.")
+                    .accessibilityIdentifier("emptyCurrentWeekNotice")
+            } else if history?.hasOtherWeeks == true {
+                Text("Showing \(dates). Everything before it is under View Older Weeks.")
+            } else {
+                Text("Showing \(dates).")
+            }
         }
     }
 
