@@ -245,15 +245,16 @@ preferable to leaving a driver unable to end their shift until the clock catches
 ## History
 
 History shows **the week the driver is in**, Monday through Sunday, and nothing else. The heading
-says so and names the dates it covers:
+says which week, and the footer under the list says which days:
 
 ```text
-HISTORY
-This Week · Sep 14 – 20, 2026
+HISTORY · THIS WEEK
+...
+Showing Sep 14 – 20, 2026.
 ```
 
-Completed shifts in that week appear under it, newest first, each row a compact summary and a single
-tap target:
+Completed shifts in that week appear between them, newest first, each row a compact summary and a
+single tap target:
 
 ```text
 Sat, Sep 19                              $86.25
