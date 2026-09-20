@@ -29,8 +29,9 @@ stateDiagram-v2
     cancelled --> [*]
 ```
 
-The two edges that are not events are the corrections, and both act on a delivery recorded as
-delivered by mistake. Which one applies depends on the **shift**, not on the delivery:
+The two edges that are not events are the corrections that change *which* terminal event a delivery
+records, and both act on a delivery recorded as delivered by mistake. Which one applies depends on
+the **shift**, not on the delivery:
 
 - While the shift is still **running**, `Reopen` records nothing: it **removes** the delivered
   timestamp and the delivery goes back to the state its remaining timestamps already describe, so the
@@ -39,6 +40,10 @@ delivered by mistake. Which one applies depends on the **shift**, not on the del
 - Once the shift has **ended**, nothing can finish a delivery, so `Correct to Cancelled` records the
   ending that actually happened instead. The delivery stays terminal. See
   [Correcting a completion after the shift has ended](#correcting-a-completion-after-the-shift-has-ended).
+
+A third correction changes no edge at all. Once the shift has ended, the instants a delivery recorded
+can be corrected **in place**: same stages, same terminal event, different times. See
+[Correcting the times a delivery recorded](#correcting-the-times-a-delivery-recorded).
 
 | State | What it means | Recorded by |
 | --- | --- | --- |
@@ -280,6 +285,92 @@ The control says `Correct to Cancelled` rather than `Cancel Delivery`, which is 
 control for work falling through now, and rather than `Edit`, which would promise a lifecycle editor
 DashPilot does not have. Every correction is confirmed by a sentence that names the delivery and says
 what will happen to it.
+
+## Correcting the times a delivery recorded
+
+DashPilot can be unreachable at the moment work actually happens. It is evicted under memory
+pressure, it crashes, or it is replaced by a new build mid-shift. The driver keeps delivering, and
+the events land in the app whenever it comes back — so a delivery records a completion long after the
+order reached the door.
+
+`Correct Times`, on the delivery's own row in a finished shift's history, opens one sheet holding a
+picker for **each instant the delivery already records**. Nothing else is on it.
+
+### It corrects facts and creates none
+
+| Correctable | Only when already recorded |
+| --- | --- |
+| `acceptedAt` | Always: a delivery that was not accepted does not exist |
+| `arrivedAtPickupAt` | When the driver recorded reaching the pickup |
+| `pickedUpAt` | When the driver recorded collecting the order |
+| `deliveredAt` | On a delivery recorded as delivered |
+| `cancelledAt` | On a delivery recorded as cancelled |
+
+A stage the delivery never recorded has **no picker and no row**. A delivery cancelled on the way to
+a pickup never arrived at one, and offering a control to say when it did would be an invitation to
+invent an event. The same rule from the other side: no recorded event can be removed here, and the
+terminal event cannot be swapped — that is `Correct to Cancelled`, which has its own name and its own
+confirmation.
+
+### Nothing cascades
+
+Every proposed time has to leave the delivery temporally valid:
+
+`acceptedAt` ≤ `arrivedAtPickupAt` ≤ `pickedUpAt` ≤ `deliveredAt` or `cancelledAt`
+
+— over the stages that exist, and with every one of them inside the shift that holds the delivery.
+Touching instants are in order, because two events can genuinely share a minute.
+
+**A time that collides with another is refused, and the refusal names the other one.** A completion
+dragged back behind its own pickup is not resolved by dragging the pickup back with it: that would
+replace a second fact the driver recorded with one the app invented. The driver corrects that fact
+too, in the same sheet, and the whole proposal is judged again. It is the rule a shift's end already
+meets against a pause and against a delivery.
+
+### What moves, and what does not
+
+Nothing derived is stored anywhere in DashPilot, so every figure built from these instants follows a
+correction with no recomputation step and no second stored answer:
+
+| Moves | Does not move |
+| --- | --- |
+| The delivery's **accepted to delivered** duration | Its recorded gross amount, its expected amount and every additional tip |
+| Its **recorded pickup wait** | Its terminal outcome: delivered stays delivered, cancelled stays cancelled |
+| Its **effective earnings per recorded delivery hour** | The offer it arrived in, and every grouping built from that |
+| The shift's **delivery active time**, and the non-delivery time derived from it | The pickup place it names |
+| The **period** figures built on those | The shift's own start and end |
+
+**The route and the recorded mileage are not changed.** Not one position is deleted, retimed,
+re-coordinated or moved between capture sessions. This corrects what the driver recorded about the
+delivery, not where the phone recorded being, and the sheet says so before anything is saved —
+because a driver who has just moved a completion back by twenty minutes might reasonably expect the
+mileage to fall with it.
+
+### Finished deliveries on finished shifts only
+
+The shift's own window is what gives the correction its bounds, so a shift that has not ended is
+refused: it has no end for a recorded event to fall inside. It is also the right refusal on its own
+terms. While the shift is running, a mis-tapped completion is **reopened** and finished properly,
+which records the real instant instead of typing one.
+
+An unfinished delivery is refused too. On a well-formed completed shift there is none, because a
+shift cannot end while a delivery is active; the repair for the anomalous row that reaches it is to
+record what happened, not to move what did not.
+
+### Validated whole, written whole
+
+The complete proposal is judged before anything is assigned, and one save follows. A refused save
+leaves **every** original instant, not some of them, so there is no state in which a delivery's
+pickup moved and its completion did not.
+
+### It is what unblocks correcting a shift's end
+
+[Correcting a shift's recorded end](shift-workflow.md#correcting-a-shifts-end-time) refuses to
+move the end back past anything a delivery recorded, so one late completion pins the shift's end to
+it. The refusal names the blocking delivery and event — `Delivery 1 has Delivered recorded at
+9:47 PM, after the proposed shift end` — and the recovery is to correct that delivery here and then
+propose the end again. Nothing corrects a delivery from the shift editor: the two are separate
+records with separate confirmations.
 
 ## The rules, and where they live
 
@@ -566,10 +657,16 @@ is what a pickup place's recorded history is built from, under the same inclusio
 ### The corrections each delivery offers
 
 Under the record sit the controls that change it: `Add` or `Change Pickup Place` always,
-`Pickup History` where a place is named, and `Add` or `Edit Earnings` on a finished delivery. They
-are laid out as a two-column grid rather than as one row, so every control is given the same half of
-the card whatever it is called. Three of them sharing a row gave each about a third of a phone's
-width, which is less than `Change Pickup Place` needs, and the titles wrapped a word to a line.
+`Pickup History` where a place is named, `Add` or `Edit Earnings` and `Add a Tip` or `Edit Tips` on a
+finished delivery, and then the two corrections — `Correct Times`, and `Correct to Cancelled` where
+that one would be accepted. They are laid out as a two-column grid rather than as one row, so every
+control is given the same half of the card whatever it is called. Three of them sharing a row gave
+each about a third of a phone's width, which is less than `Change Pickup Place` needs, and the titles
+wrapped a word to a line.
+
+The corrections come last, and in that order: the controls that record and change facts keep the
+places they had, the one that rewrites **when** the delivery happened is met after them, and the one
+that rewrites **how it ended** after that.
 
 A title that still needs two lines takes them, and at an accessibility text size the grid becomes a
 single column and the card grows downwards. Nothing is scaled down, shortened or truncated to keep
@@ -668,14 +765,16 @@ The rules, the normalisation policy and what a place deliberately does not hold 
   allocation would produce a per-delivery figure nobody recorded.
 - **No per-delivery mileage.** Route distance is measured for a shift, never assigned to one
   delivery, so there is no per-delivery cost or gross-per-mile figure.
-- **No lifecycle editor, and no deleting one delivery.** A recorded delivery is what happened: no
-  timestamp can be typed, moved or corrected, and only deleting the whole shift removes a delivery.
-  The two corrections that exist are
+- **No general lifecycle editor, and no deleting one delivery.** Only deleting the whole shift
+  removes a delivery, no lifecycle event can be created or removed by correcting one, and a
+  delivery's terminal outcome cannot be typed. The three corrections that exist are
   [reopening a delivery marked delivered by mistake](#taking-back-a-delivery-marked-delivered-by-mistake),
-  which **removes** the delivered timestamp and writes none, and
+  which **removes** the delivered timestamp and writes none;
   [correcting a completion after the shift has ended](#correcting-a-completion-after-the-shift-has-ended),
-  which reuses that same timestamp as the cancellation rather than writing a new one. Each was
-  designed as its own bounded decision rather than as a general editing framework.
+  which reuses that same timestamp as the cancellation rather than writing a new one; and
+  [correcting the times a delivery recorded](#correcting-the-times-a-delivery-recorded), which moves
+  instants the delivery already holds and creates none. Each was designed as its own bounded decision
+  rather than as a general editing framework.
 - **No inferred relationship between concurrent deliveries.** Two deliveries active at once are two
   independent records. They are shown as one group only when the driver said they were accepted
   together, and nothing pairs them by their timing, their pickup place or their overlap.
