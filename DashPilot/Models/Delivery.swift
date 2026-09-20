@@ -283,6 +283,23 @@ nonisolated final class Delivery {
         cancelledAt ?? deliveredAt ?? pickedUpAt ?? arrivedAtPickupAt ?? acceptedAt
     }
 
+    /// Every lifecycle instant this delivery records, in no particular order.
+    ///
+    /// Distinct from ``lastEventAt``, which reads the chain in the order the
+    /// lifecycle produces it and is what the *next* transition is judged
+    /// against. This is the whole set, and it exists because
+    /// ``ShiftEndCorrection`` has to know the latest instant a delivery records
+    /// even in a store whose chain is not ordered — a row with a completion
+    /// earlier than its pickup is one the app cannot write, and a shift boundary
+    /// moved back past the pickup would still be putting recorded work outside
+    /// its shift.
+    ///
+    /// Acceptance is always present; the rest are present when they happened.
+    /// Nothing is inferred and nothing is filled in.
+    var recordedEventInstants: [Date] {
+        [acceptedAt, arrivedAtPickupAt, pickedUpAt, deliveredAt, cancelledAt].compactMap { $0 }
+    }
+
     // MARK: Transitions
 
     /// Records that the driver reached the pickup.

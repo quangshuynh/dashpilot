@@ -137,6 +137,22 @@ nonisolated enum LaunchArgument {
     /// it can never touch a real store.
     static let seededPausedHistory = "-dashpilot-seeded-paused-history"
 
+    /// Runs against a throwaway store holding one **completed** shift whose
+    /// recorded end is twenty minutes later than the driver actually stopped,
+    /// with a capture session recorded in those twenty minutes.
+    ///
+    /// The end-time correction's most important claim is that recorded route
+    /// after the corrected end is **deleted** and the mileage measured again
+    /// from what remains, and no fixture and no sequence of taps reaches that
+    /// shape: ending a shift records the clock, and a UI test cannot drive a
+    /// simulator into recording a route. The shift also holds a delivery
+    /// finishing ten minutes before the corrected end, so the refusal a
+    /// correction meets when it would swallow recorded work is reachable too.
+    ///
+    /// Every time, amount and coordinate is invented. Debug builds only, and in
+    /// memory, so it can never touch a real store.
+    static let seededLateEndHistory = "-dashpilot-seeded-late-end-history"
+
     /// Runs against a throwaway store holding completed shifts in three
     /// different weeks: one in the current one, one in the week before it and
     /// two in the week three back.
@@ -214,6 +230,7 @@ nonisolated enum LaunchArgument {
         seededStackedOffer,
         seededMalformedOffer,
         seededPausedHistory,
+        seededLateEndHistory,
         seededOlderWeeks,
         seededOlderWeeksOnly
     ]
