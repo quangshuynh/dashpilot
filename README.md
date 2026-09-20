@@ -45,6 +45,16 @@ derived legitimately from device sensors and stored history is typed by the driv
   start and end, its route and every amount it records are untouched; the working duration, the
   hourly rate and the period totals over it follow. The open pause of a shift that is paused right
   now stays Resume's and End's alone, and nothing anywhere detects or suggests a pause.
+- **Correcting a shift's end time**, for when DashPilot was not reachable at the moment the driver
+  actually stopped. Moving the end **earlier** deletes the route recorded after it, behind a
+  confirmation that says how many positions go, and the recorded mileage is then **measured again**
+  from the positions that remain rather than scaled by the time removed; nothing is interpolated to
+  the new boundary. Moving it **later** adds no position and no mile, and the shift reports the
+  stretch it did not record as the capture gap it is. An end is refused rather than nudged if it
+  precedes the shift's start, precedes anything a delivery recorded, leaves a recorded pause outside
+  the shift, or reaches into a later shift. The start, every amount and every delivery and pause
+  timestamp are untouched; the durations, the rates, the mileage and the period totals over them
+  follow. Nothing detects or suggests an end.
 - **Route capture** that starts and stops with the shift, carries on while the driver is in another
   app or the phone is locked, states whether it is active, stopped because the shift is paused,
   paused because a session could not start off screen, or unavailable, and never ends a shift

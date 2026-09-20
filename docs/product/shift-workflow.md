@@ -198,6 +198,91 @@ driver who may be at a wheel.
 **Nothing is detected.** No pause is inferred from a stationary stretch, a gap in the route or a
 quiet hour, and none is proposed when one is added. Every timestamp here was typed by the driver.
 
+## Correcting a shift's end time
+
+A shift's end is the one lifecycle timestamp DashPilot itself can get wrong. If the app is evicted
+under memory pressure, crashes, or is simply not something a driver will stop to open in the last
+minutes of a shift, the end is recorded whenever they next get to it. The shift then reports working
+time nobody worked, an hourly figure that is too low, and, if recording was still running, the
+mileage of the drive home.
+
+`Correct End Time` is on the finished shift's own detail screen, in the `Shift` section beside the
+times it changes. It opens a picker on the end the shift records, states what the elapsed and working
+times would become, and writes nothing until Save. **Cancel leaves the shift exactly as it was.**
+
+### Moving the end earlier deletes the route recorded after it
+
+Route recorded after the moment the driver stopped is not part of that shift, so it is **deleted**.
+This is the one destructive correction in DashPilot that is not a deletion of a whole record, and it
+is confirmed in an alert that says how many positions go.
+
+The recorded mileage is then **measured again** from the positions that remain, by the same
+calculation every other shift is measured by:
+
+!!! warning "Mileage is re-measured, never scaled"
+
+    A shift shortened by a fifth does not lose a fifth of its miles. It loses whichever positions
+    were fixed after the corrected end, and what is left is measured from its own coordinates. A
+    shift that recorded three equal stretches and loses one reports two thirds of the distance,
+    whatever share of the time went with it.
+
+Nothing is invented to reach the new boundary either. If the last retained position was fixed
+thirteen minutes before the corrected end, that position is still the last one, and those thirteen
+minutes are counted as a [capture gap](recorded-mileage.md) like any other.
+
+Positions recorded **at or before** the corrected end are kept, coordinate, timestamp and capture
+session unchanged. A capture session the boundary falls inside keeps the part that is still inside
+the shift and stays one session.
+
+### Moving the end later adds nothing
+
+No position and no mile is created for the stretch gained. The route simply no longer reaches the end
+of the shift, which DashPilot already counts as a capture gap and already reports as a partial
+route — so a lengthened shift says plainly that part of it has no recording behind it rather than
+claiming coverage it does not have.
+
+### What a correction is refused for
+
+An instant is **named and refused**, never quietly clamped or nudged into the nearest acceptable one:
+
+- it has to be after the shift's own start; a shift of no length is not a correction anybody means
+- it may not precede anything the shift's deliveries recorded — an acceptance, an arrival, a pickup,
+  a completion or a cancellation — because recorded work cannot fall outside the shift that holds it
+- it may not leave a recorded pause outside the shift; the pause is corrected or deleted first,
+  through its own editor, and nothing here shortens one to fit
+- it may not reach into a shift recorded after this one, because two overlapping shifts would each
+  contribute their whole working duration to the same period
+- a shift recording a pause that was never ended is refused outright, in both directions: that pause
+  has no recorded end, so every figure derived from it would move with the correction
+
+### What a correction never touches
+
+- **The shift's own start time**, so the day, week and period it belongs to do not change.
+- **Amounts.** The shift's gross earnings, every delivery's recorded amount, every additional tip and
+  every expected amount stay exactly as entered.
+- **Deliveries and pauses.** No lifecycle timestamp and no pause timestamp moves.
+- **Route recorded at or before the corrected end.** Nothing is added, moved, retimed or reassigned
+  to another capture session.
+
+What does move is everything derived from the boundary: the shift's elapsed and working durations,
+its three rates, its recorded mileage with its segments and gaps, and the period totals and rates
+that sum those.
+
+### What is not correctable here
+
+**A running shift's end**, because it has none: `End` is what records one, and it stops recording and
+reconciles the Lock Screen card as it does. **The shift's start**, and **any delivery's lifecycle
+timestamp**: those are different facts with different collisions, and one editor that moved any of
+them would be several corrections wearing one name.
+
+**Nothing is detected.** DashPilot does not infer when a driver stopped from the last position it
+holds or the last delivery they completed. The instant was typed by the driver.
+
+!!! danger "Deleted route positions do not come back"
+
+    Correcting the end later again does not restore positions an earlier correction removed. The
+    confirmation says so before anything is deleted.
+
 ## Location permission
 
 Permission is never requested at launch. iOS shows the prompt once, and a prompt that appears
@@ -241,6 +326,9 @@ ending fails, capture restarts rather than staying off.
 If the device clock has moved behind the recorded start, the end is clamped to the start, and to an
 open pause's start if there is one. Recording a zero-length shift or a zero-length pause is
 preferable to leaving a driver unable to end their shift until the clock catches up.
+
+An end recorded later than the driver actually stopped — because DashPilot was not reachable at the
+time — can be corrected afterwards. See [Correcting a shift's end time](#correcting-a-shifts-end-time).
 
 ## History
 
@@ -312,7 +400,7 @@ numbers*.
 
 | Section | What it holds |
 | --- | --- |
-| Shift | Start time, end time, elapsed duration, and, for a shift that was paused, its paused and working durations |
+| Shift | Start time, end time, elapsed duration, and, for a shift that was paused, its paused and working durations, with Correct End Time |
 | Earnings | The recorded amount or "No amount recorded", and Add or Edit Earnings |
 | Route | Recorded mileage, capture segments, capture gaps, and what qualifies them |
 | Performance | Both derived rates, or the reason each could not be derived |
