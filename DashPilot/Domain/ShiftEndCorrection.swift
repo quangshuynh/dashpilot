@@ -58,7 +58,15 @@ nonisolated enum ShiftEndCorrectionRefusal: Error, Equatable, Sendable {
     /// Refused rather than resolved, for the reason a pause is refused over a
     /// delivery rather than shortened: nothing here moves a delivery's
     /// timestamps to make a shift boundary fit.
-    case precedesRecordedDeliveryWork
+    ///
+    /// **It carries the blocking event**, because that is the whole of what the
+    /// driver needs in order to resolve it themselves. The latest one is the one
+    /// named: it is the one that has to move first, and an end acceptable to it
+    /// is acceptable to every earlier instant. A delivery recorded late — which
+    /// is the case this exists for, the app having been unreachable when the
+    /// work actually happened — is corrected in its own editor by
+    /// ``DeliveryTimeCorrection``, and the end is then proposed again.
+    case precedesRecordedDeliveryWork(RecordedDeliveryEvent)
 
     /// The proposed end would reach into a shift recorded after this one.
     ///
@@ -82,9 +90,59 @@ nonisolated extension ShiftEndCorrectionRefusal {
         .notAfterShiftStart,
         .pauseIsOpen,
         .cutsThroughRecordedPause,
-        .precedesRecordedDeliveryWork,
+        .precedesRecordedDeliveryWork(
+            RecordedDeliveryEvent(deliveryNumber: 1, event: .delivered, occurredAt: .distantPast)
+        ),
         .overlapsAnotherShift
     ]
+
+    /// A fixed structural name for the log, carrying no instant and no delivery.
+    ///
+    /// `String(describing:)` was what the log used while every case was a bare
+    /// one, and it would now print the blocking event's **timestamp** — the
+    /// instant a driver stopped working, which is exactly the class of fact
+    /// `AppLog` has never recorded. One accessor keeps a refusal from leaking
+    /// one by the ordinary act of being logged.
+    var logDescription: String {
+        switch self {
+        case .shiftNotCompleted: "shiftNotCompleted"
+        case .notAfterShiftStart: "notAfterShiftStart"
+        case .pauseIsOpen: "pauseIsOpen"
+        case .cutsThroughRecordedPause: "cutsThroughRecordedPause"
+        case .precedesRecordedDeliveryWork: "precedesRecordedDeliveryWork"
+        case .overlapsAnotherShift: "overlapsAnotherShift"
+        }
+    }
+}
+
+/// One lifecycle event a shift's delivery recorded, named the way the interface
+/// names it.
+///
+/// It exists so that a refusal can say **which** recorded fact an instant
+/// collided with. `Delivery 6 has Delivered recorded at 9:47 PM` is something a
+/// driver can act on; "a delivery recorded work after that time" leaves them to
+/// find it by opening every row.
+///
+/// The number is ``NumberedDelivery``'s — a position in the shift's own
+/// acceptance order, local to this app and stored nowhere — and the title is
+/// built by that type rather than written again here, so the name in a refusal
+/// and the name on the card cannot drift apart.
+nonisolated struct RecordedDeliveryEvent: Equatable, Sendable {
+    /// Which of the shift's deliveries recorded it, counted from one in
+    /// acceptance order.
+    let deliveryNumber: Int
+
+    /// Which lifecycle stage it is.
+    let event: DeliveryState
+
+    /// When the driver recorded it happening.
+    let occurredAt: Date
+
+    /// What the interface calls the delivery this belongs to.
+    var deliveryTitle: String { NumberedDelivery.title(number: deliveryNumber) }
+
+    /// What the interface calls this event in a record of history.
+    var eventTitle: String { event.historyDescription }
 }
 
 /// One instant a driver is proposing to record as the moment a finished shift
@@ -203,9 +261,10 @@ nonisolated struct ShiftEndCorrection: Equatable, Sendable {
     ///     malformed row whose end precedes its start is judged by the later of
     ///     the two: that is the instant a corrected window would have to reach
     ///     to still contain it.
-    ///   - deliveryEvents: every lifecycle instant the shift's deliveries
-    ///     record, in any order. Acceptance is always among them; the rest are
-    ///     there when they happened.
+    ///   - deliveryEvents: every lifecycle event the shift's deliveries record,
+    ///     in any order, each naming the delivery it belongs to and the stage it
+    ///     is. Acceptance is always among them; the rest are there when they
+    ///     happened. The latest of them is the one a refusal names.
     ///   - nextShiftStartedAt: when the next shift recorded after this one
     ///     began, or `nil` if this is the most recent. Running or finished: a
     ///     shift that has started is a shift whose minutes are spoken for.
@@ -215,7 +274,7 @@ nonisolated struct ShiftEndCorrection: Equatable, Sendable {
         startedAt: Date,
         recordedEnd: Date?,
         pauses: [ShiftPauseInterval],
-        deliveryEvents: [Date],
+        deliveryEvents: [RecordedDeliveryEvent],
         nextShiftStartedAt: Date?
     ) throws {
         guard let recordedEnd else { throw ShiftEndCorrectionRefusal.shiftNotCompleted }
@@ -234,8 +293,9 @@ nonisolated struct ShiftEndCorrection: Equatable, Sendable {
             throw ShiftEndCorrectionRefusal.cutsThroughRecordedPause
         }
 
-        if let lastDeliveryEvent = deliveryEvents.max(), lastDeliveryEvent > correctedEnd {
-            throw ShiftEndCorrectionRefusal.precedesRecordedDeliveryWork
+        let lastDeliveryEvent = deliveryEvents.max { $0.occurredAt < $1.occurredAt }
+        if let lastDeliveryEvent, lastDeliveryEvent.occurredAt > correctedEnd {
+            throw ShiftEndCorrectionRefusal.precedesRecordedDeliveryWork(lastDeliveryEvent)
         }
 
         self.recordedEnd = recordedEnd
