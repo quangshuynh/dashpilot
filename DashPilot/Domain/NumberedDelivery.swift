@@ -129,6 +129,35 @@ nonisolated struct NumberedDelivery: Identifiable {
     /// back to.
     static let correctToCancelledActionTitle = "Correct to Cancelled"
 
+    /// What the control that corrects the times a finished delivery recorded
+    /// prints.
+    ///
+    /// `Correct` rather than `Edit`, for the reason
+    /// ``correctToCancelledActionTitle`` is: it repairs a record of work that
+    /// already happened, and `Edit` would suggest the driver is free to write
+    /// whatever they like into a history other figures are derived from.
+    ///
+    /// `Times`, plural and unqualified, because the sheet behind it shows every
+    /// instant the delivery recorded and a title naming one of them would be
+    /// wrong on the other three. It does **not** name the delivery on screen,
+    /// exactly as the four controls beside it do not: the card two lines above
+    /// has already named itself, and this sits in a grid cell about half a phone
+    /// wide. VoiceOver hears the full subject through ``spokenCorrectTimesLabel``.
+    static let correctTimesActionTitle = "Correct Times"
+
+    /// What VoiceOver hears for that control.
+    ///
+    /// It names the delivery and then says what the correction is for, because a
+    /// listener choosing between rows has to know this is about when the work
+    /// happened rather than about what it paid — the two controls sit one cell
+    /// apart.
+    var spokenCorrectTimesLabel: String {
+        """
+        Correct the times \(title) recorded. It changes how long the delivery took and the figures \
+        over that, and does not change your recorded route or mileage.
+        """
+    }
+
     /// What VoiceOver hears for that control.
     ///
     /// It says the consequence rather than the action alone, and the first

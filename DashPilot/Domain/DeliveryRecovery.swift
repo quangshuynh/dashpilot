@@ -97,6 +97,124 @@ nonisolated struct DeliveryLifecycleRecord: Equatable, Sendable {
     /// than folded into ``isChronological`` because it is a **missing** event
     /// rather than a backwards one, and the two deserve different sentences.
     var recordsPickupWithoutArrival: Bool { pickedUpAt != nil && arrivedAtPickupAt == nil }
+
+    /// Whether this row records a terminal event.
+    ///
+    /// Read from the timestamps, exactly as ``Delivery/state`` reads them, so
+    /// there is no second opinion about whether a delivery has finished.
+    var isFinished: Bool { deliveredAt != nil || cancelledAt != nil }
+
+    /// The five stages a delivery can record, in the order the lifecycle
+    /// produces them.
+    ///
+    /// The terminal pair sits at the end together because only one of them is
+    /// ever recorded: the transitions refuse a second terminal event, and
+    /// ``HistoricalDeliveryCancellation`` swaps one for the other rather than
+    /// adding it. Their relative order here is therefore never exercised.
+    ///
+    /// Written out rather than taken from `DeliveryState.allCases`, which is
+    /// free to be reordered for a menu without meaning to reorder a lifecycle.
+    static let lifecycleStages: [DeliveryState] = [
+        .accepted,
+        .arrivedAtPickup,
+        .pickedUp,
+        .delivered,
+        .cancelled
+    ]
+
+    /// The instant this row records for one stage, or `nil` if it recorded none.
+    ///
+    /// The one place a stage is mapped to its column, so a caller that walks
+    /// ``lifecycleStages`` cannot pair a stage with the wrong timestamp.
+    func instant(of stage: DeliveryState) -> Date? {
+        switch stage {
+        case .accepted: acceptedAt
+        case .arrivedAtPickup: arrivedAtPickupAt
+        case .pickedUp: pickedUpAt
+        case .delivered: deliveredAt
+        case .cancelled: cancelledAt
+        }
+    }
+
+    /// The same row with one stage's instant replaced.
+    ///
+    /// **It replaces and never creates.** A stage this row does not record is
+    /// left unrecorded, so a draft built by moving pickers can never fabricate
+    /// an arrival a cancelled delivery never had; the rule that refuses one
+    /// anyway lives in ``DeliveryTimeCorrection``, and this keeps the editor
+    /// from having to be the thing that knows it.
+    func replacing(_ stage: DeliveryState, with instant: Date) -> Self {
+        guard self.instant(of: stage) != nil else { return self }
+        return Self(
+            acceptedAt: stage == .accepted ? instant : acceptedAt,
+            arrivedAtPickupAt: stage == .arrivedAtPickup ? instant : arrivedAtPickupAt,
+            pickedUpAt: stage == .pickedUp ? instant : pickedUpAt,
+            deliveredAt: stage == .delivered ? instant : deliveredAt,
+            cancelledAt: stage == .cancelled ? instant : cancelledAt
+        )
+    }
+
+    /// Every lifecycle event this row actually records, paired with its stage,
+    /// in lifecycle order.
+    ///
+    /// The one place the app pairs a stage with the instant it happened.
+    /// ``ShiftEndCorrection`` reads it to say **which** recorded event a shift's
+    /// proposed end would swallow, and ``DeliveryTimeCorrection`` reads it to
+    /// judge ordering; neither restates which stages exist or what order they
+    /// come in.
+    ///
+    /// Nothing is inferred and nothing is filled in: a stage with no timestamp
+    /// is simply absent, which is what a delivery cancelled before its pickup
+    /// looks like.
+    var recordedEvents: [RecordedLifecycleEvent] {
+        Self.lifecycleStages.compactMap { stage in
+            instant(of: stage).map { RecordedLifecycleEvent(event: stage, occurredAt: $0) }
+        }
+    }
+
+    /// How long the driver waited at the pickup, once both ends of the wait
+    /// exist.
+    ///
+    /// **The one definition**, which ``Delivery/pickupWait`` reads and a
+    /// correction editor reads over a draft, so the figure previewed before a
+    /// save and the figure reported after one cannot disagree.
+    ///
+    /// `nil` whenever either event is missing, and `nil` for a pickup recorded
+    /// before the arrival it followed. Deliberately **not** clamped: a pickup
+    /// wait is an observation counted into a place's history, and a zero
+    /// standing in for an impossible interval would enter that history as a real
+    /// wait of no length. ``PickupWaitSample`` excludes the same rows.
+    var pickupWait: TimeInterval? {
+        guard let arrivedAtPickupAt, let pickedUpAt, pickedUpAt >= arrivedAtPickupAt else { return nil }
+        return pickedUpAt.timeIntervalSince(arrivedAtPickupAt)
+    }
+
+    /// How long the whole delivery took, from acceptance to completion.
+    ///
+    /// **The one definition**, read for the reason ``pickupWait`` is. `nil`
+    /// unless the delivery was actually delivered: a cancelled delivery has a
+    /// duration in the ordinary sense, but calling it a delivery duration would
+    /// put it in the same column as deliveries that finished.
+    ///
+    /// Clamped at zero, unlike ``pickupWait``, for the reason ``Shift`` clamps:
+    /// the transitions refuse a backwards timestamp, so this cannot go negative
+    /// through the domain API, and a store that somehow holds an anomalous row
+    /// must still not produce a negative duration on a driver's screen.
+    var completedDuration: TimeInterval? {
+        guard let deliveredAt else { return nil }
+        return max(0, deliveredAt.timeIntervalSince(acceptedAt))
+    }
+}
+
+/// One lifecycle event a delivery recorded: which stage, and when.
+///
+/// A pair rather than a tuple so it can be compared, carried across a refusal
+/// and named in a sentence. It says nothing about which delivery recorded it;
+/// ``RecordedDeliveryEvent`` is that, and adds the number the screen calls the
+/// delivery by.
+nonisolated struct RecordedLifecycleEvent: Equatable, Sendable {
+    let event: DeliveryState
+    let occurredAt: Date
 }
 
 /// What taking back an accidental `Delivered` leaves behind.

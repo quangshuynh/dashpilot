@@ -79,6 +79,15 @@ derived legitimately from device sensors and stored history is typed by the driv
   or invented and the shift's delivery active time, working duration, recorded mileage and period
   figures are all unchanged. The shift is not reopened, no delivery becomes active in it, and the
   pickup place and recorded amounts stay.
+- **Correcting the times a completed delivery recorded**, for when DashPilot was unreachable while
+  the work was happening and the events landed in the app later: one sheet holding a picker for each
+  instant the delivery **already records**, judged as a whole and written as a whole. No lifecycle
+  event is created or removed, the terminal outcome, the offer, the pickup place and every amount
+  stay, and a time that would collide with another recorded event is refused **naming that event**
+  rather than moving it. The duration, the recorded pickup wait, the per-delivery hourly figure and
+  the shift's delivery active time all follow; the recorded route and mileage do not, because this
+  corrects a record and not the evidence. It is also what unblocks correcting a shift's end when a
+  late completion is what refuses it.
 - **Offers**, recording which deliveries the driver accepted together, with a correction for the
   grouping afterwards: move a delivery between offers, split one out, combine two offers or separate
   one, on a running shift or from history. A correction changes membership only. No lifecycle time,

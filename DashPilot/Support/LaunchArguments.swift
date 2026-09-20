@@ -153,6 +153,27 @@ nonisolated enum LaunchArgument {
     /// memory, so it can never touch a real store.
     static let seededLateEndHistory = "-dashpilot-seeded-late-end-history"
 
+    /// Runs against a throwaway store holding one **completed** shift whose
+    /// delivery recorded its completion two hours after the order was actually
+    /// handed over, and whose own end is late as well.
+    ///
+    /// The real recovery case: DashPilot became unreachable near the end of a
+    /// shift, the driver kept delivering, and the remaining lifecycle events
+    /// landed in the app only once a new build was installed. No fixture and no
+    /// sequence of taps reaches that shape, because recording a completion
+    /// records the clock. It is what lets one journey drive the whole recovery
+    /// end to end: an end correction refused and naming the blocking delivery
+    /// and event, the delivery's times corrected, and the same end correction
+    /// then accepted.
+    ///
+    /// The shift, its route and its recorded amount are the late-end fixture's,
+    /// so the figures a corrected end produces are the ones those journeys
+    /// already pin.
+    ///
+    /// Every time, amount and coordinate is invented. Debug builds only, and in
+    /// memory, so it can never touch a real store.
+    static let seededLateDeliveryHistory = "-dashpilot-seeded-late-delivery-history"
+
     /// Runs against a throwaway store holding completed shifts in three
     /// different weeks: one in the current one, one in the week before it and
     /// two in the week three back.
@@ -231,6 +252,7 @@ nonisolated enum LaunchArgument {
         seededMalformedOffer,
         seededPausedHistory,
         seededLateEndHistory,
+        seededLateDeliveryHistory,
         seededOlderWeeks,
         seededOlderWeeksOnly
     ]

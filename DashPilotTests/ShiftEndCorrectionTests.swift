@@ -25,7 +25,7 @@ struct ShiftEndCorrectionTests {
     private func correction(
         to correctedEnd: Date,
         pauses: [ShiftPauseInterval] = [],
-        deliveryEvents: [Date] = [],
+        deliveryEvents: [RecordedDeliveryEvent] = [],
         nextShiftStartedAt: Date? = nil
     ) throws -> ShiftEndCorrection {
         try ShiftEndCorrection(
@@ -41,7 +41,7 @@ struct ShiftEndCorrectionTests {
     private func refusal(
         to correctedEnd: Date,
         pauses: [ShiftPauseInterval] = [],
-        deliveryEvents: [Date] = [],
+        deliveryEvents: [RecordedDeliveryEvent] = [],
         nextShiftStartedAt: Date? = nil
     ) -> ShiftEndCorrectionRefusal? {
         refusal {
@@ -61,7 +61,7 @@ struct ShiftEndCorrectionTests {
     /// also express "there is no end", which is the whole of what this case is.
     private func runningShiftRefusal(
         to correctedEnd: Date,
-        deliveryEvents: [Date] = []
+        deliveryEvents: [RecordedDeliveryEvent] = []
     ) -> ShiftEndCorrectionRefusal? {
         refusal {
             try ShiftEndCorrection(
@@ -72,6 +72,30 @@ struct ShiftEndCorrectionTests {
                 deliveryEvents: deliveryEvents,
                 nextShiftStartedAt: nil
             )
+        }
+    }
+
+    /// One delivery's recorded events, at whole minutes into the shift.
+    ///
+    /// Only the stages given are recorded, so a delivery cancelled before its
+    /// pickup produces exactly the events such a row holds.
+    private func lifecycle(
+        of number: Int,
+        accepted: Double,
+        arrived: Double? = nil,
+        pickedUp: Double? = nil,
+        delivered: Double? = nil,
+        cancelled: Double? = nil
+    ) -> [RecordedDeliveryEvent] {
+        let stages: [(DeliveryState, Double?)] = [
+            (.accepted, accepted),
+            (.arrivedAtPickup, arrived),
+            (.pickedUp, pickedUp),
+            (.delivered, delivered),
+            (.cancelled, cancelled)
+        ]
+        return stages.compactMap { stage, minutes in
+            minutes.map { RecordedDeliveryEvent(deliveryNumber: number, event: stage, occurredAt: at($0)) }
         }
     }
 
@@ -205,21 +229,68 @@ struct ShiftEndCorrectionTests {
 
     @Test("An end before anything a delivery recorded is refused")
     func endBeforeRecordedDeliveryWorkIsRefused() {
-        let events = [at(100), at(105), at(110), at(150)]
+        let events = lifecycle(of: 1, accepted: 100, arrived: 105, pickedUp: 110, delivered: 150)
 
-        #expect(refusal(to: at(140), deliveryEvents: events) == .precedesRecordedDeliveryWork)
+        #expect(
+            refusal(to: at(140), deliveryEvents: events)
+                == .precedesRecordedDeliveryWork(
+                    RecordedDeliveryEvent(deliveryNumber: 1, event: .delivered, occurredAt: at(150))
+                )
+        )
         #expect(refusal(to: at(150), deliveryEvents: events) == nil, "An end exactly at the last event is inside it")
         #expect(refusal(to: at(160), deliveryEvents: events) == nil)
     }
 
+    @Test("The refusal names the delivery and the event that blocks the end")
+    func theRefusalIdentifiesTheBlockingEvent() throws {
+        // Two deliveries, and it is the second one's completion that lies after
+        // the proposed end. A refusal naming the first would send the driver to
+        // correct a record that is not in the way.
+        let events = lifecycle(of: 1, accepted: 60, arrived: 65, pickedUp: 70, delivered: 90)
+            + lifecycle(of: 2, accepted: 100, arrived: 105, pickedUp: 110, delivered: 200)
+
+        let met = try #require(refusal(to: at(150), deliveryEvents: events))
+        guard case let .precedesRecordedDeliveryWork(blocking) = met else {
+            Issue.record("Expected the delivery refusal, met \(met)")
+            return
+        }
+        #expect(blocking.deliveryNumber == 2)
+        #expect(blocking.deliveryTitle == "Delivery 2")
+        #expect(blocking.event == .delivered)
+        #expect(blocking.eventTitle == "Delivered")
+        #expect(blocking.occurredAt == at(200))
+    }
+
+    @Test("The latest recorded event is the one named, whichever stage it is")
+    func theLatestEventIsTheOneNamed() throws {
+        // A delivery cancelled at the pickup: the latest thing it records is the
+        // cancellation, and that is what has to move first.
+        let events = lifecycle(of: 3, accepted: 100, arrived: 105, cancelled: 160)
+
+        let met = try #require(refusal(to: at(120), deliveryEvents: events))
+        guard case let .precedesRecordedDeliveryWork(blocking) = met else {
+            Issue.record("Expected the delivery refusal, met \(met)")
+            return
+        }
+        #expect(blocking.event == .cancelled)
+        #expect(blocking.deliveryNumber == 3)
+    }
+
     @Test("Every recorded instant counts, not only the one the lifecycle reached last")
-    func anOutOfOrderChainIsStillJudgedByItsLatestInstant() {
+    func anOutOfOrderChainIsStillJudgedByItsLatestInstant() throws {
         // A store the app cannot write: a completion earlier than the pickup it
         // follows. An end moved back past the pickup would still be putting
-        // recorded work outside its shift.
-        let events = [at(100), at(180), at(150)]
+        // recorded work outside its shift, and the refusal names the pickup
+        // rather than the completion that comes after it in the lifecycle.
+        let events = lifecycle(of: 1, accepted: 100, pickedUp: 180, delivered: 150)
 
-        #expect(refusal(to: at(170), deliveryEvents: events) == .precedesRecordedDeliveryWork)
+        let met = try #require(refusal(to: at(170), deliveryEvents: events))
+        guard case let .precedesRecordedDeliveryWork(blocking) = met else {
+            Issue.record("Expected the delivery refusal, met \(met)")
+            return
+        }
+        #expect(blocking.event == .pickedUp, "The latest instant is named, not the latest stage")
+        #expect(blocking.occurredAt == at(180))
     }
 
     @Test("A shift with no deliveries is bounded by nothing but its own start")
@@ -251,9 +322,10 @@ struct ShiftEndCorrectionTests {
         // A running shift with a delivery reaching past the proposed end reports
         // that it is running: there is no end to correct, so nothing else about
         // the proposal is worth saying.
-        #expect(runningShiftRefusal(to: at(120), deliveryEvents: [at(200)]) == .shiftNotCompleted)
+        let late = lifecycle(of: 1, accepted: 200)
+        #expect(runningShiftRefusal(to: at(120), deliveryEvents: late) == .shiftNotCompleted)
         #expect(
-            refusal(to: start, deliveryEvents: [at(200)]) == .notAfterShiftStart,
+            refusal(to: start, deliveryEvents: late) == .notAfterShiftStart,
             "and an end before the start is refused before what lies after it is considered"
         )
     }
