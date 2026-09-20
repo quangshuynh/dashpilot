@@ -1026,6 +1026,69 @@ enum PreviewSupport {
         return container
     }
 
+    /// A **completed** shift holding a delivery whose recorded completion is two
+    /// hours later than the food actually reached the door.
+    ///
+    /// The real recovery case this whole correction exists for, seeded exactly
+    /// as it happened: DashPilot became unreachable near the end of a shift, the
+    /// driver kept delivering, and the delivery's completion landed in the app
+    /// only once a new build was installed. The shift's own end is late with it.
+    ///
+    /// No sequence of taps reaches this shape — recording a completion records
+    /// the clock — so it is the only way a journey can drive the whole recovery:
+    /// the end correction refuses and **names the blocking delivery and event**,
+    /// the delivery's times are corrected, and the same end correction is then
+    /// accepted.
+    ///
+    /// It is deliberately the late-end fixture's shift with its delivery moved:
+    /// the same start, the same three equal capture sessions, the same recorded
+    /// end and the same invented `$100.00`, so a journey that corrects the end
+    /// to 3 hr 20 min reads the same `4.5 mi` and `$30.00` per shift hour the
+    /// late-end journeys already pin. What differs is the one fact under test.
+    ///
+    /// The delivery runs from 2 hr 00 min (accepted) through 2 hr 05 min
+    /// (arrived) and 2 hr 10 min (picked up) to a recorded completion at
+    /// 3 hr 30 min, and records `$12.00`. As it stands it reports 1 hr 30 min
+    /// accepted to delivered and `$8.00` per recorded delivery hour; corrected
+    /// to a completion at 3 hr 15 min it reports 1 hr 15 min and `$9.60`, with
+    /// the 5-minute pickup wait untouched.
+    ///
+    /// Every time, amount and coordinate is invented. Debug builds only, and in
+    /// memory, so it can never touch a real store.
+    static func seededLateDeliveryHistoryContainer(
+        referenceDate: Date = pausedHistoryReference()
+    ) throws -> ModelContainer {
+        let container = try ModelContainerFactory.makeInMemoryContainer()
+        let context = ModelContext(container)
+
+        let start = referenceDate.addingTimeInterval(-5 * 3600)
+        func at(_ minutes: Double) -> Date { start.addingTimeInterval(minutes * 60) }
+
+        let shift = Shift(startedAt: start)
+        context.insert(shift)
+
+        for sample in lateEndRoute(from: start) {
+            context.insert(sample.attached(to: shift))
+        }
+
+        let delivery = insertedDelivery(on: shift, acceptedAt: at(120), in: context)
+        try? delivery.markArrivedAtPickup(at: at(125))
+        try? delivery.markPickedUp(at: at(130))
+        // The late one. Two hours of wall clock after the order was handed over,
+        // because that is when the app could next be told.
+        try? delivery.markDelivered(at: at(210))
+        try? delivery.setGrossEarnings(Money(minorUnits: 1_200))
+        delivery.setPickupPlace(place(named: SyntheticPickupPlace.noodles, at: start, in: context))
+        context.insert(delivery)
+
+        try? shift.end(at: at(220))
+        try? shift.setGrossEarnings(Money(minorUnits: 10_000))
+
+        try? context.save()
+
+        return container
+    }
+
     /// Three capture sessions of ten positions each, twenty seconds and 400 m
     /// apart, beginning 30 minutes, 3 hours 5 minutes and 3 hours 25 minutes
     /// into the shift.
@@ -1067,6 +1130,24 @@ enum PreviewSupport {
                 ShiftEndCorrectionEditor(shift: shift)
             } else {
                 Text("No synthetic shift")
+            }
+        }
+        .modelContainer(container)
+    }
+
+    /// The delivery time editor over the late-delivery fixture's one delivery.
+    @MainActor
+    static func deliveryTimeCorrectionEditor() -> some View {
+        // Previews cannot meaningfully recover from a container failure.
+        let container = try! seededLateDeliveryHistoryContainer()
+        let context = container.mainContext
+        let numbered = (try? context.fetch(FetchDescriptor<Shift>()))?.first?.numberedDeliveries.first
+
+        return Group {
+            if let numbered {
+                DeliveryTimeCorrectionEditor(numbered: numbered)
+            } else {
+                Text("No synthetic delivery")
             }
         }
         .modelContainer(container)

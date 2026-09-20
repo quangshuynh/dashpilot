@@ -1004,6 +1004,11 @@ private struct DeliveryHistoryRow: View {
     /// than a field.
     @State private var isEditingTips = false
 
+    /// The times this delivery recorded, corrected in their own sheet: they move
+    /// together, they are judged together, and a picker in a list row could not
+    /// state the consequences the editor states before saving.
+    @State private var isCorrectingTimes = false
+
     /// The correction awaiting confirmation. Nothing is written until it is
     /// confirmed, and dismissing the alert writes nothing at all.
     ///
@@ -1220,6 +1225,9 @@ private struct DeliveryHistoryRow: View {
         .sheet(isPresented: $isEditingTips) {
             DeliveryTipsEditor(numbered: numbered)
         }
+        .sheet(isPresented: $isCorrectingTimes) {
+            DeliveryTimeCorrectionEditor(numbered: numbered)
+        }
     }
 
     // MARK: Actions
@@ -1254,6 +1262,20 @@ private struct DeliveryHistoryRow: View {
             available.append(.additionalTips)
         }
 
+        // Offered only where a correction would actually be accepted, which is
+        // the same rule the control below keeps: the shift has to be over, the
+        // delivery has to be finished, and the times it already records have to
+        // be ones the domain will judge. A control that always refuses is worse
+        // than no control.
+        //
+        // The proposal it is asked about is the delivery's **own** record, so
+        // this asks "could anything here be corrected at all", never "is some
+        // particular correction acceptable" — which is the editor's question and
+        // is asked again while its pickers move.
+        if canCorrectTimes {
+            available.append(.correctTimes)
+        }
+
         // Last, so the controls that record and correct facts keep the places
         // they had, and the one that rewrites how a delivery **ended** is met
         // after all of them. Offered only where it would actually succeed: the
@@ -1266,6 +1288,24 @@ private struct DeliveryHistoryRow: View {
         }
 
         return available
+    }
+
+    /// Whether this row may offer to correct the times the delivery recorded.
+    ///
+    /// These are the two refusals a driver could never resolve from inside the
+    /// editor: a delivery on a shift that has not ended has no window for its
+    /// events to fall inside, and one that has not finished has no recorded
+    /// history to correct. Neither moves because a picker did.
+    ///
+    /// **Deliberately not ``canCorrectToCancelled``'s shape**, which asks the
+    /// domain whether the correction would be accepted as things stand. That is
+    /// right there, where the correction takes no input and a control the rule
+    /// would refuse could only ever refuse. Here the driver supplies the times,
+    /// so a row whose stored chain already runs backwards — which the app cannot
+    /// write, but a store could hold — is exactly the row this editor can
+    /// repair, and hiding the control would leave it with no remedy at all.
+    private var canCorrectTimes: Bool {
+        delivery.shift?.completedWindow != nil && delivery.state.isFinished
     }
 
     /// Whether this row may offer the historical correction at all.
@@ -1356,6 +1396,21 @@ private struct DeliveryHistoryRow: View {
             }
             .buttonStyle(.borderless)
             .accessibilityLabel(numbered.spokenAdditionalTipsLabel(tipCount: tipCount))
+
+        case .correctTimes:
+            Button {
+                correctionMessage = nil
+                isCorrectingTimes = true
+            } label: {
+                DeliveryActionLabel(
+                    title: NumberedDelivery.correctTimesActionTitle,
+                    // Deliberately not `clock.arrow.circlepath`, which `Pickup
+                    // History` already carries two cells away in the same grid.
+                    systemImage: "clock.badge.checkmark"
+                )
+            }
+            .buttonStyle(.borderless)
+            .accessibilityLabel(numbered.spokenCorrectTimesLabel)
 
         case .correctToCancelled:
             Button {
@@ -1560,14 +1615,21 @@ private struct PendingPauseDeletion: Identifiable {
 /// the grid, so the identity the grid orders by is the identity a journey looks
 /// the control up by and the two cannot drift apart.
 ///
-/// The order is the order they are read, and it is why the historical correction
-/// is last: the three that were already here keep the places they had, and the
-/// one that rewrites a recorded fact is met after them.
+/// The order is the order they are read, and it is why the two corrections come
+/// last: the four that record and change facts keep the places they had, and the
+/// two that rewrite what the delivery's own lifecycle recorded are met after
+/// them — the times first, and the one that rewrites how the delivery **ended**
+/// after that.
+///
+/// Six of them fill three even rows of the two-column grid, where five left the
+/// last cell empty. Nothing about the layout had to move to take the sixth: see
+/// ``DeliveryHistoryRow/actionColumns``.
 private enum DeliveryRowAction: String, Identifiable {
     case pickupPlace = "shiftDetailPickupPlaceButton"
     case pickupHistory = "shiftDetailPickupHistoryButton"
     case earnings = "shiftDetailDeliveryEarningsButton"
     case additionalTips = "shiftDetailDeliveryTipsButton"
+    case correctTimes = "shiftDetailCorrectDeliveryTimesButton"
     case correctToCancelled = "shiftDetailCorrectToCancelledButton"
 
     var id: String { rawValue }
