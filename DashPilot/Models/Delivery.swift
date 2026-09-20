@@ -283,7 +283,8 @@ nonisolated final class Delivery {
         cancelledAt ?? deliveredAt ?? pickedUpAt ?? arrivedAtPickupAt ?? acceptedAt
     }
 
-    /// Every lifecycle instant this delivery records, in no particular order.
+    /// Every lifecycle event this delivery records, each paired with the stage
+    /// it is, in lifecycle order.
     ///
     /// Distinct from ``lastEventAt``, which reads the chain in the order the
     /// lifecycle produces it and is what the *next* transition is judged
@@ -292,12 +293,15 @@ nonisolated final class Delivery {
     /// even in a store whose chain is not ordered — a row with a completion
     /// earlier than its pickup is one the app cannot write, and a shift boundary
     /// moved back past the pickup would still be putting recorded work outside
-    /// its shift.
+    /// its shift. It carries the **stage** as well as the instant so that the
+    /// refusal can name the event the driver has to correct.
     ///
     /// Acceptance is always present; the rest are present when they happened.
-    /// Nothing is inferred and nothing is filled in.
-    var recordedEventInstants: [Date] {
-        [acceptedAt, arrivedAtPickupAt, pickedUpAt, deliveredAt, cancelledAt].compactMap { $0 }
+    /// Nothing is inferred and nothing is filled in. The pairing itself lives on
+    /// ``DeliveryLifecycleRecord``, so the correction editor and this read the
+    /// same one rather than two copies of it.
+    var recordedEvents: [RecordedLifecycleEvent] {
+        DeliveryLifecycleRecord(self).recordedEvents
     }
 
     // MARK: Transitions
@@ -434,6 +438,73 @@ nonisolated final class Delivery {
         let correction = try HistoricalDeliveryCancellation(correcting: DeliveryLifecycleRecord(self))
         deliveredAt = nil
         cancelledAt = correction.cancelledAt
+    }
+
+    // MARK: Correcting recorded times
+
+    /// What correcting this delivery's recorded lifecycle times to `proposed`
+    /// would write, or the reason it cannot be written.
+    ///
+    /// The adapter between this model and ``DeliveryTimeCorrection``, holding no
+    /// rule of its own. The one fact it supplies that the delivery does not hold
+    /// itself is the **containing shift's window**, which is `nil` for a shift
+    /// that has not ended and is what refuses the correction there.
+    ///
+    /// It mutates nothing, so a screen can ask while a picker moves and read the
+    /// same answer the write will consult rather than a second opinion about it.
+    ///
+    /// - Throws: ``DeliveryTimeCorrectionRefusal``.
+    func timeCorrection(to proposed: DeliveryLifecycleRecord) throws -> DeliveryTimeCorrection {
+        try DeliveryTimeCorrection(
+            correcting: DeliveryLifecycleRecord(self),
+            to: proposed,
+            within: shift?.completedWindow
+        )
+    }
+
+    /// Rewrites the lifecycle instants this delivery records.
+    ///
+    /// **The only place `acceptedAt`, `arrivedAtPickupAt` and `pickedUpAt` are
+    /// ever written after the lifecycle recorded them**, and one of only three
+    /// that touch `deliveredAt` or `cancelledAt` afterwards — the other two
+    /// being ``reopenFromDelivered()`` and
+    /// ``correctCompletionToCancellation()``, which change *which* events exist
+    /// rather than when they happened. It lives here because those setters do,
+    /// and it is one operation for the reason they are: a caller must not be
+    /// able to move one instant and then decide whether the rest still make
+    /// sense.
+    ///
+    /// ## It writes only instants
+    ///
+    /// No lifecycle event is created and none is removed, which
+    /// ``DeliveryTimeCorrection`` has already established about the whole
+    /// proposal. The delivery is therefore terminal before and after and
+    /// terminal in the same way, and its pickup place, its offer, its recorded
+    /// platform pay, its expected pay and its tips are not read here at all.
+    ///
+    /// ## Every write, or none
+    ///
+    /// The whole proposal was judged before this was called, and the guard below
+    /// is the last part of that: the correction must still be a correction of
+    /// the record it was built against. A delivery whose times moved in between
+    /// — from another screen, or from a second tap — refuses rather than having
+    /// a stale proposal written over it, which is the guard ``Shift/apply(_:)``
+    /// makes with a shift's recorded end. Past that point the five assignments
+    /// cannot individually fail, so there is no state in which some of them
+    /// landed.
+    ///
+    /// - Throws: ``DeliveryTimeCorrectionRefusal/recordedTimesChanged`` when this
+    ///   delivery no longer records what the correction was built from.
+    func apply(_ correction: DeliveryTimeCorrection) throws {
+        guard DeliveryLifecycleRecord(self) == correction.recorded else {
+            throw DeliveryTimeCorrectionRefusal.recordedTimesChanged
+        }
+        let corrected = correction.corrected
+        acceptedAt = corrected.acceptedAt
+        arrivedAtPickupAt = corrected.arrivedAtPickupAt
+        pickedUpAt = corrected.pickedUpAt
+        deliveredAt = corrected.deliveredAt
+        cancelledAt = corrected.cancelledAt
     }
 
     // MARK: Pickup identity
@@ -637,28 +708,21 @@ nonisolated final class Delivery {
     /// into a place's history, and a zero standing in for an impossible interval
     /// would enter that history as a real wait of no length. Absence is the
     /// honest answer, and ``PickupWaitSample`` excludes the same rows.
-    var pickupWait: TimeInterval? {
-        guard let arrivedAtPickupAt, let pickedUpAt, pickedUpAt >= arrivedAtPickupAt else { return nil }
-        return pickedUpAt.timeIntervalSince(arrivedAtPickupAt)
-    }
+    ///
+    /// Derived by ``DeliveryLifecycleRecord/pickupWait``, so the figure a
+    /// correction editor previews from a draft and the figure this row reports
+    /// are the same rule rather than two readings of it.
+    var pickupWait: TimeInterval? { DeliveryLifecycleRecord(self).pickupWait }
 
     /// How long the whole delivery took, from acceptance to completion.
     ///
     /// `nil` unless the delivery was actually delivered. A cancelled delivery
     /// has a duration in the ordinary sense, but calling it a delivery duration
     /// would put it in the same column as deliveries that finished.
-    var completedDuration: TimeInterval? {
-        guard let deliveredAt else { return nil }
-        return clamped(from: acceptedAt, to: deliveredAt)
-    }
-
-    /// The transitions refuse a backwards timestamp, so this cannot go negative
-    /// through the domain API. It is clamped anyway, for the same reason
-    /// ``Shift`` clamps: a store that somehow holds anomalous rows must not
-    /// produce a negative duration on a driver's screen.
-    private func clamped(from start: Date, to end: Date) -> TimeInterval {
-        max(0, end.timeIntervalSince(start))
-    }
+    ///
+    /// Derived by ``DeliveryLifecycleRecord/completedDuration``, for the reason
+    /// ``pickupWait`` is.
+    var completedDuration: TimeInterval? { DeliveryLifecycleRecord(self).completedDuration }
 }
 
 extension Delivery {
