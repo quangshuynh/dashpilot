@@ -74,7 +74,10 @@ struct DeliveryOfferPersistenceTests {
         let shift = try #require(ModelContainerFactory.currentSchema.entities.first { $0.name == "Shift" })
         #expect(
             Set(shift.properties.map(\.name))
-                == ["id", "startedAt", "endedAt", "deliveries", "offers", "pauses", "grossEarningsAmount"]
+                == [
+                    "id", "startedAt", "endedAt", "deliveries", "offers", "pauses", "grossEarningsAmount",
+                    "fuelMilesPerGallonValue", "fuelGasPricePerGallonAmount"
+                ]
         )
     }
 

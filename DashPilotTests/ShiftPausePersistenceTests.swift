@@ -65,7 +65,12 @@ struct ShiftPausePersistenceTests {
         let shift = try #require(ModelContainerFactory.currentSchema.entities.first { $0.name == "Shift" })
         let attributes = Set(shift.attributes.map(\.name))
 
-        #expect(attributes == ["id", "startedAt", "endedAt", "grossEarningsAmount"])
+        #expect(
+            attributes == [
+                "id", "startedAt", "endedAt", "grossEarningsAmount",
+                "fuelMilesPerGallonValue", "fuelGasPricePerGallonAmount"
+            ]
+        )
         #expect(shift.relationships.map(\.name).contains("pauses"))
         #expect(!attributes.contains { $0.lowercased().contains("paus") })
         #expect(!attributes.contains { $0.lowercased().contains("active") })
