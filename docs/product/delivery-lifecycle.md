@@ -290,7 +290,7 @@ what will happen to it.
 
 DashPilot can be unreachable at the moment work actually happens. It is evicted under memory
 pressure, it crashes, or it is replaced by a new build mid-shift. The driver keeps delivering, and
-the events land in the app whenever it comes back — so a delivery records a completion long after the
+the events land in the app whenever it comes back, so a delivery records a completion long after the
 order reached the door.
 
 `Correct Times`, on the delivery's own row in a finished shift's history, opens one sheet holding a
@@ -309,7 +309,7 @@ picker for **each instant the delivery already records**. Nothing else is on it.
 A stage the delivery never recorded has **no picker and no row**. A delivery cancelled on the way to
 a pickup never arrived at one, and offering a control to say when it did would be an invitation to
 invent an event. The same rule from the other side: no recorded event can be removed here, and the
-terminal event cannot be swapped — that is `Correct to Cancelled`, which has its own name and its own
+terminal event cannot be swapped. That is `Correct to Cancelled`, which has its own name and its own
 confirmation.
 
 ### Nothing cascades
@@ -318,7 +318,7 @@ Every proposed time has to leave the delivery temporally valid:
 
 `acceptedAt` ≤ `arrivedAtPickupAt` ≤ `pickedUpAt` ≤ `deliveredAt` or `cancelledAt`
 
-— over the stages that exist, and with every one of them inside the shift that holds the delivery.
+over the stages that exist, and with every one of them inside the shift that holds the delivery.
 Touching instants are in order, because two events can genuinely share a minute.
 
 **A time that collides with another is refused, and the refusal names the other one.** A completion
@@ -342,7 +342,7 @@ correction with no recomputation step and no second stored answer:
 
 **The route and the recorded mileage are not changed.** Not one position is deleted, retimed,
 re-coordinated or moved between capture sessions. This corrects what the driver recorded about the
-delivery, not where the phone recorded being, and the sheet says so before anything is saved —
+delivery, not where the phone recorded being, and the sheet says so before anything is saved,
 because a driver who has just moved a completion back by twenty minutes might reasonably expect the
 mileage to fall with it.
 
@@ -367,8 +367,8 @@ pickup moved and its completion did not.
 
 [Correcting a shift's recorded end](shift-workflow.md#correcting-a-shifts-end-time) refuses to
 move the end back past anything a delivery recorded, so one late completion pins the shift's end to
-it. The refusal names the blocking delivery and event — `Delivery 1 has Delivered recorded at
-9:47 PM, after the proposed shift end` — and the recovery is to correct that delivery here and then
+it. The refusal names the blocking delivery and event (`Delivery 1 has Delivered recorded at
+9:47 PM, after the proposed shift end`), and the recovery is to correct that delivery here and then
 propose the end again. Nothing corrects a delivery from the shift editor: the two are separate
 records with separate confirmations.
 
@@ -658,7 +658,7 @@ is what a pickup place's recorded history is built from, under the same inclusio
 
 Under the record sit the controls that change it: `Add` or `Change Pickup Place` always,
 `Pickup History` where a place is named, `Add` or `Edit Earnings` and `Add a Tip` or `Edit Tips` on a
-finished delivery, and then the two corrections — `Correct Times`, and `Correct to Cancelled` where
+finished delivery, and then the two corrections: `Correct Times`, and `Correct to Cancelled` where
 that one would be accepted. They are laid out as a two-column grid rather than as one row, so every
 control is given the same half of the card whatever it is called. Three of them sharing a row gave
 each about a third of a phone's width, which is less than `Change Pickup Place` needs, and the titles

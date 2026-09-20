@@ -14,7 +14,7 @@ private struct RefusedTimeCorrectionSave: Error {}
 /// A delivery's timestamps are read by more of this app than any other fact it
 /// holds: the delivery's own duration and wait, its hourly figure, the shift's
 /// union of delivery intervals, and every period figure over those. The
-/// interesting claims are therefore split in two — that all of those **do**
+/// interesting claims are therefore split in two: that all of those **do**
 /// follow a correction, with no invalidation step anywhere, and that the route,
 /// the mileage, the money, the grouping, the pickup identity and the terminal
 /// outcome do **not**.

@@ -40,7 +40,7 @@ nonisolated enum DeliveryTimeCorrectionRefusal: Error, Equatable, Sendable {
     /// **A correction edits an existing recorded fact and creates none.** A
     /// delivery cancelled before the driver reached the pickup records no
     /// arrival, and writing one here would put an event into a driver's history
-    /// on the app's authority rather than theirs — the same distinction the app
+    /// on the app's authority rather than theirs, which is the same distinction the app
     /// keeps everywhere between a missing value and a zero.
     case eventNotRecorded(DeliveryState)
 
@@ -49,7 +49,7 @@ nonisolated enum DeliveryTimeCorrectionRefusal: Error, Equatable, Sendable {
     /// The mirror of ``eventNotRecorded(_:)``, and its own case because the two
     /// are different mistakes. Removing a recorded event is deleting history
     /// rather than correcting it, and the two corrections that genuinely remove
-    /// one — ``DeliveryRecovery`` and ``HistoricalDeliveryCancellation`` — each
+    /// one, ``DeliveryRecovery`` and ``HistoricalDeliveryCancellation``, each
     /// say so in their own name and have their own confirmation.
     case recordedEventRemoved(DeliveryState)
 
@@ -139,7 +139,7 @@ nonisolated extension DeliveryTimeCorrectionRefusal {
 /// under memory pressure, crashed, or replaced by a new build mid-shift: the
 /// driver keeps delivering, and the events land in the app whenever it comes
 /// back. The delivery then records a completion long after the food reached the
-/// door, and everything measured from that instant is wrong with it — how long
+/// door, and everything measured from that instant is wrong with it: how long
 /// the delivery took, what it paid per hour, how much of the shift was delivery
 /// active, and, downstream, whether the shift's own end can be corrected at all.
 ///
@@ -177,7 +177,7 @@ nonisolated extension DeliveryTimeCorrectionRefusal {
 /// add an arrival to a delivery that was cancelled on the way to one. And no
 /// timestamp moves except the ones the driver moved. A completion dragged back
 /// behind its own pickup is **refused, naming the pickup**, rather than dragging
-/// the pickup back with it — the driver corrects that fact explicitly, in the
+/// the pickup back with it. The driver corrects that fact explicitly, in the
 /// same editor, and the whole proposal is judged again.
 ///
 /// ## Nothing derived is written
@@ -319,7 +319,7 @@ nonisolated struct DeliveryTimeCorrection: Equatable, Sendable {
 /// something: an end moved earlier deletes recorded positions, and deleting a
 /// pause removes a row. This deletes nothing, creates nothing and leaves the
 /// delivery's terminal outcome, money and grouping exactly as they are, so it
-/// follows ``ShiftPauseCorrection``'s shape instead — the consequences are
+/// follows ``ShiftPauseCorrection``'s shape instead: the consequences are
 /// stated on the sheet, before Save, where they can be read rather than
 /// dismissed. Raising an alert for a correction that destroys nothing is what
 /// teaches a driver to confirm without reading.

@@ -247,10 +247,10 @@ An instant is **named and refused**, never quietly clamped or nudged into the ne
 
 - it has to be after the shift's own start; a shift of no length is not a correction anybody means
 - it may not precede anything the shift's deliveries recorded — an acceptance, an arrival, a pickup,
-  a completion or a cancellation — because recorded work cannot fall outside the shift that holds it.
+  a completion or a cancellation, because recorded work cannot fall outside the shift that holds it.
   **The refusal names the blocking delivery and event**: `Delivery 1 has Delivered recorded at
   9:47 PM, after the proposed shift end`, so the driver knows which record to open. Nothing here
-  corrects that delivery on their behalf — see
+  corrects that delivery on their behalf. See
   [the recovery below](#when-a-delivery-recorded-late-blocks-an-earlier-end)
 - it may not leave a recorded pause outside the shift; the pause is corrected or deleted first,
   through its own editor, and nothing here shortens one to fit
@@ -284,7 +284,7 @@ The recovery is five steps, and each one is the driver's:
 1. `Correct End Time` refuses the earlier end.
 2. It names the delivery and the event that block it.
 3. The driver opens that delivery in the shift's own record.
-4. They correct its recorded times — see
+4. They correct its recorded times. See
    [Correcting the times a delivery recorded](delivery-lifecycle.md#correcting-the-times-a-delivery-recorded).
 5. They retry the same end correction, which is then accepted and trims the route as it always does.
 
