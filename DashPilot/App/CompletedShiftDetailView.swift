@@ -106,14 +106,15 @@ struct CompletedShiftDetailView: View {
             earningsSection
             routeSection
             performanceSection
-            // The estimated section comes **after** every recorded figure and
-            // every gross rate, deliberately. What the driver recorded and what
-            // the route measured are the trustworthy part of this screen; an
-            // estimate derived from two assumptions is not, and reading down the
-            // screen should go from the one to the other rather than interleave
-            // them. Keeping Performance where it was also leaves the rate rows
-            // at the offset the existing journeys reach them at.
+            // The two estimated sections come **after** every recorded figure
+            // and every gross rate, deliberately. What the driver recorded and
+            // what the route measured are the trustworthy part of this screen;
+            // an estimate derived from two assumptions is not, and reading down
+            // the screen should go from the one to the other rather than
+            // interleave them. Keeping Performance where it was also leaves the
+            // rate rows at the offset the existing journeys reach them at.
             fuelSection
+            profitabilitySection
             // The last two reading sections, deliberately, and in this order.
             // The four above summarise the shift in a fixed number of lines;
             // these two grow with it, and a long list between the header and
@@ -861,6 +862,174 @@ struct CompletedShiftDetailView: View {
         """
     }
 
+    // MARK: Estimated net
+
+    /// What this shift is estimated to have been left with once its estimated
+    /// fuel is taken off what it recorded paying.
+    ///
+    /// A four-line ledger, in the order the subtraction happens, so the driver
+    /// can see which figure is recorded and which is estimated rather than being
+    /// handed one number to trust. The footer carries the three things the
+    /// figures cannot say for themselves: that recorded expenses are not in it
+    /// and why, that a recorded fuel purchase and this estimate can describe the
+    /// same money, and that none of this is profit.
+    ///
+    /// **The section is shown even when there is no estimate**, stating the
+    /// reason, because a fuel estimate is not a precondition for reading a
+    /// completed shift and a section that vanishes teaches nothing.
+    private var profitabilitySection: some View {
+        Section {
+            if let profitability {
+                ledgerRow(
+                    "Recorded earnings",
+                    spokenAs: "recorded gross earnings for this shift",
+                    amount: profitability.recordedEarnings,
+                    missingStatement: EstimatedNetUnavailability.earningsNotRecorded.explanation,
+                    identifier: "shiftDetailNetRecordedEarnings"
+                )
+                ledgerRow(
+                    "Estimated fuel cost",
+                    spokenAs: "estimated fuel cost, based on recorded mileage",
+                    amount: profitability.fuelEstimate.cost.map { -$0 },
+                    missingStatement: EstimatedNetUnavailability.fuelNotEstimated.explanation,
+                    identifier: "shiftDetailNetEstimatedFuel"
+                )
+                netRow(
+                    "Estimated net after fuel",
+                    spokenAs: "estimated net after fuel",
+                    net: profitability.estimatedNetAfterFuel,
+                    isProminent: true,
+                    identifier: "shiftDetailEstimatedNetAfterFuel"
+                )
+                netRow(
+                    "Estimated net per working hour",
+                    spokenAs: "estimated net after fuel per working hour",
+                    net: profitability.estimatedNetPerWorkingHour,
+                    isProminent: false,
+                    identifier: "shiftDetailEstimatedNetPerWorkingHour"
+                )
+
+                if profitability.isRoutePartial, profitability.hasAnyFigure {
+                    Text(Self.partialNetStatement)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("shiftDetailEstimatedNetPartialNotice")
+                }
+            } else {
+                Text("Working out this shift's estimated net…")
+                    .foregroundStyle(.secondary)
+            }
+        } header: {
+            Text("Estimated Net")
+        } footer: {
+            Text(
+                """
+                Estimated net after fuel is what you recorded this shift paying, less the estimated \
+                fuel cost above. The earnings are recorded; the fuel is estimated, so the result is \
+                an estimate too. Per working hour divides by the same working time the gross rate \
+                does. Recorded expenses are not part of this: DashPilot does not attribute a cost \
+                to a shift, so net after recorded expenses is a figure the period summaries carry \
+                instead. If you also recorded a fuel purchase under Expenses, that cost and this \
+                estimate may describe the same money in two places, and DashPilot does not know \
+                which shifts a tank was burned on, so it never adds or nets the two together. This \
+                is not profit, take-home pay or a tax figure: nothing for wear, insurance, \
+                maintenance or tax is subtracted anywhere in DashPilot.
+                """
+            )
+        }
+    }
+
+    /// One recorded or estimated amount on the way to the net, or one sentence
+    /// saying why there is not one.
+    ///
+    /// A missing half is never a dash and never `$0.00`: it is the sentence
+    /// naming what is missing, which is also what tells the driver what to do
+    /// about it.
+    @ViewBuilder
+    private func ledgerRow(
+        _ title: String,
+        spokenAs spokenTitle: String,
+        amount: Money?,
+        missingStatement: String,
+        identifier: String
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            if let amount {
+                LabeledContent(title) {
+                    Text(amount.formatted(locale: locale)).monospacedDigit()
+                }
+            } else {
+                LabeledContent(title) {
+                    Text("Not available").foregroundStyle(.secondary)
+                }
+                Text(missingStatement)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(
+            amount.map { "\($0.formatted(locale: locale)) \(spokenTitle)" }
+                ?? "No \(spokenTitle). \(missingStatement)"
+        )
+        .accessibilityIdentifier(identifier)
+    }
+
+    /// One derived net figure, or one sentence saying why there is not one.
+    ///
+    /// `isProminent` gives the figure the subtraction produces a heavier weight
+    /// than the lines above it, because it is what the section is for. A
+    /// negative result is shown as the negative amount it is: a shift whose
+    /// estimated fuel came to more than it paid is a real outcome.
+    @ViewBuilder
+    private func netRow(
+        _ title: String,
+        spokenAs spokenTitle: String,
+        net: EstimatedNet,
+        isProminent: Bool,
+        identifier: String
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            switch net {
+            case let .available(amount):
+                LabeledContent(title) {
+                    Text(amount.formatted(locale: locale))
+                        .monospacedDigit()
+                        .fontWeight(isProminent ? .semibold : .regular)
+                }
+            case let .unavailable(reason):
+                LabeledContent(title) {
+                    Text("Not available").foregroundStyle(.secondary)
+                }
+                Text(reason.explanation)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(netAccessibilityLabel(spokenTitle: spokenTitle, net: net))
+        .accessibilityIdentifier(identifier)
+    }
+
+    private func netAccessibilityLabel(spokenTitle: String, net: EstimatedNet) -> String {
+        switch net {
+        case let .available(amount):
+            "\(amount.formatted(locale: locale)) \(spokenTitle)"
+        case let .unavailable(reason):
+            "No \(spokenTitle). \(reason.explanation)"
+        }
+    }
+
+    /// What a partial route means for a net, which is the opposite direction to
+    /// what it means for the fuel above it.
+    private static let partialNetStatement = """
+        This route is partial, so the estimated fuel is a floor and this net is a ceiling: more \
+        fuel was used than was estimated, so less was left than is shown here.
+        """
+
     // MARK: Performance
 
     private var performanceSection: some View {
@@ -1160,6 +1329,13 @@ struct CompletedShiftDetailView: View {
         recordedDistance.map { shift.fuelEstimate(for: $0) }
     }
 
+    /// This shift's estimated net, or `nil` until the route has been measured.
+    ///
+    /// `nil` is "not measured yet" here too, and is a third state distinct from
+    /// a net that cannot be derived, which has a reason of its own.
+    private var profitability: ShiftProfitability? {
+        recordedDistance.map { shift.profitability(for: $0) }
+    }
 }
 
 /// One delivery in a completed shift's history.
