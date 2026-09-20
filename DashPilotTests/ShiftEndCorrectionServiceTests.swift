@@ -451,7 +451,13 @@ struct ShiftEndCorrectionServiceTests {
         let shift = try lateEndShift(in: context)
         try delivery(on: shift, acceptedAt: 100, deliveredAt: 195, in: context)
 
-        #expect(throws: ShiftEndCorrectionError.invalidCorrection(.precedesRecordedDeliveryWork)) {
+        #expect(
+            throws: ShiftEndCorrectionError.invalidCorrection(
+                .precedesRecordedDeliveryWork(
+                    RecordedDeliveryEvent(deliveryNumber: 1, event: .delivered, occurredAt: at(195))
+                )
+            )
+        ) {
             try corrections(context).correct(shift, to: self.at(190))
         }
         #expect(shift.endedAt == at(240))

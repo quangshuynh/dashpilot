@@ -164,7 +164,15 @@ nonisolated final class Shift {
             startedAt: startedAt,
             recordedEnd: endedAt,
             pauses: pauseIntervals,
-            deliveryEvents: deliveries.flatMap(\.recordedEventInstants),
+            deliveryEvents: numberedDeliveries.flatMap { numbered in
+                numbered.delivery.recordedEvents.map { recorded in
+                    RecordedDeliveryEvent(
+                        deliveryNumber: numbered.number,
+                        event: recorded.event,
+                        occurredAt: recorded.occurredAt
+                    )
+                }
+            },
             nextShiftStartedAt: nextShiftStartedAt
         )
     }
