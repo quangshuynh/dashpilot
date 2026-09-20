@@ -94,7 +94,10 @@ struct RouteSampleRelationshipTests {
         let properties = Set(shift.properties.map(\.name))
 
         #expect(
-            properties == ["id", "startedAt", "endedAt", "deliveries", "offers", "pauses", "grossEarningsAmount"]
+            properties == [
+                "id", "startedAt", "endedAt", "deliveries", "offers", "pauses", "grossEarningsAmount",
+                "fuelMilesPerGallonValue", "fuelGasPricePerGallonAmount"
+            ]
         )
         #expect(!properties.contains("routeSamples"))
 
