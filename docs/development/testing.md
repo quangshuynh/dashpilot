@@ -351,9 +351,9 @@ correction being offered on a running shift, correcting the times of a delivery 
 two hours after the order was handed over and watching its duration and hourly figure follow while
 its wait, its amount, its terminal state and the shift's recorded mileage do not, being refused a
 delivery time corrected behind its own arrival and told to correct that one as well, no delivery time
-correction being offered on a running shift, driving the whole real recovery end to end — the shift
+correction being offered on a running shift, driving the whole real recovery end to end (the shift
 end refused and the blocking delivery named, that delivery corrected, and the same end correction
-then accepted and trimming the route as it always did — reading a
+then accepted and trimming the route as it always did), reading a
 day beside the day before it with both figures and both coverages on screen,
 the percentage a finished and fully recorded pair of days states, the absence of one while a day is
 still in progress, an empty previous day said to hold nothing rather than shown as no earnings,

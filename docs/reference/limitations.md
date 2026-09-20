@@ -266,7 +266,7 @@ and one they cannot.
   event. A delivery marked delivered by mistake can be **reopened** while its shift is running, which
   removes the delivered timestamp and writes none. Once the shift has ended it can be **corrected to
   cancelled**, which reuses the recorded completion as the cancellation rather than writing a new
-  time. And on a finished shift the instants it **already records** can be corrected in place — see
+  time. And on a finished shift the instants it **already records** can be corrected in place. See
   the next section.
 - **A delivery can only be reopened while its shift is running.** It is refused on a shift that has
   ended, and refused while the shift is paused, because a delivery cannot run through time the app

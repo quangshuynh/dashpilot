@@ -10,7 +10,7 @@ import Testing
 ///
 /// Three kinds of claim. First, that every refusal is a refusal: nothing is
 /// clamped, swapped or nudged into an acceptable instant, and above all nothing
-/// **cascades** — a completion dragged behind its own pickup is refused naming
+/// **cascades**: a completion dragged behind its own pickup is refused naming
 /// the pickup rather than dragging the pickup with it. Second, that a stage the
 /// delivery never recorded is never brought into existence and a stage it does
 /// record is never taken away. Third, that a refusal says which recorded fact it

@@ -16,7 +16,7 @@ import SwiftUI
 /// Three things, all of them above Save. What moves, which is how long the
 /// delivery took, how long the pickup wait was, what it paid per recorded
 /// delivery hour and how much of the shift was delivery active. What does not,
-/// which is the route and the shift's recorded mileage — the consequence a
+/// which is the route and the shift's recorded mileage, the consequence a
 /// driver is least likely to have in mind, since moving a completion back by
 /// twenty minutes sounds like it should take miles with it. And that nothing
 /// cascades, so a time refused for colliding with another is corrected by
@@ -28,7 +28,7 @@ import SwiftUI
 /// an end moved earlier deletes recorded positions, and deleting a pause removes
 /// a row. This deletes nothing, creates nothing, and leaves the delivery's
 /// terminal outcome, its offer, its pickup place and every amount on it exactly
-/// as they are. So it takes ``ShiftPauseEditor``'s shape instead — a draft, the
+/// as they are. So it takes ``ShiftPauseEditor``'s shape instead: a draft, the
 /// consequences stated on the sheet, and Save. Raising an alert over a
 /// correction that destroys nothing is what teaches a driver to confirm without
 /// reading.
@@ -251,7 +251,7 @@ struct DeliveryTimeCorrectionEditor: View {
     ///
     /// The numerator is the delivery's **existing** effective earnings, because
     /// this correction touches no amount, and the arithmetic is
-    /// ``ShiftMetricsCalculator/grossPerHour(of:over:)`` — the one definition of
+    /// ``ShiftMetricsCalculator/grossPerHour(of:over:)``, the one definition of
     /// an amount per hour in the app, and the one
     /// ``Delivery/effectiveEarningsPerDeliveryHour`` will use to report the same
     /// figure once the draft is saved.
