@@ -39,6 +39,11 @@ nonisolated extension Shift {
             currencyCode: Money.displayCurrencyCode,
             grossEarnings: ExportAmount.recorded(grossEarnings),
             route: ShiftRouteExport(recordedDistance),
+            // The assumptions as recorded, never the estimate derived from
+            // them: the file states what the driver entered, and a reader
+            // reproduces the arithmetic from the recorded mileage above.
+            fuelMilesPerGallon: ExportDecimal.recorded(fuelAssumptions.milesPerGallon),
+            fuelGasPricePerGallon: ExportAmount.recorded(fuelAssumptions.gasPricePerGallon),
             // The unioned figure, so two deliveries carried at once contribute
             // their shared minutes once. Absent — never zero — for a shift whose
             // deliveries describe nothing measurable.
