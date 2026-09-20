@@ -66,6 +66,15 @@ nonisolated enum DeliveryLifecycleError: Error {
     case invalidRecovery(DeliveryRecoveryRefusal)
     /// A historical correction was refused by the delivery's own timestamps.
     case invalidCancellation(HistoricalCancellationRefusal)
+    /// The domain refused a correction to a completed delivery's recorded
+    /// lifecycle times.
+    ///
+    /// Its own case rather than ``invalidTransition(_:)``, for the reason
+    /// ``invalidCancellation(_:)`` is: this rewrites instants on a delivery that
+    /// has already finished, and a driver reading a refusal has to be told which
+    /// recorded time it collided with rather than that a lifecycle step was out
+    /// of order.
+    case invalidTimeCorrection(DeliveryTimeCorrectionRefusal)
     /// An additional tip was refused by the delivery or by the amount itself.
     ///
     /// Its own case rather than ``invalidTransition(_:)``, for the reason
@@ -95,6 +104,7 @@ nonisolated extension DeliveryLifecycleError: Equatable {
         case (.deliveryNotOnAShift, .deliveryNotOnAShift): true
         case let (.invalidRecovery(lhsError), .invalidRecovery(rhsError)): lhsError == rhsError
         case let (.invalidCancellation(lhsError), .invalidCancellation(rhsError)): lhsError == rhsError
+        case let (.invalidTimeCorrection(lhsError), .invalidTimeCorrection(rhsError)): lhsError == rhsError
         case let (.invalidTip(lhsError), .invalidTip(rhsError)): lhsError == rhsError
         case let (.invalidTransition(lhsError), .invalidTransition(rhsError)): lhsError == rhsError
         case let (.invalidOffer(lhsError), .invalidOffer(rhsError)): lhsError == rhsError
@@ -127,6 +137,45 @@ nonisolated extension DeliveryLifecycleError: LocalizedError {
             """
         case .deliveryNotOnAShift:
             "That delivery is not recorded against a shift, so it cannot be changed."
+        case .invalidTimeCorrection(.shiftNotCompleted):
+            """
+            That delivery belongs to a shift that has not ended yet. Recorded times are corrected \
+            once the shift is over.
+            """
+        case .invalidTimeCorrection(.deliveryNotFinished):
+            """
+            That delivery has not finished, so there are no recorded times to correct. Record what \
+            happened to it first.
+            """
+        case let .invalidTimeCorrection(.eventNotRecorded(stage)):
+            """
+            This delivery never recorded \(Self.eventName(stage)), so there is no time for it to \
+            correct. DashPilot does not add an event that was not recorded.
+            """
+        case let .invalidTimeCorrection(.recordedEventRemoved(stage)):
+            """
+            \(stage.historyDescription) was recorded for this delivery, and \
+            correcting its times cannot remove it.
+            """
+        case let .invalidTimeCorrection(.outOfOrder(event, mustNotPrecede)):
+            """
+            \(event.historyDescription) cannot be earlier than \
+            \(Self.eventName(mustNotPrecede)). Choose a later time, or correct \
+            \(Self.eventName(mustNotPrecede)) as well.
+            """
+        case let .invalidTimeCorrection(.precedesShiftStart(stage)):
+            """
+            \(stage.historyDescription) would be before this shift started, and a \
+            delivery happens during the shift that recorded it. Choose a time after the shift began.
+            """
+        case let .invalidTimeCorrection(.followsShiftEnd(stage)):
+            """
+            \(stage.historyDescription) would be after this shift ended, and a \
+            delivery happens during the shift that recorded it. Choose an earlier time, or correct \
+            the shift's end time first.
+            """
+        case .invalidTimeCorrection(.recordedTimesChanged):
+            "This delivery's recorded times changed while this was open, so nothing was written."
         case .invalidCancellation(.notDelivered):
             "That delivery is not recorded as delivered, so there is no completion to correct."
         case .invalidCancellation(.alreadyCancelled):
@@ -193,6 +242,16 @@ nonisolated extension DeliveryLifecycleError: LocalizedError {
         case .storeUnavailable:
             "DashPilot could not save to its local data store, so the delivery was not changed."
         }
+    }
+
+    /// What a refusal calls one lifecycle stage in the middle of a sentence.
+    ///
+    /// ``DeliveryState/historyDescription`` is written for the start of one, so
+    /// it is used as it stands where a sentence begins with the stage and
+    /// lowercased here where it does not. One accessor rather than five literals,
+    /// so the stage a refusal names is the stage the delivery's own record names.
+    private static func eventName(_ stage: DeliveryState) -> String {
+        stage.historyDescription.lowercased()
     }
 }
 
@@ -692,6 +751,154 @@ struct DeliveryService {
             \(summary.completed, privacy: .public) completed and \(summary.cancelled, privacy: .public) cancelled
             """
         )
+    }
+
+    // MARK: Correcting recorded times
+
+    /// Rewrites the lifecycle instants a **finished** delivery on a **finished**
+    /// shift recorded.
+    ///
+    /// ## What it corrects
+    ///
+    /// Work that happened while DashPilot could not record it. The app is
+    /// evicted, crashes or is replaced by a new build mid-shift, the driver keeps
+    /// delivering, and the events land whenever it comes back — so a delivery
+    /// records a completion long after the food reached the door. Every figure
+    /// measured from that instant is wrong with it, and, because
+    /// ``ShiftEndCorrectionService`` refuses to move a shift's end back past
+    /// anything a delivery recorded, one late completion also pins the shift's
+    /// own end. Correcting the delivery is what unblocks correcting the shift.
+    ///
+    /// ## What it writes, and what it will not
+    ///
+    /// The instants the delivery **already records**, and nothing else. No
+    /// lifecycle stage is created and none is removed, so the delivery is
+    /// terminal in exactly the same way afterwards; its offer, pickup place,
+    /// recorded platform pay, expected pay and tips are not read here at all;
+    /// and no route sample, capture session or shift timestamp is touched. This
+    /// corrects what the driver recorded about the delivery, not where the phone
+    /// recorded being.
+    ///
+    /// **Nothing cascades.** A proposal that would put one recorded event before
+    /// another is refused naming both, rather than dragging the second along
+    /// with the first. That is the same rule the shift's end meets against a
+    /// pause and against a delivery: the colliding fact is corrected explicitly,
+    /// by the driver.
+    ///
+    /// ## Nothing derived is written
+    ///
+    /// The delivery's completed duration, its recorded pickup wait, its
+    /// effective earnings per recorded delivery hour, the shift's union of
+    /// delivery intervals and every period figure over them are derived on
+    /// demand from exactly these instants, so all of them move with the save and
+    /// none of them is recomputed or invalidated here.
+    ///
+    /// ## Validated whole, written whole
+    ///
+    /// ``DeliveryTimeCorrection`` judges the **complete** proposal before
+    /// anything is assigned, ``Delivery/apply(_:)`` checks it is still a
+    /// correction of the record it was judged against, and one save follows. A
+    /// refused save rolls back, so the store keeps every original instant and
+    /// there is no ordering in which one moved and another did not.
+    ///
+    /// The caller must re-read from the store rather than trusting a live object
+    /// after a refused save, which is the SwiftData rollback caveat `AGENTS.md`
+    /// records.
+    ///
+    /// - Parameters:
+    ///   - delivery: the finished delivery whose recorded times are moving.
+    ///   - proposed: the times it should record instead. It must record exactly
+    ///     the stages the delivery already records.
+    /// - Returns: what was applied, so a caller can say what moved without
+    ///   re-deriving it from a model that already has.
+    /// - Throws: ``DeliveryLifecycleError/deliveryNotOnAShift``,
+    ///   ``DeliveryLifecycleError/invalidTimeCorrection(_:)`` or
+    ///   ``DeliveryLifecycleError/storeUnavailable(underlying:)``.
+    @discardableResult
+    func correctRecordedTimes(
+        _ delivery: Delivery,
+        to proposed: DeliveryLifecycleRecord
+    ) throws -> DeliveryTimeCorrection {
+        guard delivery.shift != nil else {
+            // A delivery attached to no shift is a store the app cannot produce,
+            // which is why this is a fault rather than a refusal. The row is left
+            // exactly as it is.
+            AppLog.delivery.fault("Refused to correct a delivery's times: it is attached to no shift")
+            throw DeliveryLifecycleError.deliveryNotOnAShift
+        }
+
+        let correction = try proposedCorrection(on: delivery, to: proposed)
+
+        do {
+            try delivery.apply(correction)
+        } catch let error as DeliveryTimeCorrectionRefusal {
+            // Nothing has been assigned: the model checks before it writes.
+            AppLog.delivery.notice(
+                "Refused a delivery time correction: \(error.logDescription, privacy: .public)"
+            )
+            throw DeliveryLifecycleError.invalidTimeCorrection(error)
+        }
+
+        do {
+            try commit(context)
+        } catch {
+            // Every original instant survives, together: the rollback discards
+            // the whole proposal rather than the part that failed.
+            context.rollback()
+            AppLog.delivery.error("Failed to persist a delivery time correction: \(error)")
+            throw DeliveryLifecycleError.storeUnavailable(underlying: error)
+        }
+
+        // Structural only, and deliberately without an instant, a direction, a
+        // stage or a delivery — and without a count of how many stages moved,
+        // which is the same line `OfferCorrectionService` already declines to
+        // write about how many deliveries it moved. When a driver accepted,
+        // collected or delivered an order is exactly the class of fact
+        // `AppLog.delivery` has never recorded, and correcting one is not the
+        // moment to start.
+        AppLog.delivery.info("A completed delivery's recorded times were corrected")
+        return correction
+    }
+
+    /// Why the proposed times would be refused, or `nil` if they would be
+    /// accepted.
+    ///
+    /// The editor asks this while its pickers move, so the sentence on screen is
+    /// written by the same rule the write will consult rather than by a second
+    /// opinion about it. It mutates nothing and saves nothing.
+    ///
+    /// A delivery attached to no shift reports
+    /// ``DeliveryTimeCorrectionRefusal/shiftNotCompleted``, which withholds the
+    /// save: there is no window to judge against, and offering a save that is
+    /// about to fail would be the worse answer.
+    func timeCorrectionRefusal(
+        on delivery: Delivery,
+        to proposed: DeliveryLifecycleRecord
+    ) -> DeliveryTimeCorrectionRefusal? {
+        do {
+            _ = try proposedCorrection(on: delivery, to: proposed)
+            return nil
+        } catch DeliveryLifecycleError.invalidTimeCorrection(let refusal) {
+            return refusal
+        } catch {
+            return .shiftNotCompleted
+        }
+    }
+
+    /// The proposed correction, with the domain's refusal wrapped for this
+    /// layer.
+    private func proposedCorrection(
+        on delivery: Delivery,
+        to proposed: DeliveryLifecycleRecord
+    ) throws -> DeliveryTimeCorrection {
+        do {
+            return try delivery.timeCorrection(to: proposed)
+        } catch let error as DeliveryTimeCorrectionRefusal {
+            AppLog.delivery.notice(
+                "Refused a delivery time correction: \(error.logDescription, privacy: .public)"
+            )
+            throw DeliveryLifecycleError.invalidTimeCorrection(error)
+        }
     }
 
     /// Applies one lifecycle event to one named delivery.
