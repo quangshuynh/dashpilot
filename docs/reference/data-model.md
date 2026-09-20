@@ -34,6 +34,8 @@ Derived, never stored:
 | `completedWorkingDuration` | The same for a finished shift, `nil` while unfinished |
 | `routeSamples()` | This shift's retained positions, fetched, oldest first. Not a stored collection |
 | `routeSampleCount` | How many positions the route holds, counted rather than loaded |
+| `routeSamples(after:)` | The positions fixed strictly after an instant, which an end-time correction removes |
+| `routeSampleCount(after:)` | How many those are, counted rather than loaded, for the confirmation that states it |
 | `recordedDistance(...)` | A `RouteDistance` measured from the retained route |
 | `grossEarnings` | The stored decimal as a `Money`, or `nil` |
 | `activeDeliveries` | This shift's deliveries that are neither delivered nor cancelled, in acceptance order |
@@ -65,7 +67,14 @@ ended, because restating a grouping is not recording new work.
 `beginPause(at:)` rejects a pause on an ended shift, a second open pause, and a start before the
 shift's. `endOpenPause(at:)` rejects a resume with nothing open and one on an ended shift; the
 returned pause is inserted by the caller, so a refused write leaves nothing behind.
-`end(at:)` rejects ending a shift twice or ending it before it started. `setGrossEarnings(_:)`
+`end(at:)` rejects ending a shift twice or ending it before it started. `apply(_:)` is the only thing
+that rewrites `endedAt` afterwards, taking a `ShiftEndCorrection` that has already been checked and
+rejecting a shift whose recorded end is not the one that correction was built against;
+`endCorrection(to:nextShiftStartedAt:)` is the adapter that gathers the shift's start, its recorded
+end, its pauses and every lifecycle instant its deliveries record for that check. Both are reached
+through `ShiftEndCorrectionService`, which refuses a running shift, deletes the route positions an
+earlier end puts outside the shift, and commits **once** for the two together, so no ordering exists
+in which the end moves while the positions survive. `setGrossEarnings(_:)`
 rejects a negative amount and an amount on an unfinished shift. `clearGrossEarnings()` removes the
 amount, which is a distinct operation from recording zero.
 

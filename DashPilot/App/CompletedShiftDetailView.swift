@@ -52,6 +52,12 @@ struct CompletedShiftDetailView: View {
     /// and where a grouping mistake is most often noticed.
     @State private var isCorrectingOffers = false
 
+    /// Correcting the moment the shift ended, in its own sheet. Offered here
+    /// because this is the screen that states the end, and because
+    /// ``ShiftEndCorrectionService`` refuses a running shift outright rather
+    /// than relying on no screen offering the control.
+    @State private var isCorrectingEnd = false
+
     /// The pause the editor is open on, or `.adding` for one being recorded
     /// after the fact. `nil` means the editor is closed.
     ///
@@ -110,7 +116,15 @@ struct CompletedShiftDetailView: View {
         }
         .navigationTitle(shift.startedAt.formatted(date: .abbreviated, time: .omitted))
         .navigationBarTitleDisplayMode(.inline)
-        .task(id: shift.id) { recordedDistance = shift.recordedDistance() }
+        // Keyed by the shift **and its recorded end**, because correcting the end
+        // is the one action on this screen that changes what the route measures
+        // to: it moves the window the walk is checked against and, for an
+        // earlier end, deletes the positions beyond it. Keyed by the identifier
+        // alone, the screen would keep drawing the mileage it measured on
+        // arrival.
+        .task(id: RouteMeasurementKey(shift: shift.id, endedAt: shift.endedAt)) {
+            recordedDistance = shift.recordedDistance()
+        }
         .sheet(isPresented: $isEditingEarnings) {
             ShiftEarningsEditor(shift: shift)
         }
@@ -119,6 +133,9 @@ struct CompletedShiftDetailView: View {
         }
         .sheet(isPresented: $isCorrectingOffers) {
             OfferCorrectionView(shift: shift)
+        }
+        .sheet(isPresented: $isCorrectingEnd) {
+            ShiftEndCorrectionEditor(shift: shift)
         }
         .sheet(item: $pauseBeingEdited) { edit in
             ShiftPauseEditor(shift: shift, pause: edit.pause)
@@ -225,6 +242,21 @@ struct CompletedShiftDetailView: View {
                         identifier: "shiftDetailNonDeliveryTime"
                     )
                 }
+            }
+
+            // Here rather than in a section of its own, because the fact it
+            // corrects is three rows above it and the figures it moves are the
+            // two below that. Offered only once the shift has an end to correct;
+            // the service refuses a running shift regardless of what any screen
+            // presents.
+            if shift.endedAt != nil {
+                Button {
+                    isCorrectingEnd = true
+                } label: {
+                    Label("Correct End Time", systemImage: "clock.arrow.circlepath")
+                }
+                .accessibilityLabel("Correct the time this shift ended")
+                .accessibilityIdentifier("correctShiftEndButton")
             }
         } header: {
             Text("Shift")
@@ -1465,6 +1497,18 @@ private struct DeliveryHistoryRow: View {
         }
         return sentences.joined(separator: ". ")
     }
+}
+
+/// What the route measurement on this screen depends on.
+///
+/// The shift's identifier answers "is this a different shift"; its recorded end
+/// answers "is this the same shift measured against a different window". Both
+/// have to be in the key, because correcting the end changes the second without
+/// touching the first, and a measurement keyed on the identifier alone would
+/// keep reporting the mileage the screen arrived with.
+private struct RouteMeasurementKey: Hashable {
+    let shift: UUID
+    let endedAt: Date?
 }
 
 /// Which pause the editor is open on.

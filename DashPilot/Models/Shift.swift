@@ -144,6 +144,53 @@ nonisolated final class Shift {
         endedAt = date
     }
 
+    /// Checks an instant the driver proposes as the moment this finished shift
+    /// ended.
+    ///
+    /// The adapter between the model and ``ShiftEndCorrection``, holding no rule
+    /// of its own: it gathers this shift's start, its recorded end, its pauses
+    /// and every lifecycle instant its deliveries record, and the value type
+    /// decides. Nothing is written and nothing is mutated, so a screen can ask
+    /// what a proposed end would be refused for without attempting it.
+    ///
+    /// `nextShiftStartedAt` is the caller's because it is the one fact here that
+    /// is not this shift's own; ``ShiftEndCorrectionService`` reads it from the
+    /// store.
+    ///
+    /// - Throws: ``ShiftEndCorrectionRefusal``.
+    func endCorrection(to correctedEnd: Date, nextShiftStartedAt: Date?) throws -> ShiftEndCorrection {
+        try ShiftEndCorrection(
+            to: correctedEnd,
+            startedAt: startedAt,
+            recordedEnd: endedAt,
+            pauses: pauseIntervals,
+            deliveryEvents: deliveries.flatMap(\.recordedEventInstants),
+            nextShiftStartedAt: nextShiftStartedAt
+        )
+    }
+
+    /// Rewrites when this shift ended.
+    ///
+    /// **The only place `endedAt` is written after ``end(at:)`` recorded it**,
+    /// and it writes nothing else: the start, the earnings, every delivery, every
+    /// pause and every retained position are left exactly as they are. Taking
+    /// the route evidence that now lies outside the shift with it is
+    /// ``ShiftEndCorrectionService``'s, because it is a change to other rows and
+    /// has to share one transaction with this one.
+    ///
+    /// The correction has already been checked against this shift's own facts by
+    /// ``ShiftEndCorrection``. What is kept here is the one rule that is about
+    /// *this row* rather than about the records around it: **a shift that has
+    /// not ended has no end to correct.**
+    ///
+    /// - Throws: ``ShiftEndCorrectionRefusal/shiftNotCompleted`` for a shift
+    ///   that is still running, and for one whose recorded end is no longer the
+    ///   end the correction was built against.
+    func apply(_ correction: ShiftEndCorrection) throws {
+        guard endedAt == correction.recordedEnd else { throw ShiftEndCorrectionRefusal.shiftNotCompleted }
+        endedAt = correction.correctedEnd
+    }
+
     /// The device clock can move backwards (manual changes, NTP corrections),
     /// so a negative interval is treated as zero rather than surfaced as a
     /// negative duration in metrics.
@@ -209,6 +256,63 @@ extension Shift {
             )
         } catch {
             AppLog.routeCapture.error("Could not count a shift's stored route: \(error)")
+            return 0
+        }
+    }
+
+    /// This shift's retained positions fixed **strictly after** `boundary`,
+    /// oldest first.
+    ///
+    /// The evidence an end-time correction moving the end back to `boundary`
+    /// takes out of the shift. Strictly after, so a position fixed exactly at
+    /// the boundary is kept: the driver said they stopped then, and a position
+    /// recorded at that instant is the last thing that happened inside the
+    /// shift rather than the first thing outside it.
+    ///
+    /// The predicate and the ordering are ``routeSamples()``'s, with one more
+    /// clause, so there is still one definition of "this shift's route".
+    ///
+    /// An empty array for a shift that is not in a store, and for a read the
+    /// store refused — which is why ``ShiftEndCorrectionService`` fetches
+    /// through the context itself rather than through this, and this is used
+    /// where a count is being shown rather than where rows are being deleted.
+    func routeSamples(after boundary: Date) -> [RouteSample] {
+        guard let modelContext else { return [] }
+        let shiftID = id
+        let descriptor = FetchDescriptor<RouteSample>(
+            predicate: #Predicate { $0.shift?.id == shiftID && $0.timestamp > boundary },
+            sortBy: [
+                SortDescriptor(\.timestamp),
+                SortDescriptor(\.latitude),
+                SortDescriptor(\.longitude)
+            ]
+        )
+        do {
+            return try modelContext.fetch(descriptor)
+        } catch {
+            // The reason names no position and no instant.
+            AppLog.routeCapture.error("Could not read the tail of a shift's stored route: \(error)")
+            return []
+        }
+    }
+
+    /// How many positions this shift's route holds after `boundary`.
+    ///
+    /// A count rather than a fetch, for the reason ``routeSampleCount`` is one:
+    /// the confirmation a driver reads before an end-time correction states how
+    /// many positions would leave the shift, and stating a number should not
+    /// load a route to do it.
+    func routeSampleCount(after boundary: Date) -> Int {
+        guard let modelContext else { return 0 }
+        let shiftID = id
+        do {
+            return try modelContext.fetchCount(
+                FetchDescriptor<RouteSample>(
+                    predicate: #Predicate { $0.shift?.id == shiftID && $0.timestamp > boundary }
+                )
+            )
+        } catch {
+            AppLog.routeCapture.error("Could not count the tail of a shift's stored route: \(error)")
             return 0
         }
     }
