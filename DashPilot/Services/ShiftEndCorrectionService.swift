@@ -49,10 +49,11 @@ nonisolated extension ShiftEndCorrectionError: LocalizedError {
             This shift records a pause that ends after that time, and a pause has to be inside the \
             shift. Correct or delete that pause first, or choose a later end time.
             """
-        case .invalidCorrection(.precedesRecordedDeliveryWork):
+        case let .invalidCorrection(.precedesRecordedDeliveryWork(event)):
             """
-            A delivery recorded work after that time, so the shift cannot have ended then. Choose an \
-            end time after everything your deliveries recorded.
+            \(event.deliveryTitle) has \(event.eventTitle) recorded at \
+            \(event.occurredAt.formatted(date: .omitted, time: .shortened)), after the proposed \
+            shift end. Open that delivery and correct its times, or choose a later end time.
             """
         case .invalidCorrection(.overlapsAnotherShift):
             """
@@ -219,7 +220,7 @@ struct ShiftEndCorrectionService {
             // cost.
             context.rollback()
             AppLog.shift.notice(
-                "Refused a shift end correction: \(String(describing: error), privacy: .public)"
+                "Refused a shift end correction: \(error.logDescription, privacy: .public)"
             )
             throw ShiftEndCorrectionError.invalidCorrection(error)
         }
@@ -284,7 +285,7 @@ struct ShiftEndCorrectionService {
             return try shift.endCorrection(to: correctedEnd, nextShiftStartedAt: nextStart)
         } catch let error as ShiftEndCorrectionRefusal {
             AppLog.shift.notice(
-                "Refused a shift end correction: \(String(describing: error), privacy: .public)"
+                "Refused a shift end correction: \(error.logDescription, privacy: .public)"
             )
             throw ShiftEndCorrectionError.invalidCorrection(error)
         }
