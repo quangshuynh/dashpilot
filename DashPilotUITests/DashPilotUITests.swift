@@ -31,6 +31,9 @@ final class DashPilotUITests: XCTestCase {
     /// Must match `LaunchArgument.seededPausedHistory`, for the same reason.
     private static let seededPausedHistoryArgument = "-dashpilot-seeded-paused-history"
 
+    /// Must match `LaunchArgument.seededLateEndHistory`, for the same reason.
+    private static let seededLateEndHistoryArgument = "-dashpilot-seeded-late-end-history"
+
     /// Must match `LaunchArgument.seededOlderWeeks`, for the same reason.
     private static let seededOlderWeeksArgument = "-dashpilot-seeded-older-weeks"
 
@@ -212,6 +215,28 @@ final class DashPilotUITests: XCTestCase {
     private func launchWithPausedHistory() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments.append(Self.seededPausedHistoryArgument)
+        launchInPortrait(app)
+        return app
+    }
+
+    /// Launches against a throwaway store holding one **completed** shift whose
+    /// recorded end is twenty minutes later than the driver actually stopped.
+    ///
+    /// A journey cannot produce this state by tapping: ending a shift records
+    /// the clock, and a UI test cannot drive a simulator into recording a route.
+    ///
+    /// The fixture's shift runs from its start to `3 hr 40 min` in, and its
+    /// route is three capture sessions of ten positions each, beginning 30
+    /// minutes, 3 hours 5 minutes and 3 hours 25 minutes in. It records one
+    /// delivery from `3 hr 5 min` to `3 hr 10 min`, and an invented `$100.00`.
+    /// So it opens showing `3 hr 40 min` elapsed, `6.7 mi` recorded over three
+    /// segments, and `$27.27` per shift hour; correcting the end to `3 hr 20
+    /// min` removes the third session and leaves `3 hr 20 min`, `4.5 mi` and
+    /// exactly `$30.00`.
+    @MainActor
+    private func launchWithLateEndHistory() -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments.append(Self.seededLateEndHistoryArgument)
         launchInPortrait(app)
         return app
     }
@@ -2870,6 +2895,248 @@ final class DashPilotUITests: XCTestCase {
                 "\(identifier) is not offered on a paused shift either: the open pause is Resume's and End's"
             )
         }
+    }
+
+    // MARK: Correcting a shift's end time
+
+    /// The whole journey: open a shift DashPilot recorded as ending late,
+    /// correct the end, agree to lose the route recorded afterwards, and watch
+    /// the three figures that depend on the boundary move.
+    ///
+    /// The claim is not only that the end changes. It is that the **mileage is
+    /// measured again** rather than reduced in proportion: the shift loses one
+    /// of its three equal capture sessions, so the honest answer is `4.5 mi` and
+    /// a figure scaled by the time removed would be about `5.6 mi`.
+    @MainActor
+    func testCorrectingAShiftThatDashPilotRecordedAsEndingLate() throws {
+        let app = launchWithLateEndHistory()
+        openFirstShift(in: app)
+
+        let elapsed = app.descendants(matching: .any)["shiftDetailDuration"]
+        XCTAssertTrue(scrollTo(elapsed, in: app), "The shift states its elapsed time")
+        XCTAssertEqual(elapsed.label, "3 hours, 40 minutes elapsed shift time")
+
+        // The route and the rate live below, so they are read on the way past
+        // and the screen is brought back before anything is tapped.
+        let mileage = app.descendants(matching: .any)["shiftDetailRecordedMileage"]
+        XCTAssertTrue(scrollTo(mileage, in: app), "The shift states what its route recorded")
+        XCTAssertTrue(mileage.label.contains("6.7 miles"), "Showed: \(mileage.label)")
+        let segments = app.staticTexts["shiftDetailCaptureSegments"]
+        XCTAssertTrue(segments.label.contains("3"), "Three capture segments. Showed: \(segments.label)")
+
+        let hourlyRate = app.descendants(matching: .any)["shiftDetailHourlyRate"]
+        XCTAssertTrue(scrollTo(hourlyRate, in: app))
+        XCTAssertTrue(hourlyRate.label.hasPrefix("$27.27"), "Showed: \(hourlyRate.label)")
+        XCTAssertTrue(scrollToTop(reaching: elapsed, in: app))
+
+        let correct = app.buttons["correctShiftEndButton"]
+        XCTAssertTrue(scrollUntilHittable(correct, in: app), "The shift offers to correct its end")
+        XCTAssertEqual(
+            correct.label,
+            "Correct the time this shift ended",
+            "The control says which fact it changes"
+        )
+        correct.tap()
+
+        let summary = app.descendants(matching: .any)["shiftEndCorrectionSummary"]
+        XCTAssertTrue(summary.waitForExistence(timeout: 5), "The editor opens on the end as recorded")
+        XCTAssertTrue(
+            summary.label.hasPrefix("3 hours, 40 minutes elapsed"),
+            "with the length the shift already has. Showed: \(summary.label)"
+        )
+        XCTAssertTrue(
+            app.descendants(matching: .any)["shiftEndCorrectionRecordedEnd"].exists,
+            "and says what the recorded end is, so the picker moving does not lose it"
+        )
+
+        // The driver actually stopped twenty minutes before DashPilot recorded it.
+        setTime(minute: "20", ofPicker: "shiftEndCorrectionPicker", in: app)
+        XCTAssertTrue(
+            waitForLabel(summary, toContain: "3 hours, 20 minutes elapsed"),
+            "The consequence is restated before anything is written. Showed: \(summary.label)"
+        )
+
+        let warning = app.descendants(matching: .any)
+            .matching(identifier: "shiftEndCorrectionRouteWarning")
+            .firstMatch
+        XCTAssertTrue(warning.waitForExistence(timeout: 5), "The destructive part is stated on the sheet")
+        XCTAssertTrue(
+            warning.label.contains("10 recorded positions"),
+            "with the number of positions that go. Showed: \(warning.label)"
+        )
+        XCTAssertTrue(
+            warning.label.contains("not reduced by the same share as the time"),
+            "and it refuses the proportional reading outright. Showed: \(warning.label)"
+        )
+
+        app.buttons["shiftEndCorrectionSaveButton"].tap()
+
+        // `firstMatch`, because the alert presents the button nested inside
+        // itself and both elements carry the identifier.
+        let confirm = app.buttons["confirmShiftEndCorrectionButton"].firstMatch
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5), "Destroying recorded route is confirmed first")
+        confirm.tap()
+
+        // Back on the shift, with every figure the boundary feeds moved.
+        XCTAssertTrue(
+            waitForLabel(elapsed, toContain: "3 hours, 20 minutes"),
+            "The shift records the end the driver corrected it to. Showed: \(elapsed.label)"
+        )
+        XCTAssertTrue(scrollTo(mileage, in: app))
+        XCTAssertTrue(
+            waitForLabel(mileage, toContain: "4.5 miles"),
+            "The mileage is what the positions that remain support. Showed: \(mileage.label)"
+        )
+        XCTAssertFalse(
+            mileage.label.contains("5.6 miles"),
+            "and not the route's distance scaled by the time removed"
+        )
+        XCTAssertTrue(
+            waitForLabel(app.staticTexts["shiftDetailCaptureSegments"], toContain: "2"),
+            "The third segment left with its positions"
+        )
+        XCTAssertTrue(scrollTo(hourlyRate, in: app))
+        XCTAssertTrue(
+            waitForLabel(hourlyRate, toContain: "$30.00"),
+            "and the hourly figure divides by the corrected working time. Showed: \(hourlyRate.label)"
+        )
+    }
+
+    /// Declining the confirmation leaves the shift and its whole route exactly
+    /// as they were.
+    @MainActor
+    func testDecliningTheRouteWarningKeepsTheShiftAsRecorded() throws {
+        let app = launchWithLateEndHistory()
+        openFirstShift(in: app)
+
+        let correct = app.buttons["correctShiftEndButton"]
+        XCTAssertTrue(scrollUntilHittable(correct, in: app))
+        correct.tap()
+
+        XCTAssertTrue(app.descendants(matching: .any)["shiftEndCorrectionSummary"].waitForExistence(timeout: 5))
+        setTime(minute: "20", ofPicker: "shiftEndCorrectionPicker", in: app)
+        app.buttons["shiftEndCorrectionSaveButton"].tap()
+
+        let confirm = app.buttons["confirmShiftEndCorrectionButton"].firstMatch
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        // The alert's own Cancel, not the sheet's: the sheet's says which shift
+        // it is keeping, so matching the bare word reaches only this one.
+        app.alerts.buttons["Cancel"].tap()
+
+        XCTAssertTrue(
+            app.descendants(matching: .any)["shiftEndCorrectionSummary"].waitForExistence(timeout: 5),
+            "The sheet stays open with the time the driver chose"
+        )
+        app.buttons["shiftEndCorrectionCancelButton"].tap()
+
+        let elapsed = app.descendants(matching: .any)["shiftDetailDuration"]
+        XCTAssertTrue(scrollTo(elapsed, in: app))
+        XCTAssertEqual(elapsed.label, "3 hours, 40 minutes elapsed shift time", "Nothing at all was written")
+        let mileage = app.descendants(matching: .any)["shiftDetailRecordedMileage"]
+        XCTAssertTrue(scrollTo(mileage, in: app))
+        XCTAssertTrue(mileage.label.contains("6.7 miles"), "and no position was deleted. Showed: \(mileage.label)")
+    }
+
+    /// An end before something the shift's deliveries recorded is refused, and
+    /// the refusal says which recorded fact it collided with.
+    @MainActor
+    func testAnEndCannotBeCorrectedOverRecordedDeliveryWork() throws {
+        let app = launchWithLateEndHistory()
+        openFirstShift(in: app)
+
+        let correct = app.buttons["correctShiftEndButton"]
+        XCTAssertTrue(scrollUntilHittable(correct, in: app))
+        correct.tap()
+
+        XCTAssertTrue(app.descendants(matching: .any)["shiftEndCorrectionSummary"].waitForExistence(timeout: 5))
+        // The fixture's one delivery was delivered ten minutes after the hour,
+        // so five minutes past it is inside recorded work.
+        setTime(minute: "05", ofPicker: "shiftEndCorrectionPicker", in: app)
+
+        // `firstMatch`, because a SwiftUI `Label` is a glyph and a text under
+        // one identifier, and reading `.label` off a query matching both is an
+        // error.
+        let refusal = app.descendants(matching: .any)
+            .matching(identifier: "shiftEndCorrectionRefusal")
+            .firstMatch
+        XCTAssertTrue(refusal.waitForExistence(timeout: 5), "The instant is refused rather than saved")
+        XCTAssertTrue(
+            refusal.label.contains("A delivery recorded work after that time"),
+            "and the refusal says which recorded fact it collided with. Showed: \(refusal.label)"
+        )
+        XCTAssertFalse(
+            app.buttons["shiftEndCorrectionSaveButton"].isEnabled,
+            "Saving is withheld rather than offered and then refused"
+        )
+
+        app.buttons["shiftEndCorrectionCancelButton"].tap()
+        let elapsed = app.descendants(matching: .any)["shiftDetailDuration"]
+        XCTAssertTrue(scrollTo(elapsed, in: app))
+        XCTAssertEqual(elapsed.label, "3 hours, 40 minutes elapsed shift time")
+    }
+
+    /// Moving the end **later** adds time and adds no mileage, and the sheet
+    /// says so before it is saved.
+    @MainActor
+    func testALaterEndAddsTimeAndNoMileage() throws {
+        let app = launchWithSeededHistory()
+        openFirstShift(in: app)
+
+        let elapsed = app.descendants(matching: .any)["shiftDetailDuration"]
+        let mileage = app.descendants(matching: .any)["shiftDetailRecordedMileage"]
+        XCTAssertTrue(scrollTo(mileage, in: app), "The shift states what its route recorded")
+        let mileageBefore = mileage.label
+        // Back to the top before tapping: the control sits above the figure just
+        // read, and the scroll helpers only go down.
+        XCTAssertTrue(scrollToTop(reaching: elapsed, in: app))
+
+        let correct = app.buttons["correctShiftEndButton"]
+        XCTAssertTrue(scrollUntilHittable(correct, in: app), "The shift offers to correct its end")
+        correct.tap()
+
+        XCTAssertTrue(
+            app.descendants(matching: .any)["shiftEndCorrectionSummary"].waitForExistence(timeout: 5),
+            "The editor opens on the end as recorded"
+        )
+        setTime(minute: "30", ofPicker: "shiftEndCorrectionPicker", in: app)
+
+        let note = app.descendants(matching: .any)
+            .matching(identifier: "shiftEndCorrectionRouteWarning")
+            .firstMatch
+        XCTAssertTrue(note.waitForExistence(timeout: 5), "The sheet says what a longer shift does to the route")
+        XCTAssertTrue(
+            note.label.contains("No route or mileage is added"),
+            "which is nothing at all. Showed: \(note.label)"
+        )
+        app.buttons["shiftEndCorrectionSaveButton"].tap()
+        XCTAssertFalse(
+            app.buttons["confirmShiftEndCorrectionButton"].firstMatch.waitForExistence(timeout: 2),
+            "Nothing is destroyed, so nothing is confirmed"
+        )
+
+        XCTAssertTrue(scrollTo(mileage, in: app), "The route section is still there to read")
+        XCTAssertEqual(
+            mileage.label,
+            mileageBefore,
+            "Not one metre was invented for the stretch the shift gained"
+        )
+    }
+
+    /// The correction is not offered while a shift is running, which is where
+    /// the driver may be at a wheel.
+    @MainActor
+    func testEndCorrectionIsNotOfferedOnARunningShift() throws {
+        let app = launchWithEmptyStore()
+
+        let startShift = app.buttons["startShiftButton"]
+        XCTAssertTrue(startShift.waitForExistence(timeout: 10))
+        startShift.tap()
+
+        XCTAssertTrue(app.buttons["endShiftButton"].waitForExistence(timeout: 5), "The shift is running")
+        XCTAssertFalse(
+            app.buttons["correctShiftEndButton"].exists,
+            "A shift with no recorded end has none to correct, and End is what records one"
+        )
     }
 
     // MARK: Delivery earnings, from detail
