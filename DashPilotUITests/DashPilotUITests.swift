@@ -2220,13 +2220,14 @@ final class DashPilotUITests: XCTestCase {
     /// width assertion itself, at 104.7 points against the 160.8 it asks for,
     /// rather than on a timeout or on a wrapped word.
     ///
-    /// The set is **five** on a delivered delivery in a finished shift, since the
-    /// historical correction and the additional tips joined it. That is what the
-    /// grid is for: each new action took the next cell rather than costing
-    /// anything, and the widths below are the same widths. Five is also the case
-    /// worth pinning, because it is the odd one: the last control keeps its
-    /// column instead of stretching across the row it has to itself, which is
-    /// what keeps the left edge the same down the whole list.
+    /// The set is **six** on a delivered delivery in a finished shift, since the
+    /// additional tips, the historical correction and the time correction all
+    /// joined it. That is what the grid is for: each new action took the next
+    /// cell rather than costing anything, and the widths below are the same
+    /// widths. Six fills three even rows, so the odd case is pinned on the
+    /// **cancelled** delivery further down, which offers five: the last control
+    /// keeps its column instead of stretching across the row it has to itself,
+    /// which is what keeps the left edge the same down the whole list.
     @MainActor
     func testCompletedDeliveryOffersEveryCorrectionWithRoomToReadIt() throws {
         let app = launchWithSeededHistory()
@@ -2242,10 +2243,11 @@ final class DashPilotUITests: XCTestCase {
         let history = card.buttons["shiftDetailPickupHistoryButton"]
         let earnings = card.buttons["shiftDetailDeliveryEarningsButton"]
         let tips = card.buttons["shiftDetailDeliveryTipsButton"]
+        let times = card.buttons["shiftDetailCorrectDeliveryTimesButton"]
         let correct = card.buttons["shiftDetailCorrectToCancelledButton"]
 
-        // Reaching the last of the five brings the others with it: they are the
-        // four directly above it in the same card.
+        // Reaching the last of the six brings the others with it: they are the
+        // five directly above it in the same card.
         XCTAssertTrue(scrollUntilHittable(correct, in: app), "Every action is reachable by scrolling")
 
         // Each one still names the delivery it acts on, which is what makes it
@@ -2255,12 +2257,16 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertEqual(earnings.label, "Edit gross earnings for Delivery 1")
         XCTAssertEqual(tips.label, "Add an additional tip to Delivery 1")
         XCTAssertTrue(
+            times.label.hasPrefix("Correct the times Delivery 1 recorded."),
+            "including the one that rewrites when the delivery happened: \(times.label)"
+        )
+        XCTAssertTrue(
             correct.label.hasPrefix("Correct Delivery 1 to cancelled."),
-            "including the one that rewrites how the delivery ended: \(correct.label)"
+            "and the one that rewrites how it ended: \(correct.label)"
         )
 
         let width = app.windows.element(boundBy: 0).frame.width
-        for action in [place, history, earnings, tips, correct] {
+        for action in [place, history, earnings, tips, times, correct] {
             XCTAssertTrue(action.isHittable, "Every action is tappable where it is: \(action.label)")
             XCTAssertGreaterThanOrEqual(
                 action.frame.height,
@@ -2312,20 +2318,52 @@ final class DashPilotUITests: XCTestCase {
         )
         XCTAssertEqual(tips.frame.minX, history.frame.minX, accuracy: 1, "in the second column")
 
-        // The fifth has a line to itself, and this is the assertion the odd
-        // count exists for: it keeps its column instead of stretching across the
-        // row, so the left edge does not move and the empty cell stays empty.
-        XCTAssertGreaterThan(correct.frame.minY, earnings.frame.maxY - 1, "The fifth action starts a third line")
-        XCTAssertEqual(correct.frame.minX, place.frame.minX, accuracy: 1, "in the first column")
+        // The third line holds the two corrections, in the same two columns, so
+        // six controls fill three even rows and no cell is left empty.
+        XCTAssertGreaterThan(times.frame.minY, earnings.frame.maxY - 1, "The fifth action starts a third line")
+        XCTAssertEqual(times.frame.minX, place.frame.minX, accuracy: 1, "in the first column")
         XCTAssertEqual(
-            correct.frame.width,
+            times.frame.width,
             place.frame.width,
             accuracy: 1,
-            "and at a column's width rather than the whole row's"
+            "at a column's width rather than the whole row's"
+        )
+        XCTAssertEqual(
+            correct.frame.minY,
+            times.frame.minY,
+            accuracy: 1,
+            "and the sixth shares that line rather than starting a fourth"
+        )
+        XCTAssertEqual(correct.frame.minX, history.frame.minX, accuracy: 1, "in the second column")
+
+        // The odd count is now the **cancelled** delivery's: it offers five,
+        // because nothing corrects how a cancelled delivery ended. The last
+        // control keeps its column instead of stretching across the row it has
+        // to itself, which is what keeps the left edge the same down the list.
+        let cancelledCard = deliveryCard(containing: "Delivery 2, cancelled", in: app)
+        let cancelledPlace = cancelledCard.buttons["shiftDetailPickupPlaceButton"]
+        let cancelledTimes = cancelledCard.buttons["shiftDetailCorrectDeliveryTimesButton"]
+        XCTAssertTrue(scrollUntilHittable(cancelledTimes, in: app), "A cancelled delivery's times are correctable")
+        XCTAssertFalse(
+            cancelledCard.buttons["shiftDetailCorrectToCancelledButton"].exists,
+            "and nothing offers to correct how it ended, because it ended that way"
+        )
+        XCTAssertEqual(
+            cancelledTimes.frame.minX,
+            cancelledPlace.frame.minX,
+            accuracy: 1,
+            "The lone fifth control keeps the first column"
+        )
+        XCTAssertEqual(
+            cancelledTimes.frame.width,
+            cancelledPlace.frame.width,
+            accuracy: 1,
+            "at a column's width rather than the whole row's"
         )
 
         // And the controls still do what they did: the grid changed where they
         // are, not what they open.
+        XCTAssertTrue(scrollUntilHittable(earnings, in: app))
         earnings.tap()
         let field = app.textFields["deliveryEarningsAmountField"]
         XCTAssertTrue(field.waitForExistence(timeout: 5), "The earnings editor still opens from its action")
@@ -2355,6 +2393,7 @@ final class DashPilotUITests: XCTestCase {
         let history = card.buttons["shiftDetailPickupHistoryButton"]
         let earnings = card.buttons["shiftDetailDeliveryEarningsButton"]
         let tips = card.buttons["shiftDetailDeliveryTipsButton"]
+        let times = card.buttons["shiftDetailCorrectDeliveryTimesButton"]
         let correct = card.buttons["shiftDetailCorrectToCancelledButton"]
 
         XCTAssertTrue(
@@ -2363,7 +2402,7 @@ final class DashPilotUITests: XCTestCase {
         )
 
         let width = app.windows.element(boundBy: 0).frame.width
-        for action in [place, history, earnings, tips, correct] {
+        for action in [place, history, earnings, tips, times, correct] {
             XCTAssertTrue(action.exists, "Nothing is dropped to keep the card short")
             XCTAssertGreaterThan(
                 action.frame.width,
@@ -2389,11 +2428,17 @@ final class DashPilotUITests: XCTestCase {
             earnings.frame.maxY - 1,
             "The fourth action is under the third, not beside it"
         )
+        XCTAssertTrue(scrollUntilHittable(times, in: app, maxSwipes: 10))
+        XCTAssertGreaterThan(
+            times.frame.minY,
+            tips.frame.maxY - 1,
+            "the fifth under the fourth"
+        )
         XCTAssertTrue(scrollUntilHittable(correct, in: app, maxSwipes: 10))
         XCTAssertGreaterThan(
             correct.frame.minY,
-            tips.frame.maxY - 1,
-            "and the fifth under the fourth, all the way down"
+            times.frame.maxY - 1,
+            "and the sixth under the fifth, all the way down"
         )
     }
 
