@@ -124,6 +124,31 @@ Unlike a lifecycle transition it is allowed on a finished shift, for the reason 
 gross amount is: it performs no transition, and history is where a grouping mistake is noticed. It
 never moves a delivery to another shift.
 
+### Correcting a shift's end
+
+`ShiftEndCorrectionService` is the only place `Shift.endedAt` is written after `end(at:)` recorded it,
+and the only place route positions are deleted outside deleting a whole shift. The rule it enforces is
+a plain value, `ShiftEndCorrection`, which takes the proposed instant plus the shift's start, recorded
+end, pauses, delivery lifecycle instants and the next shift's start, and either constructs or refuses.
+The screen asks the same value what it would be refused for while the picker moves, so the sentence a
+driver reads and the rule the write consults cannot drift apart.
+
+The service writes the end and, when the end moves **earlier**, deletes the samples fixed after it,
+then saves **once**. There is therefore no ordering in which a shift's end moves while its positions
+survive, or the reverse — the same guarantee, and the same fetch-then-delete shape rather than a batch
+delete, that `ShiftService.deleteCompletedShift(_:)` keeps.
+
+**Nothing is recalculated by this service.** Every figure a corrected shift reports is derived on
+demand as it always was: the durations from the two timestamps, the mileage from
+`RouteMileageCalculator` over the positions that remain and the corrected window, the rates from
+`ShiftMetricsCalculator`, the period totals from `PeriodMetricsCalculator`. That is what makes "the
+mileage is measured again rather than scaled" a property of the architecture rather than a promise:
+there is no second distance anywhere for a proportional one to be written into.
+
+Like the other corrections it is allowed only on a **finished** shift, performs no lifecycle
+transition, touches no amount, no delivery timestamp and no pause timestamp, and reconciles neither
+route capture nor the Live Activity, because both are about a running shift.
+
 ## System surfaces: App Intents
 
 Six intents (start, end, pause and resume a shift; start a delivery; record the next delivery event)

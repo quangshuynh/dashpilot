@@ -48,6 +48,39 @@ and one they cannot.
 - **No widget, control, watch app or notification.** The intents and the shift's Live Activity are
   the whole off-screen surface.
 
+## Shift end-time correction
+
+- **Only the end, and only on a finished shift.** A shift's start is not correctable, and neither is
+  any delivery's lifecycle timestamp. A running shift has no recorded end to correct: `End` is what
+  records one, and it stops route recording and reconciles the Lock Screen card as it does.
+- **Route recorded after the corrected end is deleted, permanently.** Moving the end earlier removes
+  those positions from the store. Moving the end later again does not bring them back, and there is
+  no undo, trash or archive. The confirmation states the count before anything is deleted.
+- **Recorded mileage is measured again, never scaled.** No distance is ever derived from a duration.
+  The retained positions are measured from their own coordinates against the corrected shift, so the
+  share of the mileage a shift keeps has nothing to do with the share of the time it keeps.
+- **No endpoint is invented.** Nothing is interpolated from the last retained position to the
+  corrected end. The stretch between them is counted as a capture gap, exactly as it would be for any
+  other shift whose recording stopped early.
+- **Moving the end later adds no route and no mileage.** The added stretch has no recording behind
+  it, and DashPilot reports that as one more capture gap and a partial route rather than inventing
+  coverage. There is no separate "this part of the shift was never recorded" marker, and the gap
+  count does not say *where* in the shift the missing stretch is.
+- **A correction is refused rather than resolved.** An end before the shift's start, before anything
+  a delivery recorded, past a recorded pause's own end, or reaching into a later shift is named and
+  refused. Nothing is clamped, and no pause or delivery timestamp is moved to make an end fit.
+- **A shift holding a pause that was never ended cannot be corrected at all.** That row is a store
+  DashPilot cannot write — ending a shift closes its open pause — and the pause editor refuses it
+  too, so such a shift has no remedy here. Deleting the shift is the only one.
+- **Shifts that already overlap are not repaired.** The editor will not create an overlap with a
+  later shift, but nothing merges, flags or corrects a pair a store already holds.
+- **No end time is suggested.** DashPilot does not infer when a driver stopped from the last position
+  it recorded, the last delivery they completed, or a stationary stretch. The instant is the
+  driver's.
+- **Nothing is logged about a correction beyond that one happened.** The instant, the direction and
+  the number of positions removed are all absent from the log, for the reason no coordinate or amount
+  is ever written to it.
+
 ## Shift pause
 
 - **A pause is only what the driver recorded.** DashPilot observes nothing during one: it does not
@@ -462,7 +495,8 @@ and one they cannot.
 - **A shift with a wrong date is filed by that date.** DashPilot does not detect a device clock that
   was wrong when a shift was recorded. A shift stored with a date in a future week is listed under
   Older Weeks rather than in the current one, which keeps it reachable but is the wrong heading for
-  it; correcting a recorded shift's start or end time is not possible at all.
+  it. A shift's **end** can be corrected; its start cannot, and the start is what decides which week,
+  day and period the shift belongs to.
 
 ## History export
 

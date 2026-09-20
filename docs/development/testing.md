@@ -27,6 +27,8 @@ test cannot see, such as a screen that renders a sentence the model never claime
 | Shift pause persistence | The v8 to v9 migration with every shift's duration unchanged and nothing read as a break, the schema shape asserting a relationship rather than a paused flag, the plan's version and stage counts asserted here once, a paused shift recovered from a reopened store by the unchanged unfinished-shift query, and deletion cascading to pauses |
 | Shift pause correction | The rules a proposed correction is checked against, with no store: the bounds, positive length, touching allowed and overlapping refused for another pause and for delivery work, an open or malformed stored row blocking nothing because it measures nothing, and every refusal having a sentence that says what would make the stretch acceptable |
 | Shift pause correction service | The three writes through the store and mostly what must not move: a start, an end and both together, deletion renumbering nothing it should not, a missed pause added without making the shift paused, the running-shift and open-pause refusals, an overlap refused rather than merged, a delivery kept rather than shortened, elapsed time, delivery active time, mileage, route sessions and both amounts unchanged, the period's working hours and rate following, a pre-existing overlap still unioned and a malformed row repairable, three refused saves read back through a fresh context, the export carrying it through the fields it already had at format version 3, and three daylight-saving cases measured in real seconds |
+| Shift end correction | The rules a proposed end is checked against, with no store: after the start with zero refused, a pause reaching past it and an open one, everything a delivery recorded including an out-of-order chain, a later shift with touching allowed, which refusal wins when two hold, the boundary route is judged against and the fact that a later end has none, and every refusal and the destructive confirmation having a sentence that names what it is about |
+| Shift end correction service | The write through the store, and the claim the whole suite exists for: a fixture of three equal capture sessions, so a mileage measured from what remains and a mileage scaled by the time removed cannot be mistaken for each other. Plus the position exactly on the boundary kept, the endpoint never interpolated, the partial capture session keeping its identity, a later end adding no position and no metre while its missing coverage stays visible, the durations and both rates following, the amounts, tips, delivery timestamps and pause timestamps unchanged, the five refusals through the store with the route read only after the proposal is accepted, a refused save leaving the end **and** the whole route as they were read through a fresh context, a repeated correction idempotent and two steps matching one, deleted positions not returning when the end moves back, the period the shift does not leave, and the export carrying it through the fields it already had |
 | Shift pause metrics, reporting and export | The hourly rate dividing by working time, a break not lowering it, a shift paused throughout having no rate rather than a rate of zero, delivery active time unchanged while non-delivery time moves inside working time, the period total and its rate, the comparison's working-time row, and the three exported duration fields with zero meaning measured |
 | Persistence, Route sample persistence, Shift earnings persistence | Store round trips and the v1, v2 and v3 migrations |
 | Delivery lifecycle, Delivery service | Every transition and refusal, concurrent deliveries and their isolation, deterministic ordering and numbering, clamped clocks, the shift-end policy and cascade |
@@ -150,7 +152,7 @@ a period locale and a comma locale side by side.
 
 ## Launch arguments
 
-Debug builds accept twelve arguments, all used only by UI tests and screenshots:
+Debug builds accept fifteen arguments, all used only by UI tests and screenshots:
 
 | Argument | Effect |
 | --- | --- |
@@ -163,6 +165,8 @@ Debug builds accept twelve arguments, all used only by UI tests and screenshots:
 | `-dashpilot-seeded-expected-pay` | Opens an in-memory store holding a running shift with two deliveries waiting at their pickups, alike except that one records what it is expected to pay |
 | `-dashpilot-seeded-stacked-offer` | Opens an in-memory store holding a running shift with one offer of two deliveries and a later add-on offer of one |
 | `-dashpilot-seeded-malformed-offer` | Opens an in-memory store holding a running shift with one offer of two deliveries and one offer holding no deliveries at all, which is a row the app cannot produce |
+| `-dashpilot-seeded-paused-history` | Opens an in-memory store holding one completed shift that was paused twice, with one delivery between the two pauses, which is what the pause corrections are checked against |
+| `-dashpilot-seeded-late-end-history` | Opens an in-memory store holding one completed shift whose recorded end is twenty minutes later than the driver stopped, with a whole capture session and a delivery recorded before it |
 | `-dashpilot-seeded-older-weeks` | Opens an in-memory store holding completed shifts in three different weeks: one in the current one, one in the week before it and two in the week three back, so History's scope can be asserted end to end |
 | `-dashpilot-seeded-older-weeks-only` | The same store without its current-week shift, which is the empty-current-week state |
 | `-dashpilot-stubbed-location` | Replaces Core Location with the stub providers, reporting When In Use at full accuracy and producing no positions |
@@ -273,8 +277,18 @@ It is also the one fixture anchored to a **whole hour** rather than to the round
 share, so every pause lands on a clean clock minute and a journey can set a minute wheel to a round
 value and know exactly what the corrected pause is.
 
+The late-end fixture is the one no other fixture and no sequence of taps reaches, for both of the
+reasons the paused-history one is unreachable: ending a shift records the clock, and a simulator
+cannot be driven into recording a route. It describes a driver who stopped at `3 hr 20 min` and a
+DashPilot that recorded the end at `3 hr 40 min`, with a whole capture session recorded in between —
+the drive home. Its three capture sessions are deliberately **equal**, so the journey that corrects
+the end can assert `4.5 mi` and state, in the same breath, that a figure scaled by the time removed
+would have been about `5.6 mi`. Its one delivery finishes ten minutes before the corrected end, which
+is what makes the delivery refusal reachable from the same launch. It shares the paused-history
+fixture's whole-hour anchor for the same reason.
+
 The seeded paths are app code that exists only for tests. They are DEBUG-only and in-memory, and
-they are eight more launch paths to keep honest.
+every one of them is another launch path to keep honest.
 
 ## UI journeys
 
@@ -323,7 +337,14 @@ writing anything, being refused a pause corrected over a recorded delivery and t
 collided with, deleting a pause recorded by mistake after a confirmation that states which way the
 working time moves, cancelling that confirmation, adding a pause that was never recorded and finding
 it opens refused rather than pre-filled, a shift with no pauses still offering to record one, none of
-those corrections being offered on a running or a paused shift, reading a
+those corrections being offered on a running or a paused shift, correcting the end of a shift
+DashPilot recorded as finishing late and watching the elapsed time, the recorded mileage, the capture
+segments and the hourly figure all follow while the mileage lands on what the retained positions
+support rather than on a figure scaled by the time removed, declining that confirmation and finding
+the shift and its whole route exactly as recorded, being refused an end corrected over recorded
+delivery work and told which fact it collided with, moving an end later and being told that no route
+or mileage comes with the extra time and then finding that none did, no end correction being offered
+on a running shift, reading a
 day beside the day before it with both figures and both coverages on screen,
 the percentage a finished and fully recorded pair of days states, the absence of one while a day is
 still in progress, an empty previous day said to hold nothing rather than shown as no earnings,
