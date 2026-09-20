@@ -34,6 +34,9 @@ final class DashPilotUITests: XCTestCase {
     /// Must match `LaunchArgument.seededLateEndHistory`, for the same reason.
     private static let seededLateEndHistoryArgument = "-dashpilot-seeded-late-end-history"
 
+    /// Must match `LaunchArgument.seededLateDeliveryHistory`, for the same reason.
+    private static let seededLateDeliveryHistoryArgument = "-dashpilot-seeded-late-delivery-history"
+
     /// Must match `LaunchArgument.seededOlderWeeks`, for the same reason.
     private static let seededOlderWeeksArgument = "-dashpilot-seeded-older-weeks"
 
@@ -237,6 +240,31 @@ final class DashPilotUITests: XCTestCase {
     private func launchWithLateEndHistory() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments.append(Self.seededLateEndHistoryArgument)
+        launchInPortrait(app)
+        return app
+    }
+
+    /// Launches against a throwaway store holding the **real recovery case**: a
+    /// completed shift whose one delivery recorded its completion long after the
+    /// order was handed over, and whose own end is late as well.
+    ///
+    /// A journey cannot produce this state by tapping: recording a completion
+    /// records the clock.
+    ///
+    /// The shift, its route and its `$100.00` are the late-end fixture's, so it
+    /// opens showing `3 hr 40 min`, `6.7 mi` over three segments and `$27.27`
+    /// per shift hour, and correcting the end to `3 hr 20 min` leaves
+    /// `3 hr 20 min`, `4.5 mi` over two segments and exactly `$30.00`. What
+    /// differs is `Delivery 1`: accepted `2 hr 00 min` in, at the pickup at
+    /// `2 hr 05 min`, collected at `2 hr 10 min`, recorded as delivered at
+    /// `3 hr 30 min`, and carrying `$12.00`. So it reads `1 hr 30 min` accepted
+    /// to delivered and `$8.00` per recorded delivery hour until the completion
+    /// is corrected to `3 hr 15 min`, which makes those `1 hr 15 min` and
+    /// `$9.60`.
+    @MainActor
+    private func launchWithLateDeliveryHistory() -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments.append(Self.seededLateDeliveryHistoryArgument)
         launchInPortrait(app)
         return app
     }
@@ -3061,8 +3089,12 @@ final class DashPilotUITests: XCTestCase {
             .firstMatch
         XCTAssertTrue(refusal.waitForExistence(timeout: 5), "The instant is refused rather than saved")
         XCTAssertTrue(
-            refusal.label.contains("A delivery recorded work after that time"),
-            "and the refusal says which recorded fact it collided with. Showed: \(refusal.label)"
+            refusal.label.hasPrefix("Delivery 1 has Delivered recorded at "),
+            "and the refusal names the delivery and the event it collided with. Showed: \(refusal.label)"
+        )
+        XCTAssertTrue(
+            refusal.label.contains("after the proposed shift end"),
+            "rather than leaving the driver to find it. Showed: \(refusal.label)"
         )
         XCTAssertFalse(
             app.buttons["shiftEndCorrectionSaveButton"].isEnabled,
@@ -3136,6 +3168,268 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertFalse(
             app.buttons["correctShiftEndButton"].exists,
             "A shift with no recorded end has none to correct, and End is what records one"
+        )
+    }
+
+    // MARK: Correcting a completed delivery's recorded times
+
+    /// The whole journey: open a delivery DashPilot recorded as delivered two
+    /// hours after the food reached the door, correct the completion, and watch
+    /// the two figures derived from it move while the route stays exactly as it
+    /// was recorded.
+    @MainActor
+    func testCorrectingADeliveryRecordedAfterTheAppCameBack() throws {
+        let app = launchWithLateDeliveryHistory()
+        openFirstShift(in: app)
+
+        // The mileage is read first and re-read at the end: the whole promise of
+        // this correction is that it does not touch the route.
+        let elapsed = app.descendants(matching: .any)["shiftDetailDuration"]
+        let mileage = app.descendants(matching: .any)["shiftDetailRecordedMileage"]
+        XCTAssertTrue(scrollTo(mileage, in: app), "The shift states what its route recorded")
+        let mileageBefore = mileage.label
+        XCTAssertTrue(mileageBefore.contains("6.7 miles"), "Showed: \(mileageBefore)")
+
+        let row = app.descendants(matching: .any)["shiftDetailDeliveryRow"].firstMatch
+        XCTAssertTrue(scrollTo(row, in: app), "The delivery is in the shift's record")
+        XCTAssertTrue(
+            row.label.contains("Accepted to delivered 1 hour, 30 minutes"),
+            "with the duration its late completion implies. Showed: \(row.label)"
+        )
+        XCTAssertTrue(
+            row.label.contains("$8.00 earned per recorded delivery hour"),
+            "and the hourly figure over it. Showed: \(row.label)"
+        )
+
+        let correct = app.buttons["shiftDetailCorrectDeliveryTimesButton"]
+        XCTAssertTrue(scrollUntilHittable(correct, in: app), "The delivery offers to correct its times")
+        XCTAssertTrue(
+            correct.label.hasPrefix("Correct the times Delivery 1 recorded"),
+            "The control says which delivery it changes. Showed: \(correct.label)"
+        )
+        correct.tap()
+
+        let summary = app.descendants(matching: .any)["deliveryTimeCorrectionSummary"]
+        XCTAssertTrue(summary.waitForExistence(timeout: 5), "The editor opens on the times as recorded")
+        XCTAssertTrue(
+            summary.label.contains("1 hour, 30 minutes"),
+            "with the figures they produce. Showed: \(summary.label)"
+        )
+
+        let note = app.descendants(matching: .any)
+            .matching(identifier: "deliveryTimeCorrectionRouteNotice")
+            .firstMatch
+        XCTAssertTrue(note.waitForExistence(timeout: 5), "and says what it will not touch")
+        XCTAssertTrue(
+            note.label.contains("recorded mileage are not changed"),
+            "which is the route. Showed: \(note.label)"
+        )
+
+        // The order really reached the door fifteen minutes past the hour.
+        setTime(minute: "15", ofPicker: "deliveryTimeCorrectionPicker.delivered", in: app)
+        XCTAssertTrue(
+            waitForLabel(summary, toContain: "1 hour, 15 minutes"),
+            "The consequence is restated before anything is written. Showed: \(summary.label)"
+        )
+        XCTAssertTrue(
+            summary.label.contains("$9.60"),
+            "and so is the hourly figure it moves. Showed: \(summary.label)"
+        )
+
+        app.buttons["deliveryTimeCorrectionSaveButton"].tap()
+
+        XCTAssertTrue(scrollTo(row, in: app), "Back on the shift's record")
+        XCTAssertTrue(
+            waitForLabel(row, toContain: "Accepted to delivered 1 hour, 15 minutes"),
+            "The delivery records the completion the driver corrected it to. Showed: \(row.label)"
+        )
+        XCTAssertTrue(
+            row.label.contains("$9.60 earned per recorded delivery hour"),
+            "and the rate divides by the corrected lifecycle. Showed: \(row.label)"
+        )
+        XCTAssertTrue(
+            row.label.contains("Gross earnings for Delivery 1, $12.00"),
+            "over the amount that did not move. Showed: \(row.label)"
+        )
+        XCTAssertTrue(
+            row.label.contains("Waited at pickup 5 minutes"),
+            "and the wait, whose two ends did not move either. Showed: \(row.label)"
+        )
+        XCTAssertTrue(
+            row.label.hasPrefix("Delivery 1, delivered"),
+            "The delivery is still terminal, and terminal the same way. Showed: \(row.label)"
+        )
+
+        // Back to the top and then down again: the route section sits **above**
+        // the deliveries, and the scroll helper that walks down cannot reach it
+        // from here. This is the pair the end-correction journeys already use.
+        XCTAssertTrue(scrollToTop(reaching: elapsed, in: app))
+        XCTAssertTrue(scrollTo(mileage, in: app))
+        XCTAssertEqual(
+            mileage.label,
+            mileageBefore,
+            "and not one metre of recorded route moved with the times"
+        )
+    }
+
+    /// A time that would put one recorded event before another is refused, and
+    /// the refusal names the event the driver has to correct as well.
+    @MainActor
+    func testADeliveryTimeThatBreaksTheLifecycleOrderIsRefused() throws {
+        let app = launchWithLateDeliveryHistory()
+        openFirstShift(in: app)
+
+        let correct = app.buttons["shiftDetailCorrectDeliveryTimesButton"]
+        XCTAssertTrue(scrollUntilHittable(correct, in: app))
+        correct.tap()
+
+        XCTAssertTrue(app.descendants(matching: .any)["deliveryTimeCorrectionSummary"].waitForExistence(timeout: 5))
+
+        // The pickup was recorded ten minutes past the hour and the arrival at
+        // five, so two minutes past would have the order collected before the
+        // driver reached the counter.
+        setTime(minute: "02", ofPicker: "deliveryTimeCorrectionPicker.pickedUp", in: app)
+
+        // `firstMatch`, because a SwiftUI `Label` is a glyph and a text under
+        // one identifier, and reading `.label` off a query matching both is an
+        // error.
+        let refusal = app.descendants(matching: .any)
+            .matching(identifier: "deliveryTimeCorrectionRefusal")
+            .firstMatch
+        XCTAssertTrue(refusal.waitForExistence(timeout: 5), "The time is refused rather than saved")
+        XCTAssertTrue(
+            refusal.label.hasPrefix("Picked up cannot be earlier than arrived at the pickup"),
+            "and the refusal names the fact it collided with. Showed: \(refusal.label)"
+        )
+        XCTAssertTrue(
+            refusal.label.contains("correct arrived at the pickup as well"),
+            "and says that fact is corrected rather than moved out of the way. Showed: \(refusal.label)"
+        )
+        XCTAssertFalse(
+            app.buttons["deliveryTimeCorrectionSaveButton"].isEnabled,
+            "Saving is withheld rather than offered and then refused"
+        )
+
+        app.buttons["deliveryTimeCorrectionCancelButton"].tap()
+
+        let row = app.descendants(matching: .any)["shiftDetailDeliveryRow"].firstMatch
+        XCTAssertTrue(scrollTo(row, in: app))
+        XCTAssertTrue(
+            row.label.contains("Waited at pickup 5 minutes"),
+            "Nothing at all was written, and above all the arrival was not moved. Showed: \(row.label)"
+        )
+    }
+
+    /// The real recovery, end to end.
+    ///
+    /// DashPilot became unreachable near the end of a shift. The remaining work
+    /// was recorded once a new build was installed, so both the delivery's
+    /// completion and the shift's own end are late. Correcting the end alone is
+    /// refused, because the delivery records work after the proposed end — and
+    /// the refusal says **which** delivery and **which** event, which is the
+    /// whole of what the driver needs. They correct that, and the same end
+    /// correction is then accepted and trims the route as it always did.
+    @MainActor
+    func testTheShiftEndIsCorrectedOnceTheDeliveryBlockingItIs() throws {
+        let app = launchWithLateDeliveryHistory()
+        openFirstShift(in: app)
+
+        let elapsed = app.descendants(matching: .any)["shiftDetailDuration"]
+        XCTAssertTrue(scrollTo(elapsed, in: app))
+        XCTAssertEqual(elapsed.label, "3 hours, 40 minutes elapsed shift time")
+
+        // 1. The end correction is refused.
+        let correctEnd = app.buttons["correctShiftEndButton"]
+        XCTAssertTrue(scrollUntilHittable(correctEnd, in: app))
+        correctEnd.tap()
+
+        XCTAssertTrue(app.descendants(matching: .any)["shiftEndCorrectionSummary"].waitForExistence(timeout: 5))
+        setTime(minute: "20", ofPicker: "shiftEndCorrectionPicker", in: app)
+
+        // 2. And it identifies the blocking delivery and event.
+        let refusal = app.descendants(matching: .any)
+            .matching(identifier: "shiftEndCorrectionRefusal")
+            .firstMatch
+        XCTAssertTrue(refusal.waitForExistence(timeout: 5), "The end is refused")
+        XCTAssertTrue(
+            refusal.label.hasPrefix("Delivery 1 has Delivered recorded at "),
+            "and says which delivery and which event block it. Showed: \(refusal.label)"
+        )
+        XCTAssertTrue(
+            refusal.label.contains("Open that delivery and correct its times"),
+            "and where to go next. Showed: \(refusal.label)"
+        )
+        XCTAssertFalse(app.buttons["shiftEndCorrectionSaveButton"].isEnabled)
+        app.buttons["shiftEndCorrectionCancelButton"].tap()
+
+        // 3 and 4. The driver opens that delivery and corrects it.
+        let correctTimes = app.buttons["shiftDetailCorrectDeliveryTimesButton"]
+        XCTAssertTrue(scrollUntilHittable(correctTimes, in: app))
+        correctTimes.tap()
+
+        XCTAssertTrue(app.descendants(matching: .any)["deliveryTimeCorrectionSummary"].waitForExistence(timeout: 5))
+        setTime(minute: "15", ofPicker: "deliveryTimeCorrectionPicker.delivered", in: app)
+        app.buttons["deliveryTimeCorrectionSaveButton"].tap()
+
+        let row = app.descendants(matching: .any)["shiftDetailDeliveryRow"].firstMatch
+        XCTAssertTrue(scrollTo(row, in: app))
+        XCTAssertTrue(
+            waitForLabel(row, toContain: "Accepted to delivered 1 hour, 15 minutes"),
+            "The delivery no longer records work after the end the driver wants. Showed: \(row.label)"
+        )
+
+        // 5. The same correction is retried.
+        XCTAssertTrue(scrollToTop(reaching: elapsed, in: app))
+        XCTAssertTrue(scrollUntilHittable(correctEnd, in: app))
+        correctEnd.tap()
+
+        XCTAssertTrue(app.descendants(matching: .any)["shiftEndCorrectionSummary"].waitForExistence(timeout: 5))
+        setTime(minute: "20", ofPicker: "shiftEndCorrectionPicker", in: app)
+        XCTAssertFalse(
+            app.descendants(matching: .any)
+                .matching(identifier: "shiftEndCorrectionRefusal")
+                .firstMatch
+                .exists,
+            "and it is no longer refused"
+        )
+        app.buttons["shiftEndCorrectionSaveButton"].tap()
+
+        // 6. And it trims the route and rederives the figures exactly as it
+        //    always has. `firstMatch`, because the alert presents the button
+        //    nested inside itself.
+        let confirm = app.buttons["confirmShiftEndCorrectionButton"].firstMatch
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5), "Destroying recorded route is still confirmed first")
+        confirm.tap()
+
+        XCTAssertTrue(
+            waitForLabel(elapsed, toContain: "3 hours, 20 minutes"),
+            "The shift records the end the driver corrected it to. Showed: \(elapsed.label)"
+        )
+        let mileage = app.descendants(matching: .any)["shiftDetailRecordedMileage"]
+        XCTAssertTrue(scrollTo(mileage, in: app))
+        XCTAssertTrue(
+            waitForLabel(mileage, toContain: "4.5 miles"),
+            "measured again from the positions that remain. Showed: \(mileage.label)"
+        )
+        let hourlyRate = app.descendants(matching: .any)["shiftDetailHourlyRate"]
+        XCTAssertTrue(scrollTo(hourlyRate, in: app))
+        XCTAssertTrue(
+            waitForLabel(hourlyRate, toContain: "$30.00"),
+            "and the hourly figure divides by the corrected working time. Showed: \(hourlyRate.label)"
+        )
+    }
+
+    /// The correction is not offered while a shift is running, which is where
+    /// the driver may be at a wheel and where a mis-tapped completion is
+    /// reopened and finished properly instead.
+    @MainActor
+    func testDeliveryTimeCorrectionIsNotOfferedOnARunningShift() throws {
+        let app = launchWithActiveDelivery()
+
+        XCTAssertTrue(app.buttons["endShiftButton"].waitForExistence(timeout: 10), "The shift is running")
+        XCTAssertFalse(
+            app.buttons["shiftDetailCorrectDeliveryTimesButton"].exists,
+            "A delivery on a running shift has no shift window to be corrected inside"
         )
     }
 
