@@ -5193,6 +5193,116 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertFalse(cost.label.contains("$0.00"), "Removing figures is not recording that no fuel was used")
     }
 
+    // MARK: Estimated net
+
+    /// The estimated net reads as a ledger: what was recorded, what was
+    /// estimated, and what is left.
+    @MainActor
+    func testEstimatedNetShowsTheSubtractionItPerformed() throws {
+        let app = launchWithSeededHistory()
+        openFirstShift(in: app)
+        recordFuelAssumptions(milesPerGallon: "25", gasPrice: "3.50", in: app)
+
+        let earnings = app.descendants(matching: .any)["shiftDetailNetRecordedEarnings"]
+        XCTAssertTrue(scrollTo(earnings, in: app), "The estimated net section should be reachable")
+        XCTAssertTrue(
+            waitForLabel(earnings, toContain: "$86.25 recorded gross earnings for this shift"),
+            "The recorded half says it is recorded: \(earnings.label)"
+        )
+
+        let fuel = app.descendants(matching: .any)["shiftDetailNetEstimatedFuel"]
+        XCTAssertTrue(scrollTo(fuel, in: app))
+        XCTAssertTrue(
+            waitForLabel(fuel, toContain: "estimated fuel cost, based on recorded mileage"),
+            "The estimated half says it is estimated, and what from: \(fuel.label)"
+        )
+        XCTAssertTrue(fuel.label.contains("-$"), "And it is subtracted, which the figure shows: \(fuel.label)")
+
+        let net = app.descendants(matching: .any)["shiftDetailEstimatedNetAfterFuel"]
+        XCTAssertTrue(scrollTo(net, in: app))
+        XCTAssertTrue(
+            waitForLabel(net, toContain: "estimated net after fuel"),
+            "The result is named an estimate rather than a profit: \(net.label)"
+        )
+        XCTAssertFalse(net.label.lowercased().contains("profit"))
+
+        let hourly = app.descendants(matching: .any)["shiftDetailEstimatedNetPerWorkingHour"]
+        XCTAssertTrue(scrollTo(hourly, in: app))
+        XCTAssertTrue(
+            waitForLabel(hourly, toContain: "estimated net after fuel per working hour"),
+            "And the hourly figure names the same denominator the gross rate uses: \(hourly.label)"
+        )
+    }
+
+    /// A partial route makes the fuel a floor and the net a ceiling, and the
+    /// screen says so in that direction.
+    @MainActor
+    func testEstimatedNetStatesWhichWayAPartialRouteIsWrong() throws {
+        let app = launchWithSeededHistory()
+        openFirstShift(in: app)
+        recordFuelAssumptions(milesPerGallon: "25", gasPrice: "3.50", in: app)
+
+        let notice = app.descendants(matching: .any)["shiftDetailEstimatedNetPartialNotice"]
+        XCTAssertTrue(scrollTo(notice, in: app))
+        XCTAssertTrue(
+            waitForLabel(notice, toContain: "this net is a ceiling"),
+            "A floor on the fuel is a ceiling on what was left: \(notice.label)"
+        )
+    }
+
+    /// A shift with no fuel estimate is still entirely readable: every recorded
+    /// figure and every gross rate is where it was, and only the net says it is
+    /// unavailable.
+    @MainActor
+    func testShiftWithoutAFuelEstimateKeepsItsFinancialFigures() throws {
+        let app = launchWithSeededHistory()
+        openFirstShift(in: app)
+
+        let earnings = app.descendants(matching: .any)["shiftDetailEarnings"]
+        XCTAssertTrue(earnings.waitForExistence(timeout: 5))
+        XCTAssertTrue(waitForLabel(earnings, toContain: "86.25"), "The recorded amount is unaffected")
+
+        let hourlyGross = app.descendants(matching: .any)["shiftDetailHourlyRate"]
+        XCTAssertTrue(scrollTo(hourlyGross, in: app))
+        XCTAssertTrue(
+            waitForLabel(hourlyGross, toContain: "gross earnings per shift hour"),
+            "And so is every gross rate: \(hourlyGross.label)"
+        )
+
+        let net = app.descendants(matching: .any)["shiftDetailEstimatedNetAfterFuel"]
+        XCTAssertTrue(scrollTo(net, in: app))
+        XCTAssertTrue(
+            waitForLabel(net, toContain: "Add your miles per gallon and a gas price"),
+            "The net alone is unavailable, and says what would produce it: \(net.label)"
+        )
+        XCTAssertFalse(net.label.contains("$0.00"), "An absent net is not a net of nothing")
+    }
+
+    /// A shift with no recorded amount has no net either, and is told which
+    /// figure is missing.
+    @MainActor
+    func testEstimatedNetNamesMissingEarnings() throws {
+        let app = launchWithSeededHistory()
+        openFirstShift(in: app)
+        recordFuelAssumptions(milesPerGallon: "25", gasPrice: "3.50", in: app)
+        goBack(in: app)
+
+        // The fixture's second shift recorded no amount, and the assumptions
+        // above seed its editor, so it can reach a fuel estimate without
+        // reaching an amount.
+        let history = rows(in: app)
+        XCTAssertTrue(history.firstMatch.waitForExistence(timeout: 10))
+        history.element(boundBy: 1).tap()
+
+        let net = app.descendants(matching: .any)["shiftDetailEstimatedNetAfterFuel"]
+        XCTAssertTrue(scrollTo(net, in: app))
+        XCTAssertTrue(
+            waitForLabel(net, toContain: "Add what this shift paid"),
+            "The missing half that is named is the earnings: \(net.label)"
+        )
+        XCTAssertFalse(net.label.contains("$0.00"))
+    }
+
     // MARK: Fuel helpers
 
     /// Types into the two fuel fields, leaving a field alone when its argument
