@@ -950,6 +950,128 @@ enum PreviewSupport {
         return container
     }
 
+    // MARK: A finished shift whose end was recorded late
+
+    /// A throwaway store holding one **completed** shift that DashPilot recorded
+    /// as ending later than the driver actually stopped, with route recorded
+    /// after the moment they stopped.
+    ///
+    /// This is the shape the end-time correction exists for and the one no other
+    /// fixture holds: a journey cannot produce it by tapping, because ending a
+    /// shift records the clock and a simulator cannot be driven into recording a
+    /// route. It is also the one shape where correcting the end **destroys**
+    /// something, which is the part that has to be reachable end to end.
+    ///
+    /// The story it describes: the driver stopped working at `start + 3 hr 20`,
+    /// DashPilot was not reachable, and the shift was ended at `start + 3 hr 40`
+    /// after the drive home — which is the third capture session below.
+    ///
+    /// | Offset from the start | What it holds |
+    /// | --- | --- |
+    /// | 30 min | Ten positions, twenty seconds and 400 m apart: 3,600 m |
+    /// | 3 hr 5 min | Ten more, in a second session: another 3,600 m |
+    /// | 3 hr 5 min to 3 hr 10 min | One delivery, accepted and delivered |
+    /// | 3 hr 25 min | Ten more, in a third session: another 3,600 m |
+    /// | 3 hr 40 min | The recorded end |
+    ///
+    /// So it records `6.7 mi` over three segments before a correction, and
+    /// `4.5 mi` over two once the end is corrected to `3 hr 20` and the third
+    /// session leaves the shift. Its elapsed time goes from `3 hr 40 min` to
+    /// `3 hr 20 min`, and with an invented `$100.00` recorded its hourly figure
+    /// goes from `$27.27` to exactly `$30.00`.
+    ///
+    /// The delivery is there so a journey can also meet a refusal: an end
+    /// corrected to before `3 hr 10` would put recorded delivery work outside the
+    /// shift.
+    ///
+    /// The anchor is a whole hour, for the reason the paused-history fixture's
+    /// is: every offset is a whole number of minutes, so a journey can set a
+    /// minute wheel and know exactly what it chose.
+    ///
+    /// Every time, amount and coordinate is invented. Debug builds only, and in
+    /// memory, so it can never touch a real store.
+    static func seededLateEndHistoryContainer(
+        referenceDate: Date = pausedHistoryReference()
+    ) throws -> ModelContainer {
+        let container = try ModelContainerFactory.makeInMemoryContainer()
+        let context = ModelContext(container)
+
+        let start = referenceDate.addingTimeInterval(-5 * 3600)
+        func at(_ minutes: Double) -> Date { start.addingTimeInterval(minutes * 60) }
+
+        let shift = Shift(startedAt: start)
+        context.insert(shift)
+
+        // Built directly rather than through `ShiftService`, for the reason
+        // every other completed-shift fixture here is: it describes the stored
+        // state of work that happened rather than replaying it in real time.
+        for sample in lateEndRoute(from: start) {
+            context.insert(sample.attached(to: shift))
+        }
+
+        let delivery = insertedDelivery(on: shift, acceptedAt: at(185), in: context)
+        try? delivery.markArrivedAtPickup(at: at(187))
+        try? delivery.markPickedUp(at: at(189))
+        try? delivery.markDelivered(at: at(190))
+        delivery.setPickupPlace(place(named: SyntheticPickupPlace.noodles, at: start, in: context))
+        context.insert(delivery)
+
+        try? shift.end(at: at(220))
+        // An invented amount, so the hourly figure the corrected duration
+        // divides has something to divide.
+        try? shift.setGrossEarnings(Money(minorUnits: 10_000))
+
+        try? context.save()
+
+        return container
+    }
+
+    /// Three capture sessions of ten positions each, twenty seconds and 400 m
+    /// apart, beginning 30 minutes, 3 hours 5 minutes and 3 hours 25 minutes
+    /// into the shift.
+    ///
+    /// Each session contributes 3,600 m, which is what makes the arithmetic
+    /// after a correction something a journey can state rather than approximate.
+    /// The origin is the same round number in open country every other fixture
+    /// here uses, and every position is an explicit offset north of it.
+    private static func lateEndRoute(from start: Date) -> [PreviewRouteSample] {
+        let metresPerDegreeLatitude = 111_320.0
+
+        return [30.0, 185.0, 205.0].enumerated().flatMap { index, startMinute -> [PreviewRouteSample] in
+            let session = UUID()
+            // Each session starts further north than the last one ended, which
+            // is what a driver who kept moving while nothing was recorded looks
+            // like. The distance between sessions is never counted.
+            let originMetres = Double(index) * 9_000
+            return (0..<10).map { step in
+                PreviewRouteSample(
+                    timestamp: start.addingTimeInterval(startMinute * 60 + Double(step) * 20),
+                    latitude: 40.0 + (originMetres + Double(step) * 400) / metresPerDegreeLatitude,
+                    longitude: -75.0,
+                    captureSessionID: session
+                )
+            }
+        }
+    }
+
+    /// The end-time editor over the fixture above.
+    @MainActor
+    static func shiftEndCorrectionEditor() -> some View {
+        // Previews cannot meaningfully recover from a container failure.
+        let container = try! seededLateEndHistoryContainer()
+        let context = container.mainContext
+        let shift = (try? context.fetch(FetchDescriptor<Shift>()))?.first
+
+        return Group {
+            if let shift {
+                ShiftEndCorrectionEditor(shift: shift)
+            } else {
+                Text("No synthetic shift")
+            }
+        }
+        .modelContainer(container)
+    }
+
     /// The pause editor over the fixture above, correcting its first pause or
     /// adding one.
     @MainActor
