@@ -50,9 +50,10 @@ and one they cannot.
 
 ## Shift end-time correction
 
-- **Only the end, and only on a finished shift.** A shift's start is not correctable, and neither is
-  any delivery's lifecycle timestamp. A running shift has no recorded end to correct: `End` is what
-  records one, and it stops route recording and reconciles the Lock Screen card as it does.
+- **Only the end, and only on a finished shift.** A shift's start is not correctable anywhere, and a
+  delivery's own lifecycle times are corrected on the delivery rather than here. A running shift has
+  no recorded end to correct: `End` is what records one, and it stops route recording and reconciles
+  the Lock Screen card as it does.
 - **Route recorded after the corrected end is deleted, permanently.** Moving the end earlier removes
   those positions from the store. Moving the end later again does not bring them back, and there is
   no undo, trash or archive. The confirmation states the count before anything is deleted.
@@ -68,7 +69,9 @@ and one they cannot.
   count does not say *where* in the shift the missing stretch is.
 - **A correction is refused rather than resolved.** An end before the shift's start, before anything
   a delivery recorded, past a recorded pause's own end, or reaching into a later shift is named and
-  refused. Nothing is clamped, and no pause or delivery timestamp is moved to make an end fit.
+  refused. Nothing is clamped, and no pause or delivery timestamp is moved to make an end fit. The
+  delivery refusal names the blocking delivery and event so the driver can go and correct it, and
+  that is the whole of the help it gives: the shift editor corrects no delivery.
 - **A shift holding a pause that was never ended cannot be corrected at all.** That row is a store
   DashPilot cannot write — ending a shift closes its open pause — and the pause editor refuses it
   too, so such a shift has no remedy here. Deleting the shift is the only one.
@@ -80,6 +83,30 @@ and one they cannot.
 - **Nothing is logged about a correction beyond that one happened.** The instant, the direction and
   the number of positions removed are all absent from the log, for the reason no coordinate or amount
   is ever written to it.
+
+## Correcting a completed delivery's recorded times
+
+- **Only instants that already exist, and only on a finished shift.** A lifecycle stage the delivery
+  never recorded gets no picker and is never created, a recorded one is never removed, and the
+  terminal outcome cannot be changed here. A delivery on a running shift is refused: the shift's own
+  window is what bounds the correction, and a mis-tapped completion there is reopened and finished
+  properly instead.
+- **A collision is refused, never resolved.** A time that would run behind another recorded event is
+  named and refused, together with the event it collided with. Nothing cascades: DashPilot will not
+  move a pickup back to make room for a completion, so a driver who meant to move both moves both.
+- **Nothing is suggested.** DashPilot does not infer when a delivery really finished from the route,
+  a stationary stretch or the next delivery's acceptance. Every instant was typed by the driver, and
+  a correction is as true as their memory of the shift.
+- **The route and the recorded mileage do not follow.** Correcting a delivery's times changes what
+  the driver recorded about the delivery, not where the phone recorded being, so a shift can record
+  mileage in minutes a corrected delivery no longer covers. That is honest rather than a defect: the
+  positions are evidence and the times are a record.
+- **There is no correction history.** Nothing stores what the times used to be or how many of them
+  moved, in the store, in the export or in the log: the log records only that a correction happened,
+  never which delivery, which stage, when, or how many stages went with it. A corrected delivery is
+  indistinguishable from one recorded correctly at the time.
+- **A correction cannot be taken back.** The previous times are gone once the save succeeds, and the
+  only way back is to correct them again from memory.
 
 ## Shift pause
 
@@ -233,14 +260,14 @@ and one they cannot.
   all DashPilot claims about it.
 - **A delivery's recorded pickup wait is only as good as the tapping**, like every other interval. An
   arrival marked late shortens it and one marked early lengthens it, and nothing detects either.
-- **A recorded delivery's timestamps cannot be edited, and a delivery cannot be deleted
-  individually.** A mis-tapped lifecycle event stays as recorded, and only deleting the whole shift
-  removes it. There are three exceptions and all are narrow. The pickup place can be added, changed
-  or removed at any time, because it is not an event. A delivery marked delivered by mistake can be
-  **reopened** while its shift is running, which removes the delivered timestamp and writes none. And
-  once the shift has ended it can be **corrected to cancelled**, which reuses the recorded completion
-  as the cancellation rather than writing a new time. No time can be typed, moved or shifted through
-  any of them, and a mis-tapped *arrival* or *pickup* is still permanent.
+- **A delivery cannot be deleted individually**, and no lifecycle event can be created or removed by
+  correcting one. Only deleting the whole shift removes a delivery. What can be corrected is narrow
+  and deliberate. The pickup place can be added, changed or removed at any time, because it is not an
+  event. A delivery marked delivered by mistake can be **reopened** while its shift is running, which
+  removes the delivered timestamp and writes none. Once the shift has ended it can be **corrected to
+  cancelled**, which reuses the recorded completion as the cancellation rather than writing a new
+  time. And on a finished shift the instants it **already records** can be corrected in place — see
+  the next section.
 - **A delivery can only be reopened while its shift is running.** It is refused on a shift that has
   ended, and refused while the shift is paused, because a delivery cannot run through time the app
   reports as not worked. Reopening the shift itself is a separate decision DashPilot does not make.
@@ -252,12 +279,11 @@ and one they cannot.
   holds work in progress; and it would shorten or remove that shift's delivery active time with
   nothing on screen saying so. See
   [Why the ended-shift refusal is permanent](../product/delivery-lifecycle.md#why-the-ended-shift-refusal-is-permanent).
-- **A historical completion can only be corrected to a cancellation, not to a different time.** A
-  `Delivered` recorded after the shift ended is wrong in one of two ways: the delivery never
-  completed, or the time is off. Only the first is fixable. The delivery is recorded as cancelled at
-  the instant it recorded as its completion, which keeps every duration and every period figure
-  exactly where they were; a completion recorded ten minutes late stays ten minutes late. There is
-  still no timestamp editor anywhere in DashPilot.
+- **A historical completion is corrected to a cancellation without moving a time.** A `Delivered`
+  recorded after the shift ended is wrong in one of two ways: the delivery never completed, or the
+  time is off. `Correct to Cancelled` fixes the first, recording the cancellation at the instant the
+  completion held, so every duration and period figure stays exactly where it was. The second is
+  `Correct Times`, which is a different action on the same row.
 - **A correction to cancelled cannot be taken back.** A cancelled delivery is terminal and nothing
   reopens one, so a driver who corrects the wrong row has no remedy but deleting the shift. The
   correction is confirmed by a sentence naming the delivery for exactly that reason.

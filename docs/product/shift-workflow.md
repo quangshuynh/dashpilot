@@ -247,7 +247,11 @@ An instant is **named and refused**, never quietly clamped or nudged into the ne
 
 - it has to be after the shift's own start; a shift of no length is not a correction anybody means
 - it may not precede anything the shift's deliveries recorded — an acceptance, an arrival, a pickup,
-  a completion or a cancellation — because recorded work cannot fall outside the shift that holds it
+  a completion or a cancellation — because recorded work cannot fall outside the shift that holds it.
+  **The refusal names the blocking delivery and event**: `Delivery 1 has Delivered recorded at
+  9:47 PM, after the proposed shift end`, so the driver knows which record to open. Nothing here
+  corrects that delivery on their behalf — see
+  [the recovery below](#when-a-delivery-recorded-late-blocks-an-earlier-end)
 - it may not leave a recorded pause outside the shift; the pause is corrected or deleted first,
   through its own editor, and nothing here shortens one to fit
 - it may not reach into a shift recorded after this one, because two overlapping shifts would each
@@ -268,12 +272,32 @@ What does move is everything derived from the boundary: the shift's elapsed and 
 its three rates, its recorded mileage with its segments and gaps, and the period totals and rates
 that sum those.
 
+### When a delivery recorded late blocks an earlier end
+
+This is the case the refusal above exists for. DashPilot became unreachable near the end of a shift,
+the driver kept delivering, and both the remaining deliveries and the shift's own end were recorded
+much later than they happened. Correcting the end alone is refused, because the delivery now records
+work after the end being proposed.
+
+The recovery is five steps, and each one is the driver's:
+
+1. `Correct End Time` refuses the earlier end.
+2. It names the delivery and the event that block it.
+3. The driver opens that delivery in the shift's own record.
+4. They correct its recorded times — see
+   [Correcting the times a delivery recorded](delivery-lifecycle.md#correcting-the-times-a-delivery-recorded).
+5. They retry the same end correction, which is then accepted and trims the route as it always does.
+
+**Nothing corrects a delivery from the shift editor.** A delivery's times and a shift's end are two
+records with two sets of collisions, and an editor that moved both would be writing a fact the driver
+never looked at.
+
 ### What is not correctable here
 
 **A running shift's end**, because it has none: `End` is what records one, and it stops recording and
-reconciles the Lock Screen card as it does. **The shift's start**, and **any delivery's lifecycle
-timestamp**: those are different facts with different collisions, and one editor that moved any of
-them would be several corrections wearing one name.
+reconciles the Lock Screen card as it does. **The shift's start**: it is what decides the day, week
+and period a shift is reported in, and it is not editable anywhere. A delivery's own lifecycle times
+are corrected on the delivery, never here.
 
 **Nothing is detected.** DashPilot does not infer when a driver stopped from the last position it
 holds or the last delivery they completed. The instant was typed by the driver.
