@@ -211,8 +211,11 @@ Live Activity does with it is decided by reading the store.
 ## Nothing derived is stored
 
 Recorded mileage, all three rates, a delivery's state, its two derived intervals, the shift's
-delivery active time and the wording that qualifies all of them are computed on demand from the
-shift's timestamps, its recorded amount, its retained route and its deliveries. A stored
+delivery active time, its estimated fuel and its estimated net after fuel, and the wording that
+qualifies all of them, are computed on demand from the shift's timestamps, its recorded amount, the
+fuel assumptions it recorded, its retained route and its deliveries. The fuel estimate is the clearest
+case: the store holds the two assumptions and nothing else, so correcting the shift's end moves the
+route, the mileage is measured again, and the estimate follows with no fuel code involved. A stored
 `hourlyRate`, a stored distance, a stored `activeDuration` or a stored delivery state would be a
 second answer to a question the store can already answer: it would keep the old number after the
 calculation improved, and it would have to be rewritten every time the driver edited an amount or

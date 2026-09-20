@@ -124,8 +124,8 @@ struct FuelAssumptionPersistenceTests {
             context.insert(paid)
 
             // A route in one continuous capture session, so the migrated shift
-            // has a measured distance to be estimated over — or rather, not to
-            // be estimated over, since it records no assumption.
+            // has a measured distance to be estimated over, or rather not to be
+            // estimated over, since it records no assumption.
             let session = UUID()
             for step in 0..<10 {
                 context.insert(

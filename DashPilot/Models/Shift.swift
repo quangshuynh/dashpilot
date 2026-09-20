@@ -113,9 +113,9 @@ nonisolated final class Shift {
     /// `private(set)` rather than `private`, unlike ``grossEarningsAmount``,
     /// for one reason: ``ShiftService/mostRecentFuelAssumptions()`` seeds the
     /// editor from the last shift that recorded assumptions, and a SwiftData
-    /// `#Predicate` can only name a property it can read. Nothing else reads it
-    /// — ``fuelAssumptions`` is the accessor, and it is the only place the
-    /// stored pair becomes a ``FuelAssumptions``.
+    /// `#Predicate` can only name a property it can read. Nothing else reads it:
+    /// ``fuelAssumptions`` is the accessor, and it is the only place the stored
+    /// pair becomes a ``FuelAssumptions``.
     ///
     /// Always greater than zero where it is present: ``setFuelAssumptions(milesPerGallon:gasPricePerGallon:)``
     /// refuses anything else, because it is the divisor of the estimate.
@@ -519,8 +519,8 @@ extension Shift {
     /// The adapter between the model and ``FuelEstimateCalculator``, holding no
     /// rule of its own. Nothing is stored: the estimate is derived from the
     /// route's measurement and the shift's own assumptions every time it is
-    /// asked for, which is why correcting the shift's end — and with it the
-    /// route it retains — moves the estimate with no fuel code involved at all.
+    /// asked for, which is why correcting the shift's end, and with it the route
+    /// it retains, moves the estimate with no fuel code involved at all.
     ///
     /// `recordedDistance` is passed in rather than measured here for the reason
     /// ``metrics(for:using:)`` takes one: measuring a route walks every position

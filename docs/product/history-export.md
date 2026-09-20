@@ -65,6 +65,35 @@ Exports are never called "v13".
 
 ### Version history
 
+#### Still 4: the fuel assumptions a shift was estimated under
+
+A completed shift can now record the vehicle fuel economy and the gas price its
+[estimated fuel cost](estimated-fuel.md) is worked out under. Evaluated against the rule above and
+**left at 4**, because nothing existing changed: nothing was removed, nothing renamed, nothing
+redefined and no enumeration gained a value.
+
+Two fields were **added** to `shifts[]` in JSON, each an explicit `null` where the driver recorded
+none:
+
+- `fuelMilesPerGallon`, a decimal string such as `"28.50"`. Not an amount, so it carries no currency:
+  it is a ratio the driver typed.
+- `fuelGasPricePerGallon`, an amount in the record's `currencyCode`. `"0.00"` is a recorded price of
+  nothing and is a different fact from `null`.
+
+**The assumptions are in the file; the estimate is not.** They are exactly what a reader needs to
+reproduce it: `route.recordedDistanceMiles` divided by the fuel economy, priced at the gas price.
+Writing the derived cost as well would have put an estimate in a column beside recorded money, in
+a format whose whole point is that a reader can tell the two apart. A spreadsheet column is a thing
+people sum. That is the judgement that keeps `expectedEarnings` out of the CSV.
+
+**The CSV gained no column.** Its unit is a delivery and these are facts about a shift, and inserting
+a column breaks positional readers, which is the other half of what forces a bump. It stays at 39
+columns.
+
+**No estimate becomes an expense, and no expense becomes an estimate.** A recorded fuel purchase is
+still an `expenses` row with its own date, category and amount. Nothing in the format adds the two,
+and no summary figure nets them.
+
 #### 4: tips received outside what the platform recorded paying
 
 A delivery can now carry any number of
@@ -252,8 +281,9 @@ Shift, day, week and all-history scopes, in JSON and CSV.
 ### Per shift
 
 Its start and end, elapsed time, paused time, working time, how many times it was paused, the amount
-recorded on it, what its route measured and how far that can be trusted, delivery active and
-non-delivery time, the three derived rates, the delivered and cancelled counts, and its deliveries.
+recorded on it, what its route measured and how far that can be trusted, the fuel economy and gas
+price it was estimated under if the driver recorded them, delivery active and non-delivery time, the
+three derived rates, the delivered and cancelled counts, and its deliveries.
 
 ### Per delivery
 
@@ -359,6 +389,12 @@ is exactly where they get lost.
   a period with none is not a period that cost nothing.
 - **An expense belongs to a date, not to a shift.** No file relates one to a shift or a delivery, and
   none divides one across work.
+- **An assumption is not a measurement, and an estimate is not a recorded cost.**
+  `fuelMilesPerGallon` and `fuelGasPricePerGallon` are figures the driver typed for one shift.
+  DashPilot observes neither. The estimated gallons, the estimated fuel cost and the estimated net
+  derived from them are **not** fields in any file: the export carries recorded facts and the
+  assumptions, and a reader who wants the estimate applies the documented rule to the recorded
+  mileage in the same record.
 
 ## Encoding
 

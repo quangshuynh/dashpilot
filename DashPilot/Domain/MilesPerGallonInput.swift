@@ -51,8 +51,8 @@ nonisolated extension MilesPerGallonInputError: LocalizedError {
 /// Miles per gallon is **not money**. It has no currency, no symbol to strip, no
 /// cents, and its zero is refused rather than recorded. Routing it through
 /// ``MoneyInput`` directly would give a driver typing a fuel economy the
-/// sentence "Gross earnings cannot be negative", and would let a `Money` — the
-/// type this project reserves for currency — stand for a ratio.
+/// sentence "Gross earnings cannot be negative", and would let a `Money`, the
+/// type this project reserves for currency, stand for a ratio.
 ///
 /// What it *does* share is the locale-aware reading of a decimal number, through
 /// ``MoneyInput/decimal(from:)``. Which character is the decimal separator,
@@ -67,8 +67,8 @@ nonisolated extension MilesPerGallonInputError: LocalizedError {
 ///
 /// There is **no upper bound of its own**. ``MoneyInput/maximumAmount`` already
 /// guards against a pasted page of digits, and a tighter limit would be a
-/// judgement about what a vehicle can do — the same judgement the money parser
-/// declines to make about what a delivery can pay. A driver with an unusual
+/// judgement about what a vehicle can do, which is the judgement the money
+/// parser declines to make about what a delivery can pay. A driver with an unusual
 /// vehicle is not somebody this app should argue with.
 nonisolated struct MilesPerGallonInput {
     /// Fraction digits accepted.

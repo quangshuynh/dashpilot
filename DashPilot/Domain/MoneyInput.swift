@@ -168,9 +168,9 @@ nonisolated struct MoneyInput {
     ///
     /// ``MilesPerGallonInput`` is the reason this is separable: a vehicle's fuel
     /// economy is a plain decimal a driver types, and the *locale* rules for
-    /// reading one — which character is the decimal separator, where grouping
-    /// separators may fall, that a space inside a number is a grouping separator
-    /// rather than something to delete — are exactly these. Writing them a
+    /// reading one (which character is the decimal separator, where grouping
+    /// separators may fall, and that a space inside a number is a grouping
+    /// separator rather than something to delete) are exactly these. Writing them a
     /// second time is how two fields on the same phone come to disagree about
     /// what `"1 234,5"` means.
     ///

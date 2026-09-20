@@ -427,13 +427,21 @@ numbers*.
 | Shift | Start time, end time, elapsed duration, and, for a shift that was paused, its paused and working durations, with Correct End Time |
 | Earnings | The recorded amount or "No amount recorded", and Add or Edit Earnings |
 | Route | Recorded mileage, capture segments, capture gaps, and what qualifies them |
-| Performance | Both derived rates, or the reason each could not be derived |
+| Performance | All three derived gross rates, or the reason each could not be derived |
+| Estimated Fuel | The estimated fuel cost over this shift's recorded mileage, the estimated gallons, the fuel economy and gas price it was estimated under, and Add or Edit Fuel Assumptions |
+| Estimated Net | Recorded earnings, the estimated fuel cost being subtracted, the estimated net after fuel and the estimated net per working hour |
 | Pauses | Each recorded pause with its times and length, Edit and Delete for each, and Add Missed Pause |
 | Deliveries | How many were completed and cancelled, and what each one recorded |
 | Delete | Delete Shift, behind a confirmation |
 
 The pause list and the delivery log are the last two reading sections because they are the two that
-grow with the shift; the four above them summarise it in a fixed number of lines.
+grow with the shift; the sections above them summarise it in a fixed number of lines.
+
+The two estimated sections come after everything recorded, deliberately. What the driver recorded and
+what the route measured are the trustworthy part of this screen, and reading down it should go from
+the recorded to the estimated rather than mix them. A shift with no fuel estimate keeps every other
+figure exactly where it is, and only those two sections say they are unavailable and why. See
+[Estimated fuel and net](estimated-fuel.md).
 
 It is a summary, not a dashboard: no chart, no map, no gauge and no score. Only completed shifts
 have a detail screen, because a running shift has no finalised duration, no earnings it may record

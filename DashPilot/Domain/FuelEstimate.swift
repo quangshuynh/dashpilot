@@ -27,8 +27,8 @@ nonisolated struct FuelAssumptions: Equatable, Sendable {
     ///
     /// A `Decimal` rather than a ``Money``, because it is not money: it is a
     /// ratio the driver typed, and it is the **divisor** of the estimate. It is
-    /// always greater than zero where it is present — ``Shift`` refuses anything
-    /// else — because a vehicle that covers no distance on a gallon is not a
+    /// always greater than zero where it is present, because ``Shift`` refuses
+    /// anything else: a vehicle that covers no distance on a gallon is not a
     /// measurement and cannot be divided by.
     let milesPerGallon: Decimal?
 
@@ -271,8 +271,8 @@ nonisolated enum FuelEstimate: Equatable, Sendable {
 /// The **distance** is the boundary, exactly as it is in
 /// ``ShiftMetricsCalculator``: a ``RouteDistance`` is a `Double` of metres
 /// before this calculation ever sees it. It crosses into `Decimal` once, through
-/// ``ShiftMetricsCalculator/decimal(_:scale:)`` — the app's one crossing rule —
-/// at ``ShiftMetricsCalculator/distanceScale``, a millionth of a mile.
+/// ``ShiftMetricsCalculator/decimal(_:scale:)``, which is the app's one crossing
+/// rule, at ``ShiftMetricsCalculator/distanceScale``, a millionth of a mile.
 nonisolated struct FuelEstimateCalculator: Equatable, Sendable {
     /// Fraction digits kept on the derived gallons figure.
     ///
@@ -323,8 +323,8 @@ nonisolated struct FuelEstimateCalculator: Equatable, Sendable {
             // measurement, whatever the segment count says.
             return .unavailable(.routeNotMeasurable)
         }
-        // A shift really can measure zero recorded miles — positions that did
-        // not move — and that is a measurement. It consumes no fuel and costs
+        // A shift really can measure zero recorded miles, from positions that
+        // did not move, and that is a measurement. It consumes no fuel and costs
         // nothing, which is a figure rather than a missing value.
         guard milesPerGallon > 0 else {
             // Unreachable through ``Shift``, which refuses a non-positive

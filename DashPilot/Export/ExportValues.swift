@@ -83,8 +83,8 @@ nonisolated extension ExportAmount {
 /// A vehicle's fuel economy is the one value this exists for, and it is
 /// deliberately not an ``ExportAmount``: miles per gallon is a ratio, it is not
 /// in the file's currency, and writing it through the money type would invite
-/// exactly the reading — "a figure in dollars" — that the currency field beside
-/// it denies.
+/// exactly the reading the currency field beside it denies, that it is a figure
+/// in dollars.
 ///
 /// Written at ``MilesPerGallonInput/maximumFractionDigits`` places, which is
 /// lossless for everything the app can hold: the input layer refuses anything

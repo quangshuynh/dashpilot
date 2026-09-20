@@ -5,7 +5,7 @@ import Testing
 
 /// The assumptions a completed shift records its fuel estimate under: which
 /// pairs the model accepts, what a refused edit leaves behind, and the property
-/// the whole design exists for — **an older shift's estimate cannot move when a
+/// the whole design exists for: **an older shift's estimate cannot move when a
 /// newer one records something different.**
 ///
 /// ## The claim this suite exists for

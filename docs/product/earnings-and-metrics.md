@@ -395,14 +395,23 @@ A driver can record what the work cost, see [Recorded expenses](expenses.md), an
 change **nothing** on this page. No rate, total or amount here has a cost taken off it, and every
 figure keeps the word *gross*.
 
-Costs are subtracted in exactly one place: a period summary's *net after recorded expenses*, which is
-one recorded subtotal less another and is not profit. There is no cost per shift, per delivery, per
-hour or per mile anywhere in the app, because an expense belongs to a date rather than to work.
+A **recorded** cost is subtracted in exactly one place: a period summary's *net after recorded
+expenses*, which is one recorded subtotal less another and is not profit. There is no recorded cost
+per shift, per delivery, per hour or per mile anywhere in the app, because an expense belongs to a
+date rather than to work.
+
+An **estimated** fuel cost is subtracted in exactly one other place, and it is kept visibly apart
+from all of the above. A completed shift can carry a fuel economy and a gas price the driver
+assumes, and from them DashPilot derives an estimated fuel cost over the shift's **recorded
+mileage**, an estimated net after fuel, and an estimated net per working hour over this page's own
+working-time denominator. None of it touches a rate here, none of it is a recorded expense, and its
+own screen says so. See [Estimated fuel and net](estimated-fuel.md).
 
 ## What these numbers are not
 
-- Neither rate subtracts fuel, wear, insurance, phone costs or tax. Neither is a profit, net or
-  take-home figure.
+- No rate on this page subtracts fuel, wear, insurance, phone costs or tax, and none of them is a
+  profit, net or take-home figure. The estimated net on a completed shift's detail subtracts an
+  **estimate** of fuel and nothing else, and it is not one of these rates and not profit either.
 - Neither is a tax figure, and the per-mile rate is not a mileage deduction.
 - Delivery active time is not a measure of work, effort or productivity, and non-delivery time is
   not a measure of idleness. Both are read entirely from lifecycle events the driver tapped.
