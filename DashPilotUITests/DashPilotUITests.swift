@@ -4954,6 +4954,293 @@ final class DashPilotUITests: XCTestCase {
         )
     }
 
+    // MARK: Estimated fuel
+
+    /// Records the two fuel assumptions on a finished shift, then changes one of
+    /// them.
+    ///
+    /// The seeded fixture is the only way to reach this end to end: the estimate
+    /// divides a **recorded** mileage, and a UI test cannot drive a simulator
+    /// into recording a route. The exact cost is deliberately not asserted, for
+    /// the reason the per-recorded-mile rate is not: it comes from the fixture's
+    /// coordinates rather than from anything this journey does. What is asserted
+    /// is that a figure appears, that it says what it is based on, and that
+    /// doubling the fuel economy moves it.
+    @MainActor
+    func testAddsAndEditsFuelAssumptionsFromDetail() throws {
+        let app = launchWithSeededHistory()
+        openFirstShift(in: app)
+
+        let cost = app.descendants(matching: .any)["shiftDetailEstimatedFuelCost"]
+        XCTAssertTrue(scrollTo(cost, in: app), "The estimated fuel section should be reachable")
+        XCTAssertTrue(
+            cost.label.contains("Add your vehicle's miles per gallon"),
+            "A shift with no assumptions is told which one to add, not shown $0.00: \(cost.label)"
+        )
+        XCTAssertFalse(cost.label.contains("$0.00"))
+
+        let addButton = app.buttons["editFuelAssumptionsButton"]
+        XCTAssertTrue(scrollUntilHittable(addButton, in: app))
+        XCTAssertEqual(addButton.label, "Add Fuel Assumptions", "A shift with none offers to add them")
+        addButton.tap()
+
+        typeFuelAssumptions(milesPerGallon: "25", gasPrice: "3.50", in: app)
+        app.buttons["saveFuelAssumptionsButton"].tap()
+
+        XCTAssertTrue(scrollTo(cost, in: app))
+        XCTAssertTrue(
+            waitForLabel(cost, toContain: "estimated fuel cost, based on recorded mileage"),
+            "The estimate says what it is and what it is based on: \(cost.label)"
+        )
+        XCTAssertTrue(cost.label.contains("$"), "And it states an amount: \(cost.label)")
+        let firstEstimate = cost.label
+
+        let gallons = app.descendants(matching: .any)["shiftDetailEstimatedGallons"]
+        XCTAssertTrue(scrollTo(gallons, in: app))
+        XCTAssertTrue(
+            waitForLabel(gallons, toContain: "gallons estimated, from recorded mileage"),
+            "The gallons are spelled out for a listener: \(gallons.label)"
+        )
+
+        // Both assumptions are stated back, so a driver can see what the figure
+        // was worked out from.
+        let economy = app.descendants(matching: .any)["shiftDetailFuelMilesPerGallon"]
+        XCTAssertTrue(scrollTo(economy, in: app))
+        XCTAssertTrue(waitForLabel(economy, toContain: "25 miles per gallon assumed"), "Showed: \(economy.label)")
+        let price = app.descendants(matching: .any)["shiftDetailFuelGasPrice"]
+        XCTAssertTrue(scrollTo(price, in: app))
+        XCTAssertTrue(waitForLabel(price, toContain: "$3.50 per gallon assumed"), "Showed: \(price.label)")
+
+        // Editing replaces the assumptions rather than adding to them, and the
+        // estimate follows: twice the fuel economy is half the fuel.
+        let editButton = app.buttons["editFuelAssumptionsButton"]
+        XCTAssertTrue(scrollUntilHittable(editButton, in: app))
+        XCTAssertEqual(editButton.label, "Edit Fuel Assumptions")
+        editButton.tap()
+
+        let economyField = app.textFields["fuelMilesPerGallonField"]
+        XCTAssertTrue(economyField.waitForExistence(timeout: 5))
+        XCTAssertEqual(economyField.value as? String, "25", "The editor opens on the stored figures")
+        XCTAssertEqual(app.textFields["fuelGasPriceField"].value as? String, "3.5")
+        clear(economyField, in: app)
+        economyField.typeText("50")
+        app.buttons["saveFuelAssumptionsButton"].tap()
+
+        XCTAssertTrue(scrollTo(cost, in: app))
+        XCTAssertTrue(
+            waitForLabel(cost, toContain: "estimated fuel cost"),
+            "The estimate is still stated: \(cost.label)"
+        )
+        XCTAssertNotEqual(cost.label, firstEstimate, "A more economical vehicle uses less fuel over the same miles")
+    }
+
+    /// One assumption alone is not an estimate, and the screen says which half
+    /// is missing rather than showing nothing.
+    @MainActor
+    func testFuelEstimateNamesTheMissingHalf() throws {
+        let app = launchWithSeededHistory()
+        openFirstShift(in: app)
+
+        let addButton = app.buttons["editFuelAssumptionsButton"]
+        XCTAssertTrue(scrollUntilHittable(addButton, in: app))
+        addButton.tap()
+
+        typeFuelAssumptions(milesPerGallon: "25", gasPrice: nil, in: app)
+        app.buttons["saveFuelAssumptionsButton"].tap()
+
+        let cost = app.descendants(matching: .any)["shiftDetailEstimatedFuelCost"]
+        XCTAssertTrue(scrollTo(cost, in: app))
+        XCTAssertTrue(
+            waitForLabel(cost, toContain: "Add what a gallon of fuel cost"),
+            "The half that is missing is the one named: \(cost.label)"
+        )
+        XCTAssertFalse(cost.label.contains("$0.00"), "A missing price is not free fuel")
+
+        // The half that was recorded is still shown, so the driver can see what
+        // is already there.
+        let economy = app.descendants(matching: .any)["shiftDetailFuelMilesPerGallon"]
+        XCTAssertTrue(scrollTo(economy, in: app))
+        XCTAssertTrue(waitForLabel(economy, toContain: "25 miles per gallon assumed"))
+
+        let price = app.descendants(matching: .any)["shiftDetailFuelGasPrice"]
+        XCTAssertTrue(scrollTo(price, in: app))
+        XCTAssertTrue(waitForLabel(price, toContain: "No gas price recorded"), "Showed: \(price.label)")
+    }
+
+    /// The fixture's route has a gap in it, so the estimate has to say it is a
+    /// floor rather than a total.
+    @MainActor
+    func testFuelEstimateKeepsThePartialRouteWording() throws {
+        let app = launchWithSeededHistory()
+        openFirstShift(in: app)
+
+        recordFuelAssumptions(milesPerGallon: "25", gasPrice: "3.50", in: app)
+
+        let cost = app.descendants(matching: .any)["shiftDetailEstimatedFuelCost"]
+        XCTAssertTrue(scrollTo(cost, in: app))
+        XCTAssertTrue(
+            waitForLabel(cost, toContain: "This route is partial"),
+            "The estimate carries the route's own caveat rather than reading as a total: \(cost.label)"
+        )
+        XCTAssertTrue(
+            cost.label.contains("more fuel was used than this estimates"),
+            "And says which way the figure is wrong: \(cost.label)"
+        )
+    }
+
+    /// A fuel economy of zero is refused, and refusing it records nothing.
+    @MainActor
+    func testInvalidFuelAssumptionsAreNotSaved() throws {
+        let app = launchWithSeededHistory()
+        openFirstShift(in: app)
+
+        let addButton = app.buttons["editFuelAssumptionsButton"]
+        XCTAssertTrue(scrollUntilHittable(addButton, in: app))
+        addButton.tap()
+
+        typeFuelAssumptions(milesPerGallon: "0", gasPrice: "3.50", in: app)
+        app.buttons["saveFuelAssumptionsButton"].tap()
+
+        // `firstMatch`, because a `Label` renders as an element containing its
+        // own text and both carry the identifier: reading `.label` off the
+        // unqualified query fails on the multiple match rather than on anything
+        // about the screen.
+        let message = app.descendants(matching: .any)
+            .matching(identifier: "fuelAssumptionsValidationMessage")
+            .firstMatch
+        XCTAssertTrue(message.waitForExistence(timeout: 5), "The driver should be told why it was refused")
+        XCTAssertTrue(
+            message.label.contains("more than zero"),
+            "And told the rule, which is that it is the divisor: \(message.label)"
+        )
+        XCTAssertTrue(
+            app.textFields["fuelGasPriceField"].exists,
+            "The editor stays open with what was typed rather than discarding it"
+        )
+
+        app.buttons["cancelFuelAssumptionsButton"].tap()
+
+        let button = app.buttons["editFuelAssumptionsButton"]
+        XCTAssertTrue(scrollUntilHittable(button, in: app))
+        XCTAssertEqual(
+            button.label,
+            "Add Fuel Assumptions",
+            "A refused pair leaves the shift with neither figure recorded, including the valid one"
+        )
+    }
+
+    /// The editor fills itself from the last shift that recorded assumptions, so
+    /// they are typed once rather than every shift.
+    ///
+    /// The fixture's second shift recorded nothing, which is what makes the
+    /// seeding visible: whatever appears in its fields came from the other
+    /// shift.
+    @MainActor
+    func testFuelAssumptionsSeedFromTheLastShiftThatRecordedThem() throws {
+        let app = launchWithSeededHistory()
+        openFirstShift(in: app)
+        recordFuelAssumptions(milesPerGallon: "25", gasPrice: "3.50", in: app)
+        goBack(in: app)
+
+        let history = rows(in: app)
+        XCTAssertTrue(history.firstMatch.waitForExistence(timeout: 10))
+        history.element(boundBy: 1).tap()
+
+        let addButton = app.buttons["editFuelAssumptionsButton"]
+        XCTAssertTrue(scrollUntilHittable(addButton, in: app))
+        XCTAssertEqual(
+            addButton.label,
+            "Add Fuel Assumptions",
+            "This shift has recorded nothing of its own yet"
+        )
+        addButton.tap()
+
+        let economyField = app.textFields["fuelMilesPerGallonField"]
+        XCTAssertTrue(economyField.waitForExistence(timeout: 5))
+        XCTAssertEqual(economyField.value as? String, "25", "Filled in from the last pair recorded")
+        XCTAssertEqual(app.textFields["fuelGasPriceField"].value as? String, "3.5")
+
+        // And leaving without saving records nothing: a filled field is a
+        // suggestion, not a figure.
+        app.buttons["cancelFuelAssumptionsButton"].tap()
+        let button = app.buttons["editFuelAssumptionsButton"]
+        XCTAssertTrue(scrollUntilHittable(button, in: app))
+        XCTAssertEqual(button.label, "Add Fuel Assumptions")
+    }
+
+    /// Removing the assumptions leaves no estimate, which is not an estimate of
+    /// nothing.
+    @MainActor
+    func testRemovingFuelAssumptionsLeavesNoEstimate() throws {
+        let app = launchWithSeededHistory()
+        openFirstShift(in: app)
+        recordFuelAssumptions(milesPerGallon: "25", gasPrice: "3.50", in: app)
+
+        let editButton = app.buttons["editFuelAssumptionsButton"]
+        XCTAssertTrue(scrollUntilHittable(editButton, in: app))
+        editButton.tap()
+
+        let remove = app.buttons["removeFuelAssumptionsButton"]
+        XCTAssertTrue(remove.waitForExistence(timeout: 5))
+        remove.tap()
+
+        let cost = app.descendants(matching: .any)["shiftDetailEstimatedFuelCost"]
+        XCTAssertTrue(scrollTo(cost, in: app))
+        XCTAssertTrue(
+            waitForLabel(cost, toContain: "Add your vehicle's miles per gallon"),
+            "The shift is back to having no estimate at all: \(cost.label)"
+        )
+        XCTAssertFalse(cost.label.contains("$0.00"), "Removing figures is not recording that no fuel was used")
+    }
+
+    // MARK: Fuel helpers
+
+    /// Types into the two fuel fields, leaving a field alone when its argument
+    /// is `nil`.
+    @MainActor
+    private func typeFuelAssumptions(milesPerGallon: String?, gasPrice: String?, in app: XCUIApplication) {
+        if let milesPerGallon {
+            let field = app.textFields["fuelMilesPerGallonField"]
+            XCTAssertTrue(field.waitForExistence(timeout: 5))
+            field.tap()
+            field.typeText(milesPerGallon)
+        }
+        if let gasPrice {
+            let field = app.textFields["fuelGasPriceField"]
+            XCTAssertTrue(field.waitForExistence(timeout: 5))
+            field.tap()
+            field.typeText(gasPrice)
+        }
+    }
+
+    /// Opens the fuel editor from a completed shift's detail screen, types both
+    /// assumptions and saves.
+    ///
+    /// The editor seeds its fields from the last pair recorded, so each one is
+    /// cleared before it is typed into: a journey that appended to a seeded
+    /// field would record a figure nobody entered.
+    @MainActor
+    private func recordFuelAssumptions(milesPerGallon: String, gasPrice: String, in app: XCUIApplication) {
+        let button = app.buttons["editFuelAssumptionsButton"]
+        XCTAssertTrue(scrollUntilHittable(button, in: app), "The fuel section should be reachable")
+        button.tap()
+
+        let economyField = app.textFields["fuelMilesPerGallonField"]
+        XCTAssertTrue(economyField.waitForExistence(timeout: 5))
+        clear(economyField, in: app)
+        economyField.typeText(milesPerGallon)
+
+        let priceField = app.textFields["fuelGasPriceField"]
+        clear(priceField, in: app)
+        priceField.typeText(gasPrice)
+
+        app.buttons["saveFuelAssumptionsButton"].tap()
+        XCTAssertTrue(
+            app.buttons["editFuelAssumptionsButton"].waitForExistence(timeout: 5),
+            "The sheet closes once the pair is recorded"
+        )
+    }
+
     @MainActor
     private func rows(in app: XCUIApplication) -> XCUIElementQuery {
         app.descendants(matching: .any).matching(identifier: "completedShiftRow")
