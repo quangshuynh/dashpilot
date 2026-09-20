@@ -38,6 +38,14 @@ import Foundation
 ///   nowhere else: no shift field, no summary figure and no rate in this format
 ///   is derived from it, and the two are never added, compared or substituted
 ///   for one another here.
+/// - **An assumption is not a measurement, and an estimate is not a recorded
+///   cost.** ``fuelMilesPerGallon`` and ``fuelGasPricePerGallon`` are figures the
+///   driver typed for one shift. The estimated gallons and estimated fuel cost
+///   DashPilot derives from them are **not** fields here, and neither is any net
+///   figure derived from them: the file carries the recorded facts and the
+///   assumptions, and a reader who wants the estimate applies the one rule the
+///   documentation states. A recorded fuel purchase is an `expenses` row and
+///   nothing in this file adds the two together.
 /// - **What the platform paid is not everything the delivery paid.**
 ///   ``DeliveryExportRecord/grossEarnings`` is the platform-recorded amount,
 ///   unchanged and meaning exactly what it always has;
@@ -104,6 +112,33 @@ nonisolated struct ShiftExportRecord: Equatable, Sendable, Codable {
 
     let route: ShiftRouteExport
 
+    /// The vehicle fuel economy the driver recorded as the assumption this
+    /// shift's fuel estimate is worked out under, or `null` if they recorded
+    /// none.
+    ///
+    /// **An assumption the driver typed, not a measurement.** DashPilot has no
+    /// way to observe a vehicle's fuel economy and does not try to.
+    ///
+    /// It is in the file because an export is the only way anything leaves
+    /// DashPilot, and because it is half of what a reader needs to reproduce or
+    /// check the estimate: `route.recordedDistanceMiles / fuelMilesPerGallon`
+    /// gallons, at ``fuelGasPricePerGallon`` each. The **estimate itself is
+    /// deliberately not a field** — see ``ExportFormat`` for why a derived
+    /// estimate sitting beside recorded money is a thing a spreadsheet sums.
+    let fuelMilesPerGallon: ExportDecimal?
+
+    /// What the driver recorded a gallon of fuel costing, as the assumption this
+    /// shift's estimate is worked out under, or `null` if they recorded none.
+    ///
+    /// In ``currencyCode``, like every other amount here. `"0.00"` is a recorded
+    /// price of nothing and is a different fact from `null`, which is no price
+    /// recorded at all.
+    ///
+    /// **It is not a recorded expense.** A fuel purchase the driver recorded
+    /// appears in the file's `expenses`, with its own date, category and amount.
+    /// Nothing adds the two, and nothing derives one from the other.
+    let fuelGasPricePerGallon: ExportAmount?
+
     /// How much of the shift at least one recorded delivery was open for, with
     /// deliveries worked at the same time counted **once**.
     ///
@@ -137,6 +172,7 @@ nonisolated struct ShiftExportRecord: Equatable, Sendable, Codable {
     private enum CodingKeys: String, CodingKey {
         case id, startedAt, endedAt, elapsedSeconds, pausedSeconds, workingSeconds, pauseCount
         case currencyCode, grossEarnings, route
+        case fuelMilesPerGallon, fuelGasPricePerGallon
         case deliveryActiveSeconds, nonDeliverySeconds
         case grossPerWorkingHour, grossPerDeliveryActiveHour, grossPerRecordedMile
         case deliveredCount, cancelledCount, deliveries
@@ -155,6 +191,8 @@ nonisolated struct ShiftExportRecord: Equatable, Sendable, Codable {
         try container.encode(currencyCode, forKey: .currencyCode)
         try container.encodeAlways(grossEarnings, forKey: .grossEarnings)
         try container.encode(route, forKey: .route)
+        try container.encodeAlways(fuelMilesPerGallon, forKey: .fuelMilesPerGallon)
+        try container.encodeAlways(fuelGasPricePerGallon, forKey: .fuelGasPricePerGallon)
         try container.encodeAlways(deliveryActiveSeconds, forKey: .deliveryActiveSeconds)
         try container.encodeAlways(nonDeliverySeconds, forKey: .nonDeliverySeconds)
         try container.encodeAlways(grossPerWorkingHour, forKey: .grossPerWorkingHour)

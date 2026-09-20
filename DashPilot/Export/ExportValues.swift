@@ -74,6 +74,79 @@ nonisolated extension ExportAmount {
     }
 }
 
+/// How a plain, non-monetary decimal is written into an exported file.
+///
+/// **A decimal string, never a JSON number**, for the reason ``ExportAmount``
+/// is one: a `Decimal` encoded as a JSON number is re-read by most parsers as an
+/// IEEE double, and the loss happens after the file has left DashPilot.
+///
+/// A vehicle's fuel economy is the one value this exists for, and it is
+/// deliberately not an ``ExportAmount``: miles per gallon is a ratio, it is not
+/// in the file's currency, and writing it through the money type would invite
+/// exactly the reading — "a figure in dollars" — that the currency field beside
+/// it denies.
+///
+/// Written at ``MilesPerGallonInput/maximumFractionDigits`` places, which is
+/// lossless for everything the app can hold: the input layer refuses anything
+/// finer. Trailing zeroes are kept, so `28.5` is written `"28.50"` and the file
+/// has one shape for the value rather than two.
+nonisolated struct ExportDecimal: Equatable, Sendable, Codable {
+    /// The value **as the file states it**, already at ``scale`` places.
+    let value: Decimal
+
+    /// Fraction digits an exported decimal is written at.
+    static let scale = MilesPerGallonInput.maximumFractionDigits
+
+    init(_ value: Decimal) {
+        var source = value
+        var rounded = Decimal()
+        NSDecimalRound(&rounded, &source, Self.scale, .plain)
+        self.value = rounded
+    }
+
+    /// The canonical string, e.g. `"28.50"`.
+    var string: String {
+        value.formatted(
+            .number
+                .precision(.fractionLength(Self.scale))
+                .grouping(.never)
+                .locale(Self.canonicalLocale)
+        )
+    }
+
+    /// `en_US_POSIX`, so the separator is a full stop wherever the device is
+    /// set. An exported file is a data interchange, not a screen.
+    private static let canonicalLocale = Locale(identifier: "en_US_POSIX")
+
+    init(from decoder: any Decoder) throws {
+        let string = try decoder.singleValueContainer().decode(String.self)
+        guard let value = Decimal(string: string, locale: Self.canonicalLocale) else {
+            throw DecodingError.dataCorrupted(
+                DecodingError.Context(
+                    codingPath: decoder.codingPath,
+                    debugDescription: "Expected a canonical decimal such as \"28.50\"."
+                )
+            )
+        }
+        self.value = value
+    }
+
+    func encode(to encoder: any Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(string)
+    }
+}
+
+nonisolated extension ExportDecimal {
+    /// The value for a recorded figure, or `nil` when none was recorded.
+    ///
+    /// The whole point of the optional: a shift with no fuel economy recorded
+    /// exports an absence, never `"0.00"`.
+    static func recorded(_ value: Decimal?) -> ExportDecimal? {
+        value.map(ExportDecimal.init)
+    }
+}
+
 /// How a moment is written into an exported file.
 ///
 /// One format everywhere, in both JSON and CSV: ISO 8601 in UTC, to the second,
