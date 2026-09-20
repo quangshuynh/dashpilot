@@ -123,7 +123,7 @@ nonisolated struct ShiftExportRecord: Equatable, Sendable, Codable {
     /// DashPilot, and because it is half of what a reader needs to reproduce or
     /// check the estimate: `route.recordedDistanceMiles / fuelMilesPerGallon`
     /// gallons, at ``fuelGasPricePerGallon`` each. The **estimate itself is
-    /// deliberately not a field** — see ``ExportFormat`` for why a derived
+    /// deliberately not a field**: see ``ExportFormat`` for why a derived
     /// estimate sitting beside recorded money is a thing a spreadsheet sums.
     let fuelMilesPerGallon: ExportDecimal?
 

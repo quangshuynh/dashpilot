@@ -26,9 +26,9 @@ import Foundation
 /// gallons, an estimated fuel cost and an estimated net from them. Evaluated
 /// against the rule above and **left at 4**, because nothing existing changed:
 /// no field was removed, no field was renamed, no field changed meaning, and no
-/// enumeration gained a value. Two fields were **added** to `shifts[]` in JSON —
+/// enumeration gained a value. Two fields were **added** to `shifts[]` in JSON,
 /// `fuelMilesPerGallon` and `fuelGasPricePerGallon`, each an explicit `null`
-/// where the driver recorded none — and an added field is additive by this
+/// where the driver recorded none, and an added field is additive by this
 /// format's own rule.
 ///
 /// **The assumptions are in the file; the estimate is not**, and that is the
@@ -39,7 +39,7 @@ import Foundation
 /// by `fuelMilesPerGallon`, priced at `fuelGasPricePerGallon`. Writing the
 /// derived cost as well would have put an **estimate** in a column beside
 /// recorded money, in a format whose whole point is that a reader can tell the
-/// two apart — and a spreadsheet column is a thing people sum. That is the same
+/// two apart, and a spreadsheet column is a thing people sum. That is the same
 /// judgement that keeps `expectedEarnings` out of the CSV.
 ///
 /// **No CSV column was added**, for the same reason and for one more: the CSV's

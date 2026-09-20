@@ -6,8 +6,8 @@ import SwiftUI
 ///
 /// Presented only from a finished shift in history, by the rule that governs
 /// ``ShiftEarningsEditor``: typing figures is a stopped-vehicle task, so nothing
-/// anywhere offers this during a running shift, and ``Shift`` refuses it as well
-/// — a screen that is merely never presented is not a rule.
+/// anywhere offers this during a running shift, and ``Shift`` refuses it as
+/// well, because a screen that is merely never presented is not a rule.
 ///
 /// Editing is a **draft**. Both typed fields are view state; the store is
 /// written once, when the driver taps Save or Remove. Cancelling, or dismissing
@@ -23,7 +23,7 @@ import SwiftUI
 ///
 /// This shift's own assumptions, where it has any. Otherwise the most recent
 /// shift that recorded some, through
-/// ``ShiftService/mostRecentFuelAssumptions()`` — which is the whole of what a
+/// ``ShiftService/mostRecentFuelAssumptions()``, which is the whole of what a
 /// "default" means here. Seeding a text field is not deriving a figure: nothing
 /// is recorded against this shift until Save, and no shift recorded earlier
 /// changes because a later one records something else.

@@ -21,20 +21,21 @@ rather than a store reset.
 | 11.0.0 | Adds `Delivery.expectedEarningsAmount`, an optional `Decimal` holding what the driver expects an active delivery to pay |
 | 12.0.0 | Adds the `Offer` entity, an optional `Delivery.offer` reference and a `Shift.offers` relationship. Backfills one offer per existing delivery |
 | 13.0.0 | Adds the `DeliveryTip` entity and a cascading `Delivery.additionalTips` relationship. Backfills nothing |
+| 14.0.0 | Adds `Shift.fuelMilesPerGallonValue` and `Shift.fuelGasPricePerGallonAmount`, two optional `Decimal` columns holding the assumptions a shift's fuel estimate is worked out under. Backfills nothing |
 
-The current version is **v13**. Field-level detail is on [Data model](../reference/data-model.md).
+The current version is **v14**. Field-level detail is on [Data model](../reference/data-model.md).
 
-`DashPilotSchemaV1` through `DashPilotSchemaV12` hold frozen copies of their models rather than
+`DashPilotSchemaV1` through `DashPilotSchemaV13` hold frozen copies of their models rather than
 reusing the file-scope types, which have moved on. The plan then describes where a store is coming
 from as truthfully as where it is going, and the copies are never used at runtime outside
 migration.
 
-`DashPilotSchemaV12` was frozen in the interval that added v13, and the freeze was forced the way
-v11's was: v13 adds an entity and a cascading collection of it on `Delivery`, so reusing the
-file-scope types under v12 would describe every pre-v13 store as one that already recorded tips
-received outside the platform's own figure. It did not, and a version that claims otherwise cannot be
-used to prove a migration preserved anything. Each version gets its copies as the plan moves past
-it.
+`DashPilotSchemaV13` was frozen in the interval that added v14, and the freeze was forced the way
+v12's was: v14 gives `Shift` two columns, so reusing the file-scope types under v13 would describe
+every pre-v14 store as one that already recorded a fuel economy and a gas price. It did not, and a
+version that claims otherwise cannot be used to prove a migration preserved anything. v12 was frozen
+one interval earlier for the same reason, when v13 gave `Delivery` a cascading collection of tips.
+Each version gets its copies as the plan moves past it.
 
 ## Every stage but one is lightweight, deliberately
 
@@ -245,6 +246,25 @@ the app's authority, and no later screen or export could tell it from one they r
 
 Migrated deliveries keep no tips, and the interface offers to add one rather than showing one. See
 [Additional tips](../product/earnings-and-metrics.md#additional-tips-are-separate-recorded-facts).
+
+### v13 to v14
+
+Two new optional columns on an entity that already exists, applied lightweight.
+
+**There is nothing truthful to write.** A shift recording no fuel economy and no gas price is the
+ordinary shape in this build too: it is exactly what a shift created today starts as, and it reports
+that its fuel estimate is unavailable, naming the half that is missing, rather than reporting an
+estimate of `$0.00`. Not one previously derived total, rate, coverage count or exported value moves.
+
+**Backfilling is the failure mode here, not the feature.** The obvious helpful stage would copy
+whatever fuel economy the driver enters first into every shift behind it. That would put an
+assumption they never made into their whole history, and it is precisely the dependence on a current
+global figure the version exists to prevent: the estimates would move again the next time they
+changed vehicle. A recorded `fuel` expense is no better a source, because it records what one
+fill-up cost, which is neither a price per gallon nor a statement about which shift burned it.
+
+Migrated shifts record no assumptions, and the interface offers to add them. See
+[Estimated fuel and net](../product/estimated-fuel.md).
 
 ## Proving a migration rather than assuming it
 

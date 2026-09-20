@@ -136,14 +136,23 @@ miles. A period summary reports what was recorded, its split by category, and *n
 expenses*, which is one recorded subtotal less another and is never called profit. See
 [Recorded expenses](expenses.md).
 
-**Persistence.** Schema v8, with lightweight migrations from every earlier version, covered by tests
+**Estimated fuel and estimated net.** A completed shift can record the vehicle fuel economy and the
+gas price its fuel estimate is worked out under, and DashPilot derives estimated gallons, an
+estimated fuel cost over that shift's **recorded mileage**, the estimated net after fuel and the
+estimated net per working hour. Each shift keeps its own assumptions, so entering different figures
+later leaves every earlier shift where it is. It is an estimate rather than a recorded expense, it
+covers recorded miles rather than miles driven, and it is not profit, take-home pay or a tax figure.
+See [Estimated fuel and net](estimated-fuel.md).
+
+**Persistence.** Schema v14, with migrations from every earlier version, covered by tests
 that open stores written under each older version. A store that fails to open is surfaced as a
 visible state rather than a crash, and the failure screen deliberately offers no "reset the
 database" action.
 
 ## Not implemented
 
-Taxes and mileage deductions, estimated or recurring costs, receipts, a tips-versus-base breakdown,
+Taxes and mileage deductions, recurring costs, receipts, gas-price lookup, more than one vehicle, an
+estimated fuel or net figure for a period rather than a shift, a tips-versus-base breakdown,
 per-delivery mileage, customer identity, merchant scoring, ranking or profitability, offer
 profitability, automatic delivery or pickup detection, geocoding, maps, route visualisation,
 quarterly, yearly or all-time totals, trends or comparisons across more than two periods, importing

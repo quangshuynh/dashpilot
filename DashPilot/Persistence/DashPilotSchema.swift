@@ -2422,7 +2422,7 @@ enum DashPilotMigrationPlan: SchemaMigrationPlan {
     /// "helpful" stage would copy whatever fuel economy the driver enters first
     /// into every shift behind it. That would put an assumption they never made
     /// into their whole history, and it is precisely the dynamic dependence on a
-    /// current global figure the version exists to prevent — the estimates would
+    /// current global figure the version exists to prevent: the estimates would
     /// then move again the next time they changed vehicle. A recorded `fuel`
     /// expense is no better a source: it records what one fill-up cost, which is
     /// neither a price per gallon nor a statement about which shift burned it.
