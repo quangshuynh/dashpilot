@@ -144,6 +144,11 @@ struct PeriodSummaryView: View {
                     expensesSection(metrics)
                     drivingSection(metrics)
                     deliveriesSection(metrics)
+                    // After every recorded figure, deliberately, for the reason
+                    // the completed shift's two estimated sections come after
+                    // its recorded ones: what the driver entered and what the
+                    // route measured are the trustworthy part of the screen.
+                    estimatedFuelSection(metrics)
                 }
                 // Last of the figures, and shown for an empty period too when
                 // the one before it holds something: a day with no records is
@@ -480,6 +485,152 @@ struct PeriodSummaryView: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel(metrics.spokenNetStatement(locale: locale))
         .accessibilityIdentifier("periodNetAfterExpenses")
+    }
+
+    /// What the period's shifts are estimated to have spent on fuel, and what
+    /// they are estimated to have been left with after it.
+    ///
+    /// ## Its own section, beside the expenses rather than inside them
+    ///
+    /// This is the screen where the overlap the app refuses to reconcile becomes
+    /// visible for the first time: a recorded `fuel` expense and an estimated
+    /// fuel cost can now appear a few rows apart, and they may describe the same
+    /// money. So they are in **two sections**, each labelled for what it is, and
+    /// the footer says in as many words that the two are not added and that the
+    /// estimate is not among the recorded costs above. Nothing on this screen
+    /// subtracts both.
+    ///
+    /// ## Coverage is not a footnote here
+    ///
+    /// A period's estimate almost never covers every shift, so every row carries
+    /// how many shifts and how many recorded miles are behind it. A figure that
+    /// covers four of six shifts is stated as covering four of six, in the row
+    /// and in the spoken label, and the subset is never presented as the period.
+    @ViewBuilder
+    private func estimatedFuelSection(_ metrics: PeriodMetrics) -> some View {
+        Section {
+            estimatedFuelRow(metrics.fuel)
+            estimatedNetRow(metrics.estimatedNetAfterFuel)
+        } header: {
+            Text("Estimated Fuel")
+        } footer: {
+            Text(
+                """
+                Estimated fuel is each shift's recorded miles divided by the miles per gallon that \
+                shift recorded, priced at the gas price it recorded, added up over the shifts that \
+                recorded both. It is an estimate and not a recorded cost: it is not in the recorded \
+                expenses above, it is never added to them, and a fuel purchase you recorded there \
+                may be the same fuel. DashPilot does not know which shifts a tank was burned on and \
+                does not guess.
+                """
+            )
+        }
+    }
+
+    /// The period's estimated fuel, with both coverages under it.
+    private func estimatedFuelRow(_ fuel: PeriodFuelEstimate) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            LabeledContent("Estimated fuel") {
+                if let cost = fuel.estimatedCost {
+                    Text(cost.formatted(locale: locale)).monospacedDigit()
+                } else {
+                    Text("Not available").foregroundStyle(.secondary)
+                }
+            }
+
+            if fuel.isAvailable {
+                Text(fuelCoverageStatement(fuel))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                if fuel.isAnyRoutePartial {
+                    Text(PeriodFuelEstimate.partialStatement)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            } else if let explanation = fuel.unavailableExplanation {
+                Text(explanation)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(fuel.spokenStatement(locale: locale))
+        .accessibilityIdentifier("periodEstimatedFuel")
+    }
+
+    /// Coverage in both units.
+    ///
+    /// The shift count says how much of the period's **work** is behind the
+    /// figure; the mileage says how much of its **driving**. Two short shifts
+    /// missing their assumptions cost less coverage than one long one, and only
+    /// the mileage says so. A percentage is offered beside them rather than
+    /// instead of them, because a percentage cannot say which shifts are missing.
+    private func fuelCoverageStatement(_ fuel: PeriodFuelEstimate) -> String {
+        if fuel.isComplete, fuel.mileageCoverageStatement(locale: locale) != nil {
+            return "Every completed shift · \(fuel.shiftCoverageStatement)"
+        }
+        var parts = [fuel.shiftCoverageStatement]
+        if let mileage = fuel.mileageCoverageStatement(locale: locale) {
+            parts.append(mileage)
+            if let percentage = fuel.mileageCoveragePercentage {
+                parts.append("\(percentage)% of recorded miles")
+            }
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    /// The estimated net, the two figures it was worked out from, and the
+    /// sentence that keeps a subset from reading as the period.
+    private func estimatedNetRow(_ net: PeriodEstimatedNet) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            LabeledContent("Estimated net after fuel") {
+                if let amount = net.amount {
+                    Text(amount.formatted(locale: locale)).monospacedDigit()
+                } else {
+                    Text("Not available").foregroundStyle(.secondary)
+                }
+            }
+
+            if net.isAvailable {
+                // The two halves, so a reader can see the figures the
+                // subtraction was performed on rather than trusting that they
+                // were the right ones. Neither is the period's headline
+                // earnings unless the coverage says the subset is the period.
+                if let earnings = net.recordedEarnings, let fuel = net.estimatedFuel {
+                    Text(
+                        """
+                        \(earnings.formatted(locale: locale)) recorded less \
+                        \(fuel.formatted(locale: locale)) estimated fuel
+                        """
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+                    .fixedSize(horizontal: false, vertical: true)
+                }
+                Text(net.subsetCautionStatement ?? "Across every completed shift in this period.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                if net.isAnyRoutePartial {
+                    Text("Some of these routes are partial, so the fuel is a floor and this net is a ceiling.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            } else if let explanation = net.unavailability?.explanation {
+                Text(explanation)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(net.spokenStatement(locale: locale))
+        .accessibilityIdentifier("periodEstimatedNetAfterFuel")
     }
 
     private func drivingSection(_ metrics: PeriodMetrics) -> some View {

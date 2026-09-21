@@ -128,7 +128,59 @@ nonisolated extension HistoryWeekSummary {
             )
         )
 
+        // Fuel and the net after it are shown only where the week has them.
+        //
+        // Absent rather than present-and-unavailable, unlike every figure above,
+        // and the reason is that this is a **summary above a list**: a driver
+        // who has never entered a fuel economy would otherwise carry two lines
+        // saying so on every week they scroll past, and the shifts the summary
+        // is a summary of would be pushed further down for it. The shift's own
+        // detail screen is where an absent estimate is explained, because that
+        // is where it can be acted on.
+        if metrics.fuel.isAvailable {
+            lines.append(
+                HistoryWeekSummaryLine(
+                    id: .estimatedFuel,
+                    title: "Estimated fuel",
+                    value: metrics.fuel.estimatedCost?.formatted(locale: locale) ?? "Not available",
+                    detail: fuelCoverageDetail(locale: locale),
+                    spoken: metrics.fuel.spokenStatement(locale: locale)
+                )
+            )
+        }
+
+        if metrics.estimatedNetAfterFuel.isAvailable {
+            lines.append(
+                HistoryWeekSummaryLine(
+                    id: .estimatedNet,
+                    title: "Estimated net after fuel",
+                    value: metrics.estimatedNetAfterFuel.amount?.formatted(locale: locale) ?? "Not available",
+                    detail: netCoverageDetail,
+                    spoken: metrics.estimatedNetAfterFuel.spokenStatement(locale: locale)
+                )
+            )
+        }
+
         return lines
+    }
+
+    /// Both coverages, because either alone can mislead: the shift count says
+    /// how much of the week's work is behind the figure, the mileage how much of
+    /// its driving.
+    private func fuelCoverageDetail(locale: Locale) -> String? {
+        var parts = [metrics.fuel.shiftCoverageStatement]
+        if let mileage = metrics.fuel.mileageCoverageStatement(locale: locale) {
+            parts.append(mileage)
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    /// The coverage, and the sentence that keeps a subset from reading as the
+    /// week.
+    private var netCoverageDetail: String? {
+        let net = metrics.estimatedNetAfterFuel
+        guard !net.isComplete else { return "Every shift this week" }
+        return net.coverageStatement
     }
 
     /// The whole week in one sentence, for a listener who has the heading above
