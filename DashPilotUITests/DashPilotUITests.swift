@@ -2363,7 +2363,19 @@ final class DashPilotUITests: XCTestCase {
 
         // And the controls still do what they did: the grid changed where they
         // are, not what they open.
-        XCTAssertTrue(scrollUntilHittable(earnings, in: app))
+        //
+        // Back to a known top first, then down onto it. `earnings` belongs to
+        // **Delivery 1** and the screen has just been scrolled past it to
+        // Delivery 2's card, and `scrollUntilHittable` only ever searches
+        // downward. Coming back up and descending again is also what keeps the
+        // control clear of the navigation bar: an element that is merely
+        // `isHittable` can still be parked under it, and the synthesized tap
+        // then lands on the bar and opens nothing.
+        XCTAssertTrue(
+            scrollToTop(reaching: app.descendants(matching: .any)["shiftDetailEarnings"], in: app, swipes: 14),
+            "The screen is back at the shift's own figures"
+        )
+        XCTAssertTrue(scrollUntilHittable(earnings, in: app), "Delivery 1's earnings action is reachable again")
         earnings.tap()
         let field = app.textFields["deliveryEarningsAmountField"]
         XCTAssertTrue(field.waitForExistence(timeout: 5), "The earnings editor still opens from its action")
@@ -2860,8 +2872,19 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertTrue(alert.waitForExistence(timeout: 5))
         alert.buttons["Cancel"].tap()
 
-        XCTAssertTrue(pauseRow(containing: "Pause 2", in: app).waitForExistence(timeout: 5), "Both pauses are still there")
-        XCTAssertTrue(pauseRow(containing: "Pause 1", in: app).label.contains("30 minutes"))
+        // Pause 1 first, because it is the row the screen is already on; Pause 2
+        // sits below it and has to be scrolled to. A `List` does not render a row
+        // it has scrolled past, so asserting its existence where the screen
+        // happens to be left is an assertion about the scroll position rather
+        // than about the store.
+        XCTAssertTrue(
+            pauseRow(containing: "Pause 1", in: app).label.contains("30 minutes"),
+            "The pause the driver did not delete is untouched"
+        )
+        XCTAssertTrue(
+            scrollTo(pauseRow(containing: "Pause 2", in: app), in: app),
+            "Both pauses are still there"
+        )
     }
 
     /// Recording a pause the driver took and never tapped anything for.
