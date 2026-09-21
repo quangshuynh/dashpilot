@@ -58,14 +58,37 @@ So:
 - A shift's estimate can always be reproduced from what that shift itself
   records.
 
-The convenience is separate from the truth. When the editor opens on a shift that
-has recorded nothing, it **fills its fields** from the most recent shift that did
-record a pair, and says so. A filled field is a suggestion: nothing is recorded
-against the shift until the driver taps Save, and no earlier shift changes
-because a later one records something else.
+The convenience is separate from the truth, and it is what
+[Settings](settings.md) is for. A shift **takes its copy when it starts**, from
+the vehicle the driver selected and the gas price they last entered. From that
+moment the shift owns its copy: editing the vehicle, deleting it, selecting
+another or changing the price all change what the **next** shift records and
+nothing that has already been recorded.
 
-There is no settings screen and no vehicle list. One pair per shift, and the last
-pair entered as the suggestion for the next, is the whole model.
+When the fuel editor opens on a shift that recorded nothing, it **fills its
+fields** from those current defaults, or failing those from the most recent shift
+that did record a pair, and says so. A filled field is a suggestion: nothing is
+recorded against the shift until the driver taps Save, and no earlier shift
+changes because a later one, or a setting, records something else.
+
+A shift worked before the defaults existed is **not** filled in for the driver.
+It keeps recording nothing until they open its fuel editor and tap
+`Use Current Defaults`, which fills the fields from Settings for them to save.
+Writing today's figures into last month's work would put an assumption the driver
+never made into their history.
+
+### Which vehicle a shift says it was worked in
+
+A shift that took its economy from a vehicle also records **what that vehicle was
+called**, and shows it under the two figures. It is a label and never an input:
+no estimate, rate or total reads it, and a shift with an economy but no name
+produces exactly the same figures.
+
+It is a copy rather than a link, so a shift stays intelligible when the profile
+behind it is renamed or deleted. The name is recorded beside an economy only when
+it **is** that vehicle's economy: a driver who types a different figure by hand
+records no vehicle, because DashPilot does not know which vehicle covers that
+many miles on a gallon.
 
 ## Missing is not zero
 

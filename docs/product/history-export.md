@@ -80,6 +80,18 @@ none:
 - `fuelGasPricePerGallon`, an amount in the record's `currencyCode`. `"0.00"` is a recorded price of
   nothing and is a different fact from `null`.
 
+A third was added later, by the interval that introduced [vehicle
+profiles](settings.md), and is additive in the same way:
+
+- `fuelVehicleName`, the name of the vehicle the shift's fuel economy came from, as recorded when
+  that shift started, or `null` where the economy was typed by hand. A label rather than an input:
+  no figure in the file or in the app is derived from it.
+
+**The driver's current preferences are not in the file.** Not the vehicle list, not which vehicle is
+selected, not the current gas price. An export is a record of work done, and what a driver has
+selected today says nothing about the shifts in it. What is exported is the snapshot each shift
+recorded, which stays what it was when the profile behind it is renamed or deleted.
+
 **The assumptions are in the file; the estimate is not.** They are exactly what a reader needs to
 reproduce it: `route.recordedDistanceMiles` divided by the fuel economy, priced at the gas price.
 Writing the derived cost as well would have put an estimate in a column beside recorded money, in
@@ -390,8 +402,9 @@ is exactly where they get lost.
 - **An expense belongs to a date, not to a shift.** No file relates one to a shift or a delivery, and
   none divides one across work.
 - **An assumption is not a measurement, and an estimate is not a recorded cost.**
-  `fuelMilesPerGallon` and `fuelGasPricePerGallon` are figures the driver typed for one shift.
-  DashPilot observes neither. The estimated gallons, the estimated fuel cost and the estimated net
+  `fuelMilesPerGallon` and `fuelGasPricePerGallon` are figures the driver typed, recorded against one
+  shift, and `fuelVehicleName` is what they called the vehicle they came from. DashPilot observes
+  none of the three. The estimated gallons, the estimated fuel cost and the estimated net
   derived from them are **not** fields in any file: the export carries recorded facts and the
   assumptions, and a reader who wants the estimate applies the documented rule to the recorded
   mileage in the same record.

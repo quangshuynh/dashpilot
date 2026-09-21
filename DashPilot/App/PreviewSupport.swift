@@ -1510,6 +1510,48 @@ enum PreviewSupport {
         return FuelAssumptionsEditor(shift: shift).modelContainer(container)
     }
 
+    /// The settings screen, with or without vehicles already recorded.
+    ///
+    /// The vehicles, the fuel economies and the price are invented, like every
+    /// other value here.
+    @MainActor
+    static func settingsView(withVehicles: Bool) -> some View {
+        let container = emptyContainer()
+        let context = container.mainContext
+        if withVehicles {
+            let service = SettingsService(context: context)
+            _ = try? service.addVehicle(
+                name: "2020 Honda Civic",
+                milesPerGallon: Decimal(string: "34", locale: Locale(identifier: "en_US_POSIX")) ?? 34,
+                createdAt: Date(timeIntervalSince1970: 1_756_000_000)
+            )
+            _ = try? service.addVehicle(
+                name: "2012 Toyota Camry",
+                milesPerGallon: Decimal(string: "28", locale: Locale(identifier: "en_US_POSIX")) ?? 28,
+                createdAt: Date(timeIntervalSince1970: 1_756_000_100)
+            )
+            try? service.setGasPricePerGallon(Money(minorUnits: 319))
+        }
+
+        return NavigationStack { SettingsView() }.modelContainer(container)
+    }
+
+    /// The vehicle editor, empty or over one synthetic profile.
+    @MainActor
+    static func vehicleProfileEditor(existing: Bool) -> some View {
+        let container = emptyContainer()
+        let profile = try? VehicleProfile(
+            name: "2020 Honda Civic",
+            milesPerGallon: Decimal(string: "34", locale: Locale(identifier: "en_US_POSIX")) ?? 34,
+            createdAt: Date(timeIntervalSince1970: 1_756_000_000)
+        )
+        if existing, let profile {
+            container.mainContext.insert(profile)
+        }
+
+        return VehicleProfileEditor(vehicle: existing ? profile : nil).modelContainer(container)
+    }
+
     /// The expense editor, empty or over one synthetic recorded cost.
     @MainActor
     static func expenseEditor(editingExisting: Bool) -> some View {

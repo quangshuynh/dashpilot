@@ -110,6 +110,7 @@ nav:
       - Earnings and metrics: product/earnings-and-metrics.md
       - Recorded expenses: product/expenses.md
       - Estimated fuel and net: product/estimated-fuel.md
+      - Settings and vehicles: product/settings.md
       - Period summaries: product/period-summaries.md
       - History export: product/history-export.md
   - Architecture:

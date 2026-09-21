@@ -5326,6 +5326,409 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertFalse(net.label.contains("$0.00"))
     }
 
+    // MARK: Settings, vehicles and fuel defaults
+
+    /// Settings is reachable from the main screen, and it says what it is for.
+    ///
+    /// The entry point is a gear in the navigation bar rather than a row in the
+    /// list, which is what keeps it out of the way of the shift workflow and off
+    /// the top of the History section.
+    @MainActor
+    func testSettingsIsReachableFromHome() throws {
+        let app = launchWithEmptyStore()
+
+        let settings = app.buttons["settingsLink"]
+        XCTAssertTrue(settings.waitForExistence(timeout: 10), "A gear should be on the main screen")
+        XCTAssertEqual(settings.label, "Settings", "A glyph alone says nothing to a listener")
+        settings.tap()
+
+        XCTAssertTrue(
+            app.navigationBars["Settings"].waitForExistence(timeout: 5),
+            "The gear opens the preferences screen"
+        )
+        XCTAssertTrue(
+            app.descendants(matching: .any)["vehiclesEmptyState"].waitForExistence(timeout: 5),
+            "A driver who has entered nothing is told so rather than shown an empty screen"
+        )
+        XCTAssertTrue(app.buttons["addVehicleButton"].exists)
+        XCTAssertTrue(app.descendants(matching: .any)["currentGasPriceRow"].exists)
+    }
+
+    /// Creates two vehicles, corrects one, and selects the other.
+    ///
+    /// The selection is read off the row's own accessibility label rather than
+    /// off a checkmark, because a mark nobody can see is not a statement.
+    @MainActor
+    func testCreatesEditsAndSelectsVehicles() throws {
+        let app = launchWithEmptyStore()
+        openSettings(in: app)
+
+        addVehicle(named: "2020 Honda Civic", milesPerGallon: "34", in: app)
+        let civic = vehicleRow(containing: "2020 Honda Civic", in: app)
+        XCTAssertTrue(civic.waitForExistence(timeout: 5), "The vehicle is listed")
+        XCTAssertTrue(
+            waitForLabel(civic, toContain: "34 miles per gallon"),
+            "The figure says its unit to a listener: \(civic.label)"
+        )
+        XCTAssertTrue(
+            civic.label.contains("Selected"),
+            "The first vehicle is the one new shifts are recorded under: \(civic.label)"
+        )
+
+        addVehicle(named: "2012 Toyota Camry", milesPerGallon: "28", in: app)
+        let camry = vehicleRow(containing: "2012 Toyota Camry", in: app)
+        XCTAssertTrue(camry.waitForExistence(timeout: 5))
+        XCTAssertFalse(camry.label.contains("Selected"), "Adding a vehicle is not choosing one: \(camry.label)")
+
+        // Correcting the first one moves neither the list nor the selection.
+        let edit = app.buttons["Edit 2020 Honda Civic"]
+        XCTAssertTrue(scrollUntilHittable(edit, in: app))
+        edit.tap()
+        let economyField = app.textFields["vehicleMilesPerGallonField"]
+        XCTAssertTrue(economyField.waitForExistence(timeout: 5))
+        XCTAssertEqual(economyField.value as? String, "34", "The editor opens on the stored figure")
+        replaceTappedField(economyField, with: "38", in: app)
+        app.buttons["saveVehicleButton"].tap()
+
+        let corrected = vehicleRow(containing: "2020 Honda Civic", in: app)
+        XCTAssertTrue(waitForLabel(corrected, toContain: "38 miles per gallon"), "Showed: \(corrected.label)")
+
+        // Selecting the second one moves the selection to it, and off the first.
+        camry.tap()
+        XCTAssertTrue(
+            waitForLabel(vehicleRow(containing: "2012 Toyota Camry", in: app), toContain: "Selected"),
+            "The tapped vehicle becomes the one new shifts are recorded under"
+        )
+        XCTAssertFalse(
+            vehicleRow(containing: "2020 Honda Civic", in: app).label.contains("Selected"),
+            "And exactly one is selected"
+        )
+    }
+
+    /// A vehicle with no name, and one with no fuel economy, are both refused
+    /// with the sentence that explains the rule.
+    @MainActor
+    func testRefusesAVehicleWithNoNameOrNoFuelEconomy() throws {
+        let app = launchWithEmptyStore()
+        openSettings(in: app)
+
+        app.buttons["addVehicleButton"].tap()
+        let nameField = app.textFields["vehicleNameField"]
+        XCTAssertTrue(nameField.waitForExistence(timeout: 5))
+
+        // No fuel economy at all.
+        nameField.tap()
+        nameField.typeText("The van")
+        app.buttons["saveVehicleButton"].tap()
+        let message = app.descendants(matching: .any).matching(identifier: "vehicleValidationMessage").firstMatch
+        XCTAssertTrue(message.waitForExistence(timeout: 5), "A vehicle with no economy is refused")
+        XCTAssertTrue(
+            message.label.contains("miles per gallon"),
+            "And the refusal names what is missing: \(message.label)"
+        )
+
+        // A fuel economy of zero, which is the divisor.
+        let economyField = app.textFields["vehicleMilesPerGallonField"]
+        economyField.tap()
+        economyField.typeText("0")
+        app.buttons["saveVehicleButton"].tap()
+        XCTAssertTrue(
+            waitForLabel(message, toContain: "more than zero"),
+            "Zero is refused because it is what the recorded miles are divided by: \(message.label)"
+        )
+
+        // The name rule is not repeated here: a name of nothing but whitespace is
+        // refused by ``VehicleName`` and is pinned in the domain suite, where it
+        // costs no double tap on a two-word field to reach.
+        app.buttons["cancelVehicleButton"].tap()
+        XCTAssertTrue(
+            app.descendants(matching: .any)["vehiclesEmptyState"].waitForExistence(timeout: 5),
+            "Nothing refused was written"
+        )
+    }
+
+    /// Records a current gas price, corrects it, and removes it.
+    ///
+    /// Removing is deliberately not the same as recording zero: afterwards there
+    /// is no current price at all, and the row says so rather than showing
+    /// `$0.00`.
+    @MainActor
+    func testRecordsCorrectsAndRemovesTheCurrentGasPrice() throws {
+        let app = launchWithEmptyStore()
+        openSettings(in: app)
+
+        let row = app.descendants(matching: .any)["currentGasPriceRow"]
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        XCTAssertTrue(waitForLabel(row, toContain: "Current gas price"), "Showed: \(row.label)")
+        XCTAssertEqual(row.value as? String, "Not set", "Nothing recorded is stated as nothing recorded")
+
+        row.tap()
+        let field = app.textFields["currentGasPriceField"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        field.tap()
+        field.typeText("3.19")
+        app.buttons["saveCurrentGasPriceButton"].tap()
+
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        XCTAssertEqual(row.value as? String, "$3.19 per gallon", "The price says its unit to a listener")
+
+        row.tap()
+        let seeded = app.textFields["currentGasPriceField"]
+        XCTAssertTrue(seeded.waitForExistence(timeout: 5))
+        XCTAssertEqual(seeded.value as? String, "3.19", "The editor opens on the stored figure")
+        replaceTappedField(seeded, with: "3.35", in: app)
+        app.buttons["saveCurrentGasPriceButton"].tap()
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        XCTAssertEqual(row.value as? String, "$3.35 per gallon")
+
+        row.tap()
+        let remove = app.buttons["removeCurrentGasPriceButton"]
+        XCTAssertTrue(remove.waitForExistence(timeout: 5))
+        remove.tap()
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        XCTAssertEqual(row.value as? String, "Not set", "Removed is not a price of nothing")
+    }
+
+    /// The whole point of the feature, driven end to end: a shift started after
+    /// the defaults are set records them, and the shift before it does not.
+    @MainActor
+    func testANewShiftRecordsTheCurrentDefaultsAndAnOlderOneDoesNot() throws {
+        let app = launchWithEmptyStore()
+
+        // A shift worked before anything was set records nothing.
+        completeAShift(in: app)
+        openFirstShift(in: app)
+        let economy = app.descendants(matching: .any)["shiftDetailFuelMilesPerGallon"]
+        XCTAssertFalse(
+            economy.exists,
+            "A shift worked before the driver entered any defaults records none"
+        )
+        goBack(in: app)
+
+        openSettings(in: app)
+        addVehicle(named: "2020 Honda Civic", milesPerGallon: "34", in: app)
+        setCurrentGasPrice("3.19", in: app)
+        goBack(in: app)
+
+        // A shift worked afterwards carries the snapshot with no typing at all.
+        completeAShift(in: app)
+        openFirstShift(in: app)
+
+        let recorded = app.descendants(matching: .any)["shiftDetailFuelMilesPerGallon"]
+        XCTAssertTrue(scrollTo(recorded, in: app), "The new shift records the selected vehicle's economy")
+        XCTAssertTrue(waitForLabel(recorded, toContain: "34 miles per gallon assumed"), "Showed: \(recorded.label)")
+
+        let price = app.descendants(matching: .any)["shiftDetailFuelGasPrice"]
+        XCTAssertTrue(scrollTo(price, in: app))
+        XCTAssertTrue(waitForLabel(price, toContain: "$3.19 per gallon assumed"), "Showed: \(price.label)")
+
+        let vehicle = app.descendants(matching: .any)["shiftDetailFuelVehicle"]
+        XCTAssertTrue(scrollTo(vehicle, in: app))
+        XCTAssertTrue(
+            waitForLabel(vehicle, toContain: "2020 Honda Civic"),
+            "And the shift says which vehicle it was worked in: \(vehicle.label)"
+        )
+    }
+
+    /// Changing the settings after a shift is recorded leaves that shift exactly
+    /// as it was, and a vehicle deleted from Settings is still named by the
+    /// shifts worked in it.
+    ///
+    /// The invariant the whole feature rests on, driven through the interface
+    /// rather than only asserted in the domain suite.
+    @MainActor
+    func testChangingSettingsLeavesARecordedShiftAlone() throws {
+        let app = launchWithEmptyStore()
+
+        openSettings(in: app)
+        addVehicle(named: "2020 Honda Civic", milesPerGallon: "34", in: app)
+        setCurrentGasPrice("3.19", in: app)
+        goBack(in: app)
+
+        completeAShift(in: app)
+
+        // Now change everything: the economy, the price, and the vehicle itself.
+        openSettings(in: app)
+        let edit = app.buttons["Edit 2020 Honda Civic"]
+        XCTAssertTrue(scrollUntilHittable(edit, in: app))
+        edit.tap()
+        replaceTappedField(app.textFields["vehicleMilesPerGallonField"], with: "12", in: app)
+        app.buttons["saveVehicleButton"].tap()
+
+        setCurrentGasPrice("9.99", in: app)
+
+        let editAgain = app.buttons["Edit 2020 Honda Civic"]
+        XCTAssertTrue(scrollUntilHittable(editAgain, in: app))
+        editAgain.tap()
+        let delete = app.buttons["deleteVehicleButton"]
+        XCTAssertTrue(scrollUntilHittable(delete, in: app))
+        delete.tap()
+        // `.firstMatch`, because a confirmation dialog's button renders as an
+        // element containing its own text and both carry the identifier. An
+        // unqualified query is a multiple match, which is the lesson the fuel
+        // editor's validation message already taught this file.
+        app.buttons.matching(identifier: "confirmDeleteVehicleButton").firstMatch.tap()
+        XCTAssertTrue(
+            app.descendants(matching: .any)["vehiclesEmptyState"].waitForExistence(timeout: 5),
+            "The vehicle is gone from Settings"
+        )
+        goBack(in: app)
+
+        openFirstShift(in: app)
+        let recorded = app.descendants(matching: .any)["shiftDetailFuelMilesPerGallon"]
+        XCTAssertTrue(scrollTo(recorded, in: app))
+        XCTAssertTrue(
+            waitForLabel(recorded, toContain: "34 miles per gallon assumed"),
+            "The shift keeps the economy it recorded: \(recorded.label)"
+        )
+        let price = app.descendants(matching: .any)["shiftDetailFuelGasPrice"]
+        XCTAssertTrue(scrollTo(price, in: app))
+        XCTAssertTrue(
+            waitForLabel(price, toContain: "$3.19 per gallon assumed"),
+            "And the price: \(price.label)"
+        )
+        let vehicle = app.descendants(matching: .any)["shiftDetailFuelVehicle"]
+        XCTAssertTrue(scrollTo(vehicle, in: app))
+        XCTAssertTrue(
+            waitForLabel(vehicle, toContain: "2020 Honda Civic"),
+            "A shift stays intelligible with no profile behind it: \(vehicle.label)"
+        )
+    }
+
+    /// An older shift is filled from the current defaults only when the driver
+    /// asks, and the fields are filled rather than the store written.
+    @MainActor
+    func testUseCurrentDefaultsFillsAnOlderShiftOnlyWhenAsked() throws {
+        let app = launchWithSeededHistory()
+
+        openSettings(in: app)
+        addVehicle(named: "2020 Honda Civic", milesPerGallon: "34", in: app)
+        setCurrentGasPrice("3.19", in: app)
+        goBack(in: app)
+
+        openFirstShift(in: app)
+        let cost = app.descendants(matching: .any)["shiftDetailEstimatedFuelCost"]
+        XCTAssertTrue(scrollTo(cost, in: app))
+        XCTAssertTrue(
+            cost.label.contains("Add your vehicle's miles per gallon"),
+            "The seeded shift was worked before the defaults existed and is not filled in: \(cost.label)"
+        )
+
+        let editor = app.buttons["editFuelAssumptionsButton"]
+        XCTAssertTrue(scrollUntilHittable(editor, in: app))
+        editor.tap()
+
+        let defaults = app.buttons["useCurrentDefaultsButton"]
+        XCTAssertTrue(scrollUntilHittable(defaults, in: app), "An older shift is offered the current defaults")
+        defaults.tap()
+
+        XCTAssertEqual(
+            app.textFields["fuelMilesPerGallonField"].value as? String,
+            "34",
+            "The control fills the fields with the settings"
+        )
+        XCTAssertEqual(app.textFields["fuelGasPriceField"].value as? String, "3.19")
+
+        // Abandoning writes nothing: the shift is still as it was.
+        app.buttons["cancelFuelAssumptionsButton"].tap()
+        XCTAssertTrue(scrollTo(cost, in: app))
+        XCTAssertTrue(
+            waitForLabel(cost, toContain: "Add your vehicle's miles per gallon"),
+            "Filling a field is not recording it: \(cost.label)"
+        )
+
+        // Asking again and saving does record it, and names the vehicle.
+        XCTAssertTrue(scrollUntilHittable(app.buttons["editFuelAssumptionsButton"], in: app))
+        app.buttons["editFuelAssumptionsButton"].tap()
+        XCTAssertTrue(scrollUntilHittable(app.buttons["useCurrentDefaultsButton"], in: app))
+        app.buttons["useCurrentDefaultsButton"].tap()
+        app.buttons["saveFuelAssumptionsButton"].tap()
+
+        XCTAssertTrue(scrollTo(cost, in: app))
+        XCTAssertTrue(
+            waitForLabel(cost, toContain: "estimated fuel cost, based on recorded mileage"),
+            "Showed: \(cost.label)"
+        )
+        let vehicle = app.descendants(matching: .any)["shiftDetailFuelVehicle"]
+        XCTAssertTrue(scrollTo(vehicle, in: app))
+        XCTAssertTrue(waitForLabel(vehicle, toContain: "2020 Honda Civic"), "Showed: \(vehicle.label)")
+    }
+
+    /// Replaces the whole contents of a field the journey reached by tapping.
+    ///
+    /// This cost a run to learn and is worth writing down. **A synthesized tap
+    /// does not move the caret**, so a field that the screen did not focus for
+    /// itself is entered with the caret at position zero: the backspaces in
+    /// ``clear(_:in:)`` have nothing to their left and do nothing, and the text
+    /// typed next is *prepended* — `34` became `3834` rather than `38`, which
+    /// reads on screen as a wrong figure rather than as a broken step. A
+    /// double tap selects what is there, and typing over a selection replaces
+    /// it, which needs no caret at all.
+    ///
+    /// ``clear(_:in:)`` is still right for a field the screen focuses on
+    /// appearance, where the caret starts after the last character.
+    @MainActor
+    private func replaceTappedField(_ field: XCUIElement, with text: String, in app: XCUIApplication) {
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        let existing = (field.value as? String) ?? ""
+        field.doubleTap()
+        field.typeText(text)
+        XCTAssertEqual(
+            field.value as? String,
+            text,
+            "The field should hold what was typed, not \(existing) with it prepended or appended"
+        )
+    }
+
+    // MARK: Settings helpers
+
+    @MainActor
+    private func openSettings(in app: XCUIApplication) {
+        let settings = app.buttons["settingsLink"]
+        XCTAssertTrue(settings.waitForExistence(timeout: 10))
+        settings.tap()
+        XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 5))
+    }
+
+    /// One vehicle row, matched on the name inside its combined label.
+    @MainActor
+    private func vehicleRow(containing name: String, in app: XCUIApplication) -> XCUIElement {
+        app.descendants(matching: .any)
+            .matching(identifier: "vehicleRow")
+            .containing(NSPredicate(format: "label CONTAINS %@", name))
+            .firstMatch
+    }
+
+    @MainActor
+    private func addVehicle(named name: String, milesPerGallon: String, in app: XCUIApplication) {
+        let add = app.buttons["addVehicleButton"]
+        XCTAssertTrue(scrollUntilHittable(add, in: app))
+        add.tap()
+
+        let nameField = app.textFields["vehicleNameField"]
+        XCTAssertTrue(nameField.waitForExistence(timeout: 5))
+        nameField.tap()
+        nameField.typeText(name)
+
+        let economyField = app.textFields["vehicleMilesPerGallonField"]
+        economyField.tap()
+        economyField.typeText(milesPerGallon)
+
+        app.buttons["saveVehicleButton"].tap()
+        XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 5))
+    }
+
+    @MainActor
+    private func setCurrentGasPrice(_ price: String, in app: XCUIApplication) {
+        let row = app.descendants(matching: .any)["currentGasPriceRow"]
+        XCTAssertTrue(scrollUntilHittable(row, in: app))
+        row.tap()
+
+        replaceTappedField(app.textFields["currentGasPriceField"], with: price, in: app)
+        app.buttons["saveCurrentGasPriceButton"].tap()
+        XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 5))
+    }
+
     // MARK: Fuel helpers
 
     /// Types into the two fuel fields, leaving a field alone when its argument

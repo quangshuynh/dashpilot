@@ -38,20 +38,20 @@ struct FuelAssumptionPersistenceTests {
 
     // MARK: Schema
 
-    /// The plan's own shape, asserted here because v14 is the current version.
+    /// What v14 is, read off the **frozen** copy now that v15 is current.
     ///
     /// The repository's convention is that the count of versions and stages
-    /// lives in the suite belonging to whichever version is current, so it is
-    /// updated in one place rather than in several. It moved here from
-    /// `DeliveryTipPersistenceTests`, which owned it while v13 was current.
-    @Test("Version 14 is the current version, and it is the one that adds the assumptions")
+    /// lives in the suite belonging to whichever version is current; those
+    /// assertions moved on to `VehicleSettingsPersistenceTests` when v15 became
+    /// current, exactly as they arrived here from `DeliveryTipPersistenceTests`.
+    /// What stays here is the claim this suite is about: v14 is the version that
+    /// added the two columns, and its frozen copy still says so.
+    @Test("Version 14 is the version that added the assumptions, and its frozen copy holds them")
     func schemaVersion() throws {
         #expect(DashPilotSchemaV14.versionIdentifier == Schema.Version(14, 0, 0))
-        #expect(DashPilotMigrationPlan.schemas.count == 14)
-        #expect(DashPilotMigrationPlan.stages.count == 13)
-        #expect(DashPilotMigrationPlan.schemas.last is DashPilotSchemaV14.Type)
 
-        let entities = Set(ModelContainerFactory.currentSchema.entities.map(\.name))
+        let schema = Schema(versionedSchema: DashPilotSchemaV14.self)
+        let entities = Set(schema.entities.map(\.name))
         #expect(
             entities == [
                 "Shift", "RouteSample", "Delivery", "PickupPlace", "Expense", "ShiftPause", "Offer",
@@ -60,13 +60,24 @@ struct FuelAssumptionPersistenceTests {
             "v14 adds no entity: it adds two columns to one that already exists"
         )
 
-        let shift = try #require(ModelContainerFactory.currentSchema.entities.first { $0.name == "Shift" })
+        let shift = try #require(schema.entities.first { $0.name == "Shift" })
+        let properties = Set(shift.properties.map(\.name))
+        #expect(properties.contains("fuelMilesPerGallonValue"))
+        #expect(properties.contains("fuelGasPricePerGallonAmount"))
         #expect(
-            Set(shift.properties.map(\.name)) == [
+            !properties.contains("fuelVehicleName"),
+            "The frozen v14 model describes the store as it was: no build that wrote one had vehicles"
+        )
+
+        // The shift the app runs against now, which keeps everything v14 had and
+        // adds the one column v15 introduced.
+        let current = try #require(ModelContainerFactory.currentSchema.entities.first { $0.name == "Shift" })
+        #expect(
+            Set(current.properties.map(\.name)) == [
                 "id", "startedAt", "endedAt", "deliveries", "offers", "pauses", "grossEarningsAmount",
-                "fuelMilesPerGallonValue", "fuelGasPricePerGallonAmount"
+                "fuelMilesPerGallonValue", "fuelGasPricePerGallonAmount", "fuelVehicleName"
             ],
-            "The shift gains exactly two columns, and keeps everything it had"
+            "The shift keeps both fuel columns, and there is still exactly one pair per shift"
         )
     }
 
