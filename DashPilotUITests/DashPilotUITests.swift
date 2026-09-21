@@ -854,6 +854,138 @@ final class DashPilotUITests: XCTestCase {
         )
     }
 
+    /// Each older week says how the whole week went before the driver opens
+    /// anything in it.
+    @MainActor
+    func testOlderWeeksAreSummarisedBeforeTheirShifts() throws {
+        let app = launchWithOlderWeeks()
+
+        let older = app.buttons["olderHistoryWeeksLink"]
+        XCTAssertTrue(scrollUntilHittable(older, in: app, maxSwipes: 12))
+        older.tap()
+
+        let summaries = app.descendants(matching: .any).matching(identifier: "olderWeekSummary")
+        XCTAssertTrue(summaries.firstMatch.waitForExistence(timeout: 10), "A week says how it went")
+        XCTAssertTrue(waitForCount(summaries, toEqual: 2), "One summary per week that holds shifts")
+
+        // The newest older week holds one shift, for $55.00.
+        let lastWeek = summaries.element(boundBy: 0)
+        XCTAssertTrue(
+            waitForLabel(lastWeek, toContain: "1 completed shift"),
+            "The week says how many shifts it holds: \(lastWeek.label)"
+        )
+        XCTAssertTrue(
+            lastWeek.label.contains("$55.00"),
+            "And what they came to, using the recorded amount: \(lastWeek.label)"
+        )
+
+        // It is above the shifts rather than under them: the first summary
+        // appears before the first row on screen.
+        let firstRow = olderWeekRows(in: app).firstMatch
+        XCTAssertTrue(firstRow.waitForExistence(timeout: 5))
+        XCTAssertLessThan(
+            lastWeek.frame.minY,
+            firstRow.frame.minY,
+            "The week's own figures come before the shifts they are a summary of"
+        )
+
+        // And the shifts are still shifts: tapping one opens its own detail.
+        firstRow.tap()
+        let earnings = app.descendants(matching: .any)["shiftDetailEarnings"]
+        XCTAssertTrue(earnings.waitForExistence(timeout: 5))
+        XCTAssertTrue(earnings.label.contains("$55.00"), "Showed: \(earnings.label)")
+    }
+
+    /// A week holding two shifts totals both, and the total is the week's rather
+    /// than either shift's.
+    @MainActor
+    func testAWeekOfSeveralShiftsIsTotalled() throws {
+        let app = launchWithOlderWeeks()
+
+        let older = app.buttons["olderHistoryWeeksLink"]
+        XCTAssertTrue(scrollUntilHittable(older, in: app, maxSwipes: 12))
+        older.tap()
+
+        let summaries = app.descendants(matching: .any).matching(identifier: "olderWeekSummary")
+        XCTAssertTrue(summaries.firstMatch.waitForExistence(timeout: 10))
+        XCTAssertTrue(waitForCount(summaries, toEqual: 2))
+
+        // The older of the two weeks holds the fixture's $41.00 and $33.00.
+        let threeWeeksAgo = summaries.element(boundBy: 1)
+        XCTAssertTrue(scrollTo(threeWeeksAgo, in: app))
+        XCTAssertTrue(
+            waitForLabel(threeWeeksAgo, toContain: "2 completed shifts"),
+            "Showed: \(threeWeeksAgo.label)"
+        )
+        XCTAssertTrue(
+            threeWeeksAgo.label.contains("$74.00"),
+            "Two shifts are added up rather than listed: \(threeWeeksAgo.label)"
+        )
+        XCTAssertFalse(threeWeeksAgo.label.contains("$41.00"), "The week states its total, not its parts")
+
+        // The week the driver is in is not on this screen at all, summary or
+        // otherwise.
+        XCTAssertEqual(elements(containing: "$70.00", in: app).count, 0)
+    }
+
+    /// The summary speaks every unit and every coverage, because a listener has
+    /// no caption in view to read afterwards.
+    @MainActor
+    func testTheWeeklySummarySpeaksItsUnitsAndCoverage() throws {
+        let app = launchWithOlderWeeks()
+
+        let older = app.buttons["olderHistoryWeeksLink"]
+        XCTAssertTrue(scrollUntilHittable(older, in: app, maxSwipes: 12))
+        older.tap()
+
+        let summary = app.descendants(matching: .any).matching(identifier: "olderWeekSummary").firstMatch
+        XCTAssertTrue(summary.waitForExistence(timeout: 10))
+
+        for expected in ["completed shift", "Recorded gross earnings", "working time"] {
+            XCTAssertTrue(
+                waitForLabel(summary, toContain: expected),
+                "The week is one spoken sentence and says \(expected): \(summary.label)"
+            )
+        }
+        XCTAssertTrue(
+            summary.label.contains("across 1 of 1 completed shift"),
+            "Every aggregate ends with what is behind it: \(summary.label)"
+        )
+
+        // The fixture's older shifts have no route, which is the more valuable
+        // claim: a week nothing was measured in says so rather than reporting
+        // no miles driven.
+        XCTAssertTrue(
+            summary.label.contains("No recorded mileage"),
+            "An unmeasured week is stated as unmeasured: \(summary.label)"
+        )
+        XCTAssertFalse(summary.label.contains("0.0 mi"), "Missing is never a zero")
+    }
+
+    /// The summary stacks rather than truncating at the largest accessibility
+    /// text size, and the shifts under it are still reachable.
+    @MainActor
+    func testTheWeeklySummarySurvivesLargeText() throws {
+        let app = XCUIApplication()
+        app.launchArguments.append(Self.seededOlderWeeksArgument)
+        app.launchArguments += ["-UIPreferredContentSizeCategoryName", Self.accessibilityXXXLTextSize]
+        launchInPortrait(app)
+
+        let older = app.buttons["olderHistoryWeeksLink"]
+        XCTAssertTrue(scrollUntilHittable(older, in: app, maxSwipes: 20))
+        older.tap()
+
+        let summary = app.descendants(matching: .any).matching(identifier: "olderWeekSummary").firstMatch
+        XCTAssertTrue(summary.waitForExistence(timeout: 10), "The week still says how it went")
+        XCTAssertTrue(
+            waitForLabel(summary, toContain: "$55.00"),
+            "And the figure is whole rather than shortened: \(summary.label)"
+        )
+
+        let row = olderWeekRows(in: app).firstMatch
+        XCTAssertTrue(scrollTo(row, in: app, maxSwipes: 20), "The shifts under it are still reachable")
+    }
+
     /// A week the driver has not worked yet says so, and does not quietly fill
     /// itself with the week before.
     @MainActor
