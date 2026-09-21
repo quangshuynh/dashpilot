@@ -484,6 +484,35 @@ virtualised simulator is the part most likely to fail for reasons that are not t
 run says which kind of failure it was rather than reporting "tests failed". Nothing is excluded, and
 no test is retried to make a run pass.
 
+### How long a run takes, and the budget it is given
+
+The job's `timeout-minutes` is **180**, and the number is measured rather than chosen for comfort.
+
+`main` run 35553963157 was cancelled by an earlier 60-minute budget with the UI journeys still
+executing. It had spent 3m25s on `build-for-testing`, 5m43s on the domain suite and 50m37s on the UI
+journeys, in which **87 of the 151 journeys had passed and none had failed**. Finishing the rest at
+that rate projects a UI step of about 88 minutes and a whole job of about 100. A virtualised runner
+is slower and more variable than a developer's machine, so the budget is set well above the
+projection rather than beside it, and stays far inside the six hours a GitHub-hosted job is capped
+at.
+
+Two things follow from this and are worth stating, because a cancelled run reads like a failing one:
+
+- **The budget is a ceiling for a hung run, not a target.** A healthy run finishes inside half of it.
+  If a run reaches 180 minutes, something has stopped making progress and the answer is to read the
+  result bundle, not to raise the number again.
+- **A cancelled run's last log line is not a diagnosis.** Run 35553963157 was cancelled while a
+  journey naming `fuelMilesPerGallonField` was on screen, and that journey was not failing; it was
+  simply the one the clock landed on. Read the result bundle, which is uploaded on cancellation as
+  well as on failure. That run's upload step ran and succeeded after the job was cancelled, which is
+  what `if: always()` is there for.
+
+`ContinuousIntegrationWorkflowTests` in the domain suite reads `ci.yml` itself and pins what a
+cancelled run cannot: the budget is no longer 60, the three stages are all present and in order in
+one job, the UI journeys still run with parallel testing off, nothing is skipped, retried or allowed
+to fail, and both result bundles are still uploaded under `if: always()`. It finds the checkout
+through its own `#filePath` and disables itself where that checkout is not readable.
+
 !!! warning "Known flakiness"
 
     Under parallel simulator load, XCUITest has been observed locally failing with
