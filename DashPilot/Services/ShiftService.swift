@@ -178,6 +178,7 @@ struct ShiftService {
 
         let shift = Shift(startedAt: date)
         context.insert(shift)
+        let recordedDefaults = recordStartingFuelDefaults(on: shift)
         do {
             try context.save()
         } catch {
@@ -187,8 +188,44 @@ struct ShiftService {
             throw ShiftLifecycleError.storeUnavailable(underlying: error)
         }
 
-        AppLog.shift.info("Shift started")
+        AppLog.shift.info("Shift started, fuel defaults recorded: \(recordedDefaults, privacy: .public)")
         return shift
+    }
+
+    /// Copies the driver's current fuel defaults onto a shift that has just been
+    /// created, and reports whether there was anything to copy.
+    ///
+    /// **Why the start and not the end.** The assumptions a shift is estimated
+    /// under are the ones that were true while it was being worked. Reading them
+    /// when the shift *ends* would let a driver who changed vehicle or updated
+    /// the gas price at lunchtime silently restate what the whole shift had
+    /// already been worked under, which is the dependence on a current global
+    /// figure the snapshot exists to prevent. Taking it at the start is the
+    /// earliest moment the facts are true and the last moment they cannot have
+    /// moved.
+    ///
+    /// **A start is never refused over a default.** A driver going out to work
+    /// must be able to start a shift, so a refusal here is logged structurally
+    /// and swallowed: the shift then records no assumptions, which is exactly
+    /// what every shift recorded before this existed carries, and the driver can
+    /// enter a pair on the completed shift as they always could. There is no
+    /// state in which the shift is half-started.
+    ///
+    /// No write happens in the same context save unless the shift itself is
+    /// saved, because the caller saves once.
+    private func recordStartingFuelDefaults(on shift: Shift) -> Bool {
+        let defaults = SettingsService(context: context).currentFuelDefaults()
+        guard defaults.hasAny else { return false }
+
+        do {
+            try shift.recordStartingFuelDefaults(defaults)
+            return true
+        } catch {
+            AppLog.fuel.error(
+                "Could not record the starting fuel defaults: \(String(describing: error), privacy: .public)"
+            )
+            return false
+        }
     }
 
     /// Ends the shift currently in progress, paused or not.
@@ -545,7 +582,7 @@ struct ShiftService {
     /// Records the fuel economy and gas price this shift's fuel estimate is
     /// worked out under, replacing whatever it recorded before.
     ///
-    /// **The whole edit is one write.** ``Shift/setFuelAssumptions(milesPerGallon:gasPricePerGallon:)``
+    /// **The whole edit is one write.** ``Shift/setFuelAssumptions(milesPerGallon:gasPricePerGallon:vehicleName:)``
     /// checks both halves before it touches either, and this saves once, so a
     /// refused pair and a refused save both leave the shift with exactly the
     /// assumptions it already had. There is no state in which a driver's fuel
@@ -566,6 +603,7 @@ struct ShiftService {
     func setFuelAssumptions(
         milesPerGallon: Decimal?,
         gasPricePerGallon: Money?,
+        vehicleName: String? = nil,
         on shift: Shift
     ) throws {
         // Read before the write, so the log can say what happened without ever
@@ -573,7 +611,11 @@ struct ShiftService {
         let isFirstRecording = !shift.fuelAssumptions.hasAny
 
         do {
-            try shift.setFuelAssumptions(milesPerGallon: milesPerGallon, gasPricePerGallon: gasPricePerGallon)
+            try shift.setFuelAssumptions(
+                milesPerGallon: milesPerGallon,
+                gasPricePerGallon: gasPricePerGallon,
+                vehicleName: vehicleName
+            )
         } catch let error as ShiftError {
             AppLog.fuel.error("Shift rejected fuel assumptions: \(String(describing: error), privacy: .public)")
             throw ShiftLifecycleError.invalidTransition(error)

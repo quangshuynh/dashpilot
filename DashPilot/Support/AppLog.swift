@@ -83,6 +83,18 @@ nonisolated enum AppLog {
     /// keeps out of the logs everywhere else.
     static let fuel = Logger(subsystem: subsystem, category: "fuel")
 
+    /// The driver's reusable preferences: that a vehicle profile was added,
+    /// changed or removed, that the selected vehicle changed, that a current gas
+    /// price was recorded or removed, and which rule refused one. **Never a
+    /// vehicle's name, never a fuel economy and never a price.**
+    ///
+    /// Its own category rather than ``fuel``, because these are statements about
+    /// a driver's current preferences rather than about a shift's recorded
+    /// assumptions, and a line here must never be readable as a line about a
+    /// shift. A vehicle name is free text the driver typed, which is the same
+    /// kind of value this project keeps out of the logs wherever it appears.
+    static let settings = Logger(subsystem: subsystem, category: "settings")
+
     /// Route sample capture: when it starts and stops, why it cannot run, how
     /// many samples were kept, and which rule rejected a candidate. Records the
     /// behaviour of the pipeline, never a coordinate that went through it.

@@ -76,7 +76,7 @@ struct DeliveryOfferPersistenceTests {
             Set(shift.properties.map(\.name))
                 == [
                     "id", "startedAt", "endedAt", "deliveries", "offers", "pauses", "grossEarningsAmount",
-                    "fuelMilesPerGallonValue", "fuelGasPricePerGallonAmount"
+                    "fuelMilesPerGallonValue", "fuelGasPricePerGallonAmount", "fuelVehicleName"
                 ]
         )
     }
