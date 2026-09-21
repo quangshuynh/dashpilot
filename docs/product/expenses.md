@@ -85,6 +85,20 @@ from the other, nothing adds them together, and no figure in the app nets one
 against the other. Reading both is reading two different things, and the screens
 say which is which.
 
+At **period** scope the two now appear on one screen, which is where a reader is
+most likely to add them by accident. They are in two sections, each labelled for
+what it is, and the period carries **two** net figures rather than one combined
+one:
+
+- **Net after recorded expenses** is recorded gross earnings less the costs
+  entered here.
+- **Estimated net after fuel** is recorded earnings less an estimate, over the
+  shifts that record both halves.
+
+Nothing subtracts both, because subtracting both under one label would count the
+same fuel twice. The footer under the estimate says so. See
+[Estimated fuel and net](estimated-fuel.md#estimated-fuel-and-recorded-expenses-are-never-combined).
+
 ## Categories
 
 Five, and no more:

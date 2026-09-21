@@ -5458,6 +5458,101 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertFalse(net.label.contains("$0.00"))
     }
 
+    // MARK: Period estimated fuel
+
+    /// A period states its estimated fuel with the coverage behind it, and never
+    /// as though the covered shifts were the whole period.
+    @MainActor
+    func testPeriodEstimatedFuelStatesItsCoverage() throws {
+        let app = launchWithPeriodSummary()
+        openPeriodSummary(in: app)
+
+        let fuel = app.descendants(matching: .any)["periodEstimatedFuel"]
+        XCTAssertTrue(scrollTo(fuel, in: app, maxSwipes: 14), "The period says what it is estimated to have spent")
+        XCTAssertTrue(
+            waitForLabel(fuel, toContain: "Estimated fuel"),
+            "Showed: \(fuel.label)"
+        )
+        XCTAssertTrue(fuel.label.contains("$"), "And it states an amount: \(fuel.label)")
+
+        // The fixture covers one of the day's two completed shifts, and the
+        // counts are part of the spoken sentence rather than a caption beside
+        // it.
+        XCTAssertTrue(
+            fuel.label.contains("1 of 2 completed shifts"),
+            "The subset is stated rather than presented as the period: \(fuel.label)"
+        )
+        XCTAssertTrue(
+            fuel.label.contains("recorded miles"),
+            "And how much of the driving is behind it: \(fuel.label)"
+        )
+    }
+
+    /// The estimated net is worked out over the shifts that record both halves,
+    /// says so, and is kept apart from the net after recorded expenses.
+    @MainActor
+    func testPeriodEstimatedNetIsSeparateFromRecordedExpenses() throws {
+        let app = launchWithPeriodSummary()
+        openPeriodSummary(in: app)
+
+        // The recorded net first, because it sits above the estimated section and
+        // `scrollTo` only walks downwards. The two are different figures over
+        // different inputs, and neither has the other taken off it.
+        let recordedNet = app.descendants(matching: .any)["periodNetAfterExpenses"]
+        XCTAssertTrue(scrollTo(recordedNet, in: app, maxSwipes: 14))
+        XCTAssertTrue(
+            waitForLabel(recordedNet, toContain: "$37.65"),
+            "Net after recorded expenses is unchanged by the estimate: \(recordedNet.label)"
+        )
+        XCTAssertFalse(
+            recordedNet.label.contains("estimated fuel"),
+            "The recorded net does not quietly include an estimate: \(recordedNet.label)"
+        )
+
+        let net = app.descendants(matching: .any)["periodEstimatedNetAfterFuel"]
+        XCTAssertTrue(scrollTo(net, in: app, maxSwipes: 14))
+        XCTAssertTrue(
+            waitForLabel(net, toContain: "Estimated net after fuel"),
+            "Showed: \(net.label)"
+        )
+        XCTAssertTrue(
+            net.label.contains("1 of 2 shifts"),
+            "A partial-coverage net says which shifts it is: \(net.label)"
+        )
+        XCTAssertTrue(
+            net.label.contains("not this period's earnings less this period's fuel"),
+            "And refuses to be read as the period's: \(net.label)"
+        )
+        XCTAssertTrue(
+            net.label.contains("never added together"),
+            "The overlap with a recorded fuel expense is stated: \(net.label)"
+        )
+    }
+
+    /// The comparison declares no period more profitable on an estimate.
+    @MainActor
+    func testTheComparisonStatesNoEstimatedFigure() throws {
+        let app = XCUIApplication()
+        app.launchArguments.append(Self.seededPeriodComparisonArgument)
+        launchInPortrait(app)
+        openPeriodSummary(in: app)
+
+        let notes = app.descendants(matching: .any)["periodComparisonNotes"]
+        XCTAssertTrue(scrollTo(notes, in: app, maxSwipes: 16), "The comparison is on screen")
+
+        XCTAssertEqual(
+            elements(containing: "Estimated fuel", in: app)
+                .matching(NSPredicate(format: "identifier BEGINSWITH %@", "periodComparison")).count,
+            0,
+            "No estimate is compared between two periods"
+        )
+        XCTAssertEqual(
+            elements(containing: "Estimated net", in: app)
+                .matching(NSPredicate(format: "identifier BEGINSWITH %@", "periodComparison")).count,
+            0
+        )
+    }
+
     // MARK: Settings, vehicles and fuel defaults
 
     /// Settings is reachable from the main screen, and it says what it is for.
