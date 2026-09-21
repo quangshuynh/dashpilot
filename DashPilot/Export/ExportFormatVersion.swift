@@ -4,7 +4,7 @@ import Foundation
 ///
 /// ## Why this is not the schema version
 ///
-/// The store is at schema v13 and will move on. That number describes how
+/// The store is at schema v14 and will move on. That number describes how
 /// SwiftData lays out a database on one device, and nothing outside the app has
 /// ever seen it. This one describes a **file a driver has already taken
 /// somewhere else** — a spreadsheet, a folder, an accountant's inbox — and the
@@ -18,6 +18,39 @@ import Foundation
 /// keeps working.
 ///
 /// ## Version history
+///
+/// ### 4 (unchanged): the fuel assumptions a shift was estimated under
+///
+/// A completed shift can now record the vehicle fuel economy and the gas price
+/// its estimated fuel cost is worked out under, and DashPilot derives estimated
+/// gallons, an estimated fuel cost and an estimated net from them. Evaluated
+/// against the rule above and **left at 4**, because nothing existing changed:
+/// no field was removed, no field was renamed, no field changed meaning, and no
+/// enumeration gained a value. Two fields were **added** to `shifts[]` in JSON,
+/// `fuelMilesPerGallon` and `fuelGasPricePerGallon`, each an explicit `null`
+/// where the driver recorded none, and an added field is additive by this
+/// format's own rule.
+///
+/// **The assumptions are in the file; the estimate is not**, and that is the
+/// decision worth stating. An export is the only way anything leaves DashPilot,
+/// so two figures the driver typed and can see on screen would otherwise be
+/// unreachable from outside the app, and they are exactly what a reader needs to
+/// reproduce the estimate: recorded miles (already in `shifts[].route`) divided
+/// by `fuelMilesPerGallon`, priced at `fuelGasPricePerGallon`. Writing the
+/// derived cost as well would have put an **estimate** in a column beside
+/// recorded money, in a format whose whole point is that a reader can tell the
+/// two apart, and a spreadsheet column is a thing people sum. That is the same
+/// judgement that keeps `expectedEarnings` out of the CSV.
+///
+/// **No CSV column was added**, for the same reason and for one more: the CSV's
+/// unit is a delivery, and these two are facts about a shift. Inserting a column
+/// would also break positional readers, which is the other half of what forces a
+/// bump. The CSV stays at **39** columns.
+///
+/// **An estimated fuel cost is never an expense here.** A fuel purchase the
+/// driver recorded is an `expenses` row with its own date, category and amount,
+/// exactly as before; nothing adds it to the assumptions above, nothing derives
+/// one from the other, and no summary figure in this format nets them together.
 ///
 /// ### 4: tips received outside what the platform recorded paying
 ///

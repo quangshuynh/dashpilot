@@ -10,7 +10,7 @@ import SwiftData
 /// default because the store holds work the driver cannot re-enter.
 nonisolated enum ModelContainerFactory {
     static var currentSchema: Schema {
-        Schema(versionedSchema: DashPilotSchemaV13.self)
+        Schema(versionedSchema: DashPilotSchemaV14.self)
     }
 
     /// The on-disk container backing the running app.

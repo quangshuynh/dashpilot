@@ -138,6 +138,15 @@ derived legitimately from device sensors and stored history is typed by the driv
   across shifts, deliveries or miles. A period reports what was recorded, its split by category, and
   **net after recorded expenses**, which is one recorded subtotal less another and is never called
   profit.
+- **Estimated fuel and estimated net on a completed shift**: the driver records a vehicle fuel
+  economy and a gas price per gallon, and DashPilot derives estimated gallons and an **estimated fuel
+  cost** over that shift's **recorded mileage** (`recorded miles / miles per gallon`, priced per
+  gallon; never miles priced as gallons), then the **estimated net after fuel** and the **estimated
+  net per working hour** over the same working time the gross hourly rate uses. Each shift records
+  its own assumptions, so entering different figures later leaves every earlier shift where it is.
+  A missing assumption means no estimate rather than `$0.00`, a recorded price of zero is a fact, a
+  partial route makes the fuel a floor and the net a ceiling, and none of it is a recorded expense,
+  profit, take-home pay or a tax figure.
 - **Day, week, month and custom-range summaries with explicit data coverage**: periods built by
   `Calendar` rather than by fixed 24-hour or 30-day arithmetic, a chosen range picked as inclusive
   dates and held internally as a half-open interval, completed shifts only, every figure shown with
@@ -154,12 +163,12 @@ Swift, SwiftUI, SwiftData, Core Location, App Intents, ActivityKit, WidgetKit, O
 and XCUITest. **No third-party runtime dependencies.** One application target, plus a widget
 extension that draws the shift's Live Activity and holds no logic of its own.
 
-Versioned schema at v13 with migrations from v1, tested by opening stores written under each older
+Versioned schema at v14 with migrations from v1, tested by opening stores written under each older
 version. Domain calculations import neither SwiftUI nor SwiftData, so every rule is
 tested without a container or a rendered view. Money is `Decimal` throughout: no monetary value
 passes through binary floating point, in memory or in the store. Nothing derived is stored, so
-mileage, active time and all three rates are recomputed from the stored data every time they are
-shown.
+mileage, active time, all three rates and every estimated fuel and net figure are recomputed from the
+stored data every time they are shown.
 
 ## Privacy
 
@@ -221,11 +230,17 @@ The short version, with the full list in [`docs/reference/limitations.md`](docs/
   It is not a tax or deduction figure.
 - **Gross earnings are what the driver typed.** Nothing is imported, no amount is a profit,
   take-home or taxable figure, and no amount recorded is a different state from `$0.00`.
-- **Recorded expenses are only what the driver entered.** DashPilot observes no purchase and
-  estimates no cost, so a period's recorded expenses are a floor and a period with none recorded is
-  not one that cost nothing. Net after recorded expenses is one recorded subtotal less another: it is
-  not profit, not take-home pay and not a tax figure, and there is no cost per shift, per delivery,
-  per hour or per mile anywhere.
+- **Recorded expenses are only what the driver entered.** DashPilot observes no purchase, so a
+  period's recorded expenses are a floor and a period with none recorded is not one that cost
+  nothing. Net after recorded expenses is one recorded subtotal less another: it is not profit, not
+  take-home pay and not a tax figure, and there is no **recorded** cost per shift, per delivery, per
+  hour or per mile anywhere.
+- **An estimated fuel cost is not a recorded one.** It is arithmetic over a shift's recorded mileage
+  and two figures the driver assumed, it creates and changes no expense, and no expense total
+  includes it. A driver who also recorded the fill-up now has two figures describing overlapping
+  money, and DashPilot states that rather than reconciling them: it does not know which shifts a tank
+  was burned on, so it never adds or nets the two. Estimated net after fuel subtracts no expense and
+  is not profit.
 - **All three rates are gross.** The per-working-hour rate divides by working time; the
   per-active-delivery-hour rate divides by the time a recorded delivery was open, which is not a
   measure of work and not a wage; the per-mile rate divides by recorded miles, which makes it
@@ -268,7 +283,8 @@ The short version, with the full list in [`docs/reference/limitations.md`](docs/
   prediction.
 - Not implemented yet: most things built on the delivery records (merchant scoring, merchant
   profitability, offer profitability, per-delivery mileage), any tax feature, recurring expenses or
-  receipts, aggregates longer than a month or a chosen range, maps, home-screen widgets,
+  receipts, aggregates longer than a month or a chosen range, an estimated fuel or net figure for a
+  period rather than a shift, gas-price lookup or more than one vehicle, maps, home-screen widgets,
   notifications, recommendations, and importing an exported file back.
 
 ## License

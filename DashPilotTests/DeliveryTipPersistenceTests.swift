@@ -33,26 +33,21 @@ struct DeliveryTipPersistenceTests {
 
     // MARK: Schema
 
-    /// The plan's own shape, asserted here because v13 is the current version.
+    /// Version 13 is where the tip entered the store, and it is still on the
+    /// path a v12 device takes to reach the current version.
     ///
-    /// The repository's convention is that the count of versions and stages
-    /// lives in the suite belonging to whichever version is current, so it is
-    /// updated in one place rather than in several. It moved here from
-    /// `DeliveryOfferPersistenceTests`, which owned it while v12 was current.
-    @Test("Version 13 is the current version, and it is the one that adds the tip")
+    /// The count of versions and stages moved to `FuelAssumptionPersistenceTests`
+    /// when v14 became current, by the convention that it lives in the suite
+    /// belonging to whichever version is current.
+    @Test("Version 13 added the tip, and is still in the plan")
     func schemaVersion() throws {
         #expect(DashPilotSchemaV13.versionIdentifier == Schema.Version(13, 0, 0))
-        #expect(DashPilotMigrationPlan.schemas.count == 13)
-        #expect(DashPilotMigrationPlan.stages.count == 12)
-        #expect(DashPilotMigrationPlan.schemas.last is DashPilotSchemaV13.Type)
+        #expect(DashPilotMigrationPlan.schemas.contains { $0 == DashPilotSchemaV13.self })
 
         let entities = Set(ModelContainerFactory.currentSchema.entities.map(\.name))
         #expect(
-            entities == [
-                "Shift", "RouteSample", "Delivery", "PickupPlace", "Expense", "ShiftPause", "Offer",
-                "DeliveryTip"
-            ],
-            "v13 adds exactly one entity"
+            entities.contains("DeliveryTip"),
+            "The entity v13 added is still the current shape's"
         )
 
         let tip = try #require(ModelContainerFactory.currentSchema.entities.first { $0.name == "DeliveryTip" })

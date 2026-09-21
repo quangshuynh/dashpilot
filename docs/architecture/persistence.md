@@ -28,11 +28,12 @@ device.
 
 ## What is stored
 
-Seven entities. Their fields are listed under [Data model](../reference/data-model.md).
+Eight entities. Their fields are listed under [Data model](../reference/data-model.md).
 
-`Shift` holds a start timestamp, an optional end timestamp and an optional gross earnings amount.
-Everything else about a shift, including its lifecycle state, its durations, its distance and its
-rates, is derived when it is asked for.
+`Shift` holds a start timestamp, an optional end timestamp, an optional gross earnings amount and
+the two optional figures its fuel estimate is worked out under. Everything else about a shift,
+including its lifecycle state, its durations, its distance, its rates, its estimated fuel and its
+estimated net, is derived when it is asked for.
 
 `ShiftPause` stores when the driver recorded pausing and, once they resume, when they recorded
 resuming. It is a row rather than a flag on `Shift` because a boolean could say a shift is paused now
@@ -52,6 +53,11 @@ no money, no duration and no distance: an offer is a grouping the driver recorde
 stays on the delivery it belongs to. `Delivery.shift` is kept beside `Delivery.offer` rather than
 replaced by it, because that column is what every fetch, aggregate, export figure and delete rule is
 built on.
+
+`DeliveryTip` stores one tip a delivery received **outside** what the platform recorded paying for
+it: its amount, the method it arrived by, when it was recorded, and its delivery. Rows rather than a
+second column on `Delivery`, because tips arrive as separate events with separate methods and a
+single mutable column would collapse them into a figure the driver has to maintain by hand.
 
 `Expense` stores when a cost was incurred, its amount, its category and an optional short note.
 It has **no relationship to anything**. See below.
@@ -145,6 +151,35 @@ and never **negative**. `ShiftService` adds the store write and the same rollbac
 transitions use, so an amount can never be showing in the interface while the store holds something
 else.
 
+## A fuel assumption is stored on the shift it was used for
+
+`Shift.fuelMilesPerGallonValue` and `Shift.fuelGasPricePerGallonAmount` are two optional `Decimal`
+columns, stored for the reason the earnings amount is and held to the same `nil`-is-not-zero rule.
+They are the vehicle fuel economy and the price of a gallon the driver assumed, and the estimated
+fuel cost derived from them is **not** stored: it is recomputed from the route and these two every
+time it is read, like every other derived figure here.
+
+**They are a snapshot, not a reference**, and that is the whole modelling decision. An assumption
+that is not recorded where it was used is an assumption that rewrites history: if one global figure
+backed every shift, a driver changing vehicle or filling up at a different price would silently
+re-cost every shift they had ever worked. So each shift keeps its own pair and its estimate is always
+derived from that. What a driver enters today seeds a text field for the next shift, and that is all
+it does.
+
+Two columns rather than a new entity, and rather than a vehicle table. There is exactly one pair per
+shift, it has no lifecycle of its own, nothing points at it, and it is never listed, ordered, counted
+or corrected independently of the shift that holds it. Two nullable columns say "estimated under
+these assumptions, or under none" completely, and they cannot go missing, be orphaned or be
+duplicated.
+
+The invariants live on the model, as the earnings ones do: only a **completed** shift may record
+them, a fuel economy must be **greater than zero** because it is the divisor, and a gas price may not
+be negative while zero is allowed and means the fuel was recorded as costing nothing. Both halves are
+validated before either is written, so a refused edit leaves the pair that was already there.
+
+**Nothing here is an expense.** Recording assumptions inserts no `Expense`, reads none and changes
+none. See [Estimated fuel and net](../product/estimated-fuel.md).
+
 ## An expense is stored unattached
 
 `Expense` has no `shift` and no `delivery`, and nothing anywhere in the store relates one to the
@@ -155,10 +190,12 @@ made. It is the same fabrication the app refuses when it declines to divide a sh
 its deliveries.
 
 Membership is by date. A period contains an expense if its `occurredAt` falls in the period, by the
-same half-open rule that puts a shift in one. Two consequences follow directly from the shape: there
-is no shift-level or delivery-level cost, and deleting a shift cascades to nothing, because an
-expense has no relationship to be cascaded along, and the cost happened whether or not the shift's record is
-still there.
+same half-open rule that puts a shift in one. Two consequences follow directly from the shape: no
+**recorded** cost is attached to a shift or a delivery, so no recorded net exists at shift level, and
+deleting a shift cascades to nothing, because an expense has no relationship to be cascaded along,
+and the cost happened whether or not the shift's record is still there. A shift's estimated net after
+fuel is not a counter-example: its subtrahend comes from that shift's own recorded mileage and its
+own recorded assumptions, and no expense enters it.
 
 The amount is a `Decimal` for the reason a shift's is, and it is **required**: an expense with no
 amount is not a record of anything. A recorded `0.00` is still a recorded amount. The category is

@@ -72,6 +72,17 @@ nonisolated enum AppLog {
     /// about their own shift, and the log is not a second copy of it.
     static let activity = Logger(subsystem: subsystem, category: "live-activity")
 
+    /// The fuel-estimate assumptions a shift records: that a pair was recorded,
+    /// changed or removed, and which rule refused one. **Never the miles per
+    /// gallon, never the gas price, and never the estimate derived from them.**
+    ///
+    /// Its own category rather than ``earnings`` or ``expenses``, because it is
+    /// neither: an estimated fuel cost is not money the driver received and not
+    /// a cost they recorded paying. A gas price is also a statement about where
+    /// and when somebody fills up, which is the same kind of value this project
+    /// keeps out of the logs everywhere else.
+    static let fuel = Logger(subsystem: subsystem, category: "fuel")
+
     /// Route sample capture: when it starts and stops, why it cannot run, how
     /// many samples were kept, and which rule rejected a candidate. Records the
     /// behaviour of the pipeline, never a coordinate that went through it.

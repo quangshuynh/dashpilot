@@ -57,6 +57,16 @@ nonisolated enum MoneyInputSubject: Sendable {
     /// What a recorded expense cost. Required: an expense with no amount is not
     /// a record of anything.
     case expense
+    /// What a gallon of fuel cost, recorded as an assumption a shift's fuel
+    /// estimate is worked out under.
+    ///
+    /// Its own subject for the reason the two above are: a driver typing what
+    /// they paid at a pump should not be told that *gross earnings* cannot be
+    /// negative, because they are not recording any. The parsing rules are
+    /// identical; only the two sentences differ. **Zero is accepted** here and
+    /// means the fuel cost nothing, which is a different fact from no price
+    /// having been recorded at all.
+    case gasPricePerGallon
 }
 
 nonisolated extension MoneyInputError {
@@ -69,6 +79,7 @@ nonisolated extension MoneyInputError {
             case .expectedEarnings: "Enter what you expect this delivery to pay, or cancel to leave none."
             case .additionalTip: "Enter what the tip was, for example 5.00."
             case .expense: "Enter what this expense cost, for example 42.10."
+            case .gasPricePerGallon: "Enter what a gallon of fuel cost, for example 3.29."
             }
         case .notANumber:
             "Enter an amount using numbers, for example 86.25."
@@ -80,6 +91,7 @@ nonisolated extension MoneyInputError {
             case .expectedEarnings: "An expected amount cannot be negative."
             case .additionalTip: "A tip cannot be a negative amount. Enter what you received."
             case .expense: "An expense cannot be a negative amount. Enter what it cost."
+            case .gasPricePerGallon: "A gas price cannot be a negative amount. Enter what a gallon cost."
             }
         case .tooLarge:
             "That is larger than any single amount DashPilot records."
@@ -149,6 +161,26 @@ nonisolated struct MoneyInput {
     ///
     /// - Throws: ``MoneyInputError`` describing the first rule the text breaks.
     func amount(from text: String) throws(MoneyInputError) -> Money {
+        Money(amount: try decimal(from: text))
+    }
+
+    /// The same reading, stopping one step short of calling the result money.
+    ///
+    /// ``MilesPerGallonInput`` is the reason this is separable: a vehicle's fuel
+    /// economy is a plain decimal a driver types, and the *locale* rules for
+    /// reading one (which character is the decimal separator, where grouping
+    /// separators may fall, and that a space inside a number is a grouping
+    /// separator rather than something to delete) are exactly these. Writing them a
+    /// second time is how two fields on the same phone come to disagree about
+    /// what `"1 234,5"` means.
+    ///
+    /// What it does **not** share is meaning. The scale bound here is the
+    /// currency's, the magnitude bound is a guard against pathological input,
+    /// and both happen to suit a fuel economy; the caller maps the failures into
+    /// its own vocabulary and adds whatever rules are its own.
+    ///
+    /// - Throws: ``MoneyInputError`` describing the first rule the text breaks.
+    func decimal(from text: String) throws(MoneyInputError) -> Decimal {
         let scrubbed = scrubbed(text)
         guard !scrubbed.isEmpty else { throw .empty }
 
@@ -172,7 +204,7 @@ nonisolated struct MoneyInput {
         }
         guard value <= Self.maximumAmount else { throw .tooLarge }
 
-        return Money(amount: value)
+        return value
     }
 
     /// The text an editor should start from when an amount already exists.

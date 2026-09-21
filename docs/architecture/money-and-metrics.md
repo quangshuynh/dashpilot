@@ -54,6 +54,18 @@ nothing entered, not a number, more precision than the currency has, negative, o
 formatting test states the locale it is asserting about instead of inheriting whichever region the
 machine running the suite happens to be set to.
 
+### A figure that is not money still reads through the same locale rules
+
+A vehicle's fuel economy is a plain decimal a driver types, and it is **not** money: it has no
+currency, no symbol to strip and no cents, and its zero is refused rather than recorded, because it
+is the divisor of a fuel estimate. So `MilesPerGallonInput` owns the meaning and refuses zero in its
+own words, while the locale-aware *reading* comes from `MoneyInput.decimal(from:)`, which is
+`amount(from:)` stopping one step short of calling the result money. Which character is the decimal
+separator, where a grouping separator may fall, and that a space inside a number is a separator
+rather than something to delete are properties of the driver's locale, not of what the number means.
+A second copy of those rules is how two fields on one phone come to disagree about what `"1 234,5"`
+is. See [Estimated fuel and net](../product/estimated-fuel.md).
+
 ## Completed-shift metrics
 
 A completed shift is read as three rates and two derived durations. Every rate is gross, every figure
