@@ -97,6 +97,14 @@ boundary is a capture gap like any other. Correcting an end **later** adds no po
 and the shift reports the stretch it did not record as a gap. See
 [Correcting a shift's end time](shift-workflow.md#correcting-a-shifts-end-time).
 
+## What is derived from it
+
+Recorded mileage is the denominator of the shift's per-recorded-mile rate, part of every period's
+mileage total, and, on a completed shift that records a fuel economy and a gas price, the basis of
+an **estimated** fuel cost. Because it is a floor rather than a total, that estimate is a floor too:
+more miles were driven than were recorded, so more fuel was used than is estimated. The screen says
+so wherever the route is partial. See [Estimated fuel and net](estimated-fuel.md).
+
 ## When there is nothing to report
 
 A route with nothing measurable in it says so rather than showing `0.0 mi`, which a driver would
@@ -107,7 +115,8 @@ captured continuously.
 ## What it is not
 
 - **Not a tax or deduction figure.** DashPilot is not a tax tool, and a mileage deduction needs a
-  complete log, which capture that iOS can interrupt cannot produce.
+  complete log, which capture that iOS can interrupt cannot produce. An estimated fuel cost derived
+  from it is not one either.
 - **Not per-delivery mileage.** Deliveries are not recorded yet, so no distance is attributed to
   one.
 - **Not calibrated.** The thresholds behind capture and measurement are defensible engineering

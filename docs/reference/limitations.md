@@ -473,14 +473,18 @@ and one they cannot.
 
 ## Recorded expenses
 
-- **Only what the driver types exists.** DashPilot observes no purchase and estimates no cost, so a
-  period's recorded expense total is a floor and a period with none recorded is not a period that
-  cost nothing.
+- **Only what the driver types exists.** DashPilot observes no purchase, so a period's recorded
+  expense total is a floor and a period with none recorded is not a period that cost nothing. A
+  completed shift's estimated fuel cost is not an exception: it is derived from that shift's mileage
+  and the driver's own assumptions, it becomes no expense, and no expense total includes it.
 - **An expense total carries no coverage pair**, because there is no denominator: nothing knows how
   many costs went unrecorded. A count of records is all that can honestly be stated.
 - **An expense belongs to a date, not to a shift.** There is no per-shift, per-delivery or per-mile
-  cost anywhere, and no shift-level net figure. Attaching a cost to work the driver did not attach it
-  to would be an attribution the app invented.
+  **recorded** cost anywhere, and no recorded net figure at shift level. Attaching a cost to work the
+  driver did not attach it to would be an attribution the app invented.
+- **A recorded fuel expense and an estimated fuel cost are never reconciled.** Both can describe the
+  same money, in different places, and DashPilot does not know which shifts a tank was burned on. It
+  states the overlap rather than matching them, and never adds or nets the two.
 - **Net after recorded expenses is not profit**, not take-home pay and not a tax figure. It is one
   recorded subtotal less another, and it is absent unless both halves were recorded.
 - **Five fixed categories.** No custom categories, no subcategories and no renaming.
@@ -490,6 +494,29 @@ and one they cannot.
 - **Expenses are not in the CSV export.** Its rows are deliveries, and an expense belongs to a date
   rather than to one, so it has no row there, the same deliberate refusal the period summary gets.
 - **A note is capped at 120 characters** and is exported as the driver wrote it.
+
+## Estimated fuel and net
+
+- **Both inputs are assumptions the driver types.** DashPilot observes no vehicle and reads no pump.
+  It does not check a fuel economy, learn one, or notice that a figure is wrong.
+- **No gas-price lookup and no station search**, ever: there is no network access in the app at all.
+  A price is whatever the driver last entered.
+- **One vehicle, and no vehicle record.** There is no vehicle list, no make or model, no tank size
+  and no efficiency by season, terrain or load. The most recent pair a driver recorded seeds the next
+  shift's fields, and that is the whole of the "default".
+- **The estimate covers recorded mileage only.** Recorded mileage is a floor, so the estimated fuel
+  is a floor and the estimated net is a ceiling. Where the route is partial the screen says so; where
+  it is complete, "no gap was detected" is still a statement about the detection.
+- **Estimated net after fuel is not profit**, not take-home pay and not a tax figure, and nothing for
+  wear, insurance, maintenance, depreciation, phone costs or tax is subtracted anywhere in DashPilot.
+- **It subtracts no recorded expense**, because no expense is attached to a shift. Net after recorded
+  expenses remains a period figure.
+- **Nothing is aggregated.** There is no period-level estimated fuel, no estimated net for a day, a
+  week or a month, and no comparison of one shift's estimated net with another's.
+- **Nothing is exported but the assumptions.** The estimated gallons, the estimated fuel cost and the
+  estimated net are in no file, in either format.
+- **A shift recorded before this existed carries no assumptions**, and none was backfilled. It
+  reports no estimate rather than an estimate of nothing.
 
 ## Data and safety
 
@@ -561,7 +588,9 @@ and one they cannot.
   optional pickup place, that place's recorded pickup waits, an optional manually entered amount per
   delivery and the period summaries over all of it are the whole of it: no merchant scoring, no
   merchant profitability, no earnings per pickup place, no wait-time recommendation, no offer
-  profitability, no tips-versus-base breakdown and no automatic detection.
+  profitability, no tips-versus-base breakdown and no automatic detection. A completed shift's
+  estimated fuel and estimated net are derived from that shift's own mileage and assumptions and read
+  nothing from its deliveries.
 - **No recommendations, predictions or machine learning.** None is implemented, and none is claimed.
 - **No delivery-platform integration**, by design and permanently. See
   [Product overview](../product/overview.md#boundaries-the-project-will-not-cross).

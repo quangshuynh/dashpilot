@@ -73,11 +73,12 @@ counts and errors. Coordinates, addresses and earnings amounts are never logged.
 | `earnings` | That an amount was added, updated or removed, or that a save failed | The amount |
 | `pickup-place` | That a place was assigned, changed, removed, reused, created, renamed or merged; that a name, rename or merge was refused, by rule; that a save failed | The name typed, the normalised key derived from it, and how many deliveries a merge moved |
 | `expenses` | That an expense was recorded, updated or deleted, which **category** it was, whether a note exists, and that a write was refused by rule or failed | The amount, the date the money was spent, and any word of the note |
+| `fuel` | That a shift's fuel assumptions were recorded, updated or removed, which rule refused a pair, and that a write failed | The miles per gallon, the gas price, the estimated gallons, the estimated fuel cost, the estimated net, and which shift any of it was about |
 | `intents` | Which action a system surface asked for, that it started or ended a shift, started a delivery or recorded an event, and which rule refused it | When any of it happened, and anything the driver said: the intents take no dictated value at all |
 | `live-activity` | That the shift's card was started, adopted, ended or refused by the system, and that a reading for it failed | Any figure it displayed (the working time, the recorded mileage, a delivery count), and when any of it happened |
 | `export` | That a file was written, for which scope and in which format, and how many shifts went into it; that an export was refused, by rule; that a write failed | Anything in the file — a date worked, an amount, a place, a distance — and the path it was written to |
 
-Eight deliberate silences are worth stating.
+Nine deliberate silences are worth stating.
 
 **Mileage is not logged at all.** The calculation reads coordinates and produces a trip metric, and
 neither belongs in a log. There is no failure it can report, because an unmeasurable route is a
@@ -107,6 +108,14 @@ a description of their spending. The category is a fixed word from a closed set,
 it cannot accidentally become the value. Nothing about a period's expense total, its split by
 category or the net after it is logged at all: every one of those is a derived figure that is a
 normal result rather than a failure, exactly as a rate is.
+
+**A fuel assumption is logged as an event and never as a figure.** Not the miles per gallon, not the
+gas price, and nothing derived from them. Its own category rather than `earnings` or `expenses`,
+because it is neither: an estimated fuel cost is not money the driver received and not a cost they
+recorded paying. A gas price is also a statement about where and when somebody fills up, and a fuel
+economy is a description of their vehicle, so both are exactly the kind of value this project keeps
+out of its logs. As with a recorded cost, nothing about the estimate itself is logged at all: every
+part of it is a derived figure and a normal result rather than a failure.
 
 **An action performed by voice records no time.** The log says a shift was started from an intent,
 not when. When a driver starts and stops work is their schedule, and a category that exists partly to

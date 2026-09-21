@@ -1490,6 +1490,26 @@ enum PreviewSupport {
         return ShiftEarningsEditor(shift: shift).modelContainer(container)
     }
 
+    /// The fuel assumptions editor over a synthetic completed shift.
+    ///
+    /// The recorded case carries an invented fuel economy and gas price, like
+    /// every other value here.
+    @MainActor
+    static func fuelAssumptionsEditor(withRecordedAssumptions: Bool) -> some View {
+        let container = emptyContainer()
+        let shift = Shift(startedAt: Date(timeIntervalSince1970: 1_756_000_000))
+        try? shift.end(at: Date(timeIntervalSince1970: 1_756_000_000 + 4 * 3600))
+        if withRecordedAssumptions {
+            try? shift.setFuelAssumptions(
+                milesPerGallon: Decimal(string: "28.5", locale: Locale(identifier: "en_US_POSIX")),
+                gasPricePerGallon: Money(minorUnits: 329)
+            )
+        }
+        container.mainContext.insert(shift)
+
+        return FuelAssumptionsEditor(shift: shift).modelContainer(container)
+    }
+
     /// The expense editor, empty or over one synthetic recorded cost.
     @MainActor
     static func expenseEditor(editingExisting: Bool) -> some View {

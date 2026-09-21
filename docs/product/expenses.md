@@ -22,8 +22,14 @@ Four facts, all entered by the driver:
 **It observes no purchase.** There is no card, bank, receipt, email or
 delivery-platform connection anywhere in the app, and no network access at all.
 
-**It estimates nothing.** There is no fuel-consumption model, no cost per mile,
-no vehicle wear and no depreciation. A cost that was not entered does not exist.
+**It estimates nothing, and nothing estimated becomes an expense.** A cost that
+was not entered does not exist here. DashPilot can estimate a completed shift's
+fuel from its recorded mileage and two figures the driver assumes, but that
+estimate is a separate thing in a separate place: it creates no expense, changes
+no expense, and is never added to or netted against any total on this page. See
+[Estimated fuel and net](estimated-fuel.md), and the section below on the overlap
+the app states rather than resolves. There is still no cost per mile, no vehicle
+wear and no depreciation.
 
 **There are no tax features.** No deduction, no mileage allowance, no
 classification of a cost as claimable, and no figure in the app is a tax figure.
@@ -52,12 +58,32 @@ when it declines to divide a shift's earnings among its deliveries.
 
 Two consequences follow, and both are deliberate:
 
-- **There is no per-shift or per-delivery cost anywhere**, and no shift-level net
-  figure.
+- **No recorded cost is attached to a shift or a delivery**, so no recorded net
+  figure exists at shift level. Net after recorded expenses is a period figure
+  and stays one.
 - **There is no cost per hour, per mile or per delivery.** The numerator would
   come from records dated to a period and the denominator from work recorded on
   shifts, which is the numerator-from-one-population figure this project refuses
   to publish everywhere else.
+
+A completed shift does show an **estimated** net after fuel, and that is not a
+counter-example: its subtrahend is derived from that shift's own recorded mileage
+and its own recorded assumptions, not from any expense the driver entered. See
+[Estimated fuel and net](estimated-fuel.md).
+
+## A recorded fuel cost and an estimated one can describe the same money
+
+A driver who records the fill-up that paid for a shift's miles now has two
+figures about overlapping money, in two places: this recorded expense, dated to a
+day, and that shift's estimated fuel cost.
+
+**DashPilot states the overlap rather than resolving it.** It does not know which
+shifts a tank of fuel was burned on, so any automatic matching would be an
+attribution the driver never made, which is the same refusal behind an expense
+having no shift at all. The two are kept apart everywhere: neither is derived
+from the other, nothing adds them together, and no figure in the app nets one
+against the other. Reading both is reading two different things, and the screens
+say which is which.
 
 ## Categories
 
@@ -223,7 +249,12 @@ text they typed.
 - **No merchant, payment method or vehicle** on a record.
 - **No cost per mile, per hour or per delivery**, by decision rather than by
   omission.
-- **No shift-level or delivery-level net figure.**
+- **No shift-level or delivery-level net figure built from recorded costs.** A
+  shift's estimated net after fuel is derived from that shift's own mileage and
+  assumptions and subtracts no expense: see
+  [Estimated fuel and net](estimated-fuel.md).
+- **No reconciliation between a recorded fuel expense and an estimated fuel
+  cost**, deliberately.
 - **No expenses in the CSV export**, and no separate expense export.
 - **No import**, so an expense recorded elsewhere cannot be brought in.
 - **No tax anything**, at all.

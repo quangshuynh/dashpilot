@@ -96,8 +96,8 @@ The full list, including the parts that are simply not built yet, is on
 
 !!! note "Documentation status"
 
-    This site documents schema v13 and the shift, route, earnings, metrics, detail, delivery
+    This site documents schema v14 and the shift, route, earnings, metrics, detail, delivery
     lifecycle, offer grouping, pickup identity, pickup wait, per-delivery earnings, additional tips,
-    expected pay, period summary, period comparison, history export, recorded expense, shift pause
-    and Live Activity work completed so far. Every amount, coordinate, route, note and business name
+    expected pay, period summary, period comparison, history export, recorded expense, estimated fuel
+    and net, shift pause and Live Activity work completed so far. Every amount, coordinate, route, note and business name
     in it is synthetic.

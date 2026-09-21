@@ -93,6 +93,10 @@ nonisolated extension ShiftLifecycleError: LocalizedError {
             "Earnings can be recorded once the shift has ended."
         case .invalidTransition(.negativeEarnings):
             "Gross earnings cannot be negative."
+        case .invalidTransition(.invalidFuelEconomy):
+            "Miles per gallon has to be more than zero. It is what DashPilot divides the recorded miles by."
+        case .invalidTransition(.negativeGasPrice):
+            "A gas price cannot be a negative amount. Enter what a gallon cost."
         case .invalidTransition:
             "That change could not be applied to the shift."
         case .storeUnavailable:
@@ -534,6 +538,120 @@ struct ShiftService {
         shift.clearGrossEarnings()
         try save(describing: "remove")
         AppLog.earnings.info("Shift earnings removed")
+    }
+
+    // MARK: Fuel assumptions
+
+    /// Records the fuel economy and gas price this shift's fuel estimate is
+    /// worked out under, replacing whatever it recorded before.
+    ///
+    /// **The whole edit is one write.** ``Shift/setFuelAssumptions(milesPerGallon:gasPricePerGallon:)``
+    /// checks both halves before it touches either, and this saves once, so a
+    /// refused pair and a refused save both leave the shift with exactly the
+    /// assumptions it already had. There is no state in which a driver's fuel
+    /// economy moved and their gas price did not.
+    ///
+    /// Nothing derived is written. The estimated gallons and the estimated cost
+    /// are read from the route and this pair whenever they are shown, so they
+    /// cannot be left describing assumptions the shift no longer holds.
+    ///
+    /// **This creates no expense.** An estimate is not a cost the driver
+    /// recorded paying, and nothing here inserts, reads or changes an
+    /// ``Expense``.
+    ///
+    /// - Throws: ``ShiftLifecycleError/invalidTransition(_:)`` when the model
+    ///   refuses the pair, or
+    ///   ``ShiftLifecycleError/storeUnavailable(underlying:)`` when the write
+    ///   fails.
+    func setFuelAssumptions(
+        milesPerGallon: Decimal?,
+        gasPricePerGallon: Money?,
+        on shift: Shift
+    ) throws {
+        // Read before the write, so the log can say what happened without ever
+        // holding the figures it happened to.
+        let isFirstRecording = !shift.fuelAssumptions.hasAny
+
+        do {
+            try shift.setFuelAssumptions(milesPerGallon: milesPerGallon, gasPricePerGallon: gasPricePerGallon)
+        } catch let error as ShiftError {
+            AppLog.fuel.error("Shift rejected fuel assumptions: \(String(describing: error), privacy: .public)")
+            throw ShiftLifecycleError.invalidTransition(error)
+        }
+
+        try saveFuel(describing: isFirstRecording ? "add" : "update")
+        AppLog.fuel.info("Shift fuel assumptions \(isFirstRecording ? "recorded" : "updated", privacy: .public)")
+    }
+
+    /// Removes a shift's fuel assumptions, returning it to having none.
+    ///
+    /// Distinct from recording zero: afterwards the shift has no estimate at
+    /// all, which is what it had before the driver typed anything, rather than
+    /// an estimate of `$0.00`.
+    ///
+    /// - Throws: ``ShiftLifecycleError/storeUnavailable(underlying:)`` if the write fails.
+    func clearFuelAssumptions(on shift: Shift) throws {
+        shift.clearFuelAssumptions()
+        try saveFuel(describing: "remove")
+        AppLog.fuel.info("Shift fuel assumptions removed")
+    }
+
+    /// The assumptions the driver most recently recorded, for seeding an editor.
+    ///
+    /// **This is the whole of what "a current default" means in DashPilot, and
+    /// it is deliberately not a stored setting.** The app has no preferences
+    /// layer, and adding one for this would put a second, mutable source of
+    /// truth beside a store whose rule is that history is derived from recorded
+    /// facts. The most recent shift that recorded assumptions is already that
+    /// fact, so the default *is* the last pair the driver typed.
+    ///
+    /// The consequence is the property that matters: **an older shift's estimate
+    /// cannot move when a newer one records something different**, because there
+    /// is no global figure for it to follow. Seeding a text field is the only
+    /// thing this value is ever used for, and a seeded field the driver does not
+    /// save writes nothing.
+    ///
+    /// The most recent shift by ``Shift/startedAt``, which is the ordering every
+    /// period, week and history list in the app assigns a shift by. Completed
+    /// shifts only, because a running one cannot carry assumptions.
+    ///
+    /// Returns ``FuelAssumptions/none`` when nothing has been recorded yet, and
+    /// on a read failure: a field that could not be seeded is an empty field,
+    /// which is the ordinary state of an editor, and is not worth refusing an
+    /// edit over.
+    func mostRecentFuelAssumptions() -> FuelAssumptions {
+        var descriptor = FetchDescriptor<Shift>(
+            predicate: #Predicate {
+                $0.endedAt != nil
+                    && ($0.fuelMilesPerGallonValue != nil || $0.fuelGasPricePerGallonAmount != nil)
+            },
+            sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
+        )
+        descriptor.fetchLimit = 1
+
+        do {
+            return try context.fetch(descriptor).first?.fuelAssumptions ?? .none
+        } catch {
+            AppLog.fuel.error("Failed to read the most recent fuel assumptions: \(error)")
+            return .none
+        }
+    }
+
+    /// Saves a fuel-assumption change, and rolls back if the store refuses.
+    ///
+    /// Its own saver rather than ``save(describing:)`` so the failure is logged
+    /// under the category that describes it. `operation` is a fixed word naming
+    /// what was attempted; the figures never are.
+    private func saveFuel(describing operation: StaticString) throws {
+        do {
+            try context.save()
+        } catch {
+            // The pending pair is discarded: the interface must not show an
+            // estimate derived from assumptions the store does not hold.
+            context.rollback()
+            AppLog.fuel.error("Failed to \(operation, privacy: .public) shift fuel assumptions: \(error)")
+            throw ShiftLifecycleError.storeUnavailable(underlying: error)
+        }
     }
 
     /// Saves, and rolls back if the store refuses.

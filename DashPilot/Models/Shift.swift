@@ -20,6 +20,13 @@ nonisolated enum ShiftError: Error, Equatable {
     case shiftAlreadyEnded
     /// The pause model rejected the transition.
     case invalidPause(ShiftPauseError)
+    /// A fuel economy of zero or less was recorded. It is the divisor of a fuel
+    /// estimate, and there is no truthful reading of a vehicle that covers no
+    /// distance on a gallon.
+    case invalidFuelEconomy
+    /// A negative gas price was recorded. Zero is allowed and means the fuel
+    /// cost nothing; a negative price is not a thing a pump charges.
+    case negativeGasPrice
 }
 
 /// A single period of delivery work.
@@ -92,6 +99,38 @@ nonisolated final class Shift {
     /// recorded what this shift paid; `0` means they recorded that it paid
     /// nothing. Migration never fabricates the second from the first.
     private var grossEarningsAmount: Decimal?
+
+    /// The vehicle fuel economy this shift's fuel estimate is worked out under,
+    /// in miles per gallon, or `nil` when the driver has recorded none.
+    ///
+    /// **A snapshot, not a reference.** It is written when the driver records
+    /// fuel assumptions for *this* shift and is never touched again by anything
+    /// they enter later. A driver who changes vehicle in March has not changed
+    /// what February's shifts consumed, and a finished shift that re-derived its
+    /// fuel from a current global figure would rewrite its own history every time
+    /// that figure moved.
+    ///
+    /// `private(set)` rather than `private`, unlike ``grossEarningsAmount``,
+    /// for one reason: ``ShiftService/mostRecentFuelAssumptions()`` seeds the
+    /// editor from the last shift that recorded assumptions, and a SwiftData
+    /// `#Predicate` can only name a property it can read. Nothing else reads it:
+    /// ``fuelAssumptions`` is the accessor, and it is the only place the stored
+    /// pair becomes a ``FuelAssumptions``.
+    ///
+    /// Always greater than zero where it is present: ``setFuelAssumptions(milesPerGallon:gasPricePerGallon:)``
+    /// refuses anything else, because it is the divisor of the estimate.
+    private(set) var fuelMilesPerGallonValue: Decimal?
+
+    /// What a gallon of fuel cost, as the assumption this shift's estimate is
+    /// worked out under, or `nil` when the driver has recorded none.
+    ///
+    /// A snapshot for the reason above: a fill-up next month at a higher price
+    /// did not make last month's driving more expensive.
+    ///
+    /// **`nil` and zero are different facts.** `nil` means no price was
+    /// recorded, so there is no estimate; `0` means the fuel was recorded as
+    /// having cost nothing, which produces an estimate of ``Money/zero``.
+    private(set) var fuelGasPricePerGallonAmount: Decimal?
 
     init(id: UUID = UUID(), startedAt: Date) {
         self.id = id
@@ -397,6 +436,100 @@ extension Shift {
     /// state the caller asked for.
     func clearGrossEarnings() {
         grossEarningsAmount = nil
+    }
+}
+
+// MARK: - Fuel assumptions
+
+extension Shift {
+    /// The fuel economy and gas price this shift's estimate is worked out under.
+    ///
+    /// The one place the two stored columns become a ``FuelAssumptions``, so
+    /// nothing else in the app handles the raw decimals.
+    var fuelAssumptions: FuelAssumptions {
+        FuelAssumptions(
+            milesPerGallon: fuelMilesPerGallonValue,
+            gasPricePerGallon: fuelGasPricePerGallonAmount.map(Money.init(amount:))
+        )
+    }
+
+    /// Records the assumptions this shift's fuel estimate is worked out under,
+    /// replacing whatever was recorded before.
+    ///
+    /// **Both halves move together, or neither does.** Every rule is checked
+    /// before any column is written, so a driver who corrects a valid gas price
+    /// and mistypes the economy in the same edit is left with exactly the pair
+    /// they had. An edit that is refused changes nothing.
+    ///
+    /// Each half is independently optional: passing `nil` for one records that
+    /// the driver has not entered it, which is the state that produces the
+    /// naming refusal rather than a zero.
+    ///
+    /// Three invariants, kept on the model rather than in a view so that no
+    /// screen, test or future caller can record a pair the app would refuse to
+    /// estimate from:
+    ///
+    /// - Only a **completed** shift may carry them, by the rule that governs
+    ///   ``setGrossEarnings(_:)``: entering figures is a stopped-vehicle task,
+    ///   and a running shift's recorded mileage is still moving.
+    /// - A fuel economy must be **greater than zero**. It is the divisor, and
+    ///   there is no truthful reading of a vehicle that covers nothing on a
+    ///   gallon.
+    /// - A gas price may not be **negative**. Zero is allowed and meaningful:
+    ///   fuel really can have cost nothing.
+    ///
+    /// Both are stored exactly as given. Rounding is a display decision, and the
+    /// input layer refuses anything finer rather than quietly rounding here.
+    ///
+    /// - Throws: ``ShiftError/shiftNotCompleted``,
+    ///   ``ShiftError/invalidFuelEconomy`` or ``ShiftError/negativeGasPrice``.
+    func setFuelAssumptions(milesPerGallon: Decimal?, gasPricePerGallon: Money?) throws {
+        guard endedAt != nil else { throw ShiftError.shiftNotCompleted }
+        if let milesPerGallon {
+            guard milesPerGallon > 0 else { throw ShiftError.invalidFuelEconomy }
+        }
+        if let gasPricePerGallon {
+            guard !gasPricePerGallon.isNegative else { throw ShiftError.negativeGasPrice }
+        }
+
+        // Nothing above can throw from here on, so the pair cannot be left
+        // half written.
+        fuelMilesPerGallonValue = milesPerGallon
+        fuelGasPricePerGallonAmount = gasPricePerGallon?.amount
+    }
+
+    /// Removes both assumptions, returning the shift to having none.
+    ///
+    /// Deliberately distinct from recording zero, by the rule that governs
+    /// ``clearGrossEarnings()``: a driver removing figures they entered by
+    /// mistake is saying "I have not recorded this", not "this shift used no
+    /// fuel". Afterwards the shift has no estimate at all rather than one of
+    /// ``Money/zero``.
+    ///
+    /// It does not throw: a shift with no assumptions to remove is already in
+    /// the state the caller asked for.
+    func clearFuelAssumptions() {
+        fuelMilesPerGallonValue = nil
+        fuelGasPricePerGallonAmount = nil
+    }
+
+    /// What this shift's recorded mileage is estimated to have consumed, and
+    /// what that cost.
+    ///
+    /// The adapter between the model and ``FuelEstimateCalculator``, holding no
+    /// rule of its own. Nothing is stored: the estimate is derived from the
+    /// route's measurement and the shift's own assumptions every time it is
+    /// asked for, which is why correcting the shift's end, and with it the route
+    /// it retains, moves the estimate with no fuel code involved at all.
+    ///
+    /// `recordedDistance` is passed in rather than measured here for the reason
+    /// ``metrics(for:using:)`` takes one: measuring a route walks every position
+    /// it holds, and the caller normally already has the result.
+    func fuelEstimate(
+        for recordedDistance: RouteDistance,
+        using calculator: FuelEstimateCalculator = FuelEstimateCalculator()
+    ) -> FuelEstimate {
+        calculator.estimate(recordedDistance: recordedDistance, assumptions: fuelAssumptions)
     }
 }
 

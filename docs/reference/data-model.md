@@ -14,6 +14,8 @@ version: **v10**.
 | `offers` | `[Offer]` | Cascade delete, inverse of `Offer.shift` |
 | `pauses` | `[ShiftPause]` | Cascade delete, inverse of `ShiftPause.shift` |
 | `grossEarningsAmount` | `Decimal?` | Private. `nil` means no amount recorded, which is not zero |
+| `fuelMilesPerGallonValue` | `Decimal?` | The vehicle fuel economy this shift's fuel estimate is worked out under, as the driver typed it. A **snapshot**, never a reference to a current figure. Always greater than zero where present, because it is the divisor. `nil` means none recorded |
+| `fuelGasPricePerGallonAmount` | `Decimal?` | What a gallon cost, as the assumption this shift is estimated under. `nil` means none recorded; `0` means the fuel was recorded as costing nothing |
 
 Derived, never stored:
 
@@ -38,6 +40,9 @@ Derived, never stored:
 | `routeSampleCount(after:)` | How many those are, counted rather than loaded, for the confirmation that states it |
 | `recordedDistance(...)` | A `RouteDistance` measured from the retained route |
 | `grossEarnings` | The stored decimal as a `Money`, or `nil` |
+| `fuelAssumptions` | The two stored columns as a `FuelAssumptions`, which is the only place they become one |
+| `fuelEstimate(for:)` | A `FuelEstimate` over a recorded distance and this shift's own assumptions, or the reason there is none |
+| `profitability(for:)` | A `ShiftProfitability`: recorded earnings less the estimated fuel, and that over the shift's working hours |
 | `activeDeliveries` | This shift's deliveries that are neither delivered nor cancelled, in acceptance order |
 | `deliveriesInOrder` | This shift's deliveries sorted by acceptance, with identity breaking a tie |
 | `numberedDeliveries` | The same list paired with the local `Delivery 1`, `Delivery 2` labels |
