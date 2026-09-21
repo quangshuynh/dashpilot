@@ -57,6 +57,14 @@ struct OlderHistoryWeeksView: View {
 
             ForEach(weeks) { group in
                 Section {
+                    // Before the rows, because the question a driver opens this
+                    // screen with is "how did that week go" and the answer
+                    // should not have to be assembled by opening six shifts.
+                    // It is a row of the section rather than part of the
+                    // heading so that the dates stay one line, which is what
+                    // keeps the list from being pushed down a screenful.
+                    HistoryWeekSummaryView(week: group.week, shifts: group.elements)
+
                     ForEach(group.elements) { shift in
                         // A link to the screen rather than to the value the root
                         // pushes by. A `navigationDestination(for:)` belongs to
