@@ -337,6 +337,73 @@ struct HistoryWeekSummaryTests {
         #expect(!spoken.contains(" mi,"), "A listener is told miles rather than mi: \(spoken)")
     }
 
+    // MARK: Fuel, where the week has it
+
+    @Test("A week with no fuel assumptions carries no fuel line at all")
+    func aWeekWithNoFuelCarriesNoFuelLine() throws {
+        let summary = HistoryWeekSummary(
+            week: try fixtureWeek,
+            records: [record(startedAt: at(day: 1, hour: 9), earnings: try money("90.00"), route: route(miles: 30))]
+        )
+
+        let ids = summary.lines(locale: Locale(identifier: "en_US")).map(\.id)
+        #expect(!ids.contains(.estimatedFuel), "A summary above a list is not where an absent estimate is explained")
+        #expect(!ids.contains(.estimatedNet))
+    }
+
+    @Test("A week with fuel carries the estimate, the net, and both coverages")
+    func aWeekWithFuelCarriesItsCoverage() throws {
+        let measured = route(miles: 50)
+        let estimate = FuelEstimateCalculator().estimate(
+            recordedDistance: measured,
+            assumptions: FuelAssumptions(
+                milesPerGallon: Decimal(25),
+                gasPricePerGallon: try money("4.00")
+            )
+        )
+
+        var covered = record(
+            startedAt: at(day: 1, hour: 9),
+            earnings: try money("100.00"),
+            route: measured,
+            delivered: 4
+        )
+        covered = PeriodShiftRecord(
+            startedAt: covered.startedAt,
+            workingDuration: covered.workingDuration,
+            grossEarnings: covered.grossEarnings,
+            recordedDistance: covered.recordedDistance,
+            deliverySummary: covered.deliverySummary,
+            fuelEstimate: estimate
+        )
+
+        let summary = HistoryWeekSummary(
+            week: try fixtureWeek,
+            records: [
+                covered,
+                // Drove and was paid, recorded no fuel economy.
+                record(startedAt: at(day: 3, hour: 9), earnings: try money("80.00"), route: route(miles: 30))
+            ]
+        )
+
+        // 50 recorded miles at 25 MPG is 2 gallons, at $4.00 is $8.00.
+        let fuel = try line(.estimatedFuel, in: summary)
+        #expect(fuel.value == "$8.00")
+        #expect(try #require(fuel.detail).contains("1 of 2 shifts"))
+        #expect(try #require(fuel.detail).contains("recorded miles"), "Showed: \(fuel.detail ?? "")")
+
+        let net = try line(.estimatedNet, in: summary)
+        #expect(net.value == "$92.00", "$100.00 recorded less $8.00 estimated, over the shift that has both")
+        #expect(net.detail == "1 of 2 shifts")
+        #expect(
+            net.spoken.contains("never added together"),
+            "The overlap with a recorded fuel expense travels with the figure: \(net.spoken)"
+        )
+
+        // And the week's own earnings are still the week's, not the subset's.
+        #expect(try line(.earnings, in: summary).value == "$180.00")
+    }
+
     // MARK: A week dated ahead of the clock
 
     @Test("A week the calendar places in the future is summarised exactly like any other")
