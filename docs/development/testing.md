@@ -167,7 +167,7 @@ Debug builds accept fifteen arguments, all used only by UI tests and screenshots
 | `-dashpilot-seeded-history` | Opens an in-memory store already holding synthetic history: one completed shift with an amount, a route recorded in two capture sessions and three deliveries (two delivered, one cancelled), and one shift with none of those |
 | `-dashpilot-seeded-active-delivery` | Opens an in-memory store holding a running shift whose delivery has already been picked up, which is the state a relaunch recovers into |
 | `-dashpilot-seeded-pickup-history` | Opens an in-memory store holding one completed shift whose deliveries give two pickup places deliberately different amounts of recorded history |
-| `-dashpilot-seeded-period-summary` | Opens an in-memory store holding a week of synthetic completed shifts and three synthetic expenses, anchored to today rather than to a fixed instant, so the period summary opens on a period that holds something |
+| `-dashpilot-seeded-period-summary` | Opens an in-memory store holding a week of synthetic completed shifts and three synthetic expenses, anchored to today rather than to a fixed instant, so the period summary opens on a period that holds something. **Exactly one of its shifts records fuel assumptions**, so the period's estimated fuel is partially covered and a coverage defect cannot pass unnoticed |
 | `-dashpilot-seeded-period-comparison` | Opens an in-memory store holding three consecutive days, also anchored to today: a today still in progress with one of two shifts unpaid, two complete days before it, and nothing before those |
 | `-dashpilot-seeded-expected-pay` | Opens an in-memory store holding a running shift with two deliveries waiting at their pickups, alike except that one records what it is expected to pay |
 | `-dashpilot-seeded-stacked-offer` | Opens an in-memory store holding a running shift with one offer of two deliveries and a later add-on offer of one |
@@ -387,7 +387,15 @@ The permission panel is asserted only to be on screen. Which state it displays d
 device, and no test drives the system alert, because automating it would be brittle and would change
 the permission state other tests run against.
 
-Two lessons are worth repeating when adding journeys:
+Three lessons are worth repeating when adding journeys:
+
+- **A synthesized tap does not move the caret.** A field the screen did not focus for itself is
+  entered with the caret at position zero, so backspaces delete nothing and the text typed next is
+  *prepended*: `34` became `3834`, which reads on screen as a wrong figure rather than as a broken
+  step. `clear(_:in:)` is right for a field a screen focuses on appearance;
+  `replaceTappedField(_:with:in:)` double-taps to select and types over the selection, which needs no
+  caret. The double tap selects a **word**, so it is wrong for multi-word text, and a rule better
+  reached without a tap belongs in the domain suite.
 
 - A `List` only renders rows near the viewport, so anything below the fold does not exist until it
   is scrolled to. This bites again whenever a section above grows: adding one sentence to the
