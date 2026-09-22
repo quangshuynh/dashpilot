@@ -2,7 +2,7 @@ import Foundation
 import OSLog
 import SwiftData
 
-/// The six lifecycle actions DashPilot will perform without a screen, and the
+/// The eight lifecycle actions DashPilot will perform without a screen, and the
 /// one rule that is specific to performing them that way.
 ///
 /// ## It owns no lifecycle logic
@@ -159,6 +159,48 @@ struct IntentLifecycleService {
         reconcileActivity()
         AppLog.intents.info("Intent resumed a shift")
         return .shiftResumed(pausedDuration: shift.pausedTime(asOf: date).duration)
+    }
+
+    /// Records that the driver has parked and is walking away from the vehicle.
+    ///
+    /// **A shift operation, not a delivery one.** Whether the vehicle is moving
+    /// is a fact about the driver and their vehicle, so this asks for no
+    /// delivery, is refused by no count of them, and the ambiguity that
+    /// withholds ``recordDeliveryProgress(at:)`` cannot arise. A driver shopping
+    /// for one order while carrying another has one vehicle, and it is parked.
+    ///
+    /// Every refusal is ``ShiftService/parkActiveShift(at:)``'s, carried through
+    /// unchanged: no shift running, already parked, and a paused shift, which
+    /// records no route either and already has its own reason for the stop.
+    /// Nothing here infers **why** the driver parked.
+    ///
+    /// The confirmation names the two facts the state is easy to confuse, because
+    /// a driver who asked for this from a doorway has no screen to check.
+    func parkVehicle(at date: Date = .now) throws -> IntentLifecycleOutcome {
+        _ = try shiftRefusal { try ShiftService(context: context).parkActiveShift(at: date) }
+        reconcileActivity()
+        AppLog.intents.info("Intent recorded the vehicle as parked")
+        return .vehicleParked
+    }
+
+    /// Records that the driver is driving again.
+    ///
+    /// Closes the open suspension through ``ShiftService``'s own operation, so
+    /// capture resumes as a **new** capture session and no distance is ever
+    /// measured across the stretch. Nothing here restarts capture and nothing
+    /// deletes a position.
+    ///
+    /// The confirmation carries the caution a spoken resume carries, for the same
+    /// reason: a capture session can only be *started* in the foreground, so a
+    /// driver who says this with DashPilot behind another app records no route
+    /// until they open it.
+    func resumeDriving(at date: Date = .now) throws -> IntentLifecycleOutcome {
+        let shift = try shiftRefusal { try ShiftService(context: context).resumeDrivingOnActiveShift(at: date) }
+        reconcileActivity()
+        AppLog.intents.info("Intent recorded the vehicle as driving again")
+        // Read from the shift after the write, like every other figure said
+        // back here, so the confirmation reports what the store now holds.
+        return .drivingResumed(parkedDuration: shift.suspendedTime(asOf: date).duration)
     }
 
     // MARK: Delivery
