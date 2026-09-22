@@ -221,7 +221,7 @@ struct RouteSuspensionTests {
     }
 
     @Test("Route coverage says what the driver recorded, and stops short of a correspondence")
-    func coverageIsTruthful() {
+    func coverageIsTruthful() throws {
         let partial = RouteDistance(
             metres: 800,
             segmentCount: 2,
@@ -246,17 +246,17 @@ struct RouteSuspensionTests {
                 unusableIntervalCount: 0
             )
         )
-        let explanation = try? #require(parked.suspensionExplanation)
-        #expect(explanation?.contains("1 stretch") == true)
-        #expect(explanation?.contains("25 min") == true)
-        #expect(explanation?.contains("no distance was measured across them") == true)
+        let explanation = try #require(parked.suspensionExplanation)
+        #expect(explanation.contains("1 stretch"))
+        #expect(explanation.contains("25 min"))
+        #expect(explanation.contains("no distance was measured across them"))
         #expect(
             parked.partialExplanation?.contains("more miles were driven than were recorded") == false,
             "That sentence is untrue of a vehicle that spent the stretch in a parking space"
         )
         #expect(parked.partialExplanation?.contains("time you recorded as parked") == true)
         // Never a claim that these stretches are those gaps.
-        #expect(explanation?.contains("gap") == false)
+        #expect(!explanation.contains("gap"))
     }
 
     // MARK: Refusals

@@ -48,8 +48,8 @@ struct ShiftPausePersistenceTests {
         let entities = Set(ModelContainerFactory.currentSchema.entities.map(\.name))
         #expect(
             entities == [
-                "Shift", "RouteSample", "Delivery", "PickupPlace", "Expense", "ShiftPause", "Offer",
-                "DeliveryTip", "VehicleProfile", "DriverSettings"
+                "Shift", "RouteSample", "RouteSuspension", "Delivery", "PickupPlace", "Expense",
+                "ShiftPause", "Offer", "DeliveryTip", "VehicleProfile", "DriverSettings"
             ]
         )
 
