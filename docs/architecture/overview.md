@@ -12,7 +12,7 @@ structure is kept flat and explicit; layers are introduced when a concrete probl
 | `Models` | SwiftData `@Model` types, which own the invariants of their own transitions |
 | `Persistence` | The versioned schema, the migration plan and container construction |
 | `Services` | Application services that own state transitions, plus thin adapters over platform frameworks |
-| `Intents` | The App Intents surface: six short lifecycle actions performed with no screen, over those same services |
+| `Intents` | The App Intents surface: eight short lifecycle actions performed with no screen, over those same services |
 | `App` | SwiftUI entry point, screens and preview fixtures |
 | `Support` | Cross-cutting utilities: logging and launch arguments |
 | `DashPilotActivity` | Value types shared with the widget extension: the Live Activity's snapshot, its control vocabulary and its five intent declarations |
@@ -151,8 +151,9 @@ route capture nor the Live Activity, because both are about a running shift.
 
 ## System surfaces: App Intents
 
-Six intents (start, end, pause and resume a shift; start a delivery; record the next delivery event)
-can be performed by voice, from Shortcuts or from Spotlight, with the app never coming to the screen.
+Eight intents (start, end, pause and resume a shift; park the vehicle and drive again; start a
+delivery; record the next delivery event) can be performed by voice, from Shortcuts or from
+Spotlight, with the app never coming to the screen.
 Each
 declares `supportedModes` as `.background`, which is where that guarantee lives and what
 `openAppWhenRun = false` said before iOS 26 deprecated it. They exist for driving safety: the
@@ -162,7 +163,9 @@ timestamp recorded at the moment the driver says so is the accurate one.
 `ShiftService` and `DeliveryService`, carries their refusals through unchanged so a driver hears the
 same sentence they would read, and adds exactly one rule of its own.
 
-That rule is which delivery a spoken step meant. On screen the question does not arise: with three
+That rule is which delivery a spoken step meant. It is about deliveries alone: the two parked actions
+are shift operations, read no delivery in either direction and are refused by no number of them,
+because one driver has one vehicle however many orders are in the car. On screen the question does not arise: with three
 deliveries running there are three cards, each with its own button. A sentence has no card, so a step
 is recorded only while **exactly one** delivery is in progress; with more, nothing is recorded and the
 refusal names the count. That is `DeliveryService`'s own principle, where every mutation takes its

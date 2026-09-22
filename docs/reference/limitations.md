@@ -38,17 +38,19 @@ and one they cannot.
   still, and a driver who parks, drives somewhere else and comes back records a stretch parked over
   driving nobody measured.
 - **Forgetting to leave the state costs the rest of the shift's route.** The app says `Parked` on the
-  running shift and on the Lock Screen for as long as it lasts, and stops there: nothing resumes on a
-  timer, on a speed or on a delivery advancing, because a rule that guessed would record a walk as
-  vehicle mileage on the day it guessed wrong.
+  running shift and on the Lock Screen for as long as it lasts, and both halves can now be recorded
+  by voice or from the Lock Screen so that a driver with full hands has no excuse to put it off. It
+  stops there: nothing resumes on a timer, on a speed or on a delivery advancing, because a rule that
+  guessed would record a walk as vehicle mileage on the day it guessed wrong.
 - **The stretches parked are not matched to the gaps they leave.** A shift whose recording had
   already stopped produces no gap by parking, and the route keeps no record of which stop is which,
   so the two facts are stated side by side and never as a correspondence.
 
 ## Voice and system actions
 
-- **Six actions only.** Start a shift, pause it, resume it, end it, start a delivery, record that
-  delivery's next event. Nothing else DashPilot does is reachable without the screen.
+- **Eight actions only.** Start a shift, pause it, resume it, end it, park the vehicle, drive again,
+  start a delivery, record that delivery's next event. Nothing else DashPilot does is reachable
+  without the screen.
 - **A spoken delivery step needs exactly one delivery in progress.** With two or more, nothing is
   recorded and the refusal names the count. This is a refusal, not a gap: a sentence names no
   particular order, and guessing one would write an event into a delivery the driver did not mean.
@@ -198,6 +200,10 @@ and one they cannot.
   driver recorded accepting the order, which says nothing about whether they were driving, waiting
   or parked during it, and it is not reduced by a shift pause. A shift cannot be paused while a
   delivery is open, so the case does not arise in data the app can produce.
+- **The parked pair is a courtesy, not a permission.** The card shows `Park Vehicle` or `Resume
+  Driving`, never both, from a snapshot that can be a moment out of date; a press that the store
+  would now refuse costs the service's own refusal sentence. Nothing about the vehicle itself is on
+  the card: no name, no miles per gallon, no price.
 - **A paused figure is written `19:57` where the app writes `0:19:57`.** The system draws the running
   clock without an hour field until there is one, and the two figures share a place on the card, so
   the paused one follows the system rather than the app.
@@ -538,11 +544,20 @@ and one they cannot.
   VIN, no plate, no make, model or trim lookup, no tank size, no odometer, no service schedule, no
   insurance record and no efficiency by season, terrain or load.
 - **Nothing detects which vehicle is being driven.** A shift copies whichever vehicle is selected
-  when it starts, so a two-vehicle driver who forgets to switch records the wrong economy and finds
-  out later. The remedy is that shift's own fuel editor, which is the remedy for any mistyped figure.
-- **A running shift cannot have its assumptions edited.** Recording figures requires a completed
-  shift, by the rule that makes typing a stopped-vehicle task, so a driver who notices mid-shift that
-  the price is wrong corrects that shift after it ends. Changing the setting fixes the next shift.
+  when it starts. The running shift now says which vehicle it recorded, so a two-vehicle driver who
+  forgot to switch can see it without opening Settings, but nothing observes, classifies or asks.
+- **A running shift's assumptions can be corrected only before any driving is recorded.** Once its
+  route has measured a distance the correction closes, because changing what a mile is assumed to
+  cost after the miles are recorded would restate what those miles are estimated to have consumed.
+  A driver who notices later corrects that shift after it ends, in its own fuel editor. Changing the
+  setting still fixes only the next shift.
+- **The correction is one shift, in progress, and nothing else.** There is no way to correct the
+  assumptions of several recorded shifts, no way to reapply a changed setting to history, and no
+  record that a correction happened: a corrected shift is indistinguishable from one recorded
+  correctly, in the app and in the export.
+- **The eligibility rule is measured distance, not judgement about how far.** A route that measured
+  nothing leaves the correction open however many raw positions it holds, and the first measured
+  distance closes it however short. There is no threshold, and deliberately no time limit.
 - **Nothing records where a shift's assumptions came from.** A snapshot taken at the start and a pair
   typed afterwards are indistinguishable, in the app and in the export. The vehicle name is the only
   hint, and it is absent whenever the economy was typed by hand.

@@ -81,6 +81,8 @@ Worked so far
 4.5 mi recorded · partial route
 2 capture segments · 1 capture gap
 2 deliveries in progress · 3 completed
+2020 Honda Civic
+34 MPG
 ```
 
 The mileage is **recorded** mileage, in the same words and from the same calculation the finished
@@ -97,6 +99,47 @@ fact and never a shift total.
 
 Still deliberately absent: a map, coordinates, a sample count, an earnings projection, a target, a
 goal and any comparison with another shift.
+
+### Which vehicle the shift is using
+
+The last two lines are the vehicle assumptions **this shift recorded when it started**, so a driver
+with two vehicles who forgot to switch can see it without leaving the screen. It answers *which
+vehicle is this shift using?*; Settings answers a different question, which is what the **next** shift
+will record.
+
+It reads the shift's own snapshot and nothing else. Changing the selected vehicle, renaming a
+profile, correcting its miles per gallon, deleting it or changing the current gas price all leave
+this row exactly where it is. A shift that recorded nothing says `No vehicle recorded` rather than
+borrowing what is selected today, which would claim the shift was worked in a vehicle nobody
+recorded.
+
+The gas price is deliberately not here. It is an input to the fuel estimate a finished shift reports,
+and the one screen a driver reads while working is not where a price belongs. See
+[Estimated fuel and net](estimated-fuel.md) and [Settings and vehicles](settings.md).
+
+### Correcting the vehicle, before any driving is recorded
+
+Beside the vehicle lines there is a small `Change`, and it is offered **only while the shift's route
+has recorded no distance**. A driver who notices at the kerb that they started the shift in the wrong
+vehicle, or under a gas price they have since seen is wrong, can correct this shift's own snapshot
+there and then.
+
+The sheet is two explicit choices, each defaulting to keeping what the shift already recorded: which
+vehicle, and whether to take the gas price currently in Settings. Nothing is written until Save, and
+Save is unavailable until something differs from what is recorded. Choosing a vehicle **copies** its
+current name and miles per gallon onto this shift: nothing in Settings is changed, the selection is
+not moved, and renaming or deleting that vehicle afterwards leaves this shift saying what it
+recorded.
+
+**Once the route has measured a distance the control is gone**, and the vehicle lines stay readable
+without it. Changing what a mile is assumed to cost after the miles are recorded would restate what
+those miles are estimated to have consumed, with nothing to point at, so the correction closes rather
+than being offered and refused. The rule is measured distance and never elapsed time: a driver who
+has been sitting still for an hour can still correct, and one who has driven ten miles in five
+minutes cannot.
+
+The remedy after that is the finished shift's own fuel editor, on its detail screen. Correcting the
+assumptions of shifts already recorded is not a feature DashPilot has.
 
 ## Pausing a shift
 
@@ -173,6 +216,14 @@ position moved or because a delivery advanced.
 The running shift and the shift's Lock Screen card both say `Parked` for as long as the state lasts,
 and both say plainly that the shift is still running, because forgetting to leave the state is the
 expensive way this goes wrong.
+
+**Both halves can be recorded without opening the app.** `Park my vehicle in DashPilot` and `Resume
+driving in DashPilot` are App Shortcuts, and the shift's Lock Screen card offers the matching button:
+whichever of the pair applies, never both. A driver with two bags in their hands cannot unlock a
+phone, and a state nobody can enter or leave hands-free is a state that gets forgotten. Every rule
+above applies to all three ways of saying it, because all three call the same two service operations.
+See [Voice and system actions](voice-actions.md) and
+[The shift on the Lock Screen](live-activity.md).
 
 ## Correcting a recorded pause
 

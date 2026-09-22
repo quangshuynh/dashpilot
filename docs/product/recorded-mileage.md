@@ -70,8 +70,18 @@ when the shift ends, its mileage is measured from the stored route in one pass, 
 Walking around a shop after parking is work, and it is not driving. DashPilot cannot tell the two
 apart on its own: a stored position carries no speed, and the rule that keeps a route from filling up
 with noise treats a walk across a car park exactly as it treats a crawl through traffic. So the app
-does not guess. **The driver says it**, with one control on the running shift, and DashPilot records
-that they said it.
+does not guess. **The driver says it**, and DashPilot records that they said it.
+
+There are three places to say it, and they record the same thing through the same code: the control
+on the running shift, the `Park my vehicle in DashPilot` shortcut, and the button on the shift's Lock
+Screen card. A driver carrying two bags cannot unlock a phone, and a state nobody can enter or leave
+hands-free is a state that gets forgotten, which is the failure that costs the rest of the shift's
+route. See [Voice and system actions](voice-actions.md) and
+[The shift on the Lock Screen](live-activity.md).
+
+Parking is a fact about the **vehicle**, not about an order: no delivery need be in progress, no
+number of deliveries in progress refuses it, and nothing anywhere asks or records **why** the driver
+parked.
 
 While a shift is recorded as parked:
 
@@ -89,7 +99,9 @@ position moved or because a delivery advanced: the app would be deciding the dri
 to their car, and the cost of deciding that wrongly is a walk recorded as vehicle mileage.
 
 The running shift and the Lock Screen both say `Parked` for as long as the state lasts, because
-forgetting to leave it is the expensive way this goes wrong.
+forgetting to leave it is the expensive way this goes wrong. The Lock Screen card shows exactly one
+of the pair at a time: `Park Vehicle` while the shift is driving, `Resume Driving` while it is
+parked, never both, because one of the two would always be a transition the store would refuse.
 
 A completed shift that was parked says how many stretches it recorded and how long they came to
 altogether, beside the route that they explain. It does **not** claim that those stretches are the
