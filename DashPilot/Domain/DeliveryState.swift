@@ -61,6 +61,26 @@ nonisolated enum DeliveryState: String, CaseIterable, Sendable, Hashable {
         }
     }
 
+    /// The shortest truthful form of ``statusDescription``, for a surface whose
+    /// line is shared with something else.
+    ///
+    /// It exists for the shift's Live Activity, where a delivery's row holds a
+    /// name, a state and a running clock inside a Lock Screen's width. The long
+    /// form is the one the app prints wherever there is room; this is the same
+    /// fact with the words a phone screen cannot afford removed, and never a
+    /// different claim. `To pickup` and `At pickup` say where the driver is
+    /// going and where they are, which is the distinction a driver carrying two
+    /// orders is reading for.
+    var compactStatusDescription: String {
+        switch self {
+        case .accepted: "To pickup"
+        case .arrivedAtPickup: "At pickup"
+        case .pickedUp: "To customer"
+        case .delivered: "Delivered"
+        case .cancelled: "Cancelled"
+        }
+    }
+
     /// How a finished delivery is named in history.
     var historyDescription: String {
         switch self {
@@ -118,6 +138,28 @@ nonisolated enum DeliveryAction: String, CaseIterable, Sendable, Hashable {
         case .complete: "Mark delivery completed"
         }
     }
+
+    /// What the delivery's card says is coming, above the button that records
+    /// it.
+    ///
+    /// The button already prints ``title``, so this repeats it by design. A
+    /// driver carrying two orders reads the **cards**, not the buttons: two
+    /// prominent controls of the same shape and size are told apart by their
+    /// words alone, and a card whose state line says what it is waiting for is
+    /// one the eye can sort without landing on either control.
+    var nextStepStatement: String { "Next: \(title)" }
+
+    /// The same fact spoken, as its own sentence.
+    ///
+    /// A listener moving between cards hears the step before they reach the
+    /// button, which is what lets them choose a card rather than discover what
+    /// it does by arriving at its control.
+    ///
+    /// No trailing full stop, which is the convention every other clause a card
+    /// appends already follows: the caller joins its sentences with one, and a
+    /// phrase carrying its own produced `picked up.. Part of Offer 1` on the
+    /// first card that held both.
+    var spokenNextStep: String { "Next step, \(spokenLabel.lowercased())" }
 
     /// The state this action records, or `nil` for ``start``, which creates the
     /// delivery rather than advancing one.

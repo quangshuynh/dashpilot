@@ -1537,6 +1537,67 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertEqual(accepted.label, "Delivery 2. Mark arrived at pickup")
     }
 
+    // MARK: What each stacked delivery is waiting for
+
+    /// Three cards on one screen, each saying which delivery it is, what it is
+    /// doing and what it is waiting for, without any of them being opened.
+    @MainActor
+    func testEveryStackedDeliverySaysWhatItIsWaitingFor() throws {
+        let app = launchWithStackedOffer()
+
+        let first = deliveryStatusCard(named: "Delivery 1", in: app)
+        XCTAssertTrue(first.waitForExistence(timeout: 10))
+        let second = deliveryStatusCard(named: "Delivery 2", in: app)
+        let third = deliveryStatusCard(named: "Delivery 3", in: app)
+
+        // The fixture's first delivery is at its pickup and the other two were
+        // only accepted, so one card is waiting for a different event from the
+        // two beside it.
+        XCTAssertTrue(first.label.contains("waiting at the pickup"), first.label)
+        XCTAssertTrue(
+            first.label.contains("Next step, mark order picked up"),
+            "The card says what it is waiting for, not only what it is doing: \(first.label)"
+        )
+
+        XCTAssertTrue(second.label.contains("heading to the pickup"), second.label)
+        XCTAssertTrue(second.label.contains("Next step, mark arrived at pickup"), second.label)
+        XCTAssertTrue(third.label.contains("Next step, mark arrived at pickup"), third.label)
+
+        // And the cards are distinguishable by that alone, which is the claim:
+        // two deliveries in different states must not read as one.
+        XCTAssertNotEqual(first.label, second.label)
+        XCTAssertFalse(
+            first.label.contains("Next step, mark arrived at pickup"),
+            "The card at its pickup is not offered the arrival it already recorded"
+        )
+    }
+
+    /// Advancing one stacked delivery moves that card's next step and leaves
+    /// every other card saying exactly what it said.
+    @MainActor
+    func testAdvancingOneStackedDeliveryMovesOnlyItsNextStep() throws {
+        let app = launchWithStackedOffer()
+
+        let second = deliveryStatusCard(named: "Delivery 2", in: app)
+        XCTAssertTrue(second.waitForExistence(timeout: 10))
+        let first = deliveryStatusCard(named: "Delivery 1", in: app)
+        let firstBefore = first.label
+
+        let step = deliveryButton("deliveryActionButton", containing: "Delivery 2", in: app)
+        XCTAssertTrue(scrollTo(step, in: app))
+        step.tap()
+
+        XCTAssertTrue(
+            waitForLabel(second, toContain: "Next step, mark order picked up"),
+            "Delivery 2 recorded its arrival, so its card now waits for the pickup: \(second.label)"
+        )
+        XCTAssertEqual(
+            first.label,
+            firstBefore,
+            "And the card beside it says exactly what it said before"
+        )
+    }
+
     // MARK: Reminders about a lifecycle event that may have gone unrecorded
 
     /// Two stale deliveries each get their own reminder, naming their own
@@ -5142,6 +5203,25 @@ final class DashPilotUITests: XCTestCase {
     ) -> XCUIElement {
         app.buttons
             .matching(NSPredicate(format: "identifier == %@ AND label CONTAINS %@", identifier, text))
+            .firstMatch
+    }
+
+    /// One delivery card on the running shift's panel, identified by the
+    /// delivery it names.
+    /// **Matched on the start of the label, not on containment.** A card's
+    /// spoken status names its siblings — `Part of Offer 1, accepted together
+    /// with Delivery 2` — so `CONTAINS "Delivery 2"` matches the card belonging
+    /// to Delivery 1. Every card's label begins with its own name.
+    @MainActor
+    private func deliveryStatusCard(named name: String, in app: XCUIApplication) -> XCUIElement {
+        app.descendants(matching: .any)
+            .matching(
+                NSPredicate(
+                    format: "identifier == %@ AND label BEGINSWITH %@",
+                    "activeDeliveryStatus",
+                    name
+                )
+            )
             .firstMatch
     }
 

@@ -831,6 +831,17 @@ private struct ActiveDeliveryCard: View {
                         .foregroundStyle(.secondary)
                 }
 
+                // What this delivery is waiting for, on the card rather than
+                // only on the button below it. With two or three cards on
+                // screen, the buttons are the same shape and the same size and
+                // are told apart only by their words; a state line that says
+                // what comes next lets the eye sort the cards without landing
+                // on a control to find out.
+                if let next = delivery.state.nextAction {
+                    Text(next.nextStepStatement)
+                        .font(.subheadline.weight(.medium))
+                }
+
                 if let place = delivery.pickupPlace {
                     Label(place.displayName, systemImage: "bag")
                         .font(.subheadline)
@@ -948,8 +959,9 @@ private struct ActiveDeliveryCard: View {
     }
 
     /// "Delivery 2, waiting at the pickup, from Nowhere Noodles, accepted at
-    /// 5:12 PM" — the identity first, because that is what tells the listener
-    /// which card they are on, and the place only when one was recorded.
+    /// 5:12 PM. Next step, mark order picked up." — the identity first, because
+    /// that is what tells the listener which card they are on, the place only
+    /// when one was recorded, and the step as its own sentence.
     ///
     /// An expected amount is appended as its own **sentence** rather than as
     /// another comma-separated clause, because it is the one part of this label
@@ -964,6 +976,13 @@ private struct ActiveDeliveryCard: View {
         parts.append("accepted at \(accepted)")
 
         var spoken = parts.joined(separator: ", ")
+        // Its own sentence, and first of the three that follow: a listener
+        // choosing between cards is choosing by what each one is waiting for,
+        // and the step has to be heard before they reach the control that takes
+        // it rather than discovered by arriving there.
+        if let next = delivery.state.nextAction {
+            spoken += ". \(next.spokenNextStep)"
+        }
         // Its own sentence, and before the money: which deliveries arrived
         // together is what tells a listener which other cards on this screen
         // belong with this one, and it must not be heard as a clause of the
