@@ -37,6 +37,22 @@ nonisolated enum IntentLifecycleOutcome: Equatable, Sendable {
     /// A shift was resumed, having been paused for `pausedDuration` in total.
     case shiftResumed(pausedDuration: TimeInterval?)
 
+    /// The driver recorded the vehicle as parked.
+    ///
+    /// No duration travels with it, and that is the point rather than an
+    /// omission: parking subtracts nothing, so there is no figure it moves. What
+    /// the driver needs told is the pair of facts the state is easy to confuse:
+    /// the route has stopped, and the shift has not.
+    case vehicleParked
+
+    /// The driver recorded that they are driving again, having had the vehicle
+    /// recorded as parked for `parkedDuration` in total over this shift.
+    ///
+    /// Optional for the reason every other duration here is: it is read from the
+    /// shift rather than assumed, and zero is a different claim from "not
+    /// known".
+    case drivingResumed(parkedDuration: TimeInterval?)
+
     /// A delivery began, alongside however many were already running.
     case deliveryStarted(number: Int?, inProgress: Int?)
 
@@ -86,6 +102,28 @@ nonisolated enum IntentLifecycleOutcome: Equatable, Sendable {
                 """
             } else {
                 "Shift resumed. Open DashPilot to start recording your route again."
+            }
+        case .vehicleParked:
+            // Two facts, and they are the two a driver can confuse. The route
+            // has stopped, which is what parking is for; the shift has not,
+            // which is what parking is not. A spoken confirmation is the only
+            // report this driver gets, and they are standing away from the car
+            // with no screen to check.
+            """
+            Vehicle parked. Route recording is stopped until you resume driving. \
+            Your shift is still running and its working time is still counting.
+            """
+        case let .drivingResumed(parkedDuration):
+            // The same caution a spoken resume carries, for the same reason: a
+            // capture session can only be started with the app on screen, so
+            // driving again by voice records no route until DashPilot is opened.
+            if let parkedDuration {
+                """
+                Driving again after \(DurationText.spoken(parkedDuration)) parked. \
+                Open DashPilot to start recording your route again.
+                """
+            } else {
+                "Driving again. Open DashPilot to start recording your route again."
             }
         case let .deliveryStarted(number, inProgress):
             [Self.started(number), Self.inProgressStatement(inProgress)]

@@ -138,7 +138,7 @@ struct DeliveryOfferSurfaceTests {
         let state = shift.activityContentState(for: .none, asOf: at(600), locale: locale)
 
         #expect(state.activeDeliveryCount == 1)
-        #expect(state.controls == [.deliveryStep(.arriveAtPickup), .startDelivery])
+        #expect(state.controls == [.deliveryStep(.arriveAtPickup), .startDelivery, .park])
     }
 
     @Test("Two deliveries of one offer withhold the step exactly as two offers do")
@@ -153,7 +153,10 @@ struct DeliveryOfferSurfaceTests {
         let groupedState = grouped.activityContentState(for: .none, asOf: at(600), locale: locale)
         let separateState = separate.activityContentState(for: .none, asOf: at(600), locale: locale)
 
-        #expect(groupedState.controls == [.startDelivery], "No step, because there is no one delivery to mean")
+        #expect(
+            groupedState.controls == [.startDelivery, .park],
+            "No step, because there is no one delivery to mean"
+        )
         #expect(groupedState.controls == separateState.controls)
         #expect(groupedState.deliveryStatus == nil)
         #expect(groupedState.activeDeliveryCount == separateState.activeDeliveryCount)

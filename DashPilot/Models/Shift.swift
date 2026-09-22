@@ -42,6 +42,16 @@ nonisolated enum ShiftError: Error, Equatable {
     /// A default that could overwrite a recorded fact would be the dynamic
     /// dependence on a current global figure the snapshot exists to prevent.
     case fuelAssumptionsAlreadyRecorded
+    /// A running shift's fuel assumptions were corrected after its route had
+    /// already measured a distance.
+    ///
+    /// **The one rule the running-shift correction has of its own.** Before any
+    /// distance is measured there is no recorded driving for a different economy
+    /// to restate; afterwards there is, and changing the divisor under it would
+    /// silently rewrite what the miles already recorded are estimated to have
+    /// consumed. Refusing is the conservative answer, and the remedy for a shift
+    /// that has driven is the shift's own fuel editor once it has finished.
+    case recordedDrivingHasBegun
 }
 
 /// A single period of delivery work.
@@ -501,6 +511,16 @@ extension Shift {
         )
     }
 
+    /// Which vehicle this shift recorded when it started.
+    ///
+    /// The adapter between the two stored columns and ``ShiftVehicleContext``,
+    /// holding no rule of its own. It reads **this shift's snapshot and nothing
+    /// else**: no preference, no profile, no current selection, so a shift that
+    /// recorded nothing says so rather than borrowing what is selected today.
+    var vehicleContext: ShiftVehicleContext {
+        ShiftVehicleContext(vehicleName: fuelVehicleName, milesPerGallon: fuelMilesPerGallonValue)
+    }
+
     /// Records the assumptions this shift's fuel estimate is worked out under,
     /// replacing whatever was recorded before.
     ///
@@ -618,6 +638,89 @@ extension Shift {
         fuelMilesPerGallonValue = milesPerGallon
         fuelGasPricePerGallonAmount = gasPricePerGallon?.amount
         fuelVehicleName = vehicleName ?? keptName
+    }
+
+    /// Whether this shift's recorded assumptions may still be corrected in place.
+    ///
+    /// **Two facts, both read rather than judged.** The shift is still running,
+    /// and its route has measured no distance yet. See
+    /// ``correctRunningFuelAssumptions(_:using:)`` for why those are the two.
+    ///
+    /// It walks the stored route, so a screen re-evaluating a body must not call
+    /// it: ``ActiveShiftMetrics/recordedDistance`` is the reading the running
+    /// shift's panel already holds, and
+    /// ``RouteDistance/isMeasured`` on that value is the same question answered
+    /// from a measurement that is already open. A control offered from the
+    /// panel's reading is a courtesy; this is the rule.
+    func mayCorrectRunningFuelAssumptions(
+        using calculator: RouteMileageCalculator = RouteMileageCalculator()
+    ) -> Bool {
+        endedAt == nil && !recordedDistance(using: calculator).isMeasured
+    }
+
+    /// Corrects the assumptions a **running** shift recorded when it started.
+    ///
+    /// ## The case it exists for
+    ///
+    /// A driver with two vehicles starts a shift in the wrong one, or with a gas
+    /// price they have since seen is wrong, and notices before they have driven
+    /// anywhere. Until this, their only remedy was to wait for the shift to end
+    /// and correct it in history, which is a remedy nobody takes.
+    ///
+    /// ## The rule, and why it is this rule
+    ///
+    /// **Only while the route has measured no distance.** That is
+    /// ``RouteDistance/isMeasured``, which is the app's existing definition of
+    /// whether a distance was measured at all, rather than a threshold or an
+    /// interval since the start invented for this: a time heuristic would let a
+    /// driver who has been sitting still for an hour be refused and one who has
+    /// driven ten miles in five minutes be allowed, which is exactly backwards.
+    /// Once a distance exists, changing the divisor under it would restate what
+    /// the miles already recorded are estimated to have consumed, with nothing
+    /// to point at. The refusal is the conservative answer and the shift's own
+    /// fuel editor is the remedy once it has finished.
+    ///
+    /// Raw samples that measured nothing do not refuse it. A single position, or
+    /// positions the calculation cannot join, support **no distance**, so no
+    /// estimate is restated by a correction over them.
+    ///
+    /// ## What it does not do
+    ///
+    /// **It deletes and rewrites no route evidence.** Nothing here reads, moves
+    /// or removes a ``RouteSample``, and the measurement it takes is the same
+    /// read-only walk the panel already performs. Making a correction possible by
+    /// discarding positions is the one thing this must never do.
+    ///
+    /// **It touches no preference.** A ``VehicleProfile`` and ``DriverSettings``
+    /// are read by the caller to build the values and are never written here, and
+    /// nothing stores a relationship to either: the name and the economy are
+    /// copied as facts, so a profile renamed or deleted afterwards leaves this
+    /// shift saying what it recorded.
+    ///
+    /// **It is not a default being reapplied.** ``recordStartingFuelDefaults(_:)``
+    /// may only fill an empty pair and runs once, without anybody asking; this
+    /// replaces a recorded pair and only ever runs because the driver saved.
+    ///
+    /// - Throws: ``ShiftError/shiftAlreadyEnded`` for a finished shift, which is
+    ///   ``setFuelAssumptions(milesPerGallon:gasPricePerGallon:vehicleName:)``'s
+    ///   subject and not this one's; ``ShiftError/recordedDrivingHasBegun`` once
+    ///   the route has measured a distance; or the same
+    ///   ``ShiftError/invalidFuelEconomy`` and ``ShiftError/negativeGasPrice``
+    ///   every other writer of this pair raises.
+    func correctRunningFuelAssumptions(
+        _ correction: FuelDefaults,
+        using calculator: RouteMileageCalculator = RouteMileageCalculator()
+    ) throws {
+        guard endedAt == nil else { throw ShiftError.shiftAlreadyEnded }
+        guard !recordedDistance(using: calculator).isMeasured else {
+            throw ShiftError.recordedDrivingHasBegun
+        }
+
+        try writeFuelAssumptions(
+            milesPerGallon: correction.assumptions.milesPerGallon,
+            gasPricePerGallon: correction.assumptions.gasPricePerGallon,
+            vehicleName: correction.vehicleName
+        )
     }
 
     /// Removes both assumptions, returning the shift to having none.

@@ -410,7 +410,7 @@ struct DeliveryRecoveryServiceTests {
         #expect(presenter.onlyContent?.completedDeliveryCount == 0)
         #expect(presenter.onlyContent?.deliveryStatus == "Heading to the customer")
         #expect(
-            presenter.onlyContent?.controls == [.deliveryStep(.complete), .startDelivery],
+            presenter.onlyContent?.controls == [.deliveryStep(.complete), .startDelivery, .park],
             "One delivery is open again, so the card offers that delivery's own next step"
         )
     }

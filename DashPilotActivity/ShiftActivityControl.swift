@@ -78,6 +78,20 @@ nonisolated enum ShiftActivityControl: Codable, Hashable, Sendable {
     /// the driver said they had stopped working, and ``DeliveryService``
     /// refuses a start on one.
     case startDelivery
+    /// Record that the driver has parked and is away from the vehicle.
+    ///
+    /// **Never ``pause``, and the vocabulary is what keeps the two apart.** A
+    /// parked shift is still running, still counting working time and still
+    /// carrying its deliveries; what has stopped is the route. Offered on every
+    /// running shift that is not already parked, including one carrying orders,
+    /// because parking at a pickup is exactly when a driver needs it and their
+    /// hands are exactly as full.
+    case park
+    /// Record that the driver is driving again.
+    ///
+    /// Replaces ``park`` while the shift is parked, and the two are never on the
+    /// card together: one of them is always a statement the store would refuse.
+    case resumeDriving
     /// Record the next step of the one delivery in progress.
     case deliveryStep(ShiftActivityDeliveryStep)
 
@@ -88,6 +102,8 @@ nonisolated enum ShiftActivityControl: Codable, Hashable, Sendable {
         case .resume: "Resume Shift"
         case .end: "End Shift"
         case .startDelivery: "Start Delivery"
+        case .park: "Park Vehicle"
+        case .resumeDriving: "Resume Driving"
         case let .deliveryStep(step): step.title
         }
     }
@@ -102,6 +118,11 @@ nonisolated enum ShiftActivityControl: Codable, Hashable, Sendable {
         case .resume: "Resume shift"
         case .end: "End shift"
         case .startDelivery: "Start delivery"
+        // Explicit about the subject and about the verb. "Pause" would be the
+        // one label on this card that could be acted on under a wrong belief,
+        // because parking subtracts nothing and pausing subtracts everything.
+        case .park: "Park vehicle"
+        case .resumeDriving: "Resume driving"
         case let .deliveryStep(step): step.spokenLabel
         }
     }
@@ -115,6 +136,11 @@ nonisolated enum ShiftActivityControl: Codable, Hashable, Sendable {
         // moving one along, and a driver carrying an order must be able to tell
         // the two apart without reading either label.
         case .startDelivery: "plus.circle.fill"
+        // Not a pause glyph and not a play glyph: the pair the driver must not
+        // confuse these with is the shift's own pause and resume, which sit on
+        // the same card.
+        case .park: "parkingsign.circle.fill"
+        case .resumeDriving: "car.fill"
         case let .deliveryStep(step): step.symbolName
         }
     }
@@ -133,8 +159,12 @@ nonisolated enum ShiftActivityControl: Codable, Hashable, Sendable {
     /// by ``ShiftActivityControl/emphasised(in:)``.
     var isProminent: Bool {
         switch self {
-        case .resume, .deliveryStep, .startDelivery: true
-        case .pause, .end: false
+        // ``resumeDriving`` is emphasised for the reason ``resume`` is, and it
+        // is the app's own panel's judgement: leaving the parked state is the
+        // tap that matters, because forgetting to is what costs the rest of the
+        // shift's route. ``park`` is not, for the reason ``pause`` is not.
+        case .resume, .resumeDriving, .deliveryStep, .startDelivery: true
+        case .pause, .park, .end: false
         }
     }
 
