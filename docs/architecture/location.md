@@ -137,6 +137,15 @@ updates and writes pending samples, *before* recording the end, so there is no w
 candidate is judged against a shift the store has already closed. It then calls `synchronize()`
 whether the end succeeded or not, so a failed end restarts capture rather than latching it off.
 
+A shift the driver has recorded as **parked** stops capture through the same path and is judged in
+the same place. `synchronize()` asks the store whether the shift is paused, then whether it is
+parked, then whether permission allows capture at all: the driver's own decisions outrank a
+permission problem, because reporting one would explain a stop they already know the reason for and
+would imply that fixing it would resume recording. `RouteSampleFilter` rejects a fix already in
+flight with `routeSuspended`, after `shiftPaused`, which closes the same window ending a shift
+closes. Driving again mints a **new** capture session, so no distance is ever measured across the
+stretch. See [Parking for a pickup](../product/shift-workflow.md#parking-for-a-pickup).
+
 Losing location never ends a shift. Shift lifecycle and tracking availability are separate concerns:
 capture goes to `.unavailable(...)`, the shift keeps running, and the driver decides when it ends.
 

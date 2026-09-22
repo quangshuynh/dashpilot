@@ -24,6 +24,16 @@ and without touching the shift's own times, its route or any amount. See
 [Shift workflow](shift-workflow.md#pausing-a-shift) and
 [Correcting a recorded pause](shift-workflow.md#correcting-a-recorded-pause).
 
+**Parked for a pickup.** A driver who parks and walks into a shop can record the vehicle as parked,
+and route recording stops until they record that they are driving again. It is a recorded row with
+its own timestamps, so it survives termination, and it is deliberately **not** a pause: working time
+keeps counting, every hourly figure keeps its denominator, and any number of deliveries may be open
+throughout. It belongs to the shift rather than to a delivery, because a driver shopping for one
+order while carrying another has one vehicle and it is parked. Leaving the state is always the
+driver's: nothing resumes because a speed changed or a delivery advanced. A completed shift that was
+parked says how many stretches it recorded and how long they came to, beside the route they explain.
+See [Parking for a pickup](shift-workflow.md#parking-for-a-pickup).
+
 **Location authorization.** Core Location's permission and accuracy states are modelled separately:
 not determined, denied, restricted, When In Use, Always, plus the system-wide Location Services
 switch and full versus reduced accuracy. The root screen shows the current state with the one
@@ -55,6 +65,15 @@ break. It is extended a few positions at a time rather than remeasured, and noth
 is written to the store. No earnings and no rates appear on a running shift, because a shift's gross
 earnings cannot be recorded until it has finished; the screen says that rather than showing a zero.
 See [Shift workflow](shift-workflow.md#while-a-shift-runs).
+
+**Reminders about an unrecorded event.** A delivery that has recorded nothing newer than its
+acceptance or its arrival for half an hour gets a passive card offering that delivery's own next
+step. It is a **suggestion and never a detection**: the card states what the record holds, asks a
+question, and says plainly that DashPilot did not observe it. Nothing is written unless the driver
+presses the control, and pressing it runs exactly the lifecycle action the delivery's own card
+already offers. No location, no motion sensor and no notification is involved, and a delivery already
+picked up, already finished, or on a finished shift is never the subject of one. See
+[Reminders about an event that may have gone unrecorded](delivery-lifecycle.md#reminders-about-an-event-that-may-have-gone-unrecorded).
 
 **Delivery lifecycle.** A delivery belongs to one shift and moves through accepted, arrived at
 pickup, picked up and delivered, or ends cancelled from any of those. Every event is recorded
@@ -151,10 +170,10 @@ database" action.
 
 ## Not implemented
 
-Taxes and mileage deductions, recurring costs, receipts, gas-price lookup, more than one vehicle, an
-estimated fuel or net figure for a period rather than a shift, a tips-versus-base breakdown,
-per-delivery mileage, customer identity, merchant scoring, ranking or profitability, offer
-profitability, automatic delivery or pickup detection, geocoding, maps, route visualisation,
+Taxes and mileage deductions, recurring costs, receipts, gas-price lookup, a tips-versus-base
+breakdown, per-delivery mileage, customer identity, merchant scoring, ranking or profitability, offer
+profitability, automatic delivery or pickup detection, any classifier that decides whether a vehicle
+is moving, geocoding, maps, route visualisation,
 quarterly, yearly or all-time totals, trends or comparisons across more than two periods, importing
 an exported file, backup, sync, home-screen widgets and recommendations.
 
