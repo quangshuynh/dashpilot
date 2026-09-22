@@ -122,6 +122,21 @@ nonisolated enum LaunchArgument {
     /// Every time is invented. Debug builds only, and in memory.
     static let seededMalformedOffer = "-dashpilot-seeded-malformed-offer"
 
+    /// Runs against a throwaway store holding a running shift whose deliveries
+    /// have recorded nothing for well over half an hour, in different states.
+    ///
+    /// A progress reminder's whole input is elapsed time, and a journey cannot
+    /// wait half an hour for one. Seeding deliveries that are already stale is
+    /// the only way to reach the reminders end to end, and seeding two of them
+    /// in different states is what proves each reminder names its own delivery
+    /// and offers that delivery's own step. A third, already picked up and older
+    /// than either threshold, is the silence: nothing is offered for a delivery
+    /// that is in the car.
+    ///
+    /// Every time is invented. Debug builds only, and in memory, so it can never
+    /// touch a real store.
+    static let seededMissedLifecycle = "-dashpilot-seeded-missed-lifecycle"
+
     /// Runs against a throwaway store holding one **completed** shift that was
     /// paused twice, with one delivery recorded between the two pauses.
     ///
@@ -250,6 +265,7 @@ nonisolated enum LaunchArgument {
         seededExpectedPay,
         seededStackedOffer,
         seededMalformedOffer,
+        seededMissedLifecycle,
         seededPausedHistory,
         seededLateEndHistory,
         seededLateDeliveryHistory,

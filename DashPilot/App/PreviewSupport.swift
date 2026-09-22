@@ -51,34 +51,38 @@ enum PreviewSupport {
     }
 
     /// The instant the fixtures holding a **running** shift hang their offsets
-    /// from: ``historyWeekReference(now:calendar:)``, or now, whichever is
-    /// earlier.
+    /// from: **now**.
     ///
-    /// A running shift is not in History, so this looks like it should not
-    /// matter. It matters the moment a journey **ends** one: the shift it
-    /// finalises carries the fixture's `startedAt`, and a shift dated in 2025
-    /// lands behind View Older Weeks rather than in the list the journey is
-    /// about to read. Three journeys failed exactly that way.
+    /// ## Why this is not ``historyWeekReference(now:calendar:)``
     ///
-    /// The `min` is what the completed-history fixtures do not need. Their
-    /// shifts are already over, so a date a few hours into the future is only
-    /// odd; a *running* shift dated in the future has been running for a
-    /// negative length of time, and the panel would draw it. Taking the earlier
-    /// of the two keeps the anchor fixed for most of the week and pins it to the
-    /// clock on the Monday and Tuesday morning where the week has not reached
-    /// it yet.
+    /// It was, and it was wrong in a way nothing noticed until a figure derived
+    /// from a running delivery's own age went on screen. The history anchor is
+    /// Tuesday 09:00 of the current week, so a suite run on a Thursday opened
+    /// these fixtures on a shift that had been "running" for two days, with
+    /// deliveries accepted two days ago. Nothing read those ages, so nothing
+    /// failed; the moment anything does, a fixture's shape depends on which
+    /// weekday the suite happens to run.
     ///
-    /// **The one window it does not cover** is the first 90 minutes of a Monday,
-    /// where the offsets below reach back past the week's own start. Accepted
-    /// rather than solved: solving it means a fixture that changes shape by
-    /// weekday, which is worth less than a fixture that is the same every time
-    /// it is read.
-    static func runningShiftReference(
-        now: Date = .now,
-        calendar: Calendar = .autoupdatingCurrent
-    ) -> Date {
-        min(now, historyWeekReference(now: now, calendar: calendar))
-    }
+    /// Anchoring on `now` keeps every offset below fixed **relative to the
+    /// launch**, which is the determinism these fixtures actually need: the same
+    /// shift length, the same delivery ages and the same lifecycle spacing every
+    /// run. Nothing here asserts an absolute clock time, and a running shift
+    /// belongs to no reporting period until it ends.
+    ///
+    /// ## What the old anchor was protecting, and why `now` protects it too
+    ///
+    /// A journey that **ends** one of these shifts finalises a shift carrying
+    /// this `startedAt`, and History shows the current Monday-to-Sunday week
+    /// only, so a shift dated outside it lands behind `View Older Weeks` instead
+    /// of in the list the journey is about to read. `now` is inside the current
+    /// week by definition, which is a stronger guarantee than the old `min`
+    /// gave: it also removes the window in the first 90 minutes of a Monday
+    /// where the offsets reached back past the week's own start, and the case
+    /// where a running shift was dated in the future.
+    ///
+    /// It takes no calendar, unlike the history anchor: there is no week to
+    /// derive a Tuesday from any more.
+    static func runningShiftReference(now: Date = .now) -> Date { now }
 
     static func populatedContainer(
         referenceDate: Date = historyWeekReference(),
@@ -301,8 +305,15 @@ enum PreviewSupport {
         // Waiting at the pickup with an amount recorded: the state the feature
         // was designed around, since the figure an offer showed is on the phone
         // at the kerb and gone by the evening.
-        let expecting = insertedDelivery(on: shift, acceptedAt: referenceDate.addingTimeInterval(-4500), in: context)
-        try? expecting.markArrivedAtPickup(at: referenceDate.addingTimeInterval(-4200))
+        //
+        // Twenty minutes at the pickup, comfortably inside
+        // `DeliveryProgressAssistance`'s half-hour threshold. Both of these
+        // deliveries sat there for over an hour until the reminders existed,
+        // which would have put an assistance card above every one of these
+        // journeys and made each of them partly a journey about assistance.
+        // The dedicated fixture below is where a stale delivery lives.
+        let expecting = insertedDelivery(on: shift, acceptedAt: referenceDate.addingTimeInterval(-1500), in: context)
+        try? expecting.markArrivedAtPickup(at: referenceDate.addingTimeInterval(-1200))
         try? expecting.setExpectedEarnings(Money(minorUnits: 850))
         context.insert(expecting)
 
@@ -310,8 +321,8 @@ enum PreviewSupport {
         // feature works exactly this delivery, and the journeys use it both to
         // enter an amount and to prove that a delivery without one finishes the
         // way it always did.
-        let plain = insertedDelivery(on: shift, acceptedAt: referenceDate.addingTimeInterval(-1800), in: context)
-        try? plain.markArrivedAtPickup(at: referenceDate.addingTimeInterval(-1500))
+        let plain = insertedDelivery(on: shift, acceptedAt: referenceDate.addingTimeInterval(-1200), in: context)
+        try? plain.markArrivedAtPickup(at: referenceDate.addingTimeInterval(-900))
         context.insert(plain)
 
         try? context.save()
@@ -359,20 +370,85 @@ enum PreviewSupport {
         // One acceptance, two deliveries, recorded through the app's own
         // creation path so the fixture cannot hold a grouping the app could not
         // produce.
+        // Accepted twenty-five minutes ago and arrived at twenty, both inside
+        // `DeliveryProgressAssistance`'s half-hour thresholds: a fixture that
+        // tripped one would put a reminder above every journey that reads this
+        // store, and each of them would become partly a journey about reminders.
         let stacked = insertedOffer(
             on: shift,
             deliveryCount: 2,
-            acceptedAt: referenceDate.addingTimeInterval(-4500),
+            acceptedAt: referenceDate.addingTimeInterval(-1500),
             in: context
         )
         if let first = stacked.first {
-            try? first.markArrivedAtPickup(at: referenceDate.addingTimeInterval(-4200))
+            try? first.markArrivedAtPickup(at: referenceDate.addingTimeInterval(-1200))
         }
 
         // Accepted later, on its own: an add-on offer is a second acceptance and
         // never an addition to the one above.
-        let addOn = insertedDelivery(on: shift, acceptedAt: referenceDate.addingTimeInterval(-3300), in: context)
+        let addOn = insertedDelivery(on: shift, acceptedAt: referenceDate.addingTimeInterval(-900), in: context)
         context.insert(addOn)
+
+        try? context.save()
+
+        return container
+    }
+
+    // MARK: Missed lifecycle events
+
+    /// The missed-lifecycle fixture, for a preview, which cannot recover from a
+    /// container failure.
+    static func missedLifecycleContainer(
+        referenceDate: Date = runningShiftReference()
+    ) -> ModelContainer {
+        try! seededMissedLifecycleContainer(referenceDate: referenceDate)
+    }
+
+    /// A throwaway store holding a running shift whose two deliveries have both
+    /// recorded nothing for well over half an hour, in **different** states.
+    ///
+    /// `Delivery 1` reached its pickup 70 minutes ago and records no pickup;
+    /// `Delivery 2` was accepted 55 minutes ago and records no arrival. A third,
+    /// `Delivery 3`, was picked up 40 minutes ago and is the negative: a
+    /// delivery already in the car is never the subject of a reminder, however
+    /// long it has been carried, and a fixture without one would leave that
+    /// silence untested end to end.
+    ///
+    /// Why a fixture rather than taps. A reminder's whole input is elapsed time,
+    /// and a journey cannot wait half an hour. The states are deliberately
+    /// different so that one launch shows both reminders the app has, each
+    /// naming its own delivery and its own step, which is also the claim that a
+    /// reminder never crosses delivery identity.
+    ///
+    /// Every time is invented. Debug builds only, and in memory, so it can never
+    /// touch a real store.
+    static func seededMissedLifecycleContainer(
+        referenceDate: Date = runningShiftReference()
+    ) throws -> ModelContainer {
+        let container = try ModelContainerFactory.makeInMemoryContainer()
+        let context = ModelContext(container)
+
+        let shift = Shift(startedAt: referenceDate.addingTimeInterval(-9000))
+        context.insert(shift)
+
+        // Waiting at a pickup since long before any threshold: the reminder
+        // offers `Picked Up`.
+        let waiting = insertedDelivery(on: shift, acceptedAt: referenceDate.addingTimeInterval(-4500), in: context)
+        try? waiting.markArrivedAtPickup(at: referenceDate.addingTimeInterval(-4200))
+        context.insert(waiting)
+
+        // Accepted and no further: the reminder offers `Arrived at Pickup`.
+        let heading = insertedDelivery(on: shift, acceptedAt: referenceDate.addingTimeInterval(-3300), in: context)
+        context.insert(heading)
+
+        // Already in the car, and older than either threshold. Nothing is
+        // offered for it, which is the decision the type documents: with stacked
+        // orders, carrying one for an hour while delivering another is ordinary
+        // work rather than a missed tap.
+        let carrying = insertedDelivery(on: shift, acceptedAt: referenceDate.addingTimeInterval(-3000), in: context)
+        try? carrying.markArrivedAtPickup(at: referenceDate.addingTimeInterval(-2700))
+        try? carrying.markPickedUp(at: referenceDate.addingTimeInterval(-2400))
+        context.insert(carrying)
 
         try? context.save()
 
@@ -409,18 +485,19 @@ enum PreviewSupport {
         let shift = Shift(startedAt: referenceDate.addingTimeInterval(-5400))
         context.insert(shift)
 
+        // Inside the assistance thresholds, for the reason the fixture above is.
         let stacked = insertedOffer(
             on: shift,
             deliveryCount: 2,
-            acceptedAt: referenceDate.addingTimeInterval(-4500),
+            acceptedAt: referenceDate.addingTimeInterval(-1500),
             in: context
         )
         if let first = stacked.first {
-            try? first.markArrivedAtPickup(at: referenceDate.addingTimeInterval(-4200))
+            try? first.markArrivedAtPickup(at: referenceDate.addingTimeInterval(-1200))
         }
 
         // The anomaly, inserted directly, which is the only way to reach one.
-        context.insert(Offer(shift: shift, acceptedAt: referenceDate.addingTimeInterval(-3300)))
+        context.insert(Offer(shift: shift, acceptedAt: referenceDate.addingTimeInterval(-900)))
 
         try? context.save()
 

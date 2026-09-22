@@ -265,14 +265,14 @@ nonisolated final class Delivery {
 
     /// Where the delivery has reached, read from its timestamps.
     ///
-    /// The terminal states are checked first: a delivery that was cancelled
-    /// after being picked up is cancelled, not picked up.
+    /// The derivation itself lives on ``DeliveryLifecycleRecord``, exactly as
+    /// ``recordedEvents`` does, so the state a stored delivery reports and the
+    /// state a correction or a reminder reads off a record are the same rule
+    /// rather than two copies of it. The terminal states are checked first: a
+    /// delivery that was cancelled after being picked up is cancelled, not
+    /// picked up.
     var state: DeliveryState {
-        if cancelledAt != nil { return .cancelled }
-        if deliveredAt != nil { return .delivered }
-        if pickedUpAt != nil { return .pickedUp }
-        if arrivedAtPickupAt != nil { return .arrivedAtPickup }
-        return .accepted
+        DeliveryLifecycleRecord(self).state
     }
 
     var isActive: Bool { state.isActive }
