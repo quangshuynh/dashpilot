@@ -48,7 +48,7 @@ therefore carries none, because no expense belongs to a shift. See
 
 Every file states `formatVersion: 4`.
 
-**This is not the SwiftData schema version**, which is currently v13. The two describe different
+**This is not the SwiftData schema version**, which is currently v16. The two describe different
 things and are free to move independently:
 
 - The schema version describes how a database is laid out on one device. Nothing outside the app has
@@ -64,6 +64,37 @@ that ignores unknown keys keeps working.
 Exports are never called "v13".
 
 ### Version history
+
+#### Still 4: the stretches a shift recorded parked
+
+A shift can now record that the driver [parked and walked away from the
+vehicle](shift-workflow.md#parking-for-a-pickup), with route recording deliberately stopped. Two
+fields were **added** to `shifts[].route` in JSON, and the version stayed at 4 because nothing
+existing changed meaning, nothing was removed or renamed, and no enumeration gained a value:
+
+- `suspensionCount`, how many stretches the shift recorded. `0` for a shift the driver never parked,
+  which is a measurement rather than a missing value.
+- `suspendedSeconds`, how long those stretches came to altogether. `0`, never `null`, for the same
+  reason.
+
+They are in the file because they are the one thing that tells a reader why a shift's recorded
+distance is short **on purpose**: without them, a shift whose driver spent forty minutes in two shops
+is indistinguishable from one whose recording failed, and the two deserve different readings of the
+same mileage. They sit with the route rather than with the durations for that reason.
+
+**Nothing subtracts them.** `suspendedSeconds` is not paused time and it is not time off: a driver
+inside a shop collecting an order is working, so `workingSeconds` is untouched and every rate derived
+from it is the rate it would have been.
+
+**No instant reaches the file**, exactly as no pause instant does. How much and how often, never
+when.
+
+The CSV gained two **appended** columns, `shiftRouteSuspensionCount` and
+`shiftRouteSuspendedSeconds`, taking it from 39 to 41. They are appended rather than placed beside
+the route columns they belong with, because inserting a column moves every column after it and would
+have bumped the version on its own. Unlike an individual tip or an expense, these are facts about the
+shift that change how a column already in the table should be read, which is the same reason
+`shiftPausedSeconds` is there.
 
 #### Still 4: the fuel assumptions a shift was estimated under
 
@@ -293,7 +324,8 @@ Shift, day, week and all-history scopes, in JSON and CSV.
 ### Per shift
 
 Its start and end, elapsed time, paused time, working time, how many times it was paused, the amount
-recorded on it, what its route measured and how far that can be trusted, the fuel economy and gas
+recorded on it, what its route measured and how far that can be trusted, how many stretches it was
+recorded parked for and how long they came to, the fuel economy and gas
 price it was estimated under if the driver recorded them, delivery active and non-delivery time, the
 three derived rates, the delivered and cancelled counts, and its deliveries.
 

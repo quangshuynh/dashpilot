@@ -131,6 +131,49 @@ confirmation says so.
 A shift left paused when the app is terminated is still paused on the next launch, with its pause
 intact and nothing recording.
 
+## Parking for a pickup
+
+A driver who parks and walks into a shop to collect an order can record the vehicle as **parked**.
+It exists because walking around a shop inflates a recorded route, and DashPilot has no way to tell a
+walk from a drive: a stored position carries no speed, and the rule that keeps a route free of noise
+treats a walk across a car park exactly as it treats a crawl through traffic. Rather than guess, the
+app lets the driver say it and records that they said it.
+
+Like a pause, it is a row with a start timestamp rather than something the screen remembers, so a
+shift left parked when the app is terminated comes back parked with nothing to recover.
+
+**Unlike a pause, it subtracts nothing.** Shopping is working:
+
+| | Pause | Parked |
+| --- | --- | --- |
+| Working time | Stops accumulating | Keeps counting |
+| Hourly rates | Divide by less | Unchanged |
+| Deliveries | Cannot be started, none may be open | Unaffected, any number may be open |
+| Route recording | Stops | Stops |
+
+The one consequence is to the route. Recording stops, so the walk is never written down; driving
+again starts a **new** recording session, so the distance between where the vehicle was parked and
+where it is driven off from is never counted. See
+[Parked for a pickup](recorded-mileage.md#parked-for-a-pickup).
+
+**Parking is refused while the shift is paused.** Pausing says the driver stopped working and
+parking says they are working on foot, and a shift holding both would be claiming two things about
+the same minutes. Resuming the shift first is one tap.
+
+**It belongs to the shift, never to a delivery.** Whether the vehicle is moving is a fact about the
+driver and their vehicle: a driver shopping for one order while carrying another has one vehicle and
+it is parked. So there is one stretch at a time however many deliveries are open, no delivery starts
+or ends one, and nothing about [stacked deliveries](delivery-lifecycle.md#stacked-deliveries) divides
+it.
+
+Leaving the state is always explicit. `Resume Driving` is one tap, pausing the shift closes it, and
+ending the shift closes it at the end instant. Nothing resumes because a speed changed, because a
+position moved or because a delivery advanced.
+
+The running shift and the shift's Lock Screen card both say `Parked` for as long as the state lasts,
+and both say plainly that the shift is still running, because forgetting to leave the state is the
+expensive way this goes wrong.
+
 ## Correcting a recorded pause
 
 A pause is two taps made at a kerb, and it is the easiest thing in DashPilot to record at the wrong
@@ -254,6 +297,10 @@ An instant is **named and refused**, never quietly clamped or nudged into the ne
   [the recovery below](#when-a-delivery-recorded-late-blocks-an-earlier-end)
 - it may not leave a recorded pause outside the shift; the pause is corrected or deleted first,
   through its own editor, and nothing here shortens one to fit
+- it may not leave a recorded stretch **parked** outside the shift either, for the same reason and
+  with the same refusal: that stretch is what explains a gap in the shift's route, and an end moved
+  back through it would leave the gap with its recorded reason outside the shift. A shift recording a
+  stretch parked that was never ended is refused outright, exactly as one holding an unended pause is
 - it may not reach into a shift recorded after this one, because two overlapping shifts would each
   contribute their whole working duration to the same period
 - a shift recording a pause that was never ended is refused outright, in both directions: that pause
@@ -264,7 +311,8 @@ An instant is **named and refused**, never quietly clamped or nudged into the ne
 - **The shift's own start time**, so the day, week and period it belongs to do not change.
 - **Amounts.** The shift's gross earnings, every delivery's recorded amount, every additional tip and
   every expected amount stay exactly as entered.
-- **Deliveries and pauses.** No lifecycle timestamp and no pause timestamp moves.
+- **Deliveries, pauses and stretches recorded parked.** No lifecycle timestamp, no pause timestamp
+  and no parked timestamp moves.
 - **Route recorded at or before the corrected end.** Nothing is added, moved, retimed or reassigned
   to another capture session.
 

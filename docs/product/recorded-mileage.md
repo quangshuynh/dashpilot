@@ -38,6 +38,8 @@ started it **continues** off screen. DashPilot asks for location while in use an
 - **The driver force quits DashPilot**, which is the same case.
 - **A shift was started by voice with DashPilot behind another app.** There was no recording to
   continue, and one cannot begin off screen, so that shift records nothing until the app is opened.
+- **The driver parks for a pickup.** Recording stops until they record that they are driving again.
+  See [Parked for a pickup](#parked-for-a-pickup) below.
 
 The running shift says which of these is happening at the time, so a driver is not left assuming
 their route is being recorded when it is not, and the active line says plainly that recording is not
@@ -62,6 +64,42 @@ a pause always shows as one and the shift reads as a partial route from then on.
 The figure is read from the store every couple of seconds and extended with the positions recorded
 since the last reading, rather than measured from the beginning each time. Nothing about it is saved:
 when the shift ends, its mileage is measured from the stored route in one pass, as it always was.
+
+## Parked for a pickup
+
+Walking around a shop after parking is work, and it is not driving. DashPilot cannot tell the two
+apart on its own: a stored position carries no speed, and the rule that keeps a route from filling up
+with noise treats a walk across a car park exactly as it treats a crawl through traffic. So the app
+does not guess. **The driver says it**, with one control on the running shift, and DashPilot records
+that they said it.
+
+While a shift is recorded as parked:
+
+- **Recording stops**, so the walk is never written down at all. Nothing is deleted, because nothing
+  is captured.
+- **The shift keeps running.** Its working time keeps counting, its deliveries keep their own
+  lifecycles, and every hourly figure it will produce keeps the denominator it had. Parking is
+  **not** pausing, and nothing about it is ever subtracted from working time.
+- **Driving again starts a new recording**, so the distance between where the vehicle was parked and
+  where it is driven off from is not counted. That stretch was not recorded, so it is not measured.
+
+Leaving the state is always the driver's. `Resume Driving` is one tap, pausing the shift leaves it,
+and ending the shift closes it at the end. Nothing resumes because a speed changed, because a
+position moved or because a delivery advanced: the app would be deciding the driver had walked back
+to their car, and the cost of deciding that wrongly is a walk recorded as vehicle mileage.
+
+The running shift and the Lock Screen both say `Parked` for as long as the state lasts, because
+forgetting to leave it is the expensive way this goes wrong.
+
+A completed shift that was parked says how many stretches it recorded and how long they came to
+altogether, beside the route that they explain. It does **not** claim that those stretches are the
+gaps the route reports: a shift whose recording had already stopped for some other reason produces
+no gap by parking, and the route keeps no record of which stop is which.
+
+The wording of a partial route moves with it. "More miles were driven than were recorded" is the
+honest reading of a route DashPilot stopped by accident, and it is simply untrue of a stretch a
+vehicle spent in a parking space, so a shift that records a stretch parked says that part of it was
+not recorded and stops there.
 
 ## Gaps, segments and partial routes
 

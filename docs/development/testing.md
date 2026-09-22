@@ -96,6 +96,11 @@ test cannot see, such as a screen that renders a sentence the model never claime
 | Historical delivery cancellation | The rule a historical correction applies before anything is written: the recorded completion reused as the cancellation to the instant, a delivery still in progress and one already cancelled each refused with their own case, contradictory times refused rather than blessed, the model moving one timestamp to the other with every earlier event asserted as a value, both amounts preserved, the offer re-derived for each mix of cancelled and delivered children, and every confirmation sentence naming its subject while saying nothing about editing and carrying no figure |
 | Historical delivery cancellation service | The correction through the store, and mostly what must not move: the shift staying ended with nothing in progress, the active-time union, working duration, mileage, recorded pickup wait and whole period metrics unchanged, delivery-earnings coverage unable to outnumber its eligible records, the running-shift and paused-shift refusals sending the driver to the reopening instead, a second invocation writing nothing, route capture and the Live Activity both left alone, a refused save leaving the delivery delivered read through a fresh context, and JSON and CSV carrying the correction through fields they already had at format version 3 |
 | Historical delivery recovery investigation | Evidence for a refusal, not a specification. Builds the row the services refuse to create (a completed shift holding a reopened delivery) and measures what every existing reader does with it: the delivery stuck beyond finishing, cancelling or reopening; the shift's end, route capture and Live Activity all correctly untouched; delivery active time unmeasurable alone and silently short beside a sibling; the offer permanently in progress; a finished period reporting work in progress and printing more delivery-earnings contributors than eligible records; and an export written rather than refused, carrying an active state and a shift whose two counts no longer reach its delivery count |
+| Delivery progress assistance | The rule a reminder is offered under, as plain values: each state it speaks about and the one it deliberately does not, the threshold checked on both sides of it, the arrival measured from the arrival rather than from the acceptance, both terminal states and a cancellation from a stale pickup, a contradictory chain and a pickup with no arrival refused as evidence, a future instant, stacked deliveries judged one at a time with each offered its own step, and a sweep of every sentence for `you arrived`, `you picked up`, `detected` and `confirmed`. Against a store: deriving one leaves every instant where it was with nothing pending, confirming one runs the ordinary lifecycle action and moves no sibling, and a finished shift's deliveries are offered nothing at all |
+| Stacked delivery state | The combinations a stacked driver meets, asserted against rules that already existed: accepted beside arrived, arrived beside picked up, two accepted, two picked up, a completion and a cancellation each leaving the active set while numbering holds, a group surviving one of its deliveries advancing past its sibling and then finishing, two offers keeping their own membership, and every active card exposing exactly the step its state allows |
+| Route suspension | What recording the vehicle as parked stops and what it deliberately does not: working duration and the paused figure untouched while the parked figure is stated, no lifecycle timestamp created or moved, the filter rejecting by its own rule with paused and ended each outranking it, two capture sessions measured separately with the kilometre between them never bridged, the coverage wording changing only where a suspension exists and never claiming a correspondence with the gaps, four refusals, pausing and ending each closing an open stretch at their own instant, one vehicle across two open deliveries with a pickup not resuming it, an end correction refused through a recorded stretch and accepted past it with the mileage measured again, and a shift left parked coming back parked from a reopened store |
+| Route suspension persistence | The v15 to v16 lightweight step with a real two-session route migrated and **no suspension read out of its gap**, the schema shape asserting the relationship to `Shift` and its absence from `Delivery`, the cascade, the frozen v15 shape holding no suspension, a store stepped up from v14, and the plan's version and stage counts asserted here once |
+| Route suspension export | Both additive fields with the route rather than with the durations, `0` rather than `null` for a shift never parked, the working seconds and pause count unmoved, nothing about it on a shift or a delivery object, no instant anywhere in the bytes, the two appended CSV columns leaving all 39 existing ones where they were and repeated on every row of a shift, and the format version at 4 |
 | Expense export | Expenses selected by their own dates, none in a single shift's file, a period of costs alone exported rather than refused, the summary's totals and net, the JSON key set and its explicit nulls, a round trip, the CSV carrying no expense whatever its column count, and expenses adding one top-level key without redefining any |
 
 Running one suite:
@@ -225,12 +230,21 @@ the week rather than from the clock, so a fixture holds the same shape whichever
 on; one consequence, accepted deliberately, is that a run in the first hours of a Monday seeds
 synthetic shifts a little way into the future.
 
-The four fixtures holding a **running** shift moved for a less obvious reason. A running shift is not
-in History, so their dates look irrelevant; they stop being irrelevant the moment a journey **ends**
-one, because the shift it finalises carries the fixture's start date. Three journeys did exactly that
-and read an empty list. They hang from the same anchor **or now, whichever is earlier**: a completed
-shift dated a few hours ahead is only odd, while a running shift dated ahead has been running for a
-negative length of time.
+The fixtures holding a **running** shift moved for a less obvious reason, and then moved again. A
+running shift is not in History, so their dates look irrelevant; they stop being irrelevant the
+moment a journey **ends** one, because the shift it finalises carries the fixture's start date. Three
+journeys did exactly that and read an empty list. They hung from the history anchor **or now,
+whichever was earlier**, which fixed those three and left a subtler problem: on any day but a Monday
+or a Tuesday the anchor is the earlier value, so a suite run on a Thursday opened them on a shift
+that had been "running" for two days, with deliveries accepted two days ago. Nothing read those ages,
+so nothing failed — until a reminder derived from a delivery's own age went on screen.
+
+They now hang from **now**, which is the determinism they actually needed: the same shift length, the
+same delivery ages and the same lifecycle spacing every run, inside the current week by definition,
+never in the future, and with no window in the first 90 minutes of a Monday. Their delivery offsets
+were compressed to sit inside the assistance thresholds at the same time, so that a journey about
+grouping or expected pay stays a journey about grouping or expected pay rather than becoming one
+about reminders.
 
 The older-weeks fixture is the one thing none of them can be. A journey cannot tap its way to a shift
 dated last month, because ending a shift records the clock, so three weeks are seeded at launch: one

@@ -13,6 +13,7 @@ version: **v10**.
 | `deliveries` | `[Delivery]` | Cascade delete, inverse of `Delivery.shift` |
 | `offers` | `[Offer]` | Cascade delete, inverse of `Offer.shift` |
 | `pauses` | `[ShiftPause]` | Cascade delete, inverse of `ShiftPause.shift` |
+| `routeSuspensions` | `[RouteSuspension]` | Cascade delete, inverse of `RouteSuspension.shift`. The stretches the driver recorded the vehicle as parked. Read by nothing that measures time |
 | `grossEarningsAmount` | `Decimal?` | Private. `nil` means no amount recorded, which is not zero |
 | `fuelMilesPerGallonValue` | `Decimal?` | The vehicle fuel economy this shift's fuel estimate is worked out under, as the driver typed it. A **snapshot**, never a reference to a current figure. Always greater than zero where present, because it is the divisor. `nil` means none recorded |
 | `fuelGasPricePerGallonAmount` | `Decimal?` | What a gallon cost, as the assumption this shift is estimated under. `nil` means none recorded; `0` means the fuel was recorded as costing nothing |
@@ -28,6 +29,12 @@ Derived, never stored:
 | `isPaused` | `lifecycleState == .paused` |
 | `pausesInOrder` | This shift's pauses sorted by start |
 | `pauseIntervals` | One `ShiftPauseInterval` per pause |
+| `openRouteSuspension` | The stretch parked with no end, or `nil`. What "parked" means |
+| `isRouteSuspended` | Whether the vehicle is recorded as parked right now. False for an ended shift and for a paused one, in both cases because those close an open stretch |
+| `routeSuspensionsInOrder` | This shift's stretches parked, sorted by start |
+| `routeSuspensionIntervals` | One `RouteSuspensionInterval` per stretch |
+| `suspendedTime(asOf:)` | A `RouteSuspendedTime` unioning those stretches within the window. **Subtracted from nothing** |
+| `completedSuspendedTime` | The same for a finished shift, `nil` while unfinished |
 | `completedDuration` | Elapsed seconds for a finished shift, clamped at zero |
 | `elapsed(asOf:)` | Elapsed seconds for a running shift, clamped at zero |
 | `measuredWindow(asOf:)` | `startedAt` to the shift's end, or to the moment being read at |
@@ -111,6 +118,41 @@ pauses and its delivery intervals for that check; `Shift.addMissedPause(_:)` is 
 creates a pause outside the live lifecycle, and like `beginPause(at:)` it leaves the context insert
 to the caller. Both are reached through `ShiftPauseCorrectionService`, which refuses a running shift
 outright and commits once per correction.
+
+## `RouteSuspension`
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `id` | `UUID` | Unique attribute |
+| `startedAt` | `Date` | When the driver recorded parking |
+| `endedAt` | `Date?` | `nil` while the driver has not recorded driving again. An open row is what "parked" means |
+| `shift` | `Shift?` | The shift this belongs to, and **never a delivery**. Optional only because SwiftData models the inverse of a to-many that way |
+
+A row rather than a flag, for the reason `ShiftPause` is one: a boolean could say the vehicle is
+parked now and not for how long, how many times or when, and a route's coverage has to be able to say
+all three. It also means a shift left parked when the app is terminated comes back parked with no
+recovery code, because the row is the only place the state lives.
+
+**It joins the shift and nothing else, at any version.** Whether the vehicle is moving is a fact
+about the driver and their vehicle: a driver shopping for one order while carrying another has one
+vehicle and it is parked. So there is at most one open row however many deliveries are in progress,
+and no delivery owns, starts or ends one.
+
+**It is not a pause, and the two are separate entities so that they cannot become one.** A
+`ShiftPause` says the driver stopped working and is subtracted from the shift's working duration;
+this says they are working on foot and is subtracted from nothing. A single entity with a kind column
+would be one `if` away from a pause subtracting a shopping trip from somebody's hours. No duration,
+rate, period figure or exported total reads a suspension as time not worked.
+
+What it does change is the **route**: capture is stopped for its whole length, so a walk is never
+written into a coordinate history, and driving again mints a new capture session, so
+`RouteMileageCalculator` refuses to measure across the stretch by the rule it already had.
+
+`beginRouteSuspension(at:)` refuses an ended shift, a paused one and a second open row, and leaves
+the context insert to the caller like `beginPause(at:)`. `endOpenRouteSuspension(at:)` is allowed on
+an ended or paused shift, unlike opening one, because both of those close an open row as part of
+their own write. `ShiftService.parkActiveShift(at:)` and `resumeDrivingOnActiveShift(at:)` are the
+only callers, and nothing anywhere ends a row because a speed changed or a delivery advanced.
 
 ## `RouteSample`
 
@@ -392,6 +434,7 @@ The row is created the first time the driver opens Settings. A migration never c
 | 13.0.0 | Adds `DeliveryTip` and `Delivery.additionalTips`. Lightweight, and nothing is backfilled: a delivery holding no tip is the ordinary shape in this build too, so every figure a migrated store derives is the figure it already was |
 | 14.0.0 | Adds `Shift.fuelMilesPerGallonValue` and `Shift.fuelGasPricePerGallonAmount`. Lightweight, and nothing is backfilled: a shift recording no assumptions reports which half is missing rather than an estimate of `$0.00` |
 | 15.0.0 | Adds `VehicleProfile`, `DriverSettings` and `Shift.fuelVehicleName`. Lightweight, and nothing is backfilled: a v14 store holds no evidence of which vehicle any shift was worked in, so no profile is invented, no settings row is created and no shift is given a name |
+| 16.0.0 | Adds `RouteSuspension` and a cascading `Shift.routeSuspensions`. Lightweight, and nothing is backfilled: a gap in a v15 route is left by a pause, a lost permission or a terminated process just as readily as by a driver walking into a shop, and the route holds no evidence of which |
 
 Every step but 12.0.0 is a lightweight stage, and none but that one writes a value. See
 [Migrations](../architecture/migrations.md).
