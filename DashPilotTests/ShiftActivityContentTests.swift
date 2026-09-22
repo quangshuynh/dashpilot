@@ -469,18 +469,21 @@ struct ShiftActivityContentTests {
         let deliveries = DeliveryService(context: context)
 
         let quiet = shift.activityContentState(for: .none, asOf: at(5), locale: locale)
-        #expect(quiet.controls == [.startDelivery, .pause, .end])
+        #expect(quiet.controls == [.startDelivery, .park, .pause, .end])
         #expect(quiet.controlNotice == nil)
 
         let delivery = try deliveries.startDelivery(at: at(10))
         let carrying = shift.activityContentState(for: .none, asOf: at(20), locale: locale)
-        #expect(carrying.controls == [.deliveryStep(.arriveAtPickup), .startDelivery])
+        #expect(carrying.controls == [.deliveryStep(.arriveAtPickup), .startDelivery, .park])
         #expect(carrying.activeDeliveryTimers.count == 1)
         #expect(carrying.controlNotice == nil)
 
         _ = try deliveries.startDelivery(at: at(30))
         let stacked = shift.activityContentState(for: .none, asOf: at(40), locale: locale)
-        #expect(stacked.controls == [.startDelivery], "The step is still withheld, for the reason it always was")
+        #expect(
+            stacked.controls == [.startDelivery, .park],
+            "The step is still withheld, for the reason it always was, and parking reads no delivery"
+        )
         #expect(stacked.activeDeliveryTimers.count == 2, "And both orders are still counted")
         #expect(stacked.controlNotice?.contains("Several deliveries") == true)
 
@@ -488,7 +491,7 @@ struct ShiftActivityContentTests {
         try deliveries.markPickedUp(delivery, at: at(60))
         try deliveries.markDelivered(delivery, at: at(70))
         let afterOne = shift.activityContentState(for: .none, asOf: at(80), locale: locale)
-        #expect(afterOne.controls == [.deliveryStep(.arriveAtPickup), .startDelivery])
+        #expect(afterOne.controls == [.deliveryStep(.arriveAtPickup), .startDelivery, .park])
         #expect(afterOne.controlNotice == nil)
     }
 
@@ -501,7 +504,7 @@ struct ShiftActivityContentTests {
 
         #expect(
             shift.activityContentState(for: .none, asOf: at(30), locale: locale).controls
-                == [.startDelivery, .pause, .end]
+                == [.startDelivery, .park, .pause, .end]
         )
     }
 
@@ -514,19 +517,19 @@ struct ShiftActivityContentTests {
 
         #expect(
             shift.activityContentState(for: .none, asOf: at(20), locale: locale).controls
-                == [.deliveryStep(.arriveAtPickup), .startDelivery]
+                == [.deliveryStep(.arriveAtPickup), .startDelivery, .park]
         )
 
         try deliveries.markArrivedAtPickup(delivery, at: at(30))
         #expect(
             shift.activityContentState(for: .none, asOf: at(40), locale: locale).controls
-                == [.deliveryStep(.pickUp), .startDelivery]
+                == [.deliveryStep(.pickUp), .startDelivery, .park]
         )
 
         try deliveries.markPickedUp(delivery, at: at(50))
         #expect(
             shift.activityContentState(for: .none, asOf: at(60), locale: locale).controls
-                == [.deliveryStep(.complete), .startDelivery]
+                == [.deliveryStep(.complete), .startDelivery, .park]
         )
     }
 
@@ -561,7 +564,7 @@ struct ShiftActivityContentTests {
         let state = shift.activityContentState(for: .none, asOf: at(30), locale: locale)
 
         #expect(
-            state.controls == [.startDelivery],
+            state.controls == [.startDelivery, .park],
             "Refusing the step is the answer; choosing one of two orders is not"
         )
         #expect(state.controlNotice?.contains("Several deliveries") == true)
@@ -651,6 +654,10 @@ struct ShiftActivityContentTests {
 
         let quiet = shift.activityContentState(for: .none, asOf: at(5), locale: locale).controls
         #expect(ShiftActivityControl.emphasised(in: quiet) == .startDelivery)
+        #expect(
+            ShiftActivityControl.park.isProminent == false,
+            "Parking is bordered for the reason pausing is: the frequent control keeps the emphasis"
+        )
 
         _ = try deliveries.startDelivery(at: at(10))
         let carrying = shift.activityContentState(for: .none, asOf: at(15), locale: locale).controls
@@ -840,12 +847,265 @@ struct ShiftActivityContentTests {
         )
 
         #expect(decoded == state)
-        #expect(decoded.controls == [.deliveryStep(.arriveAtPickup), .startDelivery])
+        #expect(decoded.controls == [.deliveryStep(.arriveAtPickup), .startDelivery, .park])
         #expect(
             decoded.activeDeliveryTimers == state.activeDeliveryTimers,
             "The anchor has to survive the encoding, or the clock the extension draws is not this delivery's"
         )
         #expect(decoded.activeDeliveryTimers.map(\.startedAt) == [at(10)])
+    }
+
+    // MARK: The parked pair
+
+    @Test("A running shift offers Park, and a parked one offers Resume Driving instead")
+    func offersExactlyOneOfTheParkedPair() throws {
+        let context = try makeContext()
+        let service = ShiftService(context: context)
+        let shift = try service.startShift(at: start)
+
+        let driving = shift.activityContentState(for: .none, asOf: at(30), locale: locale)
+        #expect(driving.controls.contains(.park))
+        #expect(!driving.controls.contains(.resumeDriving))
+        #expect(driving.routeSuspendedNotice == nil)
+
+        try service.parkActiveShift(at: at(60))
+        let parked = shift.activityContentState(for: .none, asOf: at(90), locale: locale)
+        #expect(parked.controls.contains(.resumeDriving))
+        #expect(!parked.controls.contains(.park))
+        #expect(parked.routeSuspendedNotice != nil, "And the card says which state it is in")
+
+        try service.resumeDrivingOnActiveShift(at: at(120))
+        let drivingAgain = shift.activityContentState(for: .none, asOf: at(150), locale: locale)
+        #expect(drivingAgain.controls.contains(.park))
+        #expect(!drivingAgain.controls.contains(.resumeDriving))
+        #expect(drivingAgain.routeSuspendedNotice == nil)
+    }
+
+    /// The claim in the form a card could break it: never both, in any state the
+    /// app can put a shift into.
+    @Test("The two parked controls are never on the card together")
+    func neverOffersBothParkedControls() throws {
+        let context = try makeContext()
+        let service = ShiftService(context: context)
+        let shift = try service.startShift(at: start)
+        let deliveries = DeliveryService(context: context)
+
+        func assertNeverBoth(_ moment: TimeInterval, _ note: String) {
+            let controls = shift.activityContentState(for: .none, asOf: at(moment), locale: locale).controls
+            #expect(
+                !(controls.contains(.park) && controls.contains(.resumeDriving)),
+                "One of the two is always a transition the store would refuse: \(note)"
+            )
+        }
+
+        assertNeverBoth(5, "quiet and driving")
+        try service.parkActiveShift(at: at(10))
+        assertNeverBoth(15, "quiet and parked")
+        try service.resumeDrivingOnActiveShift(at: at(20))
+
+        let delivery = try deliveries.startDelivery(at: at(30))
+        assertNeverBoth(35, "one order, driving")
+        try service.parkActiveShift(at: at(40))
+        assertNeverBoth(45, "one order, parked")
+        try service.resumeDrivingOnActiveShift(at: at(50))
+
+        _ = try deliveries.startDelivery(at: at(60))
+        assertNeverBoth(65, "two orders, driving")
+        try service.parkActiveShift(at: at(70))
+        assertNeverBoth(75, "two orders, parked")
+        try service.resumeDrivingOnActiveShift(at: at(80))
+
+        try deliveries.markArrivedAtPickup(delivery, at: at(90))
+        assertNeverBoth(95, "one order at its pickup")
+    }
+
+    /// Parking is a **shift** operation. The two refusals that thin this list
+    /// out are about a delivery nobody can name and about time nobody worked,
+    /// and neither has anything to say about a vehicle nobody moved.
+    @Test("The parked control survives the stacked refusal and the open-delivery refusal")
+    func offersTheParkedControlWhateverTheShiftIsCarrying() throws {
+        let context = try makeContext()
+        let service = ShiftService(context: context)
+        let shift = try service.startShift(at: start)
+        let deliveries = DeliveryService(context: context)
+
+        _ = try deliveries.startDelivery(at: at(10))
+        let one = shift.activityContentState(for: .none, asOf: at(20), locale: locale)
+        #expect(one.controls == [.deliveryStep(.arriveAtPickup), .startDelivery, .park])
+        #expect(!one.controls.contains(.pause), "Pausing is still refused over an open order")
+
+        _ = try deliveries.startDelivery(at: at(30))
+        let stacked = shift.activityContentState(for: .none, asOf: at(40), locale: locale)
+        #expect(stacked.controls == [.startDelivery, .park])
+        #expect(stacked.controlNotice?.contains("Several deliveries") == true, "The step is still the thing withheld")
+
+        // And the service agrees: parking with two orders open writes the row.
+        try service.parkActiveShift(at: at(50))
+        #expect(shift.isRouteSuspended)
+    }
+
+    @Test("A paused shift offers neither parked control, because a paused shift is never parked")
+    func offersNoParkedControlWhilePaused() throws {
+        let context = try makeContext()
+        let service = ShiftService(context: context)
+        let shift = try service.startShift(at: start)
+        try service.pauseActiveShift(at: at(60))
+
+        let state = shift.activityContentState(for: .none, asOf: at(120), locale: locale)
+        #expect(state.controls == [.resume, .end])
+        #expect(!state.controls.contains(.park))
+        #expect(!state.controls.contains(.resumeDriving))
+
+        // The same refusal, from the service that actually holds the rule.
+        #expect(throws: ShiftLifecycleError.shiftAlreadyPaused(pausedAt: at(60))) {
+            try service.parkActiveShift(at: at(120))
+        }
+    }
+
+    @Test("Resume Driving leads the card and carries the emphasis, as it does in the app")
+    func emphasisesResumeDrivingWhileParked() throws {
+        let context = try makeContext()
+        let service = ShiftService(context: context)
+        let shift = try service.startShift(at: start)
+        _ = try DeliveryService(context: context).startDelivery(at: at(10))
+        try service.parkActiveShift(at: at(20))
+
+        let controls = shift.activityContentState(for: .none, asOf: at(30), locale: locale).controls
+
+        #expect(controls.first == .resumeDriving, "Leaving the state is the tap that matters")
+        #expect(ShiftActivityControl.emphasised(in: controls) == .resumeDriving)
+        #expect(controls.contains(.deliveryStep(.arriveAtPickup)), "The order in the shop is still advanceable")
+    }
+
+    /// The one label on this card that could be acted on under a wrong belief.
+    @Test("The parked controls name the vehicle and never say pause")
+    func parkedControlsAreExplicitAboutTheirSubject() {
+        #expect(ShiftActivityControl.park.title == "Park Vehicle")
+        #expect(ShiftActivityControl.park.spokenLabel == "Park vehicle")
+        #expect(ShiftActivityControl.resumeDriving.title == "Resume Driving")
+        #expect(ShiftActivityControl.resumeDriving.spokenLabel == "Resume driving")
+
+        for control in [ShiftActivityControl.park, .resumeDriving] {
+            #expect(!control.title.lowercased().contains("pause"))
+            #expect(!control.spokenLabel.lowercased().contains("pause"))
+            #expect(!control.spokenLabel.lowercased().contains("break"))
+        }
+
+        // And a driver must be able to tell them from the shift's own pair
+        // without reading either label.
+        let symbols: [String] = [
+            ShiftActivityControl.park.symbolName,
+            ShiftActivityControl.resumeDriving.symbolName,
+            ShiftActivityControl.pause.symbolName,
+            ShiftActivityControl.resume.symbolName
+        ]
+        #expect(Set(symbols).count == 4)
+    }
+
+    /// The delivery rows and the mileage line are untouched by the pair: this
+    /// sub-interval added controls and nothing else.
+    @Test("Parking changes no delivery timer, no count and no mileage sentence")
+    func leavesTheRestOfTheCardExactlyAsItWas() throws {
+        let context = try makeContext()
+        let service = ShiftService(context: context)
+        let shift = try service.startShift(at: start)
+        let deliveries = DeliveryService(context: context)
+        _ = try deliveries.startDelivery(at: at(10))
+        _ = try deliveries.startDelivery(at: at(20))
+
+        let before = shift.activityContentState(for: .none, asOf: at(30), locale: locale)
+        try service.parkActiveShift(at: at(31))
+        let after = shift.activityContentState(for: .none, asOf: at(30), locale: locale)
+
+        #expect(after.activeDeliveryTimers == before.activeDeliveryTimers)
+        #expect(after.activeDeliveryCount == before.activeDeliveryCount)
+        #expect(after.completedDeliveryCount == before.completedDeliveryCount)
+        #expect(after.deliveryStatus == before.deliveryStatus)
+        #expect(after.mileageStatement == before.mileageStatement)
+        #expect(after.partialRouteMarker == before.partialRouteMarker)
+        #expect(after.workingDuration == before.workingDuration, "Parking subtracts nothing")
+        #expect(after.isPaused == before.isPaused, "And it is not a pause")
+        #expect(after.controls != before.controls, "Only the controls and the notice moved")
+    }
+
+    /// The compact and minimal presentations read the same three values they
+    /// always did, and carry no control at all.
+    @Test("Compact and minimal are unchanged by the parked pair")
+    func leavesCompactAndMinimalAlone() throws {
+        let context = try makeContext()
+        let service = ShiftService(context: context)
+        let shift = try service.startShift(at: start)
+
+        let driving = shift.activityContentState(for: .none, asOf: at(30), locale: locale)
+        try service.parkActiveShift(at: at(40))
+        let parked = shift.activityContentState(for: .none, asOf: at(50), locale: locale)
+
+        #expect(parked.compactDeliveryCount == driving.compactDeliveryCount)
+        #expect(parked.statusSymbolName == driving.statusSymbolName, "Parked is not paused, so the glyph is unchanged")
+        #expect(parked.statusTitle == driving.statusTitle)
+        // The minimal presentation's one spoken value does gain the sentence,
+        // because it is the only line a listener there has.
+        #expect(parked.spokenSummary.contains("Parked."))
+        #expect(!driving.spokenSummary.contains("Parked"))
+    }
+
+    /// A `ContentState` that fails to decode is an activity the app cannot see,
+    /// and an activity the app cannot see is a second card. This is that risk,
+    /// exercised against the shape the **previous** build persisted.
+    ///
+    /// The bytes are the real encoder's rather than hand-written ones, with the
+    /// one key an older build did not have removed from them. That is what makes
+    /// this a test of the persisted shape rather than a test of a fixture: a
+    /// previous build encoded these same fields with this same synthesised
+    /// `Codable`, and the only differences it could have are the parked notice
+    /// it did not carry and the parked controls it could not name.
+    @Test("A snapshot persisted by an earlier build still decodes")
+    func decodesASnapshotFromAnEarlierBuild() throws {
+        let context = try makeContext()
+        let shift = try startedShift(in: context)
+        _ = try DeliveryService(context: context).startDelivery(at: at(10))
+
+        // Not parked, so every control here is one an earlier build could name.
+        let state = shift.activityContentState(for: .none, asOf: at(20), locale: locale)
+        #expect(state.routeSuspendedNotice == nil)
+        var object = try #require(
+            try JSONSerialization.jsonObject(with: JSONEncoder().encode(state)) as? [String: Any]
+        )
+        #expect(object["controls"] != nil)
+
+        // The shape from before the parked notice existed at all, which is what
+        // the field was made optional for.
+        object.removeValue(forKey: "routeSuspendedNotice")
+        let decoded = try JSONDecoder().decode(
+            ShiftActivityAttributes.ContentState.self,
+            from: try JSONSerialization.data(withJSONObject: object)
+        )
+
+        #expect(decoded.routeSuspendedNotice == nil)
+        #expect(decoded.controls == state.controls)
+        #expect(decoded.activeDeliveryTimers == state.activeDeliveryTimers)
+        #expect(decoded.workingDuration == state.workingDuration)
+        #expect(decoded.activeDeliveryCount == state.activeDeliveryCount)
+    }
+
+    /// The other direction of the same risk: a card the app parks and then
+    /// hands over has to survive the round trip with the control it grew.
+    @Test("A parked snapshot round trips with the control this build added")
+    func roundTripsTheParkedControl() throws {
+        let context = try makeContext()
+        let service = ShiftService(context: context)
+        let shift = try service.startShift(at: start)
+        try service.parkActiveShift(at: at(30))
+
+        let state = shift.activityContentState(for: .none, asOf: at(60), locale: locale)
+        let decoded = try JSONDecoder().decode(
+            ShiftActivityAttributes.ContentState.self,
+            from: try JSONEncoder().encode(state)
+        )
+
+        #expect(decoded == state)
+        #expect(decoded.controls.first == .resumeDriving)
+        #expect(decoded.routeSuspendedNotice == state.routeSuspendedNotice)
     }
 
     // MARK: The working clock the system draws

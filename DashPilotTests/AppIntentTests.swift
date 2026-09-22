@@ -578,12 +578,16 @@ struct AppIntentTests {
         #expect(EndShiftFromActivityIntent.supportedModes == .background)
         #expect(StartDeliveryFromActivityIntent.supportedModes == .background)
         #expect(RecordDeliveryProgressFromActivityIntent.supportedModes == .background)
+        #expect(ParkVehicleFromActivityIntent.supportedModes == .background)
+        #expect(ResumeDrivingFromActivityIntent.supportedModes == .background)
 
         #expect(PauseShiftFromActivityIntent.authenticationPolicy == .alwaysAllowed)
         #expect(ResumeShiftFromActivityIntent.authenticationPolicy == .alwaysAllowed)
         #expect(EndShiftFromActivityIntent.authenticationPolicy == .alwaysAllowed)
         #expect(StartDeliveryFromActivityIntent.authenticationPolicy == .alwaysAllowed)
         #expect(RecordDeliveryProgressFromActivityIntent.authenticationPolicy == .alwaysAllowed)
+        #expect(ParkVehicleFromActivityIntent.authenticationPolicy == .alwaysAllowed)
+        #expect(ResumeDrivingFromActivityIntent.authenticationPolicy == .alwaysAllowed)
     }
 
     @Test("No Live Activity control appears in Shortcuts beside the spoken action it repeats")
@@ -593,8 +597,11 @@ struct AppIntentTests {
         #expect(EndShiftFromActivityIntent.isDiscoverable == false)
         #expect(StartDeliveryFromActivityIntent.isDiscoverable == false)
         #expect(RecordDeliveryProgressFromActivityIntent.isDiscoverable == false)
+        #expect(ParkVehicleFromActivityIntent.isDiscoverable == false)
+        #expect(ResumeDrivingFromActivityIntent.isDiscoverable == false)
 
         #expect(PauseShiftIntent.isDiscoverable, "The spoken action is the discoverable one")
+        #expect(ParkVehicleIntent.isDiscoverable, "And it is the one that parks, too")
         #expect(StartDeliveryIntent.isDiscoverable, "And it is the one that starts a delivery, too")
         #expect(DashPilotShortcuts.appShortcuts.count == 8, "And the shortcut count is unchanged by them")
     }
@@ -658,6 +665,83 @@ struct AppIntentTests {
             let deliveries = try context.fetch(FetchDescriptor<Delivery>())
             #expect(deliveries.count == 2)
             #expect(deliveries.allSatisfy { $0.state == .accepted }, "Neither delivery was advanced")
+        }
+    }
+
+    // MARK: Parking from the Live Activity
+
+    @Test("Parking from the Live Activity writes what the app's own button writes")
+    func activityIntentsParkAndDriveAgain() async throws {
+        try await withStore { context in
+            _ = try await StartShiftIntent().perform()
+            _ = try await ParkVehicleFromActivityIntent().perform()
+
+            let shift = try #require(try context.fetch(FetchDescriptor<Shift>()).first)
+            #expect(shift.isRouteSuspended)
+            #expect(shift.lifecycleState == .running, "Parking is not pausing, whichever surface asked")
+            #expect(shift.pauses.isEmpty)
+
+            _ = try await ResumeDrivingFromActivityIntent().perform()
+            #expect(shift.isRouteSuspended == false)
+            #expect(shift.routeSuspensions.count == 1, "The stretch is kept, not deleted")
+        }
+    }
+
+    /// The card offers only one of the pair, but the layer that matters is the
+    /// store: a snapshot on screen can be a moment out of date.
+    @Test("A stale parked press is refused by the same rule, with the same sentence")
+    func activityParkedIntentsCarryTheServicesOwnRefusals() async throws {
+        try await withStore { context in
+            _ = try await StartShiftIntent().perform()
+
+            await #expect(throws: IntentLifecycleError.shift(.shiftNotParked)) {
+                _ = try await ResumeDrivingFromActivityIntent().perform()
+            }
+
+            _ = try await ParkVehicleFromActivityIntent().perform()
+            await #expect(throws: IntentLifecycleError.self) {
+                _ = try await ParkVehicleFromActivityIntent().perform()
+            }
+
+            let shift = try #require(try context.fetch(FetchDescriptor<Shift>()).first)
+            #expect(shift.routeSuspensions.count == 1, "A refused control opens no second row")
+        }
+    }
+
+    @Test("Parking from the Live Activity mutates the shift that is running, and only it")
+    func activityParkMutatesTheRunningShift() async throws {
+        try await withStore { context in
+            // A finished shift the card could never be describing.
+            let finished = try ShiftService(context: context).startShift(at: .now.addingTimeInterval(-7_200))
+            try ShiftService(context: context).endActiveShift(at: .now.addingTimeInterval(-3_600))
+
+            _ = try await StartShiftIntent().perform()
+            _ = try await ParkVehicleFromActivityIntent().perform()
+
+            let shifts = try context.fetch(FetchDescriptor<Shift>())
+            #expect(shifts.count == 2)
+            #expect(finished.routeSuspensions.isEmpty, "The shift that ended is untouched")
+            let running = try #require(shifts.first { $0.endedAt == nil })
+            #expect(running.routeSuspensions.count == 1)
+        }
+    }
+
+    @Test("Parking from the Live Activity asks the card to catch up, and a refusal does not")
+    func activityParkReconciles() async throws {
+        try await withStoreWatchingActivity { _, recorder in
+            _ = try await StartShiftIntent().perform()
+            #expect(recorder.count == 1)
+
+            _ = try await ParkVehicleFromActivityIntent().perform()
+            #expect(recorder.count == 2)
+
+            await #expect(throws: IntentLifecycleError.self) {
+                _ = try await ParkVehicleFromActivityIntent().perform()
+            }
+            #expect(recorder.count == 2, "A refusal wrote nothing, so there is nothing to catch up with")
+
+            _ = try await ResumeDrivingFromActivityIntent().perform()
+            #expect(recorder.count == 3)
         }
     }
 

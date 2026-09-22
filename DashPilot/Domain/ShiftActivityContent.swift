@@ -89,6 +89,19 @@ nonisolated extension ShiftActivityDeliveryTimer {
 /// - A paused shift offers Resume and End. Ending a paused shift is permitted
 ///   and closes the pause at the end instant, so refusing it here would be this
 ///   surface inventing a stricter rule than the app's.
+/// - Every **running** shift also offers exactly one of the parked pair: Park
+///   Vehicle while it is driving, Resume Driving while it is parked, and never
+///   both. Which one is read from ``ActiveShiftMetrics/isRouteSuspended`` rather
+///   than chosen, so the control the card shows is always the transition the
+///   store would accept. Neither is offered on a paused shift, because a paused
+///   shift is never parked and parking one is refused.
+///
+/// Parking reads no delivery, in either direction, and that is why it survives
+/// the two refusals that thin this list out. Whether the vehicle is moving is a
+/// fact about the driver and their vehicle, so a shift carrying two orders is
+/// offered it exactly as a quiet one is: the ambiguity that withholds the step
+/// has nothing to bite on, and the rule that withholds Pause and End is about
+/// time nobody worked rather than about a vehicle nobody moved.
 ///
 /// A control is a courtesy and never a permission. Pressing one runs
 /// ``IntentLifecycleService``, which asks the store, so a snapshot that is a
@@ -153,15 +166,39 @@ nonisolated enum ShiftActivityContent {
         for metrics: ActiveShiftMetrics,
         nextStep: ShiftActivityDeliveryStep?
     ) -> [ShiftActivityControl] {
+        // A paused shift is never parked, by ``Shift/isRouteSuspended``'s own
+        // rule, so neither parked control can reach this branch.
         if metrics.isPaused { return [.resume, .end] }
+
+        // Exactly one of the parked pair, ever, and which one is read from the
+        // shift rather than chosen: the other is a statement the store would
+        // refuse. Resume Driving leads the list because it is the tap that
+        // matters, which is the app's own panel's judgement and for the app's
+        // own reason: forgetting to leave the state costs the rest of the
+        // shift's route.
+        let parkedControl: ShiftActivityControl = metrics.isRouteSuspended ? .resumeDriving : .park
 
         // Running, so one more delivery is always something the driver may be
         // accepting, and the control that starts one names no existing record.
-        if let nextStep { return [.deliveryStep(nextStep), .startDelivery] }
+        // Parking sits with them rather than with Pause and End, because it is
+        // reached several times a shift and those are reached once.
+        if let nextStep {
+            return metrics.isRouteSuspended
+                ? [parkedControl, .deliveryStep(nextStep), .startDelivery]
+                : [.deliveryStep(nextStep), .startDelivery, parkedControl]
+        }
         // Pausing and ending are both refused while any delivery is open, so a
-        // running shift that has one and offered no step offers only the start.
-        guard metrics.deliverySummary.inProgress == 0 else { return [.startDelivery] }
-        return [.startDelivery, .pause, .end]
+        // running shift that has one and offered no step offers the start and
+        // the parked control. Parking is a **shift** operation and reads no
+        // delivery, so the ambiguity that withholds the step does not touch it.
+        guard metrics.deliverySummary.inProgress == 0 else {
+            return metrics.isRouteSuspended
+                ? [parkedControl, .startDelivery]
+                : [.startDelivery, parkedControl]
+        }
+        return metrics.isRouteSuspended
+            ? [parkedControl, .startDelivery, .pause, .end]
+            : [.startDelivery, parkedControl, .pause, .end]
     }
 }
 
