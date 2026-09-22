@@ -1989,27 +1989,21 @@ enum DashPilotSchemaV13: VersionedSchema {
 /// offer, delivery timestamp, tip, pickup place, recorded amount, expected
 /// amount, pause and expense carries over untouched.
 ///
-/// ## What the version is for
+/// ## What the version was for
 ///
 /// A fuel estimate is arithmetic over three things: the shift's recorded
 /// mileage, a fuel economy and a price per gallon. The mileage is already
 /// derived from the route. The other two are **assumptions**, and an assumption
-/// that is not recorded where it was used is an assumption that rewrites history:
-/// a driver who changes vehicle, or fills up at a different price next month,
-/// would find every shift they had ever worked quietly re-costed. So the pair is
-/// recorded on the shift it was used for, and a finished shift's estimate is
-/// always derived from its own.
+/// that is not recorded where it was used is an assumption that rewrites
+/// history: a driver who changes vehicle, or fills up at a different price next
+/// month, would find every shift they had ever worked quietly re-costed. So the
+/// pair is recorded on the shift it was used for, and a finished shift's
+/// estimate is always derived from its own.
 ///
-/// ## Why two columns on `Shift` rather than a new entity
-///
-/// A `FuelAssumptions` row, or a vehicle table, was the other option and would
-/// have bought nothing this version needs. There is exactly one pair per shift,
-/// it has no lifecycle of its own, nothing else points at it, and it is never
-/// listed, ordered, counted or corrected independently of the shift that holds
-/// it. Two nullable columns express "this shift was estimated under these
-/// assumptions, or under none" completely, and they cannot go missing, be
-/// orphaned or be duplicated. Multiple vehicles are deliberately not a feature
-/// (see the product documentation), and a table exists to be joined.
+/// **That decision is what v15 builds on rather than revisits.** Vehicle
+/// profiles and a current gas price are defaults for the *next* shift; the pair
+/// a shift is estimated under is still the pair that shift holds, and v15 adds
+/// a third snapshot beside these two rather than a reference to anything.
 ///
 /// ## Why nothing derived is stored
 ///
@@ -2020,25 +2014,10 @@ enum DashPilotSchemaV13: VersionedSchema {
 /// shift end move the estimate with it: the route loses its samples, the walk
 /// measures again, and the estimate follows with no fuel code involved.
 ///
-/// ## Why this migrates lightweight
-///
-/// There is nothing to derive, backfill or reinterpret. A shift holding **no**
-/// assumptions is the ordinary shape in this build too: it is what every shift
-/// recorded before fuel estimation existed genuinely is, and it reports no
-/// estimate rather than an estimate of `$0.00`. Not one previously derived total,
-/// rate, coverage count or exported value moves.
-///
-/// **The inference it refuses is the one that looks like free information.**
-/// Backfilling a driver's history from whatever fuel economy they type first
-/// would put an assumption they never made into every shift they have ever
-/// worked, and it is exactly the dynamic dependence on a current global figure
-/// this version exists to prevent. A recorded `fuel` expense is not evidence
-/// either: it says what a fill-up cost, not what the vehicle does to a gallon,
-/// and not which shift burned it.
-///
-/// This version reuses the file-scope models rather than freezing copies,
-/// because it *is* the current shape. It gets frozen copies of its own the first
-/// time v15 moves them on, exactly as v13 did above.
+/// **Frozen**, with copies of all eight of its models, the way v13's were. The
+/// file-scope `Shift` has since gained the name of the vehicle its economy came
+/// from, and reusing it here would make v14 claim a shape no store on a device
+/// ever had.
 enum DashPilotSchemaV14: VersionedSchema {
     static var versionIdentifier: Schema.Version { Schema.Version(14, 0, 0) }
 
@@ -2052,6 +2031,314 @@ enum DashPilotSchemaV14: VersionedSchema {
             ShiftPause.self,
             Offer.self,
             DeliveryTip.self
+        ]
+    }
+
+    /// The v14 shift: the fuel economy and gas price its estimate is worked out
+    /// under, and **no record of which vehicle they came from**.
+    ///
+    /// This is the shape v15 moves, and the reason this version had to be
+    /// frozen. A v14 store records a pair of assumptions the driver typed
+    /// against one shift after it finished, because no build that wrote one had
+    /// vehicle profiles for a pair to have come from, and no shift in one was
+    /// ever started under a default.
+    @Model
+    nonisolated final class Shift {
+        @Attribute(.unique) private(set) var id: UUID
+        private(set) var startedAt: Date
+        private(set) var endedAt: Date?
+
+        @Relationship(deleteRule: .cascade, inverse: \Delivery.shift)
+        private(set) var deliveries: [Delivery] = []
+
+        @Relationship(deleteRule: .cascade, inverse: \ShiftPause.shift)
+        private(set) var pauses: [ShiftPause] = []
+
+        @Relationship(deleteRule: .cascade, inverse: \Offer.shift)
+        private(set) var offers: [Offer] = []
+
+        private(set) var grossEarningsAmount: Decimal?
+
+        private(set) var fuelMilesPerGallonValue: Decimal?
+
+        private(set) var fuelGasPricePerGallonAmount: Decimal?
+
+        init(
+            id: UUID = UUID(),
+            startedAt: Date,
+            endedAt: Date? = nil,
+            grossEarningsAmount: Decimal? = nil,
+            fuelMilesPerGallonValue: Decimal? = nil,
+            fuelGasPricePerGallonAmount: Decimal? = nil
+        ) {
+            self.id = id
+            self.startedAt = startedAt
+            self.endedAt = endedAt
+            self.grossEarningsAmount = grossEarningsAmount
+            self.fuelMilesPerGallonValue = fuelMilesPerGallonValue
+            self.fuelGasPricePerGallonAmount = fuelGasPricePerGallonAmount
+        }
+    }
+
+    /// The v14 route sample, unchanged in shape since v3.
+    @Model
+    nonisolated final class RouteSample {
+        private(set) var timestamp: Date
+        private(set) var latitude: Double
+        private(set) var longitude: Double
+        private(set) var horizontalAccuracy: Double
+        private(set) var captureSessionID: UUID?
+        private(set) var shift: Shift?
+
+        init(
+            shift: Shift,
+            timestamp: Date,
+            latitude: Double,
+            longitude: Double,
+            horizontalAccuracy: Double,
+            captureSessionID: UUID?
+        ) {
+            self.timestamp = timestamp
+            self.latitude = latitude
+            self.longitude = longitude
+            self.horizontalAccuracy = horizontalAccuracy
+            self.captureSessionID = captureSessionID
+            self.shift = shift
+        }
+    }
+
+    /// The v14 delivery, which gained its collection of tips in v13 and
+    /// is unchanged by v14.
+    @Model
+    nonisolated final class Delivery {
+        @Attribute(.unique) private(set) var id: UUID
+        private(set) var acceptedAt: Date
+        private(set) var arrivedAtPickupAt: Date?
+        private(set) var pickedUpAt: Date?
+        private(set) var deliveredAt: Date?
+        private(set) var cancelledAt: Date?
+        private(set) var shift: Shift?
+        private(set) var offer: Offer?
+        private(set) var pickupPlace: PickupPlace?
+        private(set) var grossEarningsAmount: Decimal?
+        private(set) var expectedEarningsAmount: Decimal?
+
+        @Relationship(deleteRule: .cascade, inverse: \DeliveryTip.delivery)
+        private(set) var additionalTips: [DeliveryTip] = []
+
+        init(
+            id: UUID = UUID(),
+            shift: Shift,
+            offer: Offer? = nil,
+            acceptedAt: Date,
+            arrivedAtPickupAt: Date? = nil,
+            pickedUpAt: Date? = nil,
+            deliveredAt: Date? = nil,
+            cancelledAt: Date? = nil,
+            pickupPlace: PickupPlace? = nil,
+            grossEarningsAmount: Decimal? = nil,
+            expectedEarningsAmount: Decimal? = nil
+        ) {
+            self.id = id
+            self.acceptedAt = acceptedAt
+            self.arrivedAtPickupAt = arrivedAtPickupAt
+            self.pickedUpAt = pickedUpAt
+            self.deliveredAt = deliveredAt
+            self.cancelledAt = cancelledAt
+            self.shift = shift
+            self.offer = offer
+            self.pickupPlace = pickupPlace
+            self.grossEarningsAmount = grossEarningsAmount
+            self.expectedEarningsAmount = expectedEarningsAmount
+        }
+    }
+
+    /// The v14 delivery tip, unchanged since v13 introduced it.
+    @Model
+    nonisolated final class DeliveryTip {
+        @Attribute(.unique) private(set) var id: UUID
+        private(set) var amountValue: Decimal
+        private(set) var methodRawValue: String
+        private(set) var recordedAt: Date
+        private(set) var delivery: Delivery?
+
+        init(
+            id: UUID = UUID(),
+            delivery: Delivery,
+            amountValue: Decimal,
+            methodRawValue: String,
+            recordedAt: Date
+        ) {
+            self.id = id
+            self.amountValue = amountValue
+            self.methodRawValue = methodRawValue
+            self.recordedAt = recordedAt
+            self.delivery = delivery
+        }
+    }
+
+    /// The v14 offer, unchanged from v12.
+    @Model
+    nonisolated final class Offer {
+        @Attribute(.unique) private(set) var id: UUID
+        private(set) var acceptedAt: Date
+        private(set) var shift: Shift?
+
+        @Relationship(deleteRule: .cascade, inverse: \Delivery.offer)
+        private(set) var deliveries: [Delivery] = []
+
+        init(id: UUID = UUID(), shift: Shift, acceptedAt: Date) {
+            self.id = id
+            self.acceptedAt = acceptedAt
+            self.shift = shift
+        }
+    }
+
+    /// The v14 pickup place, unchanged from v6.
+    @Model
+    nonisolated final class PickupPlace {
+        @Attribute(.unique) private(set) var id: UUID
+        private(set) var displayName: String
+        private(set) var normalizedName: String
+        private(set) var createdAt: Date
+
+        @Relationship(deleteRule: .nullify, inverse: \Delivery.pickupPlace)
+        private(set) var deliveries: [Delivery] = []
+
+        init(id: UUID = UUID(), displayName: String, normalizedName: String, createdAt: Date) {
+            self.id = id
+            self.displayName = displayName
+            self.normalizedName = normalizedName
+            self.createdAt = createdAt
+        }
+    }
+
+    /// The v14 expense, unchanged from v8.
+    ///
+    /// Its `fuel` category is the one this version's successor has to be read
+    /// beside: a recorded fuel purchase and an estimated fuel cost are different
+    /// facts, and v14 adds the second without touching the first.
+    @Model
+    nonisolated final class Expense {
+        @Attribute(.unique) private(set) var id: UUID
+        private(set) var occurredAt: Date
+        private(set) var amountValue: Decimal
+        private(set) var categoryRawValue: String
+        private(set) var note: String?
+
+        init(
+            id: UUID = UUID(),
+            occurredAt: Date,
+            amountValue: Decimal,
+            categoryRawValue: String,
+            note: String? = nil
+        ) {
+            self.id = id
+            self.occurredAt = occurredAt
+            self.amountValue = amountValue
+            self.categoryRawValue = categoryRawValue
+            self.note = note
+        }
+    }
+
+    /// The v14 shift pause, unchanged from v9.
+    @Model
+    nonisolated final class ShiftPause {
+        @Attribute(.unique) private(set) var id: UUID
+        private(set) var startedAt: Date
+        private(set) var endedAt: Date?
+        private(set) var shift: Shift?
+
+        init(id: UUID = UUID(), shift: Shift, startedAt: Date, endedAt: Date? = nil) {
+            self.id = id
+            self.startedAt = startedAt
+            self.endedAt = endedAt
+            self.shift = shift
+        }
+    }
+}
+
+/// Version 15 of the persisted schema: the driver's reusable settings, their
+/// vehicle profiles, and the vehicle a shift's fuel economy came from.
+///
+/// Two new entities, `VehicleProfile` and `DriverSettings`, and one new optional
+/// `String` column on `Shift`, `fuelVehicleName`. Nothing else anywhere changes
+/// shape: no attribute is renamed, retyped or removed, no entity is dropped, and
+/// not one stored value moves, so every shift, route sample, capture session,
+/// offer, delivery timestamp, tip, pickup place, recorded amount, expected
+/// amount, fuel assumption, pause and expense carries over untouched.
+///
+/// ## What the version is for
+///
+/// v14 established that the pair a shift is estimated under belongs to that
+/// shift. What it left the driver with was typing that pair again on every
+/// finished shift. This version gives them somewhere to keep the figures — the
+/// vehicles they drive, and what a gallon currently costs — and copies those
+/// figures onto a shift **when it starts**.
+///
+/// ## The whole design is in one sentence, and it is worth stating plainly
+///
+/// **The new rows are defaults; the shift owns snapshots.** Nothing derived
+/// reads `DriverSettings` or `VehicleProfile`: not an estimate, a rate, a total,
+/// a coverage count, a period figure or an exported value. They are read at
+/// exactly one moment, `ShiftService.startShift(at:)`, and copied. Editing a
+/// profile, deleting one, selecting a different one and changing the gas price
+/// therefore all move nothing a driver has already recorded, and that property
+/// is structural rather than a rule somebody has to keep.
+///
+/// ## Why the shift stores a vehicle *name* and not a reference
+///
+/// A profile is a preference the driver is invited to rename and delete. A shift
+/// pointing at one would either lose its label when that row went, or follow a
+/// rename it had nothing to do with. There is therefore **no relationship
+/// between `Shift` and `VehicleProfile` anywhere**, in either direction, and no
+/// delete rule connecting them: a shift stays whole, intelligible and exactly as
+/// costed when the profile behind it is deleted. `fuelVehicleName` is a label
+/// and never an input — no figure reads it.
+///
+/// ## Why the selected vehicle is an identifier, not a relationship either
+///
+/// `DriverSettings.selectedVehicleID` holds a `UUID`. A deleted profile leaves an
+/// identifier resolving to nothing, which reads as *no vehicle selected*: a state
+/// the app is designed to be in. The service clears it in the same save as the
+/// delete, so the ordinary path never leaves one dangling, and a store that
+/// somehow holds one is still a store the app can read.
+///
+/// ## Why this migrates lightweight
+///
+/// There is nothing to derive, backfill or reinterpret, and **the backfill is
+/// the failure mode rather than the feature**. The tempting stage would create a
+/// vehicle profile out of whatever fuel economy the driver's shifts already
+/// record, or write today's gas price onto the shifts that have none. Both would
+/// put figures into a driver's history that they never entered for those shifts,
+/// which is exactly the dependence on a current global figure v14 exists to
+/// prevent. A v14 store holds no evidence of which vehicle any shift was worked
+/// in, because no build that wrote one had vehicles.
+///
+/// So a migrated store opens with **no vehicle profiles, no settings row and no
+/// vehicle name on any shift**. Every shift keeps the fuel economy and gas price
+/// it recorded, keeps its estimate, and keeps reporting the estimate unavailable
+/// where it recorded neither. The settings row is created the first time the
+/// driver opens Settings, not by the migration.
+///
+/// This version reuses the file-scope models rather than freezing copies,
+/// because it *is* the current shape. It gets frozen copies of its own the first
+/// time v16 moves them on, exactly as v14 did above.
+enum DashPilotSchemaV15: VersionedSchema {
+    static var versionIdentifier: Schema.Version { Schema.Version(15, 0, 0) }
+
+    static var models: [any PersistentModel.Type] {
+        [
+            Shift.self,
+            RouteSample.self,
+            Delivery.self,
+            PickupPlace.self,
+            Expense.self,
+            ShiftPause.self,
+            Offer.self,
+            DeliveryTip.self,
+            VehicleProfile.self,
+            DriverSettings.self
         ]
     }
 }
@@ -2077,14 +2364,15 @@ enum DashPilotMigrationPlan: SchemaMigrationPlan {
             DashPilotSchemaV11.self,
             DashPilotSchemaV12.self,
             DashPilotSchemaV13.self,
-            DashPilotSchemaV14.self
+            DashPilotSchemaV14.self,
+            DashPilotSchemaV15.self
         ]
     }
 
     static var stages: [MigrationStage] {
         [
             v1ToV2, v2ToV3, v3ToV4, v4ToV5, v5ToV6, v6ToV7, v7ToV8, v8ToV9, v9ToV10, v10ToV11, v11ToV12,
-            v12ToV13, v13ToV14
+            v12ToV13, v13ToV14, v14ToV15
         ]
     }
 
@@ -2432,5 +2720,33 @@ enum DashPilotMigrationPlan: SchemaMigrationPlan {
     static let v13ToV14 = MigrationStage.lightweight(
         fromVersion: DashPilotSchemaV13.self,
         toVersion: DashPilotSchemaV14.self
+    )
+
+    /// V14 → V15 is lightweight.
+    ///
+    /// Two new entities and one optional column, and nothing truthful to write
+    /// into any of them.
+    ///
+    /// **Backfilling is the failure mode, and here there are three tempting
+    /// versions of it.** Creating a vehicle profile from the fuel economies a
+    /// driver's shifts already record would invent a vehicle they never named,
+    /// and would have to guess how many. Writing a vehicle name onto the shifts
+    /// that recorded an economy would attribute those shifts to a vehicle the
+    /// store holds no evidence of — no build that wrote a v14 store had
+    /// vehicles. Seeding the settings row with the most recent shift's gas price
+    /// would turn one shift's recorded assumption into a current preference, and
+    /// the next shift started would then carry a figure the driver never chose.
+    ///
+    /// So a migrated store opens with no profiles, no settings row and no
+    /// vehicle name anywhere. Every shift keeps the pair it recorded and the
+    /// estimate derived from it, and a shift that recorded neither still reports
+    /// which half is missing rather than an estimate of `$0.00`. The settings row
+    /// is created the first time the driver opens Settings.
+    ///
+    /// A `willMigrate`/`didMigrate` pair that touches every shift for no reason
+    /// is a way to lose a driver's history, not a way to protect it.
+    static let v14ToV15 = MigrationStage.lightweight(
+        fromVersion: DashPilotSchemaV14.self,
+        toVersion: DashPilotSchemaV15.self
     )
 }

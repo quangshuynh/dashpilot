@@ -44,6 +44,10 @@ nonisolated extension Shift {
             // reproduces the arithmetic from the recorded mileage above.
             fuelMilesPerGallon: ExportDecimal.recorded(fuelAssumptions.milesPerGallon),
             fuelGasPricePerGallon: ExportAmount.recorded(fuelAssumptions.gasPricePerGallon),
+            // The label this shift recorded, never the vehicle currently
+            // selected: the file states what was true when the shift was
+            // worked, and a profile renamed since does not rewrite it.
+            fuelVehicleName: fuelVehicleName,
             // The unioned figure, so two deliveries carried at once contribute
             // their shared minutes once. Absent — never zero — for a shift whose
             // deliveries describe nothing measurable.

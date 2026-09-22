@@ -838,6 +838,23 @@ struct CompletedShiftDetailView: View {
                 } ?? "No gas price recorded"
             )
             .accessibilityIdentifier("shiftDetailFuelGasPrice")
+
+            // Last, and only where one was recorded. It is a label rather than
+            // an input — no figure on this screen reads it — so it sits under
+            // the two figures that are, and a shift whose economy was typed by
+            // hand simply does not have this row.
+            //
+            // The vehicle it names may since have been renamed or deleted. This
+            // is what the shift recorded at the time, which is the only answer
+            // that stays true.
+            if let vehicleName = shift.fuelVehicleName {
+                LabeledContent("Vehicle") {
+                    Text(vehicleName)
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("Worked in \(vehicleName), as recorded when this shift started")
+                .accessibilityIdentifier("shiftDetailFuelVehicle")
+            }
         }
     }
 

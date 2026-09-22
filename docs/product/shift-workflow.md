@@ -406,6 +406,48 @@ opens a screen of the same rows, grouped by the week they were worked in, newest
 group headed by the dates it covers and footed by how many shifts it holds. A week nobody worked is
 absent rather than shown empty.
 
+### How a whole week went
+
+Each week on that screen opens with a summary of every shift in it, above the shifts themselves, so
+that the question a driver scrolls back with is answered before they start opening rows:
+
+```
+Sep 14 - Sep 20
+
+Shifts                    5
+Earnings            $428.30
+                          4 of 5 shifts
+Working              14h 42m
+                          5 of 5 shifts
+Recorded miles       187.4 mi
+                          5 of 5 shifts measured · 1 partial
+Deliveries               31
+                          31 deliveries completed
+```
+
+**Nothing is defined for History.** Every figure is the period summary's, derived by the same
+aggregation over the week's own period, which is what keeps one definition of "what a week came to"
+in the app. A weekly total on this screen and a weekly total on the period summary cannot disagree,
+because they are the same calculation.
+
+**Coverage travels with every figure.** A week's earnings are the subtotal of the shifts that
+recorded an amount, its working time the total of the shifts with a usable one, its mileage what the
+routes measured. None of those is necessarily every shift, so each line that can be short of its
+sources says how many shifts are behind it. `4 of 5 shifts` under a subtotal is the difference
+between a subtotal and a claim about the week.
+
+**Missing is never a zero.** A week where nobody recorded an amount says `Not recorded`, not `$0.00`;
+a week whose routes measured nothing says `Not measured`, not `0.0 mi`. A running shift is not in any
+of it, by the rule that keeps running shifts out of every historical aggregate.
+
+For a listener the whole week is one element, spoken as one sentence with every unit and every
+coverage said in full, because there is no caption in view to read afterwards. At large text sizes
+each figure stacks under its own label rather than being shortened to fit beside it.
+
+The summary is derived when a week comes into view and thrown away with it. Nothing is stored: a
+week's totals are worked out from the same recorded facts every time they are shown, exactly as a
+shift's mileage is.
+
 **Nothing is deleted, archived or aged out.** This is what is shown where, and nothing else: every
 completed shift is still in the store, still exported, still counted by every period summary, and
 still one tap from its own detail screen. A shift that leaves the current week at Monday midnight

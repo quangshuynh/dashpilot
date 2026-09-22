@@ -96,7 +96,7 @@ struct RouteSampleRelationshipTests {
         #expect(
             properties == [
                 "id", "startedAt", "endedAt", "deliveries", "offers", "pauses", "grossEarningsAmount",
-                "fuelMilesPerGallonValue", "fuelGasPricePerGallonAmount"
+                "fuelMilesPerGallonValue", "fuelGasPricePerGallonAmount", "fuelVehicleName"
             ]
         )
         #expect(!properties.contains("routeSamples"))

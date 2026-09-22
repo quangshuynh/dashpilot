@@ -27,6 +27,13 @@ nonisolated enum ShiftError: Error, Equatable {
     /// A negative gas price was recorded. Zero is allowed and means the fuel
     /// cost nothing; a negative price is not a thing a pump charges.
     case negativeGasPrice
+    /// The driver's current defaults were offered to a shift that already
+    /// records fuel assumptions of its own.
+    ///
+    /// The snapshot taken when a shift starts may only ever fill an empty pair.
+    /// A default that could overwrite a recorded fact would be the dynamic
+    /// dependence on a current global figure the snapshot exists to prevent.
+    case fuelAssumptionsAlreadyRecorded
 }
 
 /// A single period of delivery work.
@@ -117,7 +124,7 @@ nonisolated final class Shift {
     /// ``fuelAssumptions`` is the accessor, and it is the only place the stored
     /// pair becomes a ``FuelAssumptions``.
     ///
-    /// Always greater than zero where it is present: ``setFuelAssumptions(milesPerGallon:gasPricePerGallon:)``
+    /// Always greater than zero where it is present: ``setFuelAssumptions(milesPerGallon:gasPricePerGallon:vehicleName:)``
     /// refuses anything else, because it is the divisor of the estimate.
     private(set) var fuelMilesPerGallonValue: Decimal?
 
@@ -131,6 +138,26 @@ nonisolated final class Shift {
     /// recorded, so there is no estimate; `0` means the fuel was recorded as
     /// having cost nothing, which produces an estimate of ``Money/zero``.
     private(set) var fuelGasPricePerGallonAmount: Decimal?
+
+    /// What the vehicle this shift's fuel economy came from was called, or `nil`
+    /// when the economy was typed by hand rather than taken from a vehicle
+    /// profile.
+    ///
+    /// **A snapshot, exactly like the two figures above, and for one more
+    /// reason.** A ``VehicleProfile`` is a preference the driver is invited to
+    /// rename and delete. A shift holding a reference to one would either lose
+    /// its label when that row went, or follow a rename it had nothing to do
+    /// with; a shift holding the *name* stays intelligible with no profile
+    /// behind it at all. There is deliberately no relationship between the two
+    /// entities anywhere in the app.
+    ///
+    /// It is a label, never an input. No estimate, rate, total, coverage count
+    /// or aggregate reads it, and a shift with an economy but no name produces
+    /// exactly the same figures as one with both.
+    ///
+    /// The name is only ever recorded beside the economy it describes: see
+    /// ``setFuelAssumptions(milesPerGallon:gasPricePerGallon:vehicleName:)``.
+    private(set) var fuelVehicleName: String?
 
     init(id: UUID = UUID(), startedAt: Date) {
         self.id = id
@@ -481,10 +508,79 @@ extension Shift {
     /// Both are stored exactly as given. Rounding is a display decision, and the
     /// input layer refuses anything finer rather than quietly rounding here.
     ///
+    /// ## The vehicle name, and the one rule it follows
+    ///
+    /// `vehicleName` is the vehicle the caller means this economy to describe,
+    /// and it is normally `nil`: a driver typing figures into the editor is not
+    /// naming a vehicle. Passing `nil` does **not** simply erase a name the
+    /// shift already holds, because that would cost a driver their vehicle label
+    /// every time they corrected the gas price beside it. Instead the existing
+    /// name is kept exactly while the economy it describes is unchanged, and
+    /// dropped the moment the economy moves.
+    ///
+    /// That is the whole of the rule, and it is here rather than in a view
+    /// because it is a statement about what the record means: a name says *which
+    /// vehicle covers this many miles on a gallon*, so a different economy is a
+    /// different vehicle as far as DashPilot can honestly tell.
+    ///
     /// - Throws: ``ShiftError/shiftNotCompleted``,
     ///   ``ShiftError/invalidFuelEconomy`` or ``ShiftError/negativeGasPrice``.
-    func setFuelAssumptions(milesPerGallon: Decimal?, gasPricePerGallon: Money?) throws {
+    func setFuelAssumptions(
+        milesPerGallon: Decimal?,
+        gasPricePerGallon: Money?,
+        vehicleName: String? = nil
+    ) throws {
         guard endedAt != nil else { throw ShiftError.shiftNotCompleted }
+        try writeFuelAssumptions(
+            milesPerGallon: milesPerGallon,
+            gasPricePerGallon: gasPricePerGallon,
+            vehicleName: vehicleName
+        )
+    }
+
+    /// Copies the driver's current defaults onto a shift that has just started.
+    ///
+    /// **This is the earliest truthful moment to take the snapshot**, and taking
+    /// it here rather than later is the substantive decision. The assumptions a
+    /// shift is estimated under are the ones that were true while it was being
+    /// worked: a driver who changes vehicle at lunchtime, or who notices the
+    /// price has gone up, has not changed what this shift has already consumed.
+    /// Reading the defaults at the *end* of a shift would let a change made
+    /// mid-shift silently rewrite assumptions the whole shift was worked under,
+    /// which is precisely the dependence on a current global figure the snapshot
+    /// exists to prevent.
+    ///
+    /// Only on a shift that is still running, and only on one carrying nothing
+    /// yet. Both guards exist so that this can never overwrite a recorded fact:
+    /// it is the one write that happens without the driver typing anything, and
+    /// the only thing it may do is fill an empty pair.
+    ///
+    /// Defaults holding nothing are a no-op rather than a refusal: a driver who
+    /// has never opened Settings starts shifts exactly as they always did.
+    ///
+    /// - Throws: ``ShiftError/shiftAlreadyEnded``,
+    ///   ``ShiftError/fuelAssumptionsAlreadyRecorded``,
+    ///   ``ShiftError/invalidFuelEconomy`` or ``ShiftError/negativeGasPrice``.
+    func recordStartingFuelDefaults(_ defaults: FuelDefaults) throws {
+        guard endedAt == nil else { throw ShiftError.shiftAlreadyEnded }
+        guard !fuelAssumptions.hasAny else { throw ShiftError.fuelAssumptionsAlreadyRecorded }
+        guard defaults.hasAny else { return }
+
+        try writeFuelAssumptions(
+            milesPerGallon: defaults.assumptions.milesPerGallon,
+            gasPricePerGallon: defaults.assumptions.gasPricePerGallon,
+            vehicleName: defaults.vehicleName
+        )
+    }
+
+    /// The validation and the three writes, shared by the two callers above so
+    /// that there is one definition of a valid pair and one place the columns
+    /// move.
+    private func writeFuelAssumptions(
+        milesPerGallon: Decimal?,
+        gasPricePerGallon: Money?,
+        vehicleName: String?
+    ) throws {
         if let milesPerGallon {
             guard milesPerGallon > 0 else { throw ShiftError.invalidFuelEconomy }
         }
@@ -492,10 +588,15 @@ extension Shift {
             guard !gasPricePerGallon.isNegative else { throw ShiftError.negativeGasPrice }
         }
 
-        // Nothing above can throw from here on, so the pair cannot be left
-        // half written.
+        // Read before anything moves, so the name is judged against the economy
+        // the shift currently holds rather than the one being written.
+        let keptName = milesPerGallon == fuelMilesPerGallonValue ? fuelVehicleName : nil
+
+        // Nothing above can throw from here on, so the three cannot be left
+        // partly written.
         fuelMilesPerGallonValue = milesPerGallon
         fuelGasPricePerGallonAmount = gasPricePerGallon?.amount
+        fuelVehicleName = vehicleName ?? keptName
     }
 
     /// Removes both assumptions, returning the shift to having none.
@@ -511,6 +612,10 @@ extension Shift {
     func clearFuelAssumptions() {
         fuelMilesPerGallonValue = nil
         fuelGasPricePerGallonAmount = nil
+        // The label goes with the economy it described. A shift with no fuel
+        // economy naming a vehicle would be claiming something about a shift it
+        // estimates nothing for.
+        fuelVehicleName = nil
     }
 
     /// What this shift's recorded mileage is estimated to have consumed, and

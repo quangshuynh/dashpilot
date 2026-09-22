@@ -501,9 +501,18 @@ and one they cannot.
   It does not check a fuel economy, learn one, or notice that a figure is wrong.
 - **No gas-price lookup and no station search**, ever: there is no network access in the app at all.
   A price is whatever the driver last entered.
-- **One vehicle, and no vehicle record.** There is no vehicle list, no make or model, no tank size
-  and no efficiency by season, terrain or load. The most recent pair a driver recorded seeds the next
-  shift's fields, and that is the whole of the "default".
+- **Vehicles are two fields and nothing else.** A profile has a name and a fuel economy. There is no
+  VIN, no plate, no make, model or trim lookup, no tank size, no odometer, no service schedule, no
+  insurance record and no efficiency by season, terrain or load.
+- **Nothing detects which vehicle is being driven.** A shift copies whichever vehicle is selected
+  when it starts, so a two-vehicle driver who forgets to switch records the wrong economy and finds
+  out later. The remedy is that shift's own fuel editor, which is the remedy for any mistyped figure.
+- **A running shift cannot have its assumptions edited.** Recording figures requires a completed
+  shift, by the rule that makes typing a stopped-vehicle task, so a driver who notices mid-shift that
+  the price is wrong corrects that shift after it ends. Changing the setting fixes the next shift.
+- **Nothing records where a shift's assumptions came from.** A snapshot taken at the start and a pair
+  typed afterwards are indistinguishable, in the app and in the export. The vehicle name is the only
+  hint, and it is absent whenever the economy was typed by hand.
 - **The estimate covers recorded mileage only.** Recorded mileage is a floor, so the estimated fuel
   is a floor and the estimated net is a ceiling. Where the route is partial the screen says so; where
   it is complete, "no gap was detected" is still a statement about the detection.
@@ -511,10 +520,21 @@ and one they cannot.
   wear, insurance, maintenance, depreciation, phone costs or tax is subtracted anywhere in DashPilot.
 - **It subtracts no recorded expense**, because no expense is attached to a shift. Net after recorded
   expenses remains a period figure.
-- **Nothing is aggregated.** There is no period-level estimated fuel, no estimated net for a day, a
-  week or a month, and no comparison of one shift's estimated net with another's.
-- **Nothing is exported but the assumptions.** The estimated gallons, the estimated fuel cost and the
-  estimated net are in no file, in either format.
+- **A period's estimate almost never covers every shift**, and the coverage is part of the figure
+  rather than a footnote. A period where no shift recorded enough reports the estimate as unavailable
+  rather than as `$0.00`, and one where some did states the shifts and the recorded miles behind it.
+- **The estimated net is a subset figure unless it says otherwise.** It is worked out over the shifts
+  that record both an amount and an estimate, which is often fewer than the period holds.
+- **Estimated fuel is never combined with recorded expenses**, and no rule reconciles them. A
+  recorded fuel purchase may be the same fuel the estimate describes, and DashPilot does not know
+  which shifts a tank was burned on, so a period carries two net figures over two inputs and nothing
+  subtracts both. Adding them by eye is the one mistake the screen is laid out to prevent.
+- **No period is compared with another on an estimate.** Coverage usually differs and the assumptions
+  behind two periods may be different vehicles at different prices, so nothing states whether this
+  week's estimated net beat last week's, and nothing ranks, scores or declares a winner.
+- **Nothing estimated is exported.** The estimated gallons, the estimated fuel cost, the estimated
+  net and every period aggregate of them are in no file, in either format. The assumptions and the
+  vehicle name a shift recorded are; the driver's current settings are not.
 - **A shift recorded before this existed carries no assumptions**, and none was backfilled. It
   reports no estimate rather than an estimate of nothing.
 
@@ -550,6 +570,12 @@ and one they cannot.
   Older Weeks rather than in the current one, which keeps it reachable but is the wrong heading for
   it. A shift's **end** can be corrected; its start cannot, and the start is what decides which week,
   day and period the shift belongs to.
+- **A week's summary measures every shift in that week.** The figures are derived when the week
+  scrolls into view and thrown away with it, so a week costs its routes once rather than per row, but
+  nothing is cached and this has not been measured against a store holding years of work.
+- **A week with no fuel assumptions carries no fuel lines at all**, rather than lines saying the
+  estimate is unavailable. The shift's own detail screen is where an absent estimate is explained,
+  because that is where it can be acted on.
 
 ## History export
 

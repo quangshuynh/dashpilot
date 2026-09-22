@@ -338,6 +338,26 @@ A period may also state how many distinct pickup places its deliveries named.
 That is a count and nothing else — **no ranking, no scoring, no earnings per
 place**.
 
+## Estimated fuel, and the estimated net after it
+
+Under every recorded figure, a period states what its shifts are estimated to have spent on fuel and
+what they are estimated to have been left with after it. Both come from the per-shift arithmetic in
+[Estimated fuel and net](estimated-fuel.md), added up rather than worked out again.
+
+Two things about this section are the point rather than details:
+
+- **Coverage is stated in two units.** `4 of 6 shifts · 142.3 of 188.9 recorded miles` says how much
+  of the work and how much of the driving is behind the figure. The covered subset is never presented
+  as the period, and a period where nothing is covered says so rather than showing `$0.00`.
+- **The estimated net is worked out over the shifts that record both halves**, an amount and an
+  estimate, which is the paired-subset rule every rate here already follows. When that subset is not
+  the whole period the screen says so in as many words.
+
+**Estimated fuel is never combined with recorded expenses.** They are two sections, and no figure on
+the screen subtracts both: a recorded `fuel` purchase and this estimate may describe the same fuel,
+and DashPilot does not know which shifts a tank was burned on. Net after recorded expenses and
+estimated net after fuel are two honest figures rather than one invented one.
+
 ## Comparing a period with the one before it
 
 A period can be read beside the **equivalent period immediately before it**: today beside yesterday,

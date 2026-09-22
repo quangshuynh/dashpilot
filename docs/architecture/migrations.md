@@ -22,16 +22,21 @@ rather than a store reset.
 | 12.0.0 | Adds the `Offer` entity, an optional `Delivery.offer` reference and a `Shift.offers` relationship. Backfills one offer per existing delivery |
 | 13.0.0 | Adds the `DeliveryTip` entity and a cascading `Delivery.additionalTips` relationship. Backfills nothing |
 | 14.0.0 | Adds `Shift.fuelMilesPerGallonValue` and `Shift.fuelGasPricePerGallonAmount`, two optional `Decimal` columns holding the assumptions a shift's fuel estimate is worked out under. Backfills nothing |
+| 15.0.0 | Adds the `VehicleProfile` and `DriverSettings` entities and an optional `Shift.fuelVehicleName` column. Backfills nothing |
 
-The current version is **v14**. Field-level detail is on [Data model](../reference/data-model.md).
+The current version is **v15**. Field-level detail is on [Data model](../reference/data-model.md).
 
-`DashPilotSchemaV1` through `DashPilotSchemaV13` hold frozen copies of their models rather than
+`DashPilotSchemaV1` through `DashPilotSchemaV14` hold frozen copies of their models rather than
 reusing the file-scope types, which have moved on. The plan then describes where a store is coming
 from as truthfully as where it is going, and the copies are never used at runtime outside
 migration.
 
-`DashPilotSchemaV13` was frozen in the interval that added v14, and the freeze was forced the way
-v12's was: v14 gives `Shift` two columns, so reusing the file-scope types under v13 would describe
+`DashPilotSchemaV14` was frozen in the interval that added v15, and the freeze was forced the same
+way: v15 gives `Shift` the name of the vehicle its economy came from, so reusing the file-scope types
+under v14 would describe every pre-v15 store as one that already recorded a vehicle. No build that
+wrote one had vehicles at all.
+
+`DashPilotSchemaV13` was frozen one interval earlier, and that freeze was forced the way v12's was: v14 gives `Shift` two columns, so reusing the file-scope types under v13 would describe
 every pre-v14 store as one that already recorded a fuel economy and a gas price. It did not, and a
 version that claims otherwise cannot be used to prove a migration preserved anything. v12 was frozen
 one interval earlier for the same reason, when v13 gave `Delivery` a cascading collection of tips.
@@ -265,6 +270,31 @@ fill-up cost, which is neither a price per gallon nor a statement about which sh
 
 Migrated shifts record no assumptions, and the interface offers to add them. See
 [Estimated fuel and net](../product/estimated-fuel.md).
+
+### v14 to v15
+
+Two new entities and one new optional column, applied lightweight.
+
+**There is nothing truthful to write, and here there are three tempting versions of writing it.**
+
+- Creating a vehicle profile out of the fuel economies a driver's shifts already record would invent
+  a vehicle they never named, and would have to guess how many vehicles those economies describe.
+- Writing a vehicle name onto the shifts that recorded an economy would attribute those shifts to a
+  vehicle the store holds no evidence of. No build that wrote a v14 store had vehicles.
+- Seeding the settings row from the most recent shift's gas price would turn one shift's recorded
+  assumption into a current preference, and the next shift started would then carry a figure the
+  driver never chose.
+
+So a migrated store opens with **no vehicle profiles, no settings row and no vehicle name on any
+shift**, while every shift keeps the fuel economy and gas price it recorded and the estimate derived
+from them. The settings row is created the first time the driver opens Settings, not by the
+migration.
+
+**Nothing joins a shift to a vehicle**, in either direction and at any version. A shift records the
+vehicle's *name* rather than a reference to it, so deleting a profile cascades nowhere and leaves
+every shift worked in it whole. `DriverSettings.selectedVehicleID` is an identifier for the same
+reason: a deleted profile leaves a selection that resolves to nothing, which reads as *no vehicle
+selected*, a state the app is designed to be in. See [Settings and vehicles](../product/settings.md).
 
 ## Proving a migration rather than assuming it
 

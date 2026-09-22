@@ -58,14 +58,37 @@ So:
 - A shift's estimate can always be reproduced from what that shift itself
   records.
 
-The convenience is separate from the truth. When the editor opens on a shift that
-has recorded nothing, it **fills its fields** from the most recent shift that did
-record a pair, and says so. A filled field is a suggestion: nothing is recorded
-against the shift until the driver taps Save, and no earlier shift changes
-because a later one records something else.
+The convenience is separate from the truth, and it is what
+[Settings](settings.md) is for. A shift **takes its copy when it starts**, from
+the vehicle the driver selected and the gas price they last entered. From that
+moment the shift owns its copy: editing the vehicle, deleting it, selecting
+another or changing the price all change what the **next** shift records and
+nothing that has already been recorded.
 
-There is no settings screen and no vehicle list. One pair per shift, and the last
-pair entered as the suggestion for the next, is the whole model.
+When the fuel editor opens on a shift that recorded nothing, it **fills its
+fields** from those current defaults, or failing those from the most recent shift
+that did record a pair, and says so. A filled field is a suggestion: nothing is
+recorded against the shift until the driver taps Save, and no earlier shift
+changes because a later one, or a setting, records something else.
+
+A shift worked before the defaults existed is **not** filled in for the driver.
+It keeps recording nothing until they open its fuel editor and tap
+`Use Current Defaults`, which fills the fields from Settings for them to save.
+Writing today's figures into last month's work would put an assumption the driver
+never made into their history.
+
+### Which vehicle a shift says it was worked in
+
+A shift that took its economy from a vehicle also records **what that vehicle was
+called**, and shows it under the two figures. It is a label and never an input:
+no estimate, rate or total reads it, and a shift with an economy but no name
+produces exactly the same figures.
+
+It is a copy rather than a link, so a shift stays intelligible when the profile
+behind it is renamed or deleted. The name is recorded beside an economy only when
+it **is** that vehicle's economy: a driver who types a different figure by hand
+records no vehicle, because DashPilot does not know which vehicle covers that
+many miles on a gallon.
 
 ## Missing is not zero
 
@@ -212,6 +235,88 @@ deliberately not exported**: the file carries the recorded facts and the
 assumptions, and a reader who wants the estimate applies the rule at the top of
 this page to the recorded mileage already in the same record. The export format
 version is unchanged. See [History export](history-export.md).
+
+## Over a period
+
+A day, a week, a month or a chosen range states what its shifts are estimated to have spent on fuel,
+and what they are estimated to have been left with after it. Both are on the period summary, under
+every recorded figure, and both come from the same per-shift arithmetic above rather than from a
+second one.
+
+### Partial coverage is the whole problem
+
+A week can hold six shifts of which four recorded a fuel economy, a gas price and a measurable route.
+Adding those four estimates gives a real figure. Presenting it as *what this week cost in fuel* is a
+claim about six shifts made from four, and that is what the coverage exists to prevent.
+
+So the estimate never travels without the counts behind it, in **two** units, because either alone
+can mislead:
+
+```
+Estimated fuel                     $24.81
+4 of 6 shifts · 142.3 of 188.9 recorded miles · 75% of recorded miles
+```
+
+- **Shifts** says how much of the week's *work* is behind the figure.
+- **Recorded miles** says how much of its *driving* is. Two short shifts missing their assumptions
+  cost less coverage than one long one, and only the mileage says so.
+
+A percentage is derived from the mileage, because fuel is consumed over distance, and it is never
+the only thing said: a percentage cannot say which shifts are missing or how long they were. Where
+every shift is covered the screen says so in as many words, because "no coverage stated" and
+"complete coverage" must not look the same. Where none is covered it says the estimate is
+unavailable, never `$0.00`.
+
+### The estimated net is worked out over the shifts that record both halves
+
+The tempting arithmetic is `period earnings - period estimated fuel`, and it is wrong whenever the
+two have different coverage: it takes a fuel figure from four shifts off an earnings figure from six
+and labels the result as the period's.
+
+So the subtraction is performed over the **paired subset** — the shifts that recorded an amount *and*
+have an estimate — which is the rule every rate in DashPilot already follows. Both halves are shown
+under the figure, so a reader can see what it was worked out from, and when the subset is not the
+whole period the screen says so:
+
+```
+Estimated net after fuel           $92.00
+$100.00 recorded less $8.00 estimated fuel
+Worked out over the 1 of 2 shifts that record both an amount and enough to estimate their fuel.
+It is not this period's earnings less this period's fuel.
+```
+
+It may be negative, which is a real outcome. Where a contributing route is partial the fuel is a
+floor and the net is therefore a **ceiling**, and the screen says that too.
+
+### Estimated fuel and recorded expenses are never combined
+
+This is the screen where the overlap [documented above](#the-overlap-the-app-states-rather-than-resolves)
+becomes visible for the first time: a recorded `fuel` expense and an estimated fuel cost can appear a
+few rows apart, and they may describe the same money.
+
+DashPilot keeps them in **two sections**, each labelled for what it is, and adds them nowhere:
+
+- **Net after recorded expenses** is recorded gross earnings less the costs the driver entered.
+- **Estimated net after fuel** is recorded earnings less an estimate, over the paired subset.
+
+Neither has the other taken off it, and no figure anywhere subtracts both. Subtracting both under one
+label would count the same fuel twice, and DashPilot does not know which shifts a tank was burned on.
+The reconciliation rule does not exist, so the app shows two honest figures rather than one invented
+one.
+
+### Two periods are not compared on an estimate
+
+The period comparison states no estimated figure. Two periods whose fuel coverage differs are not
+like with like, and two estimated under different assumptions — a different vehicle, a different
+price — are answers to two different questions. Nothing ranks periods, scores them or declares one
+more profitable than another.
+
+### In History
+
+Each week under **View Older Weeks** carries the same two figures above its shifts, with the same
+coverage, and only when the week has them. A week where no shift recorded assumptions simply does not
+carry the lines, because a summary above a list is not the place to explain an absent estimate: the
+shift's own detail screen is, because that is where it can be acted on.
 
 ## What these figures are not
 
