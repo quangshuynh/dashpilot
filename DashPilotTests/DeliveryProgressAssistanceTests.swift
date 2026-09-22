@@ -276,11 +276,11 @@ struct DeliveryProgressAssistanceTests {
     }
 
     @Test("The caveat travels with every reminder, spoken and printed")
-    func alwaysCarriesTheCaveat() {
-        let suggestion = try? #require(assistance.suggestion(for: delivery(acceptedAt: at(0)), asOf: at(stale)))
+    func alwaysCarriesTheCaveat() throws {
+        let suggestion = try #require(assistance.suggestion(for: delivery(acceptedAt: at(0)), asOf: at(stale)))
 
         #expect(DeliveryProgressSuggestion.uncertaintyStatement.contains("cannot tell where you are"))
-        #expect(suggestion?.spokenLabel.contains(DeliveryProgressSuggestion.uncertaintyStatement) == true)
+        #expect(suggestion.spokenLabel.contains(DeliveryProgressSuggestion.uncertaintyStatement))
     }
 
     @Test("The offered action is always the delivery's own next step")

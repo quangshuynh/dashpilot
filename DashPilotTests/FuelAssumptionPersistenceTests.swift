@@ -74,8 +74,9 @@ struct FuelAssumptionPersistenceTests {
         let current = try #require(ModelContainerFactory.currentSchema.entities.first { $0.name == "Shift" })
         #expect(
             Set(current.properties.map(\.name)) == [
-                "id", "startedAt", "endedAt", "deliveries", "offers", "pauses", "grossEarningsAmount",
-                "fuelMilesPerGallonValue", "fuelGasPricePerGallonAmount", "fuelVehicleName"
+                "id", "startedAt", "endedAt", "deliveries", "offers", "pauses", "routeSuspensions",
+                "grossEarningsAmount", "fuelMilesPerGallonValue", "fuelGasPricePerGallonAmount",
+                "fuelVehicleName"
             ],
             "The shift keeps both fuel columns, and there is still exactly one pair per shift"
         )
