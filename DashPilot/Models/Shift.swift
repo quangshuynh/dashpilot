@@ -501,6 +501,16 @@ extension Shift {
         )
     }
 
+    /// Which vehicle this shift recorded when it started.
+    ///
+    /// The adapter between the two stored columns and ``ShiftVehicleContext``,
+    /// holding no rule of its own. It reads **this shift's snapshot and nothing
+    /// else**: no preference, no profile, no current selection, so a shift that
+    /// recorded nothing says so rather than borrowing what is selected today.
+    var vehicleContext: ShiftVehicleContext {
+        ShiftVehicleContext(vehicleName: fuelVehicleName, milesPerGallon: fuelMilesPerGallonValue)
+    }
+
     /// Records the assumptions this shift's fuel estimate is worked out under,
     /// replacing whatever was recorded before.
     ///

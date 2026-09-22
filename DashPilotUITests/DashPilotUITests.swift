@@ -5950,6 +5950,115 @@ final class DashPilotUITests: XCTestCase {
         )
     }
 
+    // MARK: The running shift's vehicle
+
+    /// The question the row exists to answer, driven end to end: *which vehicle
+    /// is this shift using?*, answered without leaving the driving screen.
+    @MainActor
+    func testTheRunningShiftNamesTheVehicleItRecorded() throws {
+        let app = launchWithEmptyStore()
+
+        openSettings(in: app)
+        addVehicle(named: "2020 Honda Civic", milesPerGallon: "34", in: app)
+        goBack(in: app)
+
+        let startShift = app.buttons["startShiftButton"]
+        XCTAssertTrue(startShift.waitForExistence(timeout: 10))
+        startShift.tap()
+
+        let vehicle = app.descendants(matching: .any)["activeShiftVehicle"]
+        XCTAssertTrue(scrollTo(vehicle, in: app), "The running shift says which vehicle it is using")
+        XCTAssertEqual(vehicle.label, "Shift vehicle")
+        XCTAssertEqual(
+            vehicle.value as? String,
+            "2020 Honda Civic, 34 miles per gallon",
+            "The unit is spelled out for a listener with no caption in view"
+        )
+    }
+
+    /// The invariant the whole snapshot exists for, on the surface where a
+    /// driver would most easily believe the opposite: Settings answers which
+    /// vehicle the **next** shift records, and the shift in progress does not
+    /// follow it.
+    @MainActor
+    func testChangingSettingsMidShiftLeavesTheRunningShiftsVehicleAlone() throws {
+        let app = launchWithEmptyStore()
+
+        openSettings(in: app)
+        addVehicle(named: "2020 Honda Civic", milesPerGallon: "34", in: app)
+        goBack(in: app)
+
+        let startShift = app.buttons["startShiftButton"]
+        XCTAssertTrue(startShift.waitForExistence(timeout: 10))
+        startShift.tap()
+
+        let vehicle = app.descendants(matching: .any)["activeShiftVehicle"]
+        XCTAssertTrue(scrollTo(vehicle, in: app))
+        XCTAssertEqual(vehicle.value as? String, "2020 Honda Civic, 34 miles per gallon")
+
+        // Add a second vehicle, select it, and correct the first one's figure.
+        openSettings(in: app)
+        addVehicle(named: "2012 Toyota Camry", milesPerGallon: "28", in: app)
+        let camry = vehicleRow(containing: "2012 Toyota Camry", in: app)
+        XCTAssertTrue(scrollUntilHittable(camry, in: app))
+        camry.tap()
+        XCTAssertTrue(waitForLabel(vehicleRow(containing: "2012 Toyota Camry", in: app), toContain: "Selected"))
+
+        let edit = app.buttons["Edit 2020 Honda Civic"]
+        XCTAssertTrue(scrollUntilHittable(edit, in: app))
+        edit.tap()
+        let economyField = app.textFields["vehicleMilesPerGallonField"]
+        XCTAssertTrue(economyField.waitForExistence(timeout: 5))
+        replaceTappedField(economyField, with: "41", in: app)
+        app.buttons["saveVehicleButton"].tap()
+        XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 5))
+        goBack(in: app)
+
+        let unmoved = app.descendants(matching: .any)["activeShiftVehicle"]
+        XCTAssertTrue(scrollTo(unmoved, in: app))
+        XCTAssertEqual(
+            unmoved.value as? String,
+            "2020 Honda Civic, 34 miles per gallon",
+            "The shift was worked under what it recorded, not under what is selected now"
+        )
+
+        // And it is still that after leaving the app and coming back, which is
+        // the closest a journey gets to a relaunch: the store is read again and
+        // nothing is held in the screen's own state.
+        XCUIDevice.shared.press(.home)
+        app.activate()
+        let returned = app.descendants(matching: .any)["activeShiftVehicle"]
+        XCTAssertTrue(scrollTo(returned, in: app))
+        XCTAssertEqual(returned.value as? String, "2020 Honda Civic, 34 miles per gallon")
+    }
+
+    /// A shift started with nothing selected says so, and keeps saying so after
+    /// a vehicle is selected: the absence is a fact about this shift.
+    @MainActor
+    func testAShiftStartedWithNoVehicleBorrowsNothingFromSettings() throws {
+        let app = launchWithEmptyStore()
+
+        let startShift = app.buttons["startShiftButton"]
+        XCTAssertTrue(startShift.waitForExistence(timeout: 10))
+        startShift.tap()
+
+        let vehicle = app.descendants(matching: .any)["activeShiftVehicle"]
+        XCTAssertTrue(scrollTo(vehicle, in: app))
+        XCTAssertEqual(vehicle.value as? String, "No vehicle recorded for this shift")
+
+        openSettings(in: app)
+        addVehicle(named: "2020 Honda Civic", milesPerGallon: "34", in: app)
+        goBack(in: app)
+
+        let stillEmpty = app.descendants(matching: .any)["activeShiftVehicle"]
+        XCTAssertTrue(scrollTo(stillEmpty, in: app))
+        XCTAssertEqual(
+            stillEmpty.value as? String,
+            "No vehicle recorded for this shift",
+            "Borrowing the current selection would claim a vehicle this shift never recorded"
+        )
+    }
+
     // MARK: Settings, vehicles and fuel defaults
 
     /// Settings is reachable from the main screen, and it says what it is for.
