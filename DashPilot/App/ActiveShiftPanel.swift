@@ -120,6 +120,8 @@ struct ActiveShiftPanel: View {
                 earnings(metrics)
             }
 
+            vehicleContext
+
             RouteCaptureStatusView(state: captureState)
 
             controls
@@ -289,6 +291,63 @@ struct ActiveShiftPanel: View {
             .font(.subheadline)
             .accessibilityLabel(spokenTitle)
         }
+    }
+
+    /// Which vehicle assumptions this shift is using.
+    ///
+    /// ## It reads the shift and never Settings
+    ///
+    /// The name and the economy are ``Shift``'s own snapshot, taken when the
+    /// shift started, through ``ShiftVehicleContext``. Nothing here reaches a
+    /// ``VehicleProfile``, the current selection or the current gas price, so
+    /// changing any of those mid-shift leaves this row exactly where it is, and
+    /// a shift that recorded nothing says so rather than borrowing what is
+    /// selected today. That is the whole point of the row: Settings answers
+    /// which vehicle the **next** shift will record, and a driver who forgot to
+    /// switch needs the answer about this one.
+    ///
+    /// ## Where it sits, and how quiet it is
+    ///
+    /// Below the live figures and above the capture status, which is the part of
+    /// the panel that carries context rather than the part that carries the
+    /// numbers a driver glances at. It is two short lines in caption and
+    /// subheadline type and it is never a control on its own.
+    ///
+    /// The gas price is deliberately not here. It is an input to the fuel
+    /// estimate a finished shift reports, and the one screen a driver reads
+    /// while working is not where a price belongs.
+    private var vehicleContext: some View {
+        let context = shift.vehicleContext
+
+        return HStack(alignment: .firstTextBaseline, spacing: 8) {
+            // A symbol rather than a "Vehicle" caption, so the row costs one
+            // line of height where it has one fact and two where it has both.
+            Image(systemName: "car.fill")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(context.title)
+                    .font(.subheadline)
+                    // Secondary where nothing was recorded, because an absence
+                    // should not read with the weight of a fact.
+                    .foregroundStyle(context.isRecorded ? .primary : .secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if let economy = context.economyStatement(locale: locale) {
+                    Text(economy)
+                        .font(.caption)
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Spacer(minLength: 8)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(context.spokenLabel)
+        .accessibilityValue(context.spokenValue(locale: locale))
+        .accessibilityIdentifier("activeShiftVehicle")
     }
 
     /// What the driver is told while the vehicle is recorded as parked.
