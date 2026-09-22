@@ -122,6 +122,21 @@ nonisolated enum LaunchArgument {
     /// Every time is invented. Debug builds only, and in memory.
     static let seededMalformedOffer = "-dashpilot-seeded-malformed-offer"
 
+    /// Runs against a throwaway store holding a running shift whose deliveries
+    /// have recorded nothing for well over half an hour, in different states.
+    ///
+    /// A progress reminder's whole input is elapsed time, and a journey cannot
+    /// wait half an hour for one. Seeding deliveries that are already stale is
+    /// the only way to reach the reminders end to end, and seeding two of them
+    /// in different states is what proves each reminder names its own delivery
+    /// and offers that delivery's own step. A third, already picked up and older
+    /// than either threshold, is the silence: nothing is offered for a delivery
+    /// that is in the car.
+    ///
+    /// Every time is invented. Debug builds only, and in memory, so it can never
+    /// touch a real store.
+    static let seededMissedLifecycle = "-dashpilot-seeded-missed-lifecycle"
+
     /// Runs against a throwaway store holding one **completed** shift that was
     /// paused twice, with one delivery recorded between the two pauses.
     ///
@@ -136,6 +151,20 @@ nonisolated enum LaunchArgument {
     /// Every time and amount is invented. Debug builds only, and in memory, so
     /// it can never touch a real store.
     static let seededPausedHistory = "-dashpilot-seeded-paused-history"
+
+    /// Runs against a throwaway store holding one **completed** shift with a
+    /// stretch recorded parked between its two capture sessions.
+    ///
+    /// The consequences of parking are what a journey has to be able to read,
+    /// and no sequence of taps reaches them: a UI test cannot drive a simulator
+    /// into recording a route, and a live journey that parks and resumes records
+    /// a stretch measured in seconds. This fixture records 4.5 mi over two
+    /// segments with one gap, 25 minutes parked, and a working duration of the
+    /// whole two hours — which is the claim that shopping is working.
+    ///
+    /// Every time, amount and coordinate is invented. Debug builds only, and in
+    /// memory, so it can never touch a real store.
+    static let seededParkedHistory = "-dashpilot-seeded-parked-history"
 
     /// Runs against a throwaway store holding one **completed** shift whose
     /// recorded end is twenty minutes later than the driver actually stopped,
@@ -250,7 +279,9 @@ nonisolated enum LaunchArgument {
         seededExpectedPay,
         seededStackedOffer,
         seededMalformedOffer,
+        seededMissedLifecycle,
         seededPausedHistory,
+        seededParkedHistory,
         seededLateEndHistory,
         seededLateDeliveryHistory,
         seededOlderWeeks,

@@ -56,6 +56,7 @@ struct ShiftLiveActivity: Widget {
             }
             DynamicIslandExpandedRegion(.bottom) {
                 VStack(alignment: .leading, spacing: 8) {
+                    ShiftActivityParkedNotice(state: state)
                     Text(state.mileageLine)
                         .font(.subheadline)
                         .monospacedDigit()
@@ -111,6 +112,8 @@ struct ShiftActivityLockScreenView: View {
                 Spacer(minLength: 8)
                 ShiftActivityWorkingTime(state: state)
             }
+
+            ShiftActivityParkedNotice(state: state)
 
             Text(state.mileageLine)
                 .font(.subheadline)
@@ -214,6 +217,29 @@ struct ShiftActivityDeliveryLine: View {
 /// was built at, and a listener would be told a duration that stopped moving.
 /// The label goes on the name, ahead of the figure, so VoiceOver says what the
 /// number that follows measures.
+/// The one line that says the route has stopped because the driver parked.
+///
+/// Drawn directly above the mileage figure, which is the figure it explains: a
+/// distance that has stopped growing with no reason beside it reads as a
+/// recording fault. It is **not** the paused styling and must not become it —
+/// the status line above still says the shift is running, because it is.
+///
+/// Absent entirely when the driver has not parked, so a card the feature never
+/// touches is the card it always was.
+struct ShiftActivityParkedNotice: View {
+    let state: ShiftActivityAttributes.ContentState
+
+    var body: some View {
+        if let notice = state.routeSuspendedNotice {
+            Label(notice, systemImage: "parkingsign.circle.fill")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.orange)
+                .lineLimit(1)
+                .accessibilityLabel(state.spokenRouteSuspendedNotice ?? notice)
+        }
+    }
+}
+
 struct ShiftActivityDeliveryTimers: View {
     let state: ShiftActivityAttributes.ContentState
 
@@ -245,11 +271,29 @@ struct ShiftActivityDeliveryTimers: View {
             Text(verbatim: "·")
                 .foregroundStyle(.secondary)
                 .accessibilityHidden(true)
+            // What this delivery is doing. With two orders open the card names
+            // both and `deliveryStatus` is withheld, so without this the Lock
+            // Screen says what neither of them is waiting for.
+            //
+            // Hidden from VoiceOver because the element above already speaks it:
+            // its label is the whole sentence, so a second element saying the
+            // state again would be the card repeating itself. It gives way
+            // first when the row is too narrow, which is why it carries no
+            // layout priority and the figure does.
+            if let state = timer.stateLabel {
+                Text(state)
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+                Text(verbatim: "·")
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+            }
             // Left unlabelled on purpose. The system draws and speaks this one
             // from the anchor, so any label of ours would replace a live figure
             // with the one this snapshot happened to carry.
             Text(timerInterval: timer.timerRange, countsDown: false)
                 .monospacedDigit()
+                .layoutPriority(1)
         }
         .font(.caption)
         .lineLimit(1)

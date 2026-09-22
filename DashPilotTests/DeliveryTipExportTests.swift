@@ -239,12 +239,16 @@ struct DeliveryTipExportTests {
     func csvAppendsRatherThanInserts() throws {
         let columns = ExportDocumentEncoder.columns
 
-        #expect(columns.count == 39, "36 before tips, and three appended")
+        #expect(columns.count == 41, "36 before tips, three appended by them, and two by parking")
         #expect(
-            Array(columns.suffix(3)) == [
+            Array(columns[36...38]) == [
                 "deliveryAdditionalTipCount", "deliveryAdditionalTipsTotal", "deliveryEffectiveEarnings"
             ],
             "Appended, because inserting one moves every column after it"
+        )
+        #expect(
+            Array(columns.suffix(2)) == ["shiftRouteSuspensionCount", "shiftRouteSuspendedSeconds"],
+            "And the two appended after them left the tip columns exactly where they were"
         )
         #expect(columns[35] == "deliveryOfferNumber", "The previous last column is still the 36th")
         #expect(columns.firstIndex(of: "deliveryGrossEarnings") == 33, "And the amount column has not moved")

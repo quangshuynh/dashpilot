@@ -40,11 +40,34 @@ nonisolated struct ShiftActivityDeliveryTimer: Codable, Hashable, Sendable {
     /// hold or facts this surface must not print.
     let title: String
 
+    /// What the delivery is doing, in the shortest truthful form the app has:
+    /// `"At pickup"`.
+    ///
+    /// ## Why the card needs it
+    ///
+    /// ``ShiftActivityAttributes/ContentState/deliveryStatus`` states one
+    /// delivery's state and exists only when exactly one is open, because with
+    /// two there is no "the delivery" for it to be about. A driver carrying two
+    /// orders therefore read a Lock Screen that named both and said what neither
+    /// was doing, which is precisely the glance this surface exists for. This
+    /// puts the state on the row that already names the delivery, so the answer
+    /// is per delivery rather than per card.
+    ///
+    /// ## Why it is a finished string, and why it is optional
+    ///
+    /// The extension cannot see ``DeliveryState``, exactly as it cannot see
+    /// ``NumberedDelivery``, so the app derives the word and the extension draws
+    /// it. Optional so that a snapshot persisted before this field existed still
+    /// decodes, and so that a row without one is drawn as the row this surface
+    /// drew before rather than as a gap.
+    let stateLabel: String?
+
     /// The delivery's own `acceptedAt`.
     let startedAt: Date
 
-    init(title: String, startedAt: Date) {
+    init(title: String, stateLabel: String? = nil, startedAt: Date) {
         self.title = title
+        self.stateLabel = stateLabel
         self.startedAt = startedAt
     }
 }
@@ -65,7 +88,13 @@ nonisolated extension ShiftActivityDeliveryTimer {
     /// element ahead of it, which is the same arrangement the shift's clock
     /// uses, and it says what the number that follows measures rather than
     /// leaving a bare duration to be guessed at.
-    var spokenLabel: String { "How long \(title) has been active" }
+    /// It carries the state, because the printed state sits inside this element
+    /// rather than beside it: a listener hears which delivery, what it is doing,
+    /// and then the live figure, in the order a reader's eye takes them.
+    var spokenLabel: String {
+        guard let stateLabel else { return "How long \(title) has been active" }
+        return "\(title), \(stateLabel.lowercased()). How long it has been active"
+    }
 
     /// How long the delivery had been active when the snapshot was built.
     ///
@@ -86,6 +115,7 @@ nonisolated extension ShiftActivityDeliveryTimer {
     func spokenElapsed(asOf: Date) -> String {
         let figure = Duration.seconds(elapsed(asOf: asOf))
             .formatted(.units(allowed: [.hours, .minutes], width: .wide))
-        return "\(title) active for \(figure)"
+        guard let stateLabel else { return "\(title) active for \(figure)" }
+        return "\(title), \(stateLabel.lowercased()), active for \(figure)"
     }
 }

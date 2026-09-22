@@ -254,8 +254,72 @@ struct ShiftActivityContentTests {
         #expect(!spoken.contains(":"), "A colon is heard as punctuation, not as a time")
 
         #expect(
-            timer.spokenLabel == "How long Delivery 1 has been active",
+            timer.spokenLabel == "Delivery 1, to pickup. How long it has been active",
             "The live figure is left unlabelled, so the label beside it has to say what it measures"
+        )
+        #expect(
+            spoken == "Delivery 1, to pickup, active for 18 minutes",
+            "And the frozen sentence carries the state too, for the presentation with no live element"
+        )
+    }
+
+    @Test("Each open delivery's row says what that delivery is doing")
+    func statesWhatEachStackedDeliveryIsDoing() throws {
+        let context = try makeContext()
+        let shift = try startedShift(in: context)
+        let deliveries = DeliveryService(context: context)
+
+        let waiting = try deliveries.startDelivery(at: at(10))
+        try deliveries.markArrivedAtPickup(waiting, at: at(20))
+        _ = try deliveries.startDelivery(at: at(30))
+
+        let state = shift.activityContentState(for: .none, asOf: at(60), locale: locale)
+
+        // With two open there is no "the delivery", so the card's single
+        // status line is withheld. Without a state on each row, a Lock Screen
+        // would name both deliveries and say what neither of them was waiting
+        // for, which is exactly the glance the surface exists for.
+        #expect(state.deliveryStatus == nil)
+        #expect(state.activeDeliveryTimers.map(\.title) == ["Delivery 1", "Delivery 2"])
+        #expect(state.activeDeliveryTimers.map(\.stateLabel) == ["At pickup", "To pickup"])
+        #expect(
+            state.activeDeliveryTimers.map(\.stateLabel) == [
+                DeliveryState.arrivedAtPickup.compactStatusDescription,
+                DeliveryState.accepted.compactStatusDescription
+            ],
+            "The word is the app's own, shortened for a line it shares, never a second vocabulary"
+        )
+
+        let spoken = state.activeDeliveryTimers.map(\.spokenLabel)
+        #expect(spoken == [
+            "Delivery 1, at pickup. How long it has been active",
+            "Delivery 2, to pickup. How long it has been active"
+        ])
+    }
+
+    @Test("Advancing one stacked delivery moves its row and no other")
+    func advancingOneStackedDeliveryMovesOnlyItsRow() throws {
+        let context = try makeContext()
+        let shift = try startedShift(in: context)
+        let deliveries = DeliveryService(context: context)
+
+        let first = try deliveries.startDelivery(at: at(10))
+        _ = try deliveries.startDelivery(at: at(20))
+
+        let before = shift.activityContentState(for: .none, asOf: at(60), locale: locale)
+        #expect(before.activeDeliveryTimers.map(\.stateLabel) == ["To pickup", "To pickup"])
+
+        try deliveries.markArrivedAtPickup(first, at: at(70))
+        let after = shift.activityContentState(for: .none, asOf: at(80), locale: locale)
+
+        #expect(after.activeDeliveryTimers.map(\.stateLabel) == ["At pickup", "To pickup"])
+        #expect(
+            after.activeDeliveryTimers.map(\.startedAt) == before.activeDeliveryTimers.map(\.startedAt),
+            "Neither clock is restarted by a state moving: each still counts from its own acceptance"
+        )
+        #expect(
+            ShiftActivityUpdatePolicy.change(from: before, to: after) == .material,
+            "A state the card prints has to reach the card at once, not on the route's throttle"
         )
     }
 

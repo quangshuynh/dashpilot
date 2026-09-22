@@ -267,7 +267,34 @@ nonisolated struct ShiftRouteExport: Equatable, Sendable, Codable {
     /// whose short breaks cannot be detected at all.
     let usesInferredContinuity: Bool
 
-    init(_ distance: RouteDistance) {
+    /// How many stretches the driver recorded the vehicle as parked during this
+    /// shift, with route recording deliberately stopped.
+    ///
+    /// `0` is a measurement and never a missing value: a shift the driver never
+    /// parked was parked no times, which is every shift recorded before they
+    /// could say so.
+    ///
+    /// It is in the file because it is the one thing that tells a reader why a
+    /// shift's recorded distance is short **on purpose**. Without it, a shift
+    /// whose driver spent forty minutes in two shops is indistinguishable from
+    /// one whose capture failed, and the two deserve different readings of the
+    /// same mileage.
+    ///
+    /// **It is not a claim about the gaps.** Nothing here says that these
+    /// stretches are `gapCount`'s gaps: a shift whose capture had already
+    /// stopped produces no gap by parking, and the route records no evidence of
+    /// which stop is which.
+    let suspensionCount: Int
+
+    /// How long those stretches came to altogether, in seconds.
+    ///
+    /// **Never subtracted from anything.** It is not paused time and it is not
+    /// time off: a driver inside a shop collecting an order is working, so
+    /// `workingSeconds` is untouched by it and every rate derived from that
+    /// denominator is the rate it would have been.
+    let suspendedSeconds: Int?
+
+    init(_ distance: RouteDistance, suspendedTime: RouteSuspendedTime = .none) {
         status = if distance.isMeasured {
             .measured
         } else {
@@ -283,11 +310,14 @@ nonisolated struct ShiftRouteExport: Equatable, Sendable, Codable {
         gapCount = distance.gapCount
         usableSampleCount = distance.usableSampleCount
         usesInferredContinuity = distance.usesInferredContinuity
+        suspensionCount = suspendedTime.intervalCount
+        suspendedSeconds = ExportDuration.seconds(suspendedTime.duration)
     }
 
     private enum CodingKeys: String, CodingKey {
         case status, isPartial, recordedDistanceMetres, recordedDistanceMiles
         case segmentCount, gapCount, usableSampleCount, usesInferredContinuity
+        case suspensionCount, suspendedSeconds
     }
 
     func encode(to encoder: any Encoder) throws {
@@ -300,6 +330,11 @@ nonisolated struct ShiftRouteExport: Equatable, Sendable, Codable {
         try container.encode(gapCount, forKey: .gapCount)
         try container.encode(usableSampleCount, forKey: .usableSampleCount)
         try container.encode(usesInferredContinuity, forKey: .usesInferredContinuity)
+        try container.encode(suspensionCount, forKey: .suspensionCount)
+        // Always present, `0` for a shift never parked: this is a count of
+        // seconds actually spent parked rather than a figure that might be
+        // missing, and the same rule `pausedSeconds` follows.
+        try container.encodeAlways(suspendedSeconds, forKey: .suspendedSeconds)
     }
 }
 

@@ -45,6 +45,25 @@ nonisolated enum ShiftEndCorrectionRefusal: Error, Equatable, Sendable {
     /// first, and the pause editor is where a pause is corrected.
     case cutsThroughRecordedPause
 
+    /// The shift records a stretch parked that the driver never ended.
+    ///
+    /// A store the app cannot write: ending a shift closes its open suspension
+    /// at the same instant, exactly as it closes an open pause. Refused rather
+    /// than resolved, for the reason ``pauseIsOpen`` is.
+    case routeSuspensionIsOpen
+
+    /// The proposed end would leave a recorded stretch parked outside the shift.
+    ///
+    /// A suspension is a stretch **of** the shift, exactly as a pause is, and it
+    /// is what explains a gap in the shift's route. Moving the end back through
+    /// one would leave the explanation outside the shift it explains, and the
+    /// route it covers would lose its stated reason while keeping its gap.
+    ///
+    /// Refused rather than trimmed, for the reason ``cutsThroughRecordedPause``
+    /// is: shortening a fact the driver recorded to accommodate another one is
+    /// the app rewriting a record it was asked to correct.
+    case cutsThroughRecordedRouteSuspension
+
     /// The proposed end precedes a lifecycle event one of the shift's deliveries
     /// records.
     ///
@@ -90,6 +109,8 @@ nonisolated extension ShiftEndCorrectionRefusal {
         .notAfterShiftStart,
         .pauseIsOpen,
         .cutsThroughRecordedPause,
+        .routeSuspensionIsOpen,
+        .cutsThroughRecordedRouteSuspension,
         .precedesRecordedDeliveryWork(
             RecordedDeliveryEvent(deliveryNumber: 1, event: .delivered, occurredAt: .distantPast)
         ),
@@ -109,6 +130,8 @@ nonisolated extension ShiftEndCorrectionRefusal {
         case .notAfterShiftStart: "notAfterShiftStart"
         case .pauseIsOpen: "pauseIsOpen"
         case .cutsThroughRecordedPause: "cutsThroughRecordedPause"
+        case .routeSuspensionIsOpen: "routeSuspensionIsOpen"
+        case .cutsThroughRecordedRouteSuspension: "cutsThroughRecordedRouteSuspension"
         case .precedesRecordedDeliveryWork: "precedesRecordedDeliveryWork"
         case .overlapsAnotherShift: "overlapsAnotherShift"
         }
@@ -261,6 +284,10 @@ nonisolated struct ShiftEndCorrection: Equatable, Sendable {
     ///     malformed row whose end precedes its start is judged by the later of
     ///     the two: that is the instant a corrected window would have to reach
     ///     to still contain it.
+    ///   - suspensions: every stretch the shift records the vehicle as parked,
+    ///     judged exactly as a pause is: by the stretch it states rather than by
+    ///     the one it contributes, so a malformed row is judged by the later of
+    ///     its two instants.
     ///   - deliveryEvents: every lifecycle event the shift's deliveries record,
     ///     in any order, each naming the delivery it belongs to and the stage it
     ///     is. Acceptance is always among them; the rest are there when they
@@ -274,6 +301,7 @@ nonisolated struct ShiftEndCorrection: Equatable, Sendable {
         startedAt: Date,
         recordedEnd: Date?,
         pauses: [ShiftPauseInterval],
+        suspensions: [RouteSuspensionInterval] = [],
         deliveryEvents: [RecordedDeliveryEvent],
         nextShiftStartedAt: Date?
     ) throws {
@@ -291,6 +319,20 @@ nonisolated struct ShiftEndCorrection: Equatable, Sendable {
         let lastPausedInstant = pauses.compactMap { pause in pause.end.map { max(pause.start, $0) } }.max()
         if let lastPausedInstant, lastPausedInstant > correctedEnd {
             throw ShiftEndCorrectionRefusal.cutsThroughRecordedPause
+        }
+
+        // The same two checks, in the same order, for the same reasons. A
+        // suspension is a stretch of the shift and is what explains a gap in its
+        // route, so an end that left one outside the shift would leave a gap
+        // whose recorded reason had gone.
+        guard !suspensions.contains(where: \.isOpen) else {
+            throw ShiftEndCorrectionRefusal.routeSuspensionIsOpen
+        }
+        let lastParkedInstant = suspensions.compactMap { parked in
+            parked.end.map { max(parked.start, $0) }
+        }.max()
+        if let lastParkedInstant, lastParkedInstant > correctedEnd {
+            throw ShiftEndCorrectionRefusal.cutsThroughRecordedRouteSuspension
         }
 
         let lastDeliveryEvent = deliveryEvents.max { $0.occurredAt < $1.occurredAt }
