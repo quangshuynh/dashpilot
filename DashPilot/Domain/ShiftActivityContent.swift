@@ -45,9 +45,15 @@ nonisolated extension ShiftActivityDeliveryTimer {
     /// name is ``NumberedDelivery/title``'s, which is the app's one definition
     /// of what a delivery is called, and the instant is the delivery's own
     /// `acceptedAt`, which is where every other duration derived from this
-    /// delivery already starts.
+    /// delivery already starts. The state is
+    /// ``DeliveryState/compactStatusDescription``, which is the app's one
+    /// vocabulary for what a delivery is doing, shortened for a line it shares.
     init(_ numbered: NumberedDelivery) {
-        self.init(title: numbered.title, startedAt: numbered.delivery.acceptedAt)
+        self.init(
+            title: numbered.title,
+            stateLabel: numbered.delivery.state.compactStatusDescription,
+            startedAt: numbered.delivery.acceptedAt
+        )
     }
 }
 

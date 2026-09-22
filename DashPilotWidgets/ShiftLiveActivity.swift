@@ -245,11 +245,29 @@ struct ShiftActivityDeliveryTimers: View {
             Text(verbatim: "·")
                 .foregroundStyle(.secondary)
                 .accessibilityHidden(true)
+            // What this delivery is doing. With two orders open the card names
+            // both and `deliveryStatus` is withheld, so without this the Lock
+            // Screen says what neither of them is waiting for.
+            //
+            // Hidden from VoiceOver because the element above already speaks it:
+            // its label is the whole sentence, so a second element saying the
+            // state again would be the card repeating itself. It gives way
+            // first when the row is too narrow, which is why it carries no
+            // layout priority and the figure does.
+            if let state = timer.stateLabel {
+                Text(state)
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+                Text(verbatim: "·")
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+            }
             // Left unlabelled on purpose. The system draws and speaks this one
             // from the anchor, so any label of ours would replace a live figure
             // with the one this snapshot happened to carry.
             Text(timerInterval: timer.timerRange, countsDown: false)
                 .monospacedDigit()
+                .layoutPriority(1)
         }
         .font(.caption)
         .lineLimit(1)
