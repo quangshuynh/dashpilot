@@ -46,6 +46,9 @@ enum AppModelContainer {
         if LaunchArgument.isPresent(LaunchArgument.seededMalformedOffer) {
             return try PreviewSupport.seededMalformedOfferContainer()
         }
+        if LaunchArgument.isPresent(LaunchArgument.seededMissedLifecycle) {
+            return try PreviewSupport.seededMissedLifecycleContainer()
+        }
         if LaunchArgument.isPresent(LaunchArgument.seededPausedHistory) {
             return try PreviewSupport.seededPausedHistoryContainer()
         }

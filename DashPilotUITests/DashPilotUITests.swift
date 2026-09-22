@@ -22,6 +22,9 @@ final class DashPilotUITests: XCTestCase {
     /// Must match `LaunchArgument.seededExpectedPay`, for the same reason.
     private static let seededExpectedPayArgument = "-dashpilot-seeded-expected-pay"
 
+    /// Must match `LaunchArgument.seededMissedLifecycle`, for the same reason.
+    private static let seededMissedLifecycleArgument = "-dashpilot-seeded-missed-lifecycle"
+
     /// Must match `LaunchArgument.seededStackedOffer`, for the same reason.
     private static let seededStackedOfferArgument = "-dashpilot-seeded-stacked-offer"
 
@@ -183,6 +186,22 @@ final class DashPilotUITests: XCTestCase {
     private func launchWithStackedOffer() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments.append(Self.seededStackedOfferArgument)
+        launchInPortrait(app)
+        return app
+    }
+
+    /// Launches against a throwaway store holding a running shift whose
+    /// deliveries have recorded nothing for well over half an hour.
+    ///
+    /// A progress reminder's whole input is elapsed time, and a journey cannot
+    /// wait half an hour for one. The fixture's shift holds `Delivery 1` waiting
+    /// at its pickup since 70 minutes ago, `Delivery 2` accepted 55 minutes ago
+    /// with no arrival, and `Delivery 3` picked up 40 minutes ago, which is the
+    /// delivery nothing is ever offered for.
+    @MainActor
+    private func launchWithMissedLifecycle() -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments.append(Self.seededMissedLifecycleArgument)
         launchInPortrait(app)
         return app
     }
@@ -1516,6 +1535,157 @@ final class DashPilotUITests: XCTestCase {
             "The delivered one leaves the list"
         )
         XCTAssertEqual(accepted.label, "Delivery 2. Mark arrived at pickup")
+    }
+
+    // MARK: Reminders about a lifecycle event that may have gone unrecorded
+
+    /// Two stale deliveries each get their own reminder, naming their own
+    /// delivery and offering their own next step.
+    @MainActor
+    func testStaleDeliveriesEachGetTheirOwnReminder() throws {
+        let app = launchWithMissedLifecycle()
+
+        let reminders = app.descendants(matching: .any).matching(identifier: "deliverySuggestion")
+        XCTAssertTrue(reminders.firstMatch.waitForExistence(timeout: 10))
+        XCTAssertTrue(
+            waitForCount(reminders, toEqual: 2),
+            "Two deliveries are stale; the third was picked up and is never the subject of one"
+        )
+
+        let waiting = deliveryButton("deliverySuggestionActionButton", containing: "Delivery 1", in: app)
+        let heading = deliveryButton("deliverySuggestionActionButton", containing: "Delivery 2", in: app)
+        XCTAssertTrue(waiting.exists, "The delivery at its pickup is offered the pickup")
+        XCTAssertTrue(heading.exists, "The delivery that only recorded an acceptance is offered the arrival")
+
+        // Each control names the delivery it acts on, in print and aloud, so
+        // neither is identified by where it happens to sit.
+        XCTAssertTrue(
+            waiting.label.hasPrefix("Delivery 1."),
+            "A reminder's control names its delivery first: \(waiting.label)"
+        )
+        XCTAssertTrue(waiting.label.contains("Mark order picked up"), waiting.label)
+        XCTAssertTrue(heading.label.hasPrefix("Delivery 2."), heading.label)
+        XCTAssertTrue(heading.label.contains("Mark arrived at pickup"), heading.label)
+
+        // Nothing is offered for the delivery that is already in the car,
+        // however long it has been carried.
+        XCTAssertFalse(
+            deliveryButton("deliverySuggestionActionButton", containing: "Delivery 3", in: app).exists,
+            "A delivery already picked up is never the subject of a reminder"
+        )
+    }
+
+    /// The reminder states what was recorded and says plainly that DashPilot did
+    /// not observe it.
+    @MainActor
+    func testAReminderStatesItsEvidenceAndClaimsNoObservation() throws {
+        let app = launchWithMissedLifecycle()
+
+        let reminder = app.descendants(matching: .any)
+            .matching(
+                NSPredicate(
+                    format: "identifier == %@ AND label CONTAINS %@",
+                    "deliverySuggestion",
+                    "Delivery 1"
+                )
+            )
+            .firstMatch
+        XCTAssertTrue(reminder.waitForExistence(timeout: 10))
+
+        let spoken = reminder.label
+        XCTAssertTrue(
+            spoken.contains("reached the pickup") && spoken.contains("records no pickup"),
+            "It states what the record holds: \(spoken)"
+        )
+        XCTAssertTrue(spoken.contains("Already picked this order up?"), spoken)
+        XCTAssertTrue(
+            spoken.contains("DashPilot cannot tell where you are"),
+            "The caveat travels with the reminder rather than sitting somewhere else: \(spoken)"
+        )
+        for claim in ["you arrived", "you picked up", "detected", "confirmed"] {
+            XCTAssertFalse(
+                spoken.lowercased().contains(claim),
+                "A reminder must not claim \"\(claim)\": \(spoken)"
+            )
+        }
+    }
+
+    /// Confirming a reminder records that delivery's own step and leaves the
+    /// other deliveries exactly where they were.
+    @MainActor
+    func testConfirmingAReminderAdvancesOnlyThatDelivery() throws {
+        let app = launchWithMissedLifecycle()
+
+        let heading = deliveryButton("deliveryActionButton", containing: "Delivery 2", in: app)
+        XCTAssertTrue(heading.waitForExistence(timeout: 10))
+        XCTAssertEqual(heading.label, "Delivery 2. Mark arrived at pickup")
+
+        let waitingStep = deliveryButton("deliveryActionButton", containing: "Delivery 1", in: app)
+        XCTAssertEqual(waitingStep.label, "Delivery 1. Mark order picked up")
+
+        let confirm = deliveryButton("deliverySuggestionActionButton", containing: "Delivery 2", in: app)
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        confirm.tap()
+
+        // The delivery the reminder named has moved, through the ordinary
+        // lifecycle action rather than through anything of the reminder's own.
+        XCTAssertTrue(
+            waitForLabel(heading, toContain: "Delivery 2. Mark order picked up"),
+            "Delivery 2 recorded its arrival: \(heading.label)"
+        )
+        XCTAssertEqual(
+            waitingStep.label,
+            "Delivery 1. Mark order picked up",
+            "Delivery 1 is untouched by a reminder confirmed on Delivery 2"
+        )
+
+        // And the reminder it answered is gone, because the delivery is no
+        // longer in the state it was about.
+        XCTAssertTrue(
+            waitForCount(
+                app.buttons.matching(identifier: "deliverySuggestionActionButton"),
+                toEqual: 1
+            ),
+            "The answered reminder leaves; the other one stays"
+        )
+    }
+
+    /// Waving a reminder away records nothing and leaves the delivery alone.
+    @MainActor
+    func testDismissingAReminderChangesNothing() throws {
+        let app = launchWithMissedLifecycle()
+
+        let step = deliveryButton("deliveryActionButton", containing: "Delivery 1", in: app)
+        XCTAssertTrue(step.waitForExistence(timeout: 10))
+        XCTAssertEqual(step.label, "Delivery 1. Mark order picked up")
+
+        let status = app.descendants(matching: .any)["deliveryStatus"]
+        XCTAssertTrue(waitForLabel(status, toContain: "3 deliveries in progress"), status.label)
+
+        let dismiss = deliveryButton("deliverySuggestionDismissButton", containing: "Delivery 1", in: app)
+        XCTAssertTrue(dismiss.waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            dismiss.label.contains("Nothing is recorded"),
+            "The control says aloud that it records nothing: \(dismiss.label)"
+        )
+        dismiss.tap()
+
+        XCTAssertTrue(
+            waitForCount(
+                app.descendants(matching: .any).matching(identifier: "deliverySuggestion"),
+                toEqual: 1
+            ),
+            "Only the dismissed reminder goes"
+        )
+        XCTAssertEqual(
+            step.label,
+            "Delivery 1. Mark order picked up",
+            "The delivery is exactly where it was, so nothing was recorded"
+        )
+        XCTAssertTrue(
+            waitForLabel(status, toContain: "3 deliveries in progress"),
+            "And the shift still holds the same three deliveries: \(status.label)"
+        )
     }
 
     // MARK: Offers containing several deliveries
