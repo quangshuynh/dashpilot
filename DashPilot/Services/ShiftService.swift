@@ -70,7 +70,10 @@ nonisolated extension ShiftLifecycleError: LocalizedError {
         case .shiftAlreadyActive:
             "A shift is already in progress. End it before starting another one."
         case .noActiveShift:
-            "There is no shift in progress to end."
+            // Names no particular action. This one refusal is reached by ending,
+            // pausing, resuming, parking and driving again, and a driver who
+            // said they had parked should not be answered about ending.
+            "There is no shift in progress."
         case .cannotDeleteActiveShift:
             "A shift that is still in progress cannot be deleted. End it first."
         case let .activeDeliveriesInProgress(count):
