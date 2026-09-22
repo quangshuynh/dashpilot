@@ -6059,6 +6059,199 @@ final class DashPilotUITests: XCTestCase {
         )
     }
 
+    // MARK: Correcting the running shift's vehicle
+
+    /// The whole correction, driven end to end: a shift started in the wrong
+    /// vehicle, moved to the right one before any driving, with Settings left
+    /// exactly as it was.
+    @MainActor
+    func testCorrectsTheRunningShiftsVehicleBeforeAnyDriving() throws {
+        let app = launchWithEmptyStore()
+
+        openSettings(in: app)
+        addVehicle(named: "2020 Honda Civic", milesPerGallon: "34", in: app)
+        addVehicle(named: "2012 Toyota Camry", milesPerGallon: "28", in: app)
+        goBack(in: app)
+
+        let startShift = app.buttons["startShiftButton"]
+        XCTAssertTrue(startShift.waitForExistence(timeout: 10))
+        startShift.tap()
+
+        let vehicle = app.descendants(matching: .any)["activeShiftVehicle"]
+        XCTAssertTrue(scrollTo(vehicle, in: app))
+        XCTAssertEqual(
+            vehicle.value as? String,
+            "2020 Honda Civic, 34 miles per gallon",
+            "The first vehicle added is the selected one, so the shift started under it"
+        )
+
+        let change = app.buttons["changeShiftVehicleButton"]
+        XCTAssertTrue(scrollUntilHittable(change, in: app), "Correction is offered before any driving")
+        change.tap()
+
+        // The sheet keeps what the shift recorded unless the driver chooses
+        // otherwise, so Save has nothing to write until something is picked.
+        let save = app.buttons["saveShiftVehicleButton"]
+        XCTAssertTrue(save.waitForExistence(timeout: 5))
+        XCTAssertFalse(save.isEnabled, "Saving the choices already recorded would report a change nobody made")
+
+        let camry = app.descendants(matching: .any)
+            .matching(identifier: "correctionVehicleRow")
+            .containing(NSPredicate(format: "label CONTAINS %@", "2012 Toyota Camry"))
+            .firstMatch
+        XCTAssertTrue(camry.waitForExistence(timeout: 5))
+        camry.tap()
+        XCTAssertTrue(waitForLabel(camry, toContain: "Chosen"), "The mark is said, not only drawn: \(camry.label)")
+        XCTAssertTrue(save.isEnabled)
+        save.tap()
+
+        let corrected = app.descendants(matching: .any)["activeShiftVehicle"]
+        XCTAssertTrue(scrollTo(corrected, in: app))
+        XCTAssertTrue(
+            waitForLabelValue(corrected, toEqual: "2012 Toyota Camry, 28 miles per gallon"),
+            "The running shift now says what it was corrected to: \(String(describing: corrected.value))"
+        )
+
+        // And it survives leaving the app, because the store is the only place
+        // it lives.
+        XCUIDevice.shared.press(.home)
+        app.activate()
+        let returned = app.descendants(matching: .any)["activeShiftVehicle"]
+        XCTAssertTrue(scrollTo(returned, in: app))
+        XCTAssertEqual(returned.value as? String, "2012 Toyota Camry, 28 miles per gallon")
+
+        // Settings is untouched: correcting a shift is not choosing a vehicle
+        // for the next one.
+        openSettings(in: app)
+        let civicRow = vehicleRow(containing: "2020 Honda Civic", in: app)
+        XCTAssertTrue(civicRow.waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            civicRow.label.contains("Selected"),
+            "The selection is still the driver's own: \(civicRow.label)"
+        )
+        XCTAssertTrue(civicRow.label.contains("34 miles per gallon"), "And the profile is unchanged")
+        XCTAssertTrue(
+            vehicleRow(containing: "2012 Toyota Camry", in: app).label.contains("28 miles per gallon"),
+            "As is the one the shift was corrected to"
+        )
+    }
+
+    /// Once the route has recorded a distance the correction is gone, and the
+    /// row it was beside is still readable.
+    @MainActor
+    func testTheVehicleCorrectionClosesOnceDrivingIsRecorded() throws {
+        let app = launchWithSimulatedRoute()
+
+        openSettings(in: app)
+        addVehicle(named: "2020 Honda Civic", milesPerGallon: "34", in: app)
+        goBack(in: app)
+
+        let startShift = app.buttons["startShiftButton"]
+        XCTAssertTrue(startShift.waitForExistence(timeout: 10))
+        startShift.tap()
+
+        // The synthetic vehicle is already driving, so the correction may have
+        // closed before the first look. What matters is that it is closed once a
+        // distance exists, and that the row stays readable.
+        let miles = try XCTUnwrap(
+            waitForRecordedMiles(in: app),
+            "The panel never reported a measured distance while the route was being recorded"
+        )
+        XCTAssertGreaterThan(miles, 0)
+
+        let vehicle = app.descendants(matching: .any)["activeShiftVehicle"]
+        XCTAssertTrue(scrollTo(vehicle, in: app))
+        XCTAssertEqual(
+            vehicle.value as? String,
+            "2020 Honda Civic, 34 miles per gallon",
+            "The vehicle context is still readable after driving begins"
+        )
+        XCTAssertFalse(
+            app.buttons["changeShiftVehicleButton"].exists,
+            "A dead action is worse than no action, so the control is absent rather than disabled"
+        )
+    }
+
+    /// A shift started with nothing recorded can have its assumptions filled,
+    /// which is the case the snapshot itself can never reach.
+    @MainActor
+    func testFillsMissingVehicleAssumptionsOnAFreshShift() throws {
+        let app = launchWithEmptyStore()
+
+        let startShift = app.buttons["startShiftButton"]
+        XCTAssertTrue(startShift.waitForExistence(timeout: 10))
+        startShift.tap()
+
+        let vehicle = app.descendants(matching: .any)["activeShiftVehicle"]
+        XCTAssertTrue(scrollTo(vehicle, in: app))
+        XCTAssertEqual(vehicle.value as? String, "No vehicle recorded for this shift")
+
+        // A vehicle entered after the shift began, which the shift does not take
+        // on its own.
+        openSettings(in: app)
+        addVehicle(named: "The van", milesPerGallon: "18", in: app)
+        goBack(in: app)
+
+        let stillEmpty = app.descendants(matching: .any)["activeShiftVehicle"]
+        XCTAssertTrue(scrollTo(stillEmpty, in: app))
+        XCTAssertEqual(stillEmpty.value as? String, "No vehicle recorded for this shift")
+
+        let change = app.buttons["changeShiftVehicleButton"]
+        XCTAssertTrue(scrollUntilHittable(change, in: app))
+        change.tap()
+
+        let van = app.descendants(matching: .any)
+            .matching(identifier: "correctionVehicleRow")
+            .containing(NSPredicate(format: "label CONTAINS %@", "The van"))
+            .firstMatch
+        XCTAssertTrue(van.waitForExistence(timeout: 5))
+        van.tap()
+        app.buttons["saveShiftVehicleButton"].tap()
+
+        let filled = app.descendants(matching: .any)["activeShiftVehicle"]
+        XCTAssertTrue(scrollTo(filled, in: app))
+        XCTAssertTrue(
+            waitForLabelValue(filled, toEqual: "The van, 18 miles per gallon"),
+            "Showed: \(String(describing: filled.value))"
+        )
+    }
+
+    /// Cancelling records nothing, which is what makes the sheet safe to open
+    /// while a shift is being worked.
+    @MainActor
+    func testCancellingTheVehicleCorrectionRecordsNothing() throws {
+        let app = launchWithEmptyStore()
+
+        openSettings(in: app)
+        addVehicle(named: "2020 Honda Civic", milesPerGallon: "34", in: app)
+        addVehicle(named: "2012 Toyota Camry", milesPerGallon: "28", in: app)
+        goBack(in: app)
+
+        let startShift = app.buttons["startShiftButton"]
+        XCTAssertTrue(startShift.waitForExistence(timeout: 10))
+        startShift.tap()
+
+        let change = app.buttons["changeShiftVehicleButton"]
+        XCTAssertTrue(scrollUntilHittable(change, in: app))
+        change.tap()
+
+        let camry = app.descendants(matching: .any)
+            .matching(identifier: "correctionVehicleRow")
+            .containing(NSPredicate(format: "label CONTAINS %@", "2012 Toyota Camry"))
+            .firstMatch
+        XCTAssertTrue(camry.waitForExistence(timeout: 5))
+        camry.tap()
+        app.buttons["cancelShiftVehicleButton"].tap()
+
+        let vehicle = app.descendants(matching: .any)["activeShiftVehicle"]
+        XCTAssertTrue(scrollTo(vehicle, in: app))
+        XCTAssertEqual(
+            vehicle.value as? String,
+            "2020 Honda Civic, 34 miles per gallon",
+            "Choosing a row is not recording it"
+        )
+    }
+
     // MARK: Settings, vehicles and fuel defaults
 
     /// Settings is reachable from the main screen, and it says what it is for.
@@ -6818,6 +7011,20 @@ final class DashPilotUITests: XCTestCase {
     private func waitForLabel(_ element: XCUIElement, toContain text: String) -> Bool {
         let expectation = XCTNSPredicateExpectation(
             predicate: NSPredicate(format: "label CONTAINS %@", text),
+            object: element
+        )
+        return XCTWaiter().wait(for: [expectation], timeout: 5) == .completed
+    }
+
+    /// The same wait, on an element's spoken **value** rather than its label.
+    ///
+    /// A row whose label names the metric and whose value carries the figure is
+    /// the arrangement this app uses everywhere a number is spoken, so a journey
+    /// that waits for a figure has to wait on the value.
+    @MainActor
+    private func waitForLabelValue(_ element: XCUIElement, toEqual text: String) -> Bool {
+        let expectation = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "value == %@", text),
             object: element
         )
         return XCTWaiter().wait(for: [expectation], timeout: 5) == .completed

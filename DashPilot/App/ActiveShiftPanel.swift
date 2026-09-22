@@ -73,6 +73,13 @@ struct ActiveShiftPanel: View {
     /// from scratch.
     @State private var routeMeasurement: ActiveRouteMeasurement?
 
+    /// Whether the vehicle correction sheet is open.
+    ///
+    /// Raised only by the driver tapping `Change`. Nothing presents it on its
+    /// own: a modal that appeared during a shift would be the mid-drive
+    /// interruption this whole surface is designed against.
+    @State private var isCorrectingVehicle = false
+
     private var isPaused: Bool { shift.isPaused }
 
     private var isRouteSuspended: Bool { shift.isRouteSuspended }
@@ -120,7 +127,7 @@ struct ActiveShiftPanel: View {
                 earnings(metrics)
             }
 
-            vehicleContext
+            vehicleContext(measuring: metrics?.recordedDistance)
 
             RouteCaptureStatusView(state: captureState)
 
@@ -148,6 +155,9 @@ struct ActiveShiftPanel: View {
         // pause opens a new capture session. Both change what the figure should
         // say now rather than in a couple of seconds.
         .onChange(of: shift.lifecycleState) { _, _ in measureRoute() }
+        .sheet(isPresented: $isCorrectingVehicle) {
+            ShiftVehicleCorrectionEditor(shift: shift)
+        }
     }
 
     /// Extends the route measurement with whatever the store has gained.
@@ -311,12 +321,14 @@ struct ActiveShiftPanel: View {
     /// Below the live figures and above the capture status, which is the part of
     /// the panel that carries context rather than the part that carries the
     /// numbers a driver glances at. It is two short lines in caption and
-    /// subheadline type and it is never a control on its own.
+    /// subheadline type, and the row itself is never a control: the only thing
+    /// tappable here is the small `Change` beside it, and only while the
+    /// correction is allowed.
     ///
     /// The gas price is deliberately not here. It is an input to the fuel
     /// estimate a finished shift reports, and the one screen a driver reads
     /// while working is not where a price belongs.
-    private var vehicleContext: some View {
+    private func vehicleContext(measuring recordedDistance: RouteDistance?) -> some View {
         let context = shift.vehicleContext
 
         return HStack(alignment: .firstTextBaseline, spacing: 8) {
@@ -341,14 +353,57 @@ struct ActiveShiftPanel: View {
                         .foregroundStyle(.secondary)
                 }
             }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(context.spokenLabel)
+            .accessibilityValue(context.spokenValue(locale: locale))
+            .accessibilityIdentifier("activeShiftVehicle")
 
             Spacer(minLength: 8)
+
+            if mayCorrectVehicle(measuring: recordedDistance) {
+                changeVehicleButton
+            }
         }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(context.spokenLabel)
-        .accessibilityValue(context.spokenValue(locale: locale))
-        .accessibilityIdentifier("activeShiftVehicle")
     }
+
+    /// The control that opens the correction, and it is absent rather than
+    /// disabled once the correction is no longer allowed.
+    ///
+    /// A dead action is worse than no action: a driver who taps a greyed control
+    /// learns nothing, and one who taps a live one that refuses learns it too
+    /// late. The row above stays readable either way, which is the part that has
+    /// to survive.
+    ///
+    /// Small, borderless and trailing, because it is secondary to everything
+    /// else on this panel: the driving workflow is the delivery controls and the
+    /// lifecycle buttons, and this is a settings-style correction reached
+    /// deliberately.
+    private var changeVehicleButton: some View {
+        Button("Change") { isCorrectingVehicle = true }
+            .font(.caption)
+            .buttonStyle(.borderless)
+            .accessibilityLabel("Change this shift's vehicle")
+            .accessibilityHint("Only before DashPilot has recorded any driving on this shift")
+            .accessibilityIdentifier("changeShiftVehicleButton")
+    }
+
+    /// Whether to offer the correction at all.
+    ///
+    /// Read from the measurement the panel already holds rather than from a walk
+    /// of the route, which is why it takes the distance instead of asking the
+    /// shift. ``Shift/correctRunningFuelAssumptions(_:using:)`` is where the rule
+    /// actually lives and is what refuses a stale tap; this only decides whether
+    /// to draw a control, so a reading that is a moment out of date costs a
+    /// refusal sentence rather than a wrong write.
+    ///
+    /// **`nil` withholds it.** In the moment before the route has been read once
+    /// the panel does not know whether anything was recorded, and not offering a
+    /// correction is the safe direction to be wrong in.
+    private func mayCorrectVehicle(measuring recordedDistance: RouteDistance?) -> Bool {
+        guard let recordedDistance else { return false }
+        return !recordedDistance.isMeasured
+    }
+
 
     /// What the driver is told while the vehicle is recorded as parked.
     ///

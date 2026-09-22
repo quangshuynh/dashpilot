@@ -116,6 +116,14 @@ nonisolated extension ShiftLifecycleError: LocalizedError {
             "Miles per gallon has to be more than zero. It is what DashPilot divides the recorded miles by."
         case .invalidTransition(.negativeGasPrice):
             "A gas price cannot be a negative amount. Enter what a gallon cost."
+        case .invalidTransition(.recordedDrivingHasBegun):
+            // The sentence names the reason rather than the control, because a
+            // driver meeting it has already been told they cannot and needs to
+            // know what changed.
+            """
+            Vehicle assumptions cannot be changed after recorded driving has begun. You can correct \
+            them once the shift has ended.
+            """
         case .invalidTransition:
             "That change could not be applied to the shift."
         case .storeUnavailable:
@@ -820,6 +828,55 @@ struct ShiftService {
 
         try saveFuel(describing: isFirstRecording ? "add" : "update")
         AppLog.fuel.info("Shift fuel assumptions \(isFirstRecording ? "recorded" : "updated", privacy: .public)")
+    }
+
+    /// Corrects a **running** shift's snapshotted vehicle assumptions.
+    ///
+    /// The deliberate mirror of ``setFuelAssumptions(milesPerGallon:gasPricePerGallon:vehicleName:on:)``,
+    /// which is the finished shift's editor: exactly one of the two applies to
+    /// any shift, and the model refuses the other.
+    ///
+    /// ## Conservative on purpose
+    ///
+    /// ``Shift/correctRunningFuelAssumptions(_:using:)`` allows it **only while
+    /// the shift's route has measured no distance**, and that rule is on the
+    /// model rather than here, so a screen that offered the control a moment too
+    /// late cannot write through it. Once a distance exists the correction is
+    /// refused rather than applied, because changing the divisor under recorded
+    /// driving restates what those miles are estimated to have consumed.
+    ///
+    /// ## Nothing else moves
+    ///
+    /// No ``RouteSample`` is read, moved or deleted. No ``VehicleProfile`` and no
+    /// ``DriverSettings`` row is written: the caller reads them to build
+    /// `correction`, and what reaches the store is a copy, so a profile renamed
+    /// or deleted afterwards leaves this shift saying what it recorded. No
+    /// ``Expense`` is created, and nothing derived is stored: the estimate this
+    /// shift will report is read from the corrected pair and its route whenever
+    /// it is asked for.
+    ///
+    /// **The whole correction is one write.** The model checks every rule before
+    /// it touches a column and this saves once, so a refused correction and a
+    /// refused save both leave the shift with exactly the assumptions it had.
+    ///
+    /// - Throws: ``ShiftLifecycleError/invalidTransition(_:)`` when the model
+    ///   refuses, carrying ``ShiftError/recordedDrivingHasBegun`` where driving
+    ///   has been recorded, or
+    ///   ``ShiftLifecycleError/storeUnavailable(underlying:)`` when the write
+    ///   fails.
+    func correctRunningShiftFuelAssumptions(_ correction: FuelDefaults, on shift: Shift) throws {
+        do {
+            try shift.correctRunningFuelAssumptions(correction)
+        } catch let error as ShiftError {
+            // The rule name only. Never the vehicle, the economy or the price.
+            AppLog.fuel.notice(
+                "Refused a running-shift correction: \(String(describing: error), privacy: .public)"
+            )
+            throw ShiftLifecycleError.invalidTransition(error)
+        }
+
+        try saveFuel(describing: "correct")
+        AppLog.fuel.info("Running shift fuel assumptions corrected")
     }
 
     /// Removes a shift's fuel assumptions, returning it to having none.
