@@ -1120,6 +1120,104 @@ enum PreviewSupport {
         return container
     }
 
+    // MARK: A finished shift with a stretch recorded parked
+
+    /// The parked-history fixture, for a preview, which cannot recover from a
+    /// container failure.
+    static func parkedHistoryContainer(
+        referenceDate: Date = pausedHistoryReference()
+    ) -> ModelContainer {
+        try! seededParkedHistoryContainer(referenceDate: referenceDate)
+    }
+
+    /// A throwaway store holding one **completed** shift with a stretch recorded
+    /// parked between its two capture sessions.
+    ///
+    /// No sequence of taps reaches this shape: a UI test cannot drive a
+    /// simulator into recording a route, and a live journey that parks and
+    /// resumes records a stretch measured in seconds rather than one a driver
+    /// would recognise. This is what lets the **consequences** of parking be
+    /// asserted end to end — a partial route whose wording says some of it was
+    /// the driver's own doing, the count and duration stated beside it, and a
+    /// working duration the suspension did not touch.
+    ///
+    /// | Offset from the start | What it holds |
+    /// | --- | --- |
+    /// | 30 min | Ten positions, twenty seconds and 400 m apart: 3,600 m |
+    /// | 1 hr 00 min to 1 hr 25 min | Recorded parked, capture stopped |
+    /// | 1 hr 30 min | Ten more, in a second session: another 3,600 m |
+    /// | 2 hr 00 min | The recorded end |
+    ///
+    /// So it records **4.5 mi** over two segments with one gap between them, and
+    /// says that 25 minutes of the shift were recorded parked. Its **working
+    /// duration is the whole two hours**, which is the claim the fixture exists
+    /// to make visible: shopping is working, and nothing subtracts a suspension
+    /// from anything.
+    ///
+    /// Every time, amount and coordinate is invented. Debug builds only, and in
+    /// memory, so it can never touch a real store.
+    static func seededParkedHistoryContainer(
+        referenceDate: Date = pausedHistoryReference()
+    ) throws -> ModelContainer {
+        let container = try ModelContainerFactory.makeInMemoryContainer()
+        let context = ModelContext(container)
+
+        let start = referenceDate.addingTimeInterval(-4 * 3_600)
+        func at(_ minutes: Double) -> Date { start.addingTimeInterval(minutes * 60) }
+
+        let shift = Shift(startedAt: start)
+        context.insert(shift)
+
+        for sample in parkedRoute(from: start) {
+            context.insert(sample.attached(to: shift))
+        }
+
+        // Built directly, for the reason the paused fixture's rows are: this
+        // describes the stored state of work that happened rather than replaying
+        // it in real time.
+        context.insert(RouteSuspension(shift: shift, startedAt: at(60), endedAt: at(85)))
+
+        let delivery = insertedDelivery(on: shift, acceptedAt: at(55), in: context)
+        try? delivery.markArrivedAtPickup(at: at(58))
+        try? delivery.markPickedUp(at: at(86))
+        try? delivery.markDelivered(at: at(100))
+        try? delivery.setGrossEarnings(Money(minorUnits: 1_800))
+        delivery.setPickupPlace(place(named: SyntheticPickupPlace.noodles, at: start, in: context))
+        context.insert(delivery)
+
+        try? shift.end(at: at(120))
+        try? shift.setGrossEarnings(Money(minorUnits: 8_000))
+
+        try? context.save()
+
+        return container
+    }
+
+    /// Two capture sessions with a stretch of nothing between them, which is
+    /// what a shift recorded parked actually stores.
+    ///
+    /// Each session contributes 3,600 m, so the whole route measures 4.5 mi and
+    /// the figure is one a journey can state rather than approximate. The second
+    /// session begins further north than the first ended, which is what a
+    /// vehicle that was driven away from its parking space looks like; the
+    /// distance between the two is never counted.
+    private static func parkedRoute(from start: Date) -> [PreviewRouteSample] {
+        let metresPerDegreeLatitude = 111_320.0
+
+        return [30.0, 90.0].enumerated().flatMap { index, startMinute -> [PreviewRouteSample] in
+            let session = UUID()
+            let originMetres = Double(index) * 9_000
+            return (0..<10).map { step in
+                PreviewRouteSample(
+                    timestamp: start.addingTimeInterval(startMinute * 60 + Double(step) * 20),
+                    latitude: 40.0 + (originMetres + Double(step) * 400) / metresPerDegreeLatitude,
+                    longitude: -75.0,
+                    captureSessionID: session
+                )
+            }
+        }
+    }
+
     /// A **completed** shift holding a delivery whose recorded completion is two
     /// hours later than the food actually reached the door.
     ///

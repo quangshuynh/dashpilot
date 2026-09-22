@@ -686,6 +686,10 @@ struct CompletedShiftDetailView: View {
         [
             quality.unmeasurableExplanation,
             quality.partialExplanation,
+            // After the partial sentence, which it qualifies: the driver reads
+            // that part of the shift was not recorded, and then how much of that
+            // they asked for.
+            quality.suspensionExplanation,
             quality.inferredContinuityExplanation
         ].compactMap { $0 }
     }
@@ -1301,7 +1305,10 @@ struct CompletedShiftDetailView: View {
     // MARK: Derived values
 
     private var quality: RouteQuality? {
-        recordedDistance.map(RouteQuality.init)
+        // The suspensions travel with the distance, so the route section's
+        // caveats can say how much of a short route the driver asked for. A
+        // shift that records none produces exactly the sentences it always did.
+        recordedDistance.map { RouteQuality($0, suspendedTime: shift.completedSuspendedTime ?? .none) }
     }
 
     /// How much of this shift a recorded delivery was active for.
