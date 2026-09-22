@@ -180,6 +180,27 @@ struct RootView: View {
             }
             .navigationTitle("DashPilot")
             .toolbar {
+                // The conventional place for preferences, and the conventional
+                // glyph, so a driver finds it where every other app keeps it.
+                // Leading rather than beside Expenses, because the two answer
+                // different questions and a bar with two trailing controls
+                // invites a mis-tap with a thumb on the move.
+                //
+                // In the bar rather than in the list for the reason Expenses is:
+                // every row this screen gains pushes the shift history further
+                // down, and a setting is something a driver touches when they
+                // change vehicle, not something they read.
+                ToolbarItem(placement: .topBarLeading) {
+                    NavigationLink {
+                        SettingsView()
+                    } label: {
+                        Image(systemName: "gearshape")
+                    }
+                    .accessibilityLabel("Settings")
+                    .accessibilityHint("Your vehicles and the gas price new shifts are recorded under.")
+                    .accessibilityIdentifier("settingsLink")
+                }
+
                 // In the bar rather than in the list, for two reasons. An
                 // expense belongs to no shift, so there is no section of this
                 // screen it is part of — and every row this screen gains pushes

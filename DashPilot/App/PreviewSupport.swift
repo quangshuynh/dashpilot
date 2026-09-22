@@ -469,6 +469,13 @@ enum PreviewSupport {
     /// The day therefore records `$48.60` of costs against `$86.25` of gross
     /// earnings — `$37.65` net after recorded expenses — and the week `$138.59`
     /// against `$206.25`, leaving `$67.66`.
+    ///
+    /// **Only the first shift records fuel assumptions** (an invented `28.5` MPG
+    /// at an invented `$3.19` a gallon), so the period's estimated fuel covers
+    /// one of the day's two completed shifts and one of the week's three. That
+    /// partial coverage is the point: it is what the screen has to state rather
+    /// than round off. The recorded fuel expense above sits beside the estimate
+    /// and is never added to it.
     static func periodSummaryContainer(now: Date = .now) -> ModelContainer {
         // Previews cannot meaningfully recover from a container failure.
         try! seededPeriodSummaryContainer(now: now)
@@ -491,8 +498,18 @@ enum PreviewSupport {
         let otherDay = otherDayThisWeek(from: today, now: now, calendar: calendar)
 
         // Today, three hours, with an amount and a partial route.
+        //
+        // **The only shift here that records fuel assumptions**, which is what
+        // makes the period's estimated fuel partially covered: the day holds two
+        // completed shifts and the week three, and exactly one of them can be
+        // estimated. A fixture where every shift were covered would let a
+        // coverage bug pass unnoticed.
         let first = shift(startingAt: today.addingTimeInterval(9 * 3600), hours: 3, in: context)
         try? first.setGrossEarnings(Money(minorUnits: 8625))
+        try? first.setFuelAssumptions(
+            milesPerGallon: Decimal(string: "28.5", locale: Locale(identifier: "en_US_POSIX")),
+            gasPricePerGallon: Money(minorUnits: 319)
+        )
         for sample in syntheticRoute(from: first.startedAt) {
             context.insert(sample.attached(to: first))
         }
@@ -1508,6 +1525,48 @@ enum PreviewSupport {
         container.mainContext.insert(shift)
 
         return FuelAssumptionsEditor(shift: shift).modelContainer(container)
+    }
+
+    /// The settings screen, with or without vehicles already recorded.
+    ///
+    /// The vehicles, the fuel economies and the price are invented, like every
+    /// other value here.
+    @MainActor
+    static func settingsView(withVehicles: Bool) -> some View {
+        let container = emptyContainer()
+        let context = container.mainContext
+        if withVehicles {
+            let service = SettingsService(context: context)
+            _ = try? service.addVehicle(
+                name: "2020 Honda Civic",
+                milesPerGallon: Decimal(string: "34", locale: Locale(identifier: "en_US_POSIX")) ?? 34,
+                createdAt: Date(timeIntervalSince1970: 1_756_000_000)
+            )
+            _ = try? service.addVehicle(
+                name: "2012 Toyota Camry",
+                milesPerGallon: Decimal(string: "28", locale: Locale(identifier: "en_US_POSIX")) ?? 28,
+                createdAt: Date(timeIntervalSince1970: 1_756_000_100)
+            )
+            try? service.setGasPricePerGallon(Money(minorUnits: 319))
+        }
+
+        return NavigationStack { SettingsView() }.modelContainer(container)
+    }
+
+    /// The vehicle editor, empty or over one synthetic profile.
+    @MainActor
+    static func vehicleProfileEditor(existing: Bool) -> some View {
+        let container = emptyContainer()
+        let profile = try? VehicleProfile(
+            name: "2020 Honda Civic",
+            milesPerGallon: Decimal(string: "34", locale: Locale(identifier: "en_US_POSIX")) ?? 34,
+            createdAt: Date(timeIntervalSince1970: 1_756_000_000)
+        )
+        if existing, let profile {
+            container.mainContext.insert(profile)
+        }
+
+        return VehicleProfileEditor(vehicle: existing ? profile : nil).modelContainer(container)
     }
 
     /// The expense editor, empty or over one synthetic recorded cost.

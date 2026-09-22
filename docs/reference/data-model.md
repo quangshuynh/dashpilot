@@ -16,6 +16,7 @@ version: **v10**.
 | `grossEarningsAmount` | `Decimal?` | Private. `nil` means no amount recorded, which is not zero |
 | `fuelMilesPerGallonValue` | `Decimal?` | The vehicle fuel economy this shift's fuel estimate is worked out under, as the driver typed it. A **snapshot**, never a reference to a current figure. Always greater than zero where present, because it is the divisor. `nil` means none recorded |
 | `fuelGasPricePerGallonAmount` | `Decimal?` | What a gallon cost, as the assumption this shift is estimated under. `nil` means none recorded; `0` means the fuel was recorded as costing nothing |
+| `fuelVehicleName` | `String?` | What the vehicle this shift's fuel economy came from was called, as recorded when the shift started. A **label**, never an input: no figure reads it. A copy rather than a reference, so a shift stays intelligible when the profile is renamed or deleted. `nil` where the economy was typed by hand |
 
 Derived, never stored:
 
@@ -330,6 +331,48 @@ whichever shift happened to be running when it was typed would record an attribu
 never made. Deleting a shift therefore removes no expense, and no cost is ever divided across
 shifts, deliveries, days or miles. See [Recorded expenses](../product/expenses.md).
 
+## `VehicleProfile`
+
+One vehicle the driver works in, kept so its fuel economy is typed once rather than on every shift.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `id` | `UUID` | Unique. What `DriverSettings.selectedVehicleID` points at |
+| `name` | `String` | What the driver calls this vehicle. Trimmed, non-empty and length-limited |
+| `milesPerGallonValue` | `Decimal` | The vehicle's fuel economy. Always greater than zero |
+| `createdAt` | `Date` | When the profile was created, which is the order the list is drawn in. A stable order that does not move under a rename |
+
+**It is a preference, not history, and nothing joins it to a `Shift`.** When a shift starts, the
+selected profile's name and fuel economy are copied onto that shift, and every estimate and exported
+value is derived from the copy. Editing this row afterwards changes no figure the driver has already
+seen, and deleting it leaves every shift it ever started exactly as it was. There is deliberately no
+relationship in either direction, so the delete cascades nowhere.
+
+What it deliberately does not hold: a VIN, a plate, a make, a model, a trim, an odometer reading, a
+service schedule, an insurance record or a purchase price. See
+[Settings and vehicles](../product/settings.md).
+
+## `DriverSettings`
+
+The driver's current preferences. **At most one row**, by construction: the identifier is a constant
+and is unique, so two attempts to create it resolve to one row rather than to two sets of
+preferences.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `id` | `UUID` | Unique, and always `DriverSettings.singletonID` |
+| `gasPricePerGallonAmount` | `Decimal?` | What the driver says a gallon currently costs. `nil` means none recorded; `0` means the fuel is recorded as costing nothing |
+| `selectedVehicleID` | `UUID?` | The `VehicleProfile.id` new shifts are recorded under, or `nil` when none is selected |
+
+**Nothing derived reads this row.** It is read at exactly one moment, when a shift starts, and copied
+onto that shift. Changing a setting tomorrow changes nothing recorded today.
+
+The selected vehicle is an **identifier rather than a relationship**, so a deleted profile leaves a
+selection that resolves to nothing, which reads as *no vehicle selected*. The service clears it in
+the same save as the delete, so the ordinary path never leaves one dangling.
+
+The row is created the first time the driver opens Settings. A migration never creates one.
+
 ## Schema versions
 
 | Version | Change |
@@ -347,6 +390,8 @@ shifts, deliveries, days or miles. See [Recorded expenses](../product/expenses.m
 | 11.0.0 | Adds `Delivery.expectedEarningsAmount`. No existing attribute moves, and no delivery gains one |
 | 12.0.0 | Adds `Offer`, `Delivery.offer` and `Shift.offers`. The first custom stage: every existing delivery is given a one-delivery offer of its own, and no two are grouped together |
 | 13.0.0 | Adds `DeliveryTip` and `Delivery.additionalTips`. Lightweight, and nothing is backfilled: a delivery holding no tip is the ordinary shape in this build too, so every figure a migrated store derives is the figure it already was |
+| 14.0.0 | Adds `Shift.fuelMilesPerGallonValue` and `Shift.fuelGasPricePerGallonAmount`. Lightweight, and nothing is backfilled: a shift recording no assumptions reports which half is missing rather than an estimate of `$0.00` |
+| 15.0.0 | Adds `VehicleProfile`, `DriverSettings` and `Shift.fuelVehicleName`. Lightweight, and nothing is backfilled: a v14 store holds no evidence of which vehicle any shift was worked in, so no profile is invented, no settings row is created and no shift is given a name |
 
 Every step but 12.0.0 is a lightweight stage, and none but that one writes a value. See
 [Migrations](../architecture/migrations.md).

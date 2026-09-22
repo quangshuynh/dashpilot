@@ -139,6 +139,22 @@ nonisolated struct ShiftExportRecord: Equatable, Sendable, Codable {
     /// Nothing adds the two, and nothing derives one from the other.
     let fuelGasPricePerGallon: ExportAmount?
 
+    /// What the vehicle the shift's fuel economy came from was called, as
+    /// recorded when the shift started, or `null` where the economy was typed by
+    /// hand or none was recorded.
+    ///
+    /// **A historical fact about this shift, not a current preference.** The
+    /// driver's vehicles and their current gas price are **not** in the file
+    /// anywhere, deliberately: an export is a record of work done, and what a
+    /// driver has selected today says nothing about the shifts in it. This field
+    /// is the label the shift itself recorded, and it stays what it was when the
+    /// profile behind it is renamed or deleted.
+    ///
+    /// It is a label and never an input: no figure here or in the app is derived
+    /// from it, and a shift with a fuel economy but no vehicle name exports the
+    /// same figures as one with both.
+    let fuelVehicleName: String?
+
     /// How much of the shift at least one recorded delivery was open for, with
     /// deliveries worked at the same time counted **once**.
     ///
@@ -172,7 +188,7 @@ nonisolated struct ShiftExportRecord: Equatable, Sendable, Codable {
     private enum CodingKeys: String, CodingKey {
         case id, startedAt, endedAt, elapsedSeconds, pausedSeconds, workingSeconds, pauseCount
         case currencyCode, grossEarnings, route
-        case fuelMilesPerGallon, fuelGasPricePerGallon
+        case fuelMilesPerGallon, fuelGasPricePerGallon, fuelVehicleName
         case deliveryActiveSeconds, nonDeliverySeconds
         case grossPerWorkingHour, grossPerDeliveryActiveHour, grossPerRecordedMile
         case deliveredCount, cancelledCount, deliveries
@@ -193,6 +209,7 @@ nonisolated struct ShiftExportRecord: Equatable, Sendable, Codable {
         try container.encode(route, forKey: .route)
         try container.encodeAlways(fuelMilesPerGallon, forKey: .fuelMilesPerGallon)
         try container.encodeAlways(fuelGasPricePerGallon, forKey: .fuelGasPricePerGallon)
+        try container.encodeAlways(fuelVehicleName, forKey: .fuelVehicleName)
         try container.encodeAlways(deliveryActiveSeconds, forKey: .deliveryActiveSeconds)
         try container.encodeAlways(nonDeliverySeconds, forKey: .nonDeliverySeconds)
         try container.encodeAlways(grossPerWorkingHour, forKey: .grossPerWorkingHour)

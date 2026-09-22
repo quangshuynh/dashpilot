@@ -53,6 +53,20 @@ nonisolated struct PeriodShiftRecord: Equatable, Sendable {
     /// The distinct pickup places the shift's deliveries named.
     let pickupPlaceIDs: Set<UUID>
 
+    /// What this shift's recorded miles are estimated to have consumed, and what
+    /// that cost, under the assumptions **this shift** recorded.
+    ///
+    /// Already derived rather than the assumptions plus the route, for the
+    /// reason the delivery active time arrives already unioned: the arithmetic
+    /// is defined once, by ``FuelEstimateCalculator``, and a period that worked
+    /// it out again would be the second definition this project designs
+    /// against.
+    ///
+    /// The default is an estimate that is **unavailable**, which is what a shift
+    /// recording no fuel economy genuinely has, so a caller that says nothing
+    /// about fuel says nothing rather than `$0.00`.
+    let fuelEstimate: FuelEstimate
+
     /// What individual finished deliveries actually paid, one entry each.
     ///
     /// Each entry is a delivery's **effective** earnings: the platform-recorded
@@ -78,7 +92,8 @@ nonisolated struct PeriodShiftRecord: Equatable, Sendable {
         pickupWaits: [PickupWaitSample] = [],
         pickupPlaceIDs: Set<UUID> = [],
         recordedDeliveryEarnings: [Money] = [],
-        terminalDeliveryCount: Int = 0
+        terminalDeliveryCount: Int = 0,
+        fuelEstimate: FuelEstimate = .unavailable(.milesPerGallonNotRecorded)
     ) {
         self.startedAt = startedAt
         self.isCompleted = isCompleted
@@ -91,6 +106,7 @@ nonisolated struct PeriodShiftRecord: Equatable, Sendable {
         self.pickupPlaceIDs = pickupPlaceIDs
         self.recordedDeliveryEarnings = recordedDeliveryEarnings
         self.terminalDeliveryCount = terminalDeliveryCount
+        self.fuelEstimate = fuelEstimate
     }
 
     /// The shift's working time, but only when it is a usable measurement.
@@ -257,7 +273,78 @@ nonisolated struct PeriodMetricsCalculator: Equatable, Sendable {
                 eligibleCount: shiftCount,
                 seconds: \.measuredDeliveryActiveDuration
             ),
-            grossPerRecordedMile: Self.mileageRate(of: shifts, eligibleCount: shiftCount)
+            grossPerRecordedMile: Self.mileageRate(of: shifts, eligibleCount: shiftCount),
+            // The subset that recorded enough to be estimated, and the subset of
+            // *that* which also recorded an amount. Neither is assumed to be the
+            // period, which is the whole point of both types.
+            fuel: Self.fuel(of: shifts),
+            estimatedNetAfterFuel: Self.estimatedNet(of: shifts)
+        )
+    }
+
+    // MARK: Fuel
+
+    /// The period's estimated fuel, over the shifts that have an estimate.
+    ///
+    /// **Nothing is estimated here.** Each shift arrives carrying the estimate
+    /// ``FuelEstimateCalculator`` derived for it, under the assumptions that
+    /// shift recorded, so this adds up figures rather than working any out. A
+    /// shift with no estimate contributes nothing and is counted as uncovered;
+    /// it never contributes a zero.
+    private static func fuel(of shifts: [PeriodShiftRecord]) -> PeriodFuelEstimate {
+        let covered = shifts.filter { $0.fuelEstimate.consumption != nil }
+        let consumptions = covered.compactMap(\.fuelEstimate.consumption)
+
+        return PeriodFuelEstimate(
+            estimatedCost: consumptions.isEmpty ? nil : consumptions.map(\.cost).reduce(Money.zero, +),
+            estimatedGallons: consumptions.isEmpty ? nil : consumptions.reduce(Decimal.zero) { $0 + $1.gallons },
+            shiftCoverage: MetricCoverage(contributingCount: covered.count, eligibleCount: shifts.count),
+            coveredDistance: distance(of: covered),
+            totalDistance: distance(of: shifts),
+            isAnyRoutePartial: consumptions.contains { $0.isRoutePartial }
+        )
+    }
+
+    /// The period's estimated net after fuel, over the shifts that recorded
+    /// **both** an amount and enough to be estimated.
+    ///
+    /// The paired-subset rule, which every rate in this app already follows,
+    /// applied to a subtraction. `period earnings - period estimated fuel` is
+    /// the tempting alternative and is wrong exactly when the two have different
+    /// coverage: it takes a figure from four shifts off a figure from six.
+    ///
+    /// **No expense is in it.** An `Expense` has no shift, and a recorded `fuel`
+    /// purchase may describe the same fuel this estimates, so subtracting both
+    /// under one label would count it twice. Net after recorded expenses stays
+    /// its own figure, beside this one and never combined with it.
+    private static func estimatedNet(of shifts: [PeriodShiftRecord]) -> PeriodEstimatedNet {
+        guard !shifts.isEmpty else { return .none }
+
+        let paired = shifts.filter { $0.grossEarnings != nil && $0.fuelEstimate.consumption != nil }
+        let coverage = MetricCoverage(contributingCount: paired.count, eligibleCount: shifts.count)
+
+        guard !paired.isEmpty else {
+            return PeriodEstimatedNet(
+                recordedEarnings: nil,
+                estimatedFuel: nil,
+                amount: nil,
+                coverage: coverage,
+                unavailability: .noShiftHasBoth,
+                isAnyRoutePartial: false
+            )
+        }
+
+        let earnings = paired.compactMap(\.grossEarnings).reduce(Money.zero, +)
+        let consumptions = paired.compactMap(\.fuelEstimate.consumption)
+        let fuel = consumptions.map(\.cost).reduce(Money.zero, +)
+
+        return PeriodEstimatedNet(
+            recordedEarnings: earnings,
+            estimatedFuel: fuel,
+            amount: earnings - fuel,
+            coverage: coverage,
+            unavailability: nil,
+            isAnyRoutePartial: consumptions.contains { $0.isRoutePartial }
         )
     }
 
@@ -399,7 +486,11 @@ extension Shift {
             // nothing at all and is counted as uncovered below, exactly as it
             // was before tips existed.
             recordedDeliveryEarnings: deliveries.compactMap { $0.effectiveEarnings.amount },
-            terminalDeliveryCount: deliveries.filter(\.state.isFinished).count
+            terminalDeliveryCount: deliveries.filter(\.state.isFinished).count,
+            // The shift's own estimate, over the route measurement the caller
+            // already has. Nothing here reads a current default: a finished
+            // shift is estimated under the pair it recorded.
+            fuelEstimate: fuelEstimate(for: recordedDistance)
         )
     }
 }

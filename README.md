@@ -131,7 +131,18 @@ derived legitimately from device sensors and stored history is typed by the driv
   with the week and its dates named above the list, and every earlier week grouped by week behind
   **View Older Weeks**. Nothing is deleted, archived or aged out: the scope decides what is shown
   where, and every shift is still exported, still counted by every period summary and still one tap
-  from its own detail screen.
+  from its own detail screen. Each older week opens with a **summary of every shift in it** — the
+  shifts, what they came to, the working time, the recorded mileage and the deliveries, each with the
+  count behind it — so the question a driver scrolls back with is answered before they open a row.
+  Nothing there is defined for History: it is the period summary's own aggregation over that week.
+- **Reusable settings**: the vehicles the driver works in, each a name and a fuel economy, one of
+  them selected, and a current gas price per gallon. A shift **copies** the selected vehicle's name
+  and economy and the current price **when it starts**, and owns its copy from then on — so editing a
+  vehicle, deleting one, selecting another or changing the price all change what the *next* shift
+  records and never a shift already worked. A shift worked before the defaults existed is never
+  filled in for the driver; its fuel editor offers `Use Current Defaults`, which fills the fields and
+  writes nothing until they save. No price is looked up, no station is searched and nothing about
+  where the device is is used.
 - **Recorded operating expenses**: fuel, parking and tolls, maintenance, supplies or other, each
   with an amount, a date, and an optional short note. An expense belongs to a **date** rather than to
   a shift, so nothing is attributed to work the driver did not attribute it to and no cost is divided
@@ -146,7 +157,16 @@ derived legitimately from device sensors and stored history is typed by the driv
   its own assumptions, so entering different figures later leaves every earlier shift where it is.
   A missing assumption means no estimate rather than `$0.00`, a recorded price of zero is a fact, a
   partial route makes the fuel a floor and the net a ceiling, and none of it is a recorded expense,
-  profit, take-home pay or a tax figure.
+  profit, take-home pay or a tax figure. A shift also records **which vehicle** its economy came
+  from, as a label no figure reads, so it stays intelligible when that vehicle is renamed or deleted.
+- **Estimated fuel and estimated net over a period**, with the coverage stated rather than rounded
+  off. A period's estimate is the sum of the shifts that recorded enough to be estimated, and it
+  never travels without **two** coverages — `4 of 6 shifts` and `142.3 of 188.9 recorded miles` —
+  because the first says how much of the work is behind the figure and the second how much of the
+  driving. The estimated net is worked out over the shifts that record **both** an amount and an
+  estimate, and says so whenever that is not the whole period. It is kept in its own section beside
+  recorded expenses and is **never added to them**: a recorded fuel purchase may be the same fuel,
+  and no figure anywhere subtracts both.
 - **Day, week, month and custom-range summaries with explicit data coverage**: periods built by
   `Calendar` rather than by fixed 24-hour or 30-day arithmetic, a chosen range picked as inclusive
   dates and held internally as a half-open interval, completed shifts only, every figure shown with
@@ -240,7 +260,10 @@ The short version, with the full list in [`docs/reference/limitations.md`](docs/
   includes it. A driver who also recorded the fill-up now has two figures describing overlapping
   money, and DashPilot states that rather than reconciling them: it does not know which shifts a tank
   was burned on, so it never adds or nets the two. Estimated net after fuel subtracts no expense and
-  is not profit.
+  is not profit. At period scope both figures appear on one screen, in two sections, with two net
+  figures over two inputs and nothing that subtracts both. **A period's estimate is a subset unless
+  it says otherwise**: the shifts and the recorded miles behind it are part of the figure rather than
+  a footnote, and no period is ever declared more profitable than another.
 - **All three rates are gross.** The per-working-hour rate divides by working time; the
   per-active-delivery-hour rate divides by the time a recorded delivery was open, which is not a
   measure of work and not a wage; the per-mile rate divides by recorded miles, which makes it
@@ -283,9 +306,9 @@ The short version, with the full list in [`docs/reference/limitations.md`](docs/
   prediction.
 - Not implemented yet: most things built on the delivery records (merchant scoring, merchant
   profitability, offer profitability, per-delivery mileage), any tax feature, recurring expenses or
-  receipts, aggregates longer than a month or a chosen range, an estimated fuel or net figure for a
-  period rather than a shift, gas-price lookup or more than one vehicle, maps, home-screen widgets,
-  notifications, recommendations, and importing an exported file back.
+  receipts, aggregates longer than a month or a chosen range, gas-price lookup, VIN decoding,
+  maintenance or odometer tracking, maps, home-screen widgets, notifications, recommendations, and
+  importing an exported file back.
 
 ## License
 

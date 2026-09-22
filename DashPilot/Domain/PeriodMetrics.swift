@@ -314,6 +314,23 @@ nonisolated struct PeriodMetrics: Equatable, Sendable {
     /// driven. A caller must not describe it as the latter.
     let grossPerRecordedMile: PeriodRate
 
+    /// What the period's shifts are estimated to have spent on fuel, over the
+    /// shifts that recorded enough to say, with the two coverages that keep the
+    /// subset from reading as the period. See ``PeriodFuelEstimate``.
+    let fuel: PeriodFuelEstimate
+
+    /// What the period's shifts are estimated to have been left with after fuel,
+    /// over the shifts that recorded **both** an amount and an estimate.
+    ///
+    /// Deliberately not ``recordedGrossEarnings`` less ``fuel``: those two can
+    /// have different coverage, and subtracting across them would take a figure
+    /// from four shifts off a figure from six. See ``PeriodEstimatedNet``.
+    ///
+    /// **Never combined with ``netAfterRecordedExpenses``.** One subtracts costs
+    /// the driver recorded paying; this subtracts an estimate that may describe
+    /// the same fuel.
+    let estimatedNetAfterFuel: PeriodEstimatedNet
+
     /// A period with no completed shift in it.
     ///
     /// Every figure is absent rather than zero. A week nobody drove is not a
@@ -350,7 +367,9 @@ nonisolated struct PeriodMetrics: Equatable, Sendable {
             ),
             grossPerWorkingHour: .unavailable(eligibleCount: 0),
             grossPerDeliveryActiveHour: .unavailable(eligibleCount: 0),
-            grossPerRecordedMile: .unavailable(eligibleCount: 0)
+            grossPerRecordedMile: .unavailable(eligibleCount: 0),
+            fuel: .none,
+            estimatedNetAfterFuel: .none
         )
     }
 

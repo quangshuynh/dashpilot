@@ -21,7 +21,18 @@ jobs:
   build-and-test:
     name: Build and test on iOS Simulator
     runs-on: macos-26
-    timeout-minutes: 60
+    # The budget covers a whole run of both suites on a virtualised runner, and
+    # it is measured rather than guessed. Run 35553963157 was cancelled by the
+    # previous 60-minute budget with the UI journeys still executing: 3m25s of
+    # build-for-testing, 5m43s of domain tests and 50m37s of UI journeys, in
+    # which 87 of the 151 journeys had passed and none had failed. Finishing the
+    # remaining journeys at that rate projects an 88-minute UI step and a job of
+    # roughly 100 minutes, so 180 leaves most of a second run's worth of headroom
+    # for a slow runner without approaching the 6-hour cap a GitHub-hosted job
+    # has. It is a ceiling for a hung run, not a target: a healthy run finishes
+    # well inside it, and the upload step below still runs when it is reached,
+    # which that cancelled run demonstrated.
+    timeout-minutes: 180
     env:
       XCODE_PROJECT: DashPilot.xcodeproj
       XCODE_SCHEME: DashPilot

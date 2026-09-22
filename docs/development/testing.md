@@ -167,7 +167,7 @@ Debug builds accept fifteen arguments, all used only by UI tests and screenshots
 | `-dashpilot-seeded-history` | Opens an in-memory store already holding synthetic history: one completed shift with an amount, a route recorded in two capture sessions and three deliveries (two delivered, one cancelled), and one shift with none of those |
 | `-dashpilot-seeded-active-delivery` | Opens an in-memory store holding a running shift whose delivery has already been picked up, which is the state a relaunch recovers into |
 | `-dashpilot-seeded-pickup-history` | Opens an in-memory store holding one completed shift whose deliveries give two pickup places deliberately different amounts of recorded history |
-| `-dashpilot-seeded-period-summary` | Opens an in-memory store holding a week of synthetic completed shifts and three synthetic expenses, anchored to today rather than to a fixed instant, so the period summary opens on a period that holds something |
+| `-dashpilot-seeded-period-summary` | Opens an in-memory store holding a week of synthetic completed shifts and three synthetic expenses, anchored to today rather than to a fixed instant, so the period summary opens on a period that holds something. **Exactly one of its shifts records fuel assumptions**, so the period's estimated fuel is partially covered and a coverage defect cannot pass unnoticed |
 | `-dashpilot-seeded-period-comparison` | Opens an in-memory store holding three consecutive days, also anchored to today: a today still in progress with one of two shifts unpaid, two complete days before it, and nothing before those |
 | `-dashpilot-seeded-expected-pay` | Opens an in-memory store holding a running shift with two deliveries waiting at their pickups, alike except that one records what it is expected to pay |
 | `-dashpilot-seeded-stacked-offer` | Opens an in-memory store holding a running shift with one offer of two deliveries and a later add-on offer of one |
@@ -387,7 +387,15 @@ The permission panel is asserted only to be on screen. Which state it displays d
 device, and no test drives the system alert, because automating it would be brittle and would change
 the permission state other tests run against.
 
-Two lessons are worth repeating when adding journeys:
+Three lessons are worth repeating when adding journeys:
+
+- **A synthesized tap does not move the caret.** A field the screen did not focus for itself is
+  entered with the caret at position zero, so backspaces delete nothing and the text typed next is
+  *prepended*: `34` became `3834`, which reads on screen as a wrong figure rather than as a broken
+  step. `clear(_:in:)` is right for a field a screen focuses on appearance;
+  `replaceTappedField(_:with:in:)` double-taps to select and types over the selection, which needs no
+  caret. The double tap selects a **word**, so it is wrong for multi-word text, and a rule better
+  reached without a tap belongs in the domain suite.
 
 - A `List` only renders rows near the viewport, so anything below the fold does not exist until it
   is scrolled to. This bites again whenever a section above grows: adding one sentence to the
@@ -483,6 +491,35 @@ Both test targets run in CI. The split into two steps is deliberate and visible:
 virtualised simulator is the part most likely to fail for reasons that are not the code, so a red
 run says which kind of failure it was rather than reporting "tests failed". Nothing is excluded, and
 no test is retried to make a run pass.
+
+### How long a run takes, and the budget it is given
+
+The job's `timeout-minutes` is **180**, and the number is measured rather than chosen for comfort.
+
+`main` run 35553963157 was cancelled by an earlier 60-minute budget with the UI journeys still
+executing. It had spent 3m25s on `build-for-testing`, 5m43s on the domain suite and 50m37s on the UI
+journeys, in which **87 of the 151 journeys had passed and none had failed**. Finishing the rest at
+that rate projects a UI step of about 88 minutes and a whole job of about 100. A virtualised runner
+is slower and more variable than a developer's machine, so the budget is set well above the
+projection rather than beside it, and stays far inside the six hours a GitHub-hosted job is capped
+at.
+
+Two things follow from this and are worth stating, because a cancelled run reads like a failing one:
+
+- **The budget is a ceiling for a hung run, not a target.** A healthy run finishes inside half of it.
+  If a run reaches 180 minutes, something has stopped making progress and the answer is to read the
+  result bundle, not to raise the number again.
+- **A cancelled run's last log line is not a diagnosis.** Run 35553963157 was cancelled while a
+  journey naming `fuelMilesPerGallonField` was on screen, and that journey was not failing; it was
+  simply the one the clock landed on. Read the result bundle, which is uploaded on cancellation as
+  well as on failure. That run's upload step ran and succeeded after the job was cancelled, which is
+  what `if: always()` is there for.
+
+`ContinuousIntegrationWorkflowTests` in the domain suite reads `ci.yml` itself and pins what a
+cancelled run cannot: the budget is no longer 60, the three stages are all present and in order in
+one job, the UI journeys still run with parallel testing off, nothing is skipped, retried or allowed
+to fail, and both result bundles are still uploaded under `if: always()`. It finds the checkout
+through its own `#filePath` and disables itself where that checkout is not readable.
 
 !!! warning "Known flakiness"
 
