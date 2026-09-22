@@ -28,6 +28,22 @@ and one they cannot.
 - **Routes recorded before schema v3 carry no capture sessions.** Their continuity is inferred from
   timestamps and they are always reported as partial.
 - **Nothing is drawn.** There is no map and no route visualisation.
+- **Walking is not told apart from driving, and nothing tries.** No stored position carries a speed,
+  and the five-metre movement rule keeps a walk across a car park exactly as it keeps a crawl through
+  traffic. A driver who wants a shopping trip left out of their recorded mileage records the vehicle
+  as **parked** and DashPilot stops recording; a driver who does not gets the walk in their route,
+  exactly as before. There is no classifier, no motion sensor and no inference.
+- **A stretch recorded parked is a claim about the driver's intent, not an observation.** DashPilot
+  knows they tapped a control, and nothing more. It does not know whether the vehicle actually stayed
+  still, and a driver who parks, drives somewhere else and comes back records a stretch parked over
+  driving nobody measured.
+- **Forgetting to leave the state costs the rest of the shift's route.** The app says `Parked` on the
+  running shift and on the Lock Screen for as long as it lasts, and stops there: nothing resumes on a
+  timer, on a speed or on a delivery advancing, because a rule that guessed would record a walk as
+  vehicle mileage on the day it guessed wrong.
+- **The stretches parked are not matched to the gaps they leave.** A shift whose recording had
+  already stopped produces no gap by parking, and the route keeps no record of which stop is which,
+  so the two facts are stated side by side and never as a correspondence.
 
 ## Voice and system actions
 
@@ -188,6 +204,23 @@ and one they cannot.
 
 ## Deliveries
 
+- **A reminder is a suggestion, and the app has no evidence behind it beyond elapsed time.** A
+  delivery that has recorded nothing newer for half an hour gets a card offering its next step. That
+  is the whole signal: no location, no motion, no platform. A driver genuinely waiting at a slow
+  restaurant meets the same card as one who forgot to tap, which is why it asks rather than tells and
+  why nothing is written until they press it.
+- **Reminders are for work in progress only.** Nothing is offered for a finished delivery, a
+  delivery on a finished shift, or a delivery already picked up — with stacked orders, carrying one
+  for an hour while delivering another is ordinary work. A historical timestamp is never offered for
+  correction here; that is a separate editor a driver reaches deliberately.
+- **A dismissed reminder is not remembered.** Waving one away hides it for as long as the screen
+  lives and no longer, so a reminder comes back after a relaunch. The app forgets that it asked
+  rather than forgetting that the delivery is stale, and nothing about a driver's attention is
+  stored.
+- **The thresholds are choices, not calibrations.** Half an hour in either state is a defensible
+  engineering value rather than one tuned against recorded work, and the app does not derive it from
+  the driver's own recorded pickup waits — that would be a prediction, and it is stated as a fixed
+  number instead.
 - **Nothing is detected.** Every delivery timestamp exists because the driver tapped a control.
   DashPilot cannot see an order, a restaurant handover or a customer receipt, so a delivery that was
   not recorded is not in the app, and an event recorded late is recorded late.

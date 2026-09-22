@@ -160,11 +160,24 @@ nonisolated extension ShiftActivityAttributes.ContentState {
             + [spokenUndrawnDeliveryTimerNotice].compactMap { $0 }
     }
 
+    /// The parked line spoken, where a middle dot is punctuation rather than a
+    /// word, and where the two facts a listener must not confuse are said in
+    /// full.
+    ///
+    /// Derived here rather than carried, for the reason the mileage sentence is
+    /// carried rather than derived: this one is a fixed expansion of a fixed
+    /// string, and the figure the other one holds is not.
+    var spokenRouteSuspendedNotice: String? {
+        guard routeSuspendedNotice != nil else { return nil }
+        return "Parked. Your route is not being recorded, and your shift is still running."
+    }
+
     /// The whole snapshot as one spoken description, for a surface that reads as
     /// a single element.
     var spokenSummary: String {
         var sentences = [statusTitle]
         sentences.append("\(spokenWorkingTime) worked so far")
+        if let spokenRouteSuspendedNotice { sentences.append(spokenRouteSuspendedNotice) }
         sentences.append(spokenMileageLine)
         sentences.append(spokenDeliveryLine)
         if let deliveryStatus { sentences.append(deliveryStatus) }

@@ -66,6 +66,10 @@ nonisolated enum ShiftActivityUpdatePolicy {
         guard let previous else { return .material }
 
         let isMaterial = previous.isPaused != next.isPaused
+            // A state the card prints, and one whose whole job is to be seen
+            // while the driver is away from the vehicle. It reaches the card at
+            // once rather than on the route's throttle.
+            || previous.routeSuspendedNotice != next.routeSuspendedNotice
             || previous.activeDeliveryCount != next.activeDeliveryCount
             || previous.completedDeliveryCount != next.completedDeliveryCount
             || previous.deliveryStatus != next.deliveryStatus

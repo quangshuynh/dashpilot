@@ -26,8 +26,29 @@ import Foundation
 nonisolated struct RouteQuality: Equatable, Sendable {
     let distance: RouteDistance
 
-    init(_ distance: RouteDistance) {
+    /// How much of the shift the driver recorded the vehicle as parked.
+    ///
+    /// ``RouteSuspendedTime/none`` for a shift the driver never parked, which is
+    /// every shift recorded before they could, and which is what keeps every
+    /// sentence below exactly what it was.
+    ///
+    /// It is here because it is the **one** thing this type can honestly say
+    /// about *why* a route is short, and because the sentence a partial route
+    /// carries is otherwise wrong for a driver who asked for the gap: "more
+    /// miles were driven than were recorded" is not true of a stretch the
+    /// vehicle spent in a parking space.
+    ///
+    /// **It is not a correspondence.** Nothing here claims that a suspension
+    /// produced a gap, or that a gap came from a suspension: a shift whose
+    /// capture had already stopped produces no gap by parking, and the route
+    /// carries no record of which stop is which. The wording states both facts
+    /// side by side and leaves the reader to hold them together, which is the
+    /// most the data supports.
+    let suspendedTime: RouteSuspendedTime
+
+    init(_ distance: RouteDistance, suspendedTime: RouteSuspendedTime = .none) {
         self.distance = distance
+        self.suspendedTime = suspendedTime
     }
 
     /// Whether a distance was measured at all.
@@ -144,12 +165,45 @@ nonisolated struct RouteQuality: Equatable, Sendable {
                 """
     }
 
+    /// What the driver recorded about the vehicle being parked, or `nil` where
+    /// they recorded nothing.
+    ///
+    /// Two facts and no inference: how many stretches, and how long they came to
+    /// altogether. It says capture was stopped for each, which is what actually
+    /// happened, and it does **not** say that those stretches are the gaps the
+    /// count above reports, because the route holds no evidence of which stop is
+    /// which.
+    var suspensionExplanation: String? {
+        guard suspendedTime.hasSuspensions else { return nil }
+        let stretches = suspendedTime.intervalCount == 1
+            ? "1 stretch"
+            : "\(suspendedTime.intervalCount) stretches"
+        return """
+            You recorded \(stretches) parked, \(DurationText.short(suspendedTime.duration)) \
+            altogether. Route recording was stopped for each, so no distance was measured across them.
+            """
+    }
+
     /// The two words the eye needs, and then the reason, so that a listener and
     /// a reader of the detail screen get the same claim the compact marker makes.
+    ///
+    /// **The second sentence changes when the driver parked**, and it has to.
+    /// "More miles were driven than were recorded" is the honest reading of a
+    /// route DashPilot stopped recording by accident, and it is simply untrue of
+    /// a stretch the vehicle spent in a parking space. Where a shift records a
+    /// suspension the sentence says what is certain — that part of the shift was
+    /// not recorded — and stops short of a claim about distance it cannot make
+    /// in either direction.
     private var partialSentence: String {
-        """
-        Partial route: DashPilot was not recording for part of this shift, \
-        so more miles were driven than were recorded.
-        """
+        guard suspendedTime.hasSuspensions else {
+            return """
+                Partial route: DashPilot was not recording for part of this shift, \
+                so more miles were driven than were recorded.
+                """
+        }
+        return """
+            Partial route: DashPilot was not recording for part of this shift. \
+            Some of that is time you recorded as parked, when the vehicle was not being driven.
+            """
     }
 }

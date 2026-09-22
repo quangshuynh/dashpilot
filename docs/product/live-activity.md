@@ -18,7 +18,8 @@ act on the wrong one.
 | `4.5 mi recorded · partial route` | What the retained route supports, with the marker that qualifies it |
 | `2 in progress · 5 delivered` | How the shift's deliveries stand |
 | `Waiting at the pickup` | What the one delivery in progress is doing, and only when there is exactly one |
-| `Delivery 1 · 18:04` | How long that delivery has been open, counting, one line per delivery in progress |
+| `Parked · route not recording` | Only while the driver has the vehicle recorded as parked |
+| `Delivery 1 · At pickup · 18:04` | What each delivery in progress is doing and how long it has been open, one line each |
 
 Every one of those is the app's own figure rather than a second calculation. The working duration is
 `Shift.workingDuration(asOf:)`, the same one every hourly rate divides by and the same one a spoken
@@ -30,7 +31,14 @@ wherever the figure goes. See [Recorded mileage](recorded-mileage.md).
 
 Under the delivery counts, each delivery in progress gets a line of its own:
 
-> `Delivery 1 · 18:04`
+> `Delivery 1 · At pickup · 18:04`
+
+The **state** in the middle is there because the single status line above is withheld whenever two
+deliveries are open: with two there is no "the delivery" for it to be about, so a driver carrying two
+orders read a card that named both and said what neither was doing. It is a shortened form of the
+app's own vocabulary — `To pickup`, `At pickup`, `To customer` — derived in the app and drawn by the
+extension, never a second set of words. It gives way first when the row is too narrow; the live
+figure keeps its place.
 
 The number is the one the app calls that delivery everywhere else, taken from the order the shift
 accepted them in. It is not a platform order number and it names nothing outside the app. See

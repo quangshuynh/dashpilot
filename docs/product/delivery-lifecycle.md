@@ -73,6 +73,72 @@ delivery cancelled after twenty minutes at a pickup still records that the drive
 A cancelled delivery is never deleted, never counted as completed, and never folded into a single
 total. It is work the driver did that did not end in a delivery.
 
+## Reminders about an event that may have gone unrecorded
+
+A driver focused on the delivery in front of them forgets to tap. The order goes in the car and the
+app still says they are waiting at the counter; the shift then reports a pickup wait that never
+happened and a lifecycle that stopped moving.
+
+DashPilot offers a reminder for this, and the distinction it makes is the whole feature: **it is a
+suggestion, and never a detection.** The app observes no delivery platform, reads no order, and
+cannot see a driver walk into a restaurant or get back into a car. What it can see is its **own
+record** — that a delivery has recorded nothing newer for half an hour — which is a fact about the
+record rather than a fact about the world.
+
+So the card states the record, asks a question, and says plainly that DashPilot did not observe any
+of it:
+
+> **Already picked this order up?**
+> Delivery 1 · At the pickup 41 min ago · no pickup recorded
+> DashPilot cannot tell where you are. This is a reminder from your own recorded times, not something
+> it observed.
+>
+> `Mark Delivery 1 Picked Up`   `Not Yet`
+
+**Nothing is written unless the driver presses the first control**, and pressing it runs exactly the
+lifecycle action that delivery's own card already offers, through the same service. There is no path
+by which a reminder records a step the ordinary control could not, and no lifecycle timestamp is ever
+created, moved or guessed at.
+
+### What triggers one
+
+Elapsed time in the delivery's current state, and nothing else. A delivery that records only its
+acceptance for half an hour is offered `Arrived at Pickup`; one that has recorded an arrival and
+nothing since for half an hour is offered `Picked Up`. Both thresholds are defensible engineering
+choices rather than calibrated figures.
+
+Deliveries are judged **one at a time, each on its own record**, so a driver carrying three orders is
+reminded about the one that is actually stale and not about the two beside it, and a reminder never
+names a delivery other than the one it came from.
+
+### What it deliberately does not use
+
+- **Location, in any form.** An earlier investigation measured this: the most common stationary state
+  in delivery work is a driver parked waiting for an offer, so a rule that fires on a stop fires
+  hardest on the driver's most common idle state. The discriminator that investigation did find needs
+  several visits to a place before it will say anything about one, which is no use to a driver at a
+  new restaurant.
+- **Core Motion**, which would be a new authorization the app does not ask for.
+- **A notification.** DashPilot registers none, and a reminder that fired on a time threshold is
+  exactly the reminder that would fire while the driver is at a customer's door. The card is passive:
+  it is drawn on a screen the driver is already looking at, it interrupts nothing, and a driver who
+  ignores it works exactly the shift they worked before it existed.
+
+### What it never mentions
+
+A delivery that has already been **picked up** is never the subject of a reminder, however long it
+has been carried. With stacked orders, holding one for three quarters of an hour while delivering
+another is ordinary work, so elapsed time says least about a delivery exactly there.
+
+Nothing is offered for a **finished** delivery in either terminal state, for a delivery on a finished
+shift, or for a row whose recorded times contradict each other. **No historical timestamp is ever
+offered for correction here**: this is about work in progress, and a finished delivery's times are
+corrected in [their own editor](#correcting-the-times-a-delivery-recorded).
+
+Waving a reminder away records nothing and leaves the delivery exactly as it was. The dismissal is
+not stored anywhere, so the app forgets that it asked rather than forgetting that the delivery is
+stale.
+
 ## Taking back a delivery marked delivered by mistake
 
 `Delivered` is one tap on a card the driver may be looking at from a kerb, and it is occasionally the
@@ -547,6 +613,25 @@ whatever a fetch returned first — would attach a driver's tap to a record they
     platform. It knows only what the driver recorded: two deliveries they started, and whether they
     said the two arrived in one offer. Nothing infers a relationship between them, and two deliveries
     accepted a second apart are two offers unless the driver said otherwise.
+
+### What each card says it is waiting for
+
+Every active delivery's card states three things without being opened: **which delivery it is**, what
+it is **doing**, and what it is **waiting for**.
+
+> Delivery 1 · Waiting at the pickup
+> Next: Picked Up
+
+The last line repeats the button below it by design. A driver carrying two orders reads the cards
+rather than the buttons: two prominent controls of the same shape and size are told apart by their
+words alone, and a card whose state line says what it is waiting for is one the eye can sort without
+landing on a control to find out. VoiceOver hears the same fact as its own sentence, before it
+reaches the button.
+
+The shift's [Lock Screen card](live-activity.md) carries the same distinction, and needed it more: its
+single status line is withheld whenever two deliveries are open, because with two there is no "the
+delivery" for it to be about. Each delivery's row there now carries its state beside its name and its
+clock, in a shortened form of the same vocabulary.
 
 ### Ordering and numbering
 

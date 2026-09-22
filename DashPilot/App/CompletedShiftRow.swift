@@ -167,7 +167,10 @@ struct CompletedShiftRow: View {
     }
 
     private var quality: RouteQuality? {
-        recordedDistance.map(RouteQuality.init)
+        // The row shows the figure and the partial marker, and the marker's
+        // wording changes when the driver parked. The detail screen behind it is
+        // where the count and the duration are stated.
+        recordedDistance.map { RouteQuality($0, suspendedTime: shift.completedSuspendedTime ?? .none) }
     }
 
     /// The rates this shift can support, derived from the amount recorded on it

@@ -23,15 +23,21 @@ rather than a store reset.
 | 13.0.0 | Adds the `DeliveryTip` entity and a cascading `Delivery.additionalTips` relationship. Backfills nothing |
 | 14.0.0 | Adds `Shift.fuelMilesPerGallonValue` and `Shift.fuelGasPricePerGallonAmount`, two optional `Decimal` columns holding the assumptions a shift's fuel estimate is worked out under. Backfills nothing |
 | 15.0.0 | Adds the `VehicleProfile` and `DriverSettings` entities and an optional `Shift.fuelVehicleName` column. Backfills nothing |
+| 16.0.0 | Adds the `RouteSuspension` entity and a cascading `Shift.routeSuspensions` relationship, holding the stretches the driver recorded the vehicle as parked. Backfills nothing |
 
-The current version is **v15**. Field-level detail is on [Data model](../reference/data-model.md).
+The current version is **v16**. Field-level detail is on [Data model](../reference/data-model.md).
 
-`DashPilotSchemaV1` through `DashPilotSchemaV14` hold frozen copies of their models rather than
+`DashPilotSchemaV1` through `DashPilotSchemaV15` hold frozen copies of their models rather than
 reusing the file-scope types, which have moved on. The plan then describes where a store is coming
 from as truthfully as where it is going, and the copies are never used at runtime outside
 migration.
 
-`DashPilotSchemaV14` was frozen in the interval that added v15, and the freeze was forced the same
+`DashPilotSchemaV15` was frozen in the interval that added v16, and the freeze was forced the same
+way every one before it was: v16 gives `Shift` a cascading collection of the stretches it was parked
+for, so reusing the file-scope types under v15 would describe every pre-v16 store as one that could
+already say why a stretch of route is missing. No build that wrote one could.
+
+`DashPilotSchemaV14` was frozen one interval earlier, and the freeze was forced the same
 way: v15 gives `Shift` the name of the vehicle its economy came from, so reusing the file-scope types
 under v14 would describe every pre-v15 store as one that already recorded a vehicle. No build that
 wrote one had vehicles at all.
@@ -295,6 +301,28 @@ vehicle's *name* rather than a reference to it, so deleting a profile cascades n
 every shift worked in it whole. `DriverSettings.selectedVehicleID` is an identifier for the same
 reason: a deleted profile leaves a selection that resolves to nothing, which reads as *no vehicle
 selected*, a state the app is designed to be in. See [Settings and vehicles](../product/settings.md).
+
+### v15 to v16
+
+One new entity and one new cascading relationship, applied lightweight.
+
+**There is nothing truthful to write, and the tempting version of writing it is specific.** The stage
+could read a v15 shift's route, find the gaps in it and record a stretch parked for each. It must
+not. A gap is left by a pause, a lost permission, a terminated process, a shift started while the app
+was behind another one and a tunnel, and the rows those leave behind are identical: the route holds
+no evidence of which stop is which. Writing "the driver parked here" over any of them would put a
+statement the driver never made into their history, and nothing afterwards could tell it from one
+they did.
+
+So a migrated store opens with **no suspensions at all**. Every shift keeps its route, the mileage
+that route measures, the gaps it already had and the partial-route wording that follows from them: a
+shift recorded before the driver could say they had parked genuinely never said it.
+
+**A suspension joins the shift and nothing else**, in either direction and at any version. There is
+no relationship to `Delivery`, because whether the vehicle is moving is a fact about the driver and
+their vehicle rather than about any one order, and a driver shopping for one delivery while carrying
+another has one vehicle and it is parked. See
+[Parking for a pickup](../product/shift-workflow.md#parking-for-a-pickup).
 
 ## Proving a migration rather than assuming it
 

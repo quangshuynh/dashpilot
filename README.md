@@ -37,6 +37,15 @@ derived legitimately from device sensors and stored history is typed by the driv
   recording stops for its whole length. Resuming starts a new recording, so no distance is measured
   across the break. Pausing is refused while a delivery is in progress; ending a paused shift is
   allowed and closes the pause at the end time.
+- **Parked for a pickup**, so walking around a shop after parking does not inflate the recorded
+  route. DashPilot cannot tell a walk from a drive — no stored position carries a speed — so it does
+  not guess: the driver says it with one control, route recording stops for the whole stretch, and
+  driving again starts a new recording so no distance is measured across it. It is deliberately
+  **not** a pause: working time keeps counting, every hourly figure keeps its denominator, and any
+  number of deliveries may stay open. It belongs to the shift rather than to a delivery, because a
+  driver shopping for one order while carrying another has one vehicle and it is parked. Leaving the
+  state is always explicit, and a completed shift says how many stretches it recorded and how long
+  they came to, beside the route they explain.
 - **Correcting a recorded pause**, from a finished shift's own record: a pause recorded at the wrong
   moment can have either end or both moved, one recorded by mistake can be deleted, and a pause the
   driver took and never recorded can be added. A stretch is refused rather than nudged if it ends
@@ -57,8 +66,8 @@ derived legitimately from device sensors and stored history is typed by the driv
   follow. Nothing detects or suggests an end.
 - **Route capture** that starts and stops with the shift, carries on while the driver is in another
   app or the phone is locked, states whether it is active, stopped because the shift is paused,
-  paused because a session could not start off screen, or unavailable, and never ends a shift
-  because location was lost.
+  stopped because the vehicle is parked, paused because a session could not start off screen, or
+  unavailable, and never ends a shift because location was lost.
 - **Sample filtering** with one acceptance policy covering invalid coordinates, poor accuracy, stale
   fixes, duplicate and out-of-order timestamps, negligible movement and implausible jumps.
 - **Recorded mileage** derived from the retained route, summing only what was captured continuously
@@ -67,6 +76,14 @@ derived legitimately from device sensors and stored history is typed by the driv
   one primary control per delivery, **several deliveries recordable at once** for stacked orders,
   every event targeted at one delivery, transitions enforced against the store, relaunch recovery for
   each of them, and a shift end refused while any delivery is running.
+- **Reminders about an event that may have gone unrecorded**: a delivery that has recorded nothing
+  newer than its acceptance or its arrival for half an hour gets a passive card offering that
+  delivery's own next step. A **suggestion and never a detection** — the card says what the record
+  holds, asks a question, and states plainly that DashPilot did not observe it. Nothing is written
+  unless the driver presses the control, which runs exactly the action the delivery's own card
+  already offers. No location, no motion sensor and no notification is involved, each delivery is
+  judged on its own record, and a delivery already picked up, already finished or on a finished shift
+  is never the subject of one.
 - **Taking back a delivery marked delivered by mistake**: an undo offered on the panel for the first
   few seconds after the tap, and a deliberate `Reopen a Delivered Delivery` control for the mistake
   noticed later. Reopening removes the delivered time and nothing else, and the delivery returns to
@@ -183,7 +200,7 @@ Swift, SwiftUI, SwiftData, Core Location, App Intents, ActivityKit, WidgetKit, O
 and XCUITest. **No third-party runtime dependencies.** One application target, plus a widget
 extension that draws the shift's Live Activity and holds no logic of its own.
 
-Versioned schema at v14 with migrations from v1, tested by opening stores written under each older
+Versioned schema at v16 with migrations from v1, tested by opening stores written under each older
 version. Domain calculations import neither SwiftUI nor SwiftData, so every rule is
 tested without a container or a rendered view. Money is `Decimal` throughout: no monetary value
 passes through binary floating point, in memory or in the store. Nothing derived is stored, so

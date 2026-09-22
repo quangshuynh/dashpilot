@@ -53,6 +53,22 @@ nonisolated enum RouteCaptureState: Equatable, Sendable {
     /// Resuming starts a **new** capture session, so no distance is ever
     /// measured across the stretch this state covers.
     case shiftPaused
+    /// The driver has recorded the vehicle as parked while they are away from
+    /// it, so nothing is being recorded.
+    ///
+    /// Not a failure, not an interruption and **not a pause**: the shift is
+    /// running, its working time is still growing and its deliveries are still
+    /// open. What has stopped is the route, because the driver said the vehicle
+    /// is not moving and a walk around a car park is not vehicle mileage.
+    ///
+    /// It is a state of its own rather than ``shiftPaused`` because the screen
+    /// has to say "stopped because you parked, and your shift is still
+    /// running", which is a different sentence from the one a paused shift gets
+    /// and a different sentence from anything ``unavailable`` says.
+    ///
+    /// Driving again starts a **new** capture session, so no distance is ever
+    /// measured across the stretch this state covers.
+    case routeSuspended
     /// A shift is running and capture cannot proceed.
     case unavailable(RouteCaptureUnavailableReason)
 

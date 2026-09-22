@@ -28,7 +28,7 @@ device.
 
 ## What is stored
 
-Eight entities. Their fields are listed under [Data model](../reference/data-model.md).
+Eleven entities. Their fields are listed under [Data model](../reference/data-model.md).
 
 `Shift` holds a start timestamp, an optional end timestamp, an optional gross earnings amount and
 the two optional figures its fuel estimate is worked out under. Everything else about a shift,
@@ -40,6 +40,13 @@ resuming. It is a row rather than a flag on `Shift` because a boolean could say 
 but not for how long or how many times, and an accumulated "paused seconds" would be a running sum
 the app had to keep correct across every crash and failed save. Whether a shift is paused is a pause
 with no end; how long it was paused is the union of its rows.
+
+`RouteSuspension` stores when the driver recorded the vehicle as parked and, once they drive again,
+when they recorded that. A row rather than a flag for the reason `ShiftPause` is one, and a **separate
+entity** from it rather than a kind column on one: a pause is subtracted from working time and a
+stretch parked is subtracted from nothing, and one entity carrying both would be a single `if` away
+from a shopping trip coming off somebody's hours. It joins the shift and never a delivery, because a
+driver shopping for one order while carrying another has one vehicle and it is parked.
 
 `Delivery` stores five timestamps, its shift and the offer it arrived in. Its state is derived from
 which of those timestamps exist rather than stored beside them, so nothing in the store can disagree

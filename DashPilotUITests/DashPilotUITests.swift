@@ -22,6 +22,12 @@ final class DashPilotUITests: XCTestCase {
     /// Must match `LaunchArgument.seededExpectedPay`, for the same reason.
     private static let seededExpectedPayArgument = "-dashpilot-seeded-expected-pay"
 
+    /// Must match `LaunchArgument.seededParkedHistory`, for the same reason.
+    private static let seededParkedHistoryArgument = "-dashpilot-seeded-parked-history"
+
+    /// Must match `LaunchArgument.seededMissedLifecycle`, for the same reason.
+    private static let seededMissedLifecycleArgument = "-dashpilot-seeded-missed-lifecycle"
+
     /// Must match `LaunchArgument.seededStackedOffer`, for the same reason.
     private static let seededStackedOfferArgument = "-dashpilot-seeded-stacked-offer"
 
@@ -183,6 +189,37 @@ final class DashPilotUITests: XCTestCase {
     private func launchWithStackedOffer() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments.append(Self.seededStackedOfferArgument)
+        launchInPortrait(app)
+        return app
+    }
+
+    /// Launches against a throwaway store holding one completed shift with a
+    /// stretch recorded parked between its two capture sessions.
+    ///
+    /// 4.5 mi over two segments, 25 minutes parked, and a working duration of
+    /// the whole two hours. A journey cannot produce this shape: a simulator
+    /// cannot be driven into recording a route, and a live journey that parks
+    /// and resumes records a stretch measured in seconds.
+    @MainActor
+    private func launchWithParkedHistory() -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments.append(Self.seededParkedHistoryArgument)
+        launchInPortrait(app)
+        return app
+    }
+
+    /// Launches against a throwaway store holding a running shift whose
+    /// deliveries have recorded nothing for well over half an hour.
+    ///
+    /// A progress reminder's whole input is elapsed time, and a journey cannot
+    /// wait half an hour for one. The fixture's shift holds `Delivery 1` waiting
+    /// at its pickup since 70 minutes ago, `Delivery 2` accepted 55 minutes ago
+    /// with no arrival, and `Delivery 3` picked up 40 minutes ago, which is the
+    /// delivery nothing is ever offered for.
+    @MainActor
+    private func launchWithMissedLifecycle() -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments.append(Self.seededMissedLifecycleArgument)
         launchInPortrait(app)
         return app
     }
@@ -1516,6 +1553,347 @@ final class DashPilotUITests: XCTestCase {
             "The delivered one leaves the list"
         )
         XCTAssertEqual(accepted.label, "Delivery 2. Mark arrived at pickup")
+    }
+
+    // MARK: Parked for a pickup
+
+    /// Recording the vehicle as parked stops the route, says so in two places,
+    /// and leaves the shift running.
+    @MainActor
+    func testParkingStopsTheRouteAndLeavesTheShiftRunning() throws {
+        let app = launchWithStubbedLocation()
+
+        let startShift = app.buttons["startShiftButton"]
+        XCTAssertTrue(startShift.waitForExistence(timeout: 10))
+        startShift.tap()
+
+        let status = app.descendants(matching: .any)["routeCaptureStatus"]
+        XCTAssertTrue(status.waitForExistence(timeout: 10))
+        XCTAssertTrue(
+            waitForLabel(status, toContain: "Location tracking active"),
+            "The shift starts recording: \(status.label)"
+        )
+
+        let park = app.buttons["parkShiftButton"]
+        XCTAssertTrue(scrollTo(park, in: app), "Parking is offered on a running shift")
+        XCTAssertTrue(
+            park.label.contains("shift keeps running"),
+            "The control says aloud what it does not do: \(park.label)"
+        )
+        park.tap()
+
+        // The capture status says recording has stopped, and says why.
+        XCTAssertTrue(
+            waitForLabel(status, toContain: "Route recording stopped while parked"),
+            "Capture status: \(status.label)"
+        )
+
+        // And the panel says it again where the driver is looking, with the
+        // shift's own state unchanged beside it.
+        let notice = app.descendants(matching: .any)["parkedShiftNotice"]
+        XCTAssertTrue(notice.waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            notice.label.contains("shift is still running"),
+            "Parked is not paused, and the notice must not read as though it were: \(notice.label)"
+        )
+        XCTAssertTrue(
+            app.descendants(matching: .any)["activeShiftStatus"].exists,
+            "The shift still reports itself as running rather than paused"
+        )
+        XCTAssertFalse(
+            app.descendants(matching: .any)["pausedShiftStatus"].exists,
+            "No pause was recorded"
+        )
+        XCTAssertTrue(
+            app.descendants(matching: .any)["workingTime"].exists,
+            "And its working time is still on screen, still counting"
+        )
+    }
+
+    /// Resuming driving is one tap, and it starts recording again.
+    @MainActor
+    func testResumingDrivingStartsRecordingAgain() throws {
+        let app = launchWithStubbedLocation()
+
+        let startShift = app.buttons["startShiftButton"]
+        XCTAssertTrue(startShift.waitForExistence(timeout: 10))
+        startShift.tap()
+
+        let park = app.buttons["parkShiftButton"]
+        XCTAssertTrue(scrollTo(park, in: app))
+        park.tap()
+
+        let resume = app.buttons["resumeDrivingButton"]
+        XCTAssertTrue(resume.waitForExistence(timeout: 5), "Leaving the state is one tap")
+        XCTAssertFalse(park.exists, "And parking is not offered while already parked")
+        resume.tap()
+
+        let status = app.descendants(matching: .any)["routeCaptureStatus"]
+        XCTAssertTrue(
+            waitForLabel(status, toContain: "Location tracking active"),
+            "Recording starts again: \(status.label)"
+        )
+        XCTAssertFalse(
+            app.descendants(matching: .any)["parkedShiftNotice"].exists,
+            "And the notice goes with it"
+        )
+        XCTAssertTrue(app.buttons["parkShiftButton"].exists, "Parking is offered again")
+    }
+
+    /// A completed shift that was parked says how much of its short route the
+    /// driver asked for, and reports every minute of it as worked.
+    @MainActor
+    func testACompletedParkedShiftExplainsItsShortRoute() throws {
+        let app = launchWithParkedHistory()
+
+        let row = app.descendants(matching: .any)["completedShiftRow"].firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 10))
+        row.tap()
+
+        let mileage = app.descendants(matching: .any)["shiftDetailRecordedMileage"]
+        XCTAssertTrue(scrollTo(mileage, in: app))
+        XCTAssertTrue(
+            waitForLabel(mileage, toContain: "4.5 miles recorded"),
+            "The two capture sessions, with nothing measured across the stretch parked: \(mileage.label)"
+        )
+
+        // The caveats are read out inside the same combined element as the
+        // figure they qualify, which is the arrangement that stops a listener
+        // hearing a mileage with nothing attached to it.
+        let caveats = mileage
+        XCTAssertTrue(
+            caveats.label.contains("1 stretch parked"),
+            "It says what the driver recorded: \(caveats.label)"
+        )
+        XCTAssertTrue(caveats.label.contains("25 min"), caveats.label)
+        XCTAssertTrue(
+            caveats.label.contains("time you recorded as parked"),
+            "And the partial sentence stops claiming miles were driven across it: \(caveats.label)"
+        )
+        XCTAssertFalse(
+            caveats.label.contains("more miles were driven than were recorded"),
+            "That sentence is untrue of a vehicle that spent the stretch in a parking space"
+        )
+
+        // Nothing was subtracted from the shift's own time. A paused shift shows
+        // a Paused row and a Working row; this one shows neither, because
+        // shopping is working and working equals elapsed to the second.
+        XCTAssertFalse(
+            app.descendants(matching: .any)["shiftDetailPausedTime"].exists,
+            "Parking records no pause"
+        )
+    }
+
+    // MARK: What each stacked delivery is waiting for
+
+    /// Three cards on one screen, each saying which delivery it is, what it is
+    /// doing and what it is waiting for, without any of them being opened.
+    @MainActor
+    func testEveryStackedDeliverySaysWhatItIsWaitingFor() throws {
+        let app = launchWithStackedOffer()
+
+        let first = deliveryStatusCard(named: "Delivery 1", in: app)
+        XCTAssertTrue(first.waitForExistence(timeout: 10))
+        let second = deliveryStatusCard(named: "Delivery 2", in: app)
+        let third = deliveryStatusCard(named: "Delivery 3", in: app)
+
+        // The fixture's first delivery is at its pickup and the other two were
+        // only accepted, so one card is waiting for a different event from the
+        // two beside it.
+        XCTAssertTrue(first.label.contains("waiting at the pickup"), first.label)
+        XCTAssertTrue(
+            first.label.contains("Next step, mark order picked up"),
+            "The card says what it is waiting for, not only what it is doing: \(first.label)"
+        )
+
+        XCTAssertTrue(second.label.contains("heading to the pickup"), second.label)
+        XCTAssertTrue(second.label.contains("Next step, mark arrived at pickup"), second.label)
+        XCTAssertTrue(third.label.contains("Next step, mark arrived at pickup"), third.label)
+
+        // And the cards are distinguishable by that alone, which is the claim:
+        // two deliveries in different states must not read as one.
+        XCTAssertNotEqual(first.label, second.label)
+        XCTAssertFalse(
+            first.label.contains("Next step, mark arrived at pickup"),
+            "The card at its pickup is not offered the arrival it already recorded"
+        )
+    }
+
+    /// Advancing one stacked delivery moves that card's next step and leaves
+    /// every other card saying exactly what it said.
+    @MainActor
+    func testAdvancingOneStackedDeliveryMovesOnlyItsNextStep() throws {
+        let app = launchWithStackedOffer()
+
+        let second = deliveryStatusCard(named: "Delivery 2", in: app)
+        XCTAssertTrue(second.waitForExistence(timeout: 10))
+        let first = deliveryStatusCard(named: "Delivery 1", in: app)
+        let firstBefore = first.label
+
+        let step = deliveryButton("deliveryActionButton", containing: "Delivery 2", in: app)
+        XCTAssertTrue(scrollTo(step, in: app))
+        step.tap()
+
+        XCTAssertTrue(
+            waitForLabel(second, toContain: "Next step, mark order picked up"),
+            "Delivery 2 recorded its arrival, so its card now waits for the pickup: \(second.label)"
+        )
+        XCTAssertEqual(
+            first.label,
+            firstBefore,
+            "And the card beside it says exactly what it said before"
+        )
+    }
+
+    // MARK: Reminders about a lifecycle event that may have gone unrecorded
+
+    /// Two stale deliveries each get their own reminder, naming their own
+    /// delivery and offering their own next step.
+    @MainActor
+    func testStaleDeliveriesEachGetTheirOwnReminder() throws {
+        let app = launchWithMissedLifecycle()
+
+        let reminders = app.descendants(matching: .any).matching(identifier: "deliverySuggestion")
+        XCTAssertTrue(reminders.firstMatch.waitForExistence(timeout: 10))
+        XCTAssertTrue(
+            waitForCount(reminders, toEqual: 2),
+            "Two deliveries are stale; the third was picked up and is never the subject of one"
+        )
+
+        let waiting = deliveryButton("deliverySuggestionActionButton", containing: "Delivery 1", in: app)
+        let heading = deliveryButton("deliverySuggestionActionButton", containing: "Delivery 2", in: app)
+        XCTAssertTrue(waiting.exists, "The delivery at its pickup is offered the pickup")
+        XCTAssertTrue(heading.exists, "The delivery that only recorded an acceptance is offered the arrival")
+
+        // Each control names the delivery it acts on, in print and aloud, so
+        // neither is identified by where it happens to sit.
+        XCTAssertTrue(
+            waiting.label.hasPrefix("Delivery 1."),
+            "A reminder's control names its delivery first: \(waiting.label)"
+        )
+        XCTAssertTrue(waiting.label.contains("Mark order picked up"), waiting.label)
+        XCTAssertTrue(heading.label.hasPrefix("Delivery 2."), heading.label)
+        XCTAssertTrue(heading.label.contains("Mark arrived at pickup"), heading.label)
+
+        // Nothing is offered for the delivery that is already in the car,
+        // however long it has been carried.
+        XCTAssertFalse(
+            deliveryButton("deliverySuggestionActionButton", containing: "Delivery 3", in: app).exists,
+            "A delivery already picked up is never the subject of a reminder"
+        )
+    }
+
+    /// The reminder states what was recorded and says plainly that DashPilot did
+    /// not observe it.
+    @MainActor
+    func testAReminderStatesItsEvidenceAndClaimsNoObservation() throws {
+        let app = launchWithMissedLifecycle()
+
+        let reminder = app.descendants(matching: .any)
+            .matching(
+                NSPredicate(
+                    format: "identifier == %@ AND label CONTAINS %@",
+                    "deliverySuggestion",
+                    "Delivery 1"
+                )
+            )
+            .firstMatch
+        XCTAssertTrue(reminder.waitForExistence(timeout: 10))
+
+        let spoken = reminder.label
+        XCTAssertTrue(
+            spoken.contains("reached the pickup") && spoken.contains("records no pickup"),
+            "It states what the record holds: \(spoken)"
+        )
+        XCTAssertTrue(spoken.contains("Already picked this order up?"), spoken)
+        XCTAssertTrue(
+            spoken.contains("DashPilot cannot tell where you are"),
+            "The caveat travels with the reminder rather than sitting somewhere else: \(spoken)"
+        )
+        for claim in ["you arrived", "you picked up", "detected", "confirmed"] {
+            XCTAssertFalse(
+                spoken.lowercased().contains(claim),
+                "A reminder must not claim \"\(claim)\": \(spoken)"
+            )
+        }
+    }
+
+    /// Confirming a reminder records that delivery's own step and leaves the
+    /// other deliveries exactly where they were.
+    @MainActor
+    func testConfirmingAReminderAdvancesOnlyThatDelivery() throws {
+        let app = launchWithMissedLifecycle()
+
+        let heading = deliveryButton("deliveryActionButton", containing: "Delivery 2", in: app)
+        XCTAssertTrue(heading.waitForExistence(timeout: 10))
+        XCTAssertEqual(heading.label, "Delivery 2. Mark arrived at pickup")
+
+        let waitingStep = deliveryButton("deliveryActionButton", containing: "Delivery 1", in: app)
+        XCTAssertEqual(waitingStep.label, "Delivery 1. Mark order picked up")
+
+        let confirm = deliveryButton("deliverySuggestionActionButton", containing: "Delivery 2", in: app)
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        confirm.tap()
+
+        // The delivery the reminder named has moved, through the ordinary
+        // lifecycle action rather than through anything of the reminder's own.
+        XCTAssertTrue(
+            waitForLabel(heading, toContain: "Delivery 2. Mark order picked up"),
+            "Delivery 2 recorded its arrival: \(heading.label)"
+        )
+        XCTAssertEqual(
+            waitingStep.label,
+            "Delivery 1. Mark order picked up",
+            "Delivery 1 is untouched by a reminder confirmed on Delivery 2"
+        )
+
+        // And the reminder it answered is gone, because the delivery is no
+        // longer in the state it was about.
+        XCTAssertTrue(
+            waitForCount(
+                app.buttons.matching(identifier: "deliverySuggestionActionButton"),
+                toEqual: 1
+            ),
+            "The answered reminder leaves; the other one stays"
+        )
+    }
+
+    /// Waving a reminder away records nothing and leaves the delivery alone.
+    @MainActor
+    func testDismissingAReminderChangesNothing() throws {
+        let app = launchWithMissedLifecycle()
+
+        let step = deliveryButton("deliveryActionButton", containing: "Delivery 1", in: app)
+        XCTAssertTrue(step.waitForExistence(timeout: 10))
+        XCTAssertEqual(step.label, "Delivery 1. Mark order picked up")
+
+        let status = app.descendants(matching: .any)["deliveryStatus"]
+        XCTAssertTrue(waitForLabel(status, toContain: "3 deliveries in progress"), status.label)
+
+        let dismiss = deliveryButton("deliverySuggestionDismissButton", containing: "Delivery 1", in: app)
+        XCTAssertTrue(dismiss.waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            dismiss.label.contains("Nothing is recorded"),
+            "The control says aloud that it records nothing: \(dismiss.label)"
+        )
+        dismiss.tap()
+
+        XCTAssertTrue(
+            waitForCount(
+                app.descendants(matching: .any).matching(identifier: "deliverySuggestion"),
+                toEqual: 1
+            ),
+            "Only the dismissed reminder goes"
+        )
+        XCTAssertEqual(
+            step.label,
+            "Delivery 1. Mark order picked up",
+            "The delivery is exactly where it was, so nothing was recorded"
+        )
+        XCTAssertTrue(
+            waitForLabel(status, toContain: "3 deliveries in progress"),
+            "And the shift still holds the same three deliveries: \(status.label)"
+        )
     }
 
     // MARK: Offers containing several deliveries
@@ -4972,6 +5350,25 @@ final class DashPilotUITests: XCTestCase {
     ) -> XCUIElement {
         app.buttons
             .matching(NSPredicate(format: "identifier == %@ AND label CONTAINS %@", identifier, text))
+            .firstMatch
+    }
+
+    /// One delivery card on the running shift's panel, identified by the
+    /// delivery it names.
+    /// **Matched on the start of the label, not on containment.** A card's
+    /// spoken status names its siblings — `Part of Offer 1, accepted together
+    /// with Delivery 2` — so `CONTAINS "Delivery 2"` matches the card belonging
+    /// to Delivery 1. Every card's label begins with its own name.
+    @MainActor
+    private func deliveryStatusCard(named name: String, in app: XCUIApplication) -> XCUIElement {
+        app.descendants(matching: .any)
+            .matching(
+                NSPredicate(
+                    format: "identifier == %@ AND label BEGINSWITH %@",
+                    "activeDeliveryStatus",
+                    name
+                )
+            )
             .firstMatch
     }
 

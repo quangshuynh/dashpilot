@@ -88,6 +88,29 @@ struct DeliveryControlPanel: View {
     /// up.
     @State private var isReopeningDelivery = false
 
+    /// The instant the progress reminders are derived against.
+    ///
+    /// Held rather than read in `body` for the reason ``ActiveShiftPanel`` holds
+    /// its measurement: a view body that read `.now` would derive a different
+    /// answer on every redraw for reasons that have nothing to do with the
+    /// clock, and would never redraw when the only thing that changed *was* the
+    /// clock. It is advanced by the task below.
+    @State private var suggestionClock = Date.now
+
+    /// The reminders the driver has waved away, for as long as this screen
+    /// lives.
+    ///
+    /// **Ephemeral on purpose.** A dismissal is not a fact about the delivery,
+    /// and a store that remembered which reminders a driver had seen would be
+    /// recording their attention rather than their work. It costs a reminder
+    /// coming back after a relaunch, which is the right way round: the app
+    /// forgets that it asked rather than forgetting that the delivery is stale.
+    ///
+    /// The key is the delivery **and the state it was in**, so advancing a
+    /// delivery clears its dismissal by moving past it, and a delivery that goes
+    /// stale again in its new state can be mentioned again.
+    @State private var dismissedSuggestions: Set<DismissedSuggestion> = []
+
     /// The delivery just marked delivered, while the offer to take it back is
     /// still on screen.
     ///
@@ -110,9 +133,26 @@ struct DeliveryControlPanel: View {
         DeliveryGroup.grouping(activeDeliveries, within: shift.numberedOffers)
     }
 
+    /// The reminders on screen right now, in the order the deliveries appear.
+    ///
+    /// Derived on every read from the store's own timestamps, filtered by what
+    /// the driver has already waved away. It reads no location, no sensor and
+    /// nothing outside this shift's deliveries, and it writes nothing at all.
+    private var progressSuggestions: [DeliveryProgressSuggestion] {
+        // A shift that is not running has no reminder to give: a paused one is
+        // stopped because the driver said so, and an ended one has no delivery
+        // in progress to be stale.
+        guard shift.lifecycleState == .running else { return [] }
+
+        return Self.assistance
+            .suggestions(among: activeDeliveries.map(AssistedDelivery.init), asOf: suggestionClock)
+            .filter { !dismissedSuggestions.contains(DismissedSuggestion($0)) }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             undoBanner
+            suggestions
             status
 
             ForEach(activeGroups) { group in
@@ -156,6 +196,17 @@ struct DeliveryControlPanel: View {
 
             guard !Task.isCancelled else { return }
             recentlyDelivered = nil
+        }
+        // The reminders' clock. It only advances while the shift is actually
+        // running, so a paused or finished shift costs nothing, and it advances
+        // slowly because the thresholds are measured in tens of minutes and a
+        // sentence reading "29 minutes" for one more tick is not a defect.
+        .task(id: shift.lifecycleState) {
+            guard shift.lifecycleState == .running else { return }
+            while !Task.isCancelled {
+                suggestionClock = .now
+                try? await Task.sleep(for: .seconds(Self.suggestionRefreshSeconds))
+            }
         }
         .alert(
             pendingCancellation.map { "Cancel \($0.title)?" } ?? "Cancel this delivery?",
@@ -241,6 +292,32 @@ struct DeliveryControlPanel: View {
             }
             .padding(10)
             .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 10))
+        }
+    }
+
+    /// The reminders, above everything else on the panel and below the undo.
+    ///
+    /// Passive: it is drawn where it is rather than raised, it interrupts
+    /// nothing, and a driver who ignores it entirely works exactly the shift
+    /// they worked before it existed. There is no alert, no sheet and no
+    /// notification anywhere in this feature.
+    ///
+    /// It sits above the delivery cards rather than inside them so that a driver
+    /// carrying three orders reads one short list of what may be out of date
+    /// instead of scanning three cards for a highlighted one, and so that the
+    /// cards themselves are unchanged for the driver who never sees a reminder.
+    @ViewBuilder
+    private var suggestions: some View {
+        if !progressSuggestions.isEmpty {
+            VStack(alignment: .leading, spacing: 12) {
+                ForEach(progressSuggestions) { suggestion in
+                    DeliveryProgressSuggestionCard(
+                        suggestion: suggestion,
+                        confirm: { confirm(suggestion) },
+                        dismiss: { dismissedSuggestions.insert(DismissedSuggestion(suggestion)) }
+                    )
+                }
+            }
         }
     }
 
@@ -440,6 +517,55 @@ struct DeliveryControlPanel: View {
         liveActivity.reconcile()
     }
 
+    /// Records the step a reminder offered, through the path the delivery's own
+    /// card uses.
+    ///
+    /// **It resolves the delivery by identity**, from the active list, and never
+    /// by position: a reminder is drawn above the cards rather than beside one,
+    /// so there is no visual ordering for it to trust even if it wanted to. A
+    /// delivery that has left the active list between the draw and the tap
+    /// resolves to nothing and nothing happens, which is the same outcome the
+    /// service would produce and one fewer alert.
+    ///
+    /// The operation is ``Operation/advance(_:)`` — the card's own — so the step
+    /// taken is ``DeliveryState/nextAction``'s answer for that delivery, read
+    /// from the store at the moment of the tap rather than from the reminder.
+    /// A reminder therefore cannot record a stale step, and there is no second
+    /// lifecycle path to keep in agreement with the first.
+    private func confirm(_ suggestion: DeliveryProgressSuggestion) {
+        guard let numbered = activeDeliveries.first(where: { $0.id == suggestion.deliveryID }) else { return }
+        perform(.advance(numbered))
+    }
+
+    /// The policy, held once rather than built per read, and held here rather
+    /// than injected: a view has no business tuning it, and a test that wants
+    /// different thresholds tests ``DeliveryProgressAssistance`` directly.
+    private static let assistance = DeliveryProgressAssistance()
+
+    /// How often the reminders' clock is advanced, in seconds.
+    ///
+    /// The thresholds are tens of minutes, so this only has to be short enough
+    /// that a reminder appears while the driver is still looking at the screen
+    /// and long enough that the panel is not re-deriving a list every second for
+    /// a figure printed to the minute.
+    private static let suggestionRefreshSeconds = 30
+
+    /// A reminder the driver has waved away: which delivery, and which state it
+    /// was in.
+    ///
+    /// The state is half the key deliberately. Dismissing "you may have arrived"
+    /// says nothing about whether the driver will want to be told, half an hour
+    /// later, that they may have picked the order up.
+    private struct DismissedSuggestion: Hashable {
+        let deliveryID: UUID
+        let state: DeliveryState
+
+        init(_ suggestion: DeliveryProgressSuggestion) {
+            self.deliveryID = suggestion.deliveryID
+            self.state = suggestion.state
+        }
+    }
+
     /// How many seconds on screen the immediate undo is offered for.
     ///
     /// Long enough to look down, read which delivery it names and press it,
@@ -513,6 +639,107 @@ struct DeliveryControlPanel: View {
             get: { lifecycleError != nil },
             set: { isShowing in if !isShowing { lifecycleError = nil } }
         )
+    }
+}
+
+/// One reminder that a lifecycle event may have gone unrecorded.
+///
+/// ## What it is careful about
+///
+/// It states a **fact about the record** — what the delivery last recorded and
+/// how long ago — then asks a question, then says plainly that DashPilot did not
+/// observe any of it. The order is the point: the driver reads the evidence
+/// before the suggestion, and the caveat is never further away than the
+/// suggestion is.
+///
+/// Neither control is destructive and neither is prominent. The confirming one
+/// is bordered rather than borderedProminent, because the prominent control on
+/// this screen is the delivery's own next step and a reminder must not compete
+/// with it; both are full-width with a 44-point minimum, because the driver may
+/// be standing at a kerb.
+///
+/// ## Two elements, not one
+///
+/// The sentence is one combined element so a listener hears the evidence, the
+/// question and the caveat as one statement rather than as three fragments, and
+/// the two buttons name their delivery for themselves, because a listener moving
+/// between reminders has no card heading to refer back to.
+private struct DeliveryProgressSuggestionCard: View {
+    let suggestion: DeliveryProgressSuggestion
+    let confirm: () -> Void
+    let dismiss: () -> Void
+
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 2) {
+                // A symbol and a sentence, never a tint alone: the card has to
+                // be readable in bright sun and to a driver who does not see
+                // the colour.
+                Label(suggestion.question, systemImage: "questionmark.circle")
+                    .font(.subheadline.weight(.semibold))
+
+                Text("\(suggestion.title) · \(suggestion.evidenceStatement)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                // Never abbreviated away and never behind a disclosure. It is
+                // the sentence that keeps the card a question.
+                Text(DeliveryProgressSuggestion.uncertaintyStatement)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(suggestion.spokenLabel)
+            .accessibilityIdentifier("deliverySuggestion")
+
+            controls
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
+    }
+
+    /// Side by side at ordinary text sizes and stacked at accessibility ones,
+    /// for the reason the completed delivery's actions became a grid: two
+    /// controls sharing half a phone each come out a word to a line as soon as
+    /// the text grows, and one of them has to hold a delivery's name.
+    @ViewBuilder
+    private var controls: some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(spacing: 8) {
+                confirmButton
+                dismissButton
+            }
+        } else {
+            HStack(spacing: 8) {
+                confirmButton
+                dismissButton
+            }
+        }
+    }
+
+    private var confirmButton: some View {
+        Button(action: confirm) {
+            Text(suggestion.actionTitle)
+                .frame(maxWidth: .infinity, minHeight: 44)
+        }
+        .buttonStyle(.bordered)
+        .contentShape(Rectangle())
+        .accessibilityLabel(suggestion.spokenActionLabel)
+        .accessibilityIdentifier("deliverySuggestionActionButton")
+    }
+
+    private var dismissButton: some View {
+        Button(action: dismiss) {
+            Text(suggestion.dismissTitle)
+                .frame(maxWidth: .infinity, minHeight: 44)
+        }
+        .buttonStyle(.bordered)
+        .contentShape(Rectangle())
+        .accessibilityLabel(suggestion.spokenDismissLabel)
+        .accessibilityIdentifier("deliverySuggestionDismissButton")
     }
 }
 
@@ -602,6 +829,17 @@ private struct ActiveDeliveryCard: View {
                     Text(offer.title)
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                }
+
+                // What this delivery is waiting for, on the card rather than
+                // only on the button below it. With two or three cards on
+                // screen, the buttons are the same shape and the same size and
+                // are told apart only by their words; a state line that says
+                // what comes next lets the eye sort the cards without landing
+                // on a control to find out.
+                if let next = delivery.state.nextAction {
+                    Text(next.nextStepStatement)
+                        .font(.subheadline.weight(.medium))
                 }
 
                 if let place = delivery.pickupPlace {
@@ -721,8 +959,9 @@ private struct ActiveDeliveryCard: View {
     }
 
     /// "Delivery 2, waiting at the pickup, from Nowhere Noodles, accepted at
-    /// 5:12 PM" — the identity first, because that is what tells the listener
-    /// which card they are on, and the place only when one was recorded.
+    /// 5:12 PM. Next step, mark order picked up." — the identity first, because
+    /// that is what tells the listener which card they are on, the place only
+    /// when one was recorded, and the step as its own sentence.
     ///
     /// An expected amount is appended as its own **sentence** rather than as
     /// another comma-separated clause, because it is the one part of this label
@@ -737,6 +976,13 @@ private struct ActiveDeliveryCard: View {
         parts.append("accepted at \(accepted)")
 
         var spoken = parts.joined(separator: ", ")
+        // Its own sentence, and first of the three that follow: a listener
+        // choosing between cards is choosing by what each one is waiting for,
+        // and the step has to be heard before they reach the control that takes
+        // it rather than discovered by arriving there.
+        if let next = delivery.state.nextAction {
+            spoken += ". \(next.spokenNextStep)"
+        }
         // Its own sentence, and before the money: which deliveries arrived
         // together is what tells a listener which other cards on this screen
         // belong with this one, and it must not be heard as a clause of the

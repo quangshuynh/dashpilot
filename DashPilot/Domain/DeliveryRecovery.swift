@@ -98,10 +98,26 @@ nonisolated struct DeliveryLifecycleRecord: Equatable, Sendable {
     /// rather than a backwards one, and the two deserve different sentences.
     var recordsPickupWithoutArrival: Bool { pickedUpAt != nil && arrivedAtPickupAt == nil }
 
+    /// Where the delivery has reached, read from its timestamps.
+    ///
+    /// **The one definition**, which ``Delivery/state`` reads, so a model, a
+    /// correction judged over a draft and a reminder derived from a record
+    /// cannot disagree about what a delivery is doing.
+    ///
+    /// The terminal states are checked first: a delivery cancelled after being
+    /// picked up is cancelled, not picked up.
+    var state: DeliveryState {
+        if cancelledAt != nil { return .cancelled }
+        if deliveredAt != nil { return .delivered }
+        if pickedUpAt != nil { return .pickedUp }
+        if arrivedAtPickupAt != nil { return .arrivedAtPickup }
+        return .accepted
+    }
+
     /// Whether this row records a terminal event.
     ///
-    /// Read from the timestamps, exactly as ``Delivery/state`` reads them, so
-    /// there is no second opinion about whether a delivery has finished.
+    /// Read from the timestamps, exactly as ``state`` reads them, so there is no
+    /// second opinion about whether a delivery has finished.
     var isFinished: Bool { deliveredAt != nil || cancelledAt != nil }
 
     /// The five stages a delivery can record, in the order the lifecycle

@@ -95,9 +95,15 @@ struct RouteSampleRelationshipTests {
 
         #expect(
             properties == [
-                "id", "startedAt", "endedAt", "deliveries", "offers", "pauses", "grossEarningsAmount",
-                "fuelMilesPerGallonValue", "fuelGasPricePerGallonAmount", "fuelVehicleName"
-            ]
+                "id", "startedAt", "endedAt", "deliveries", "offers", "pauses", "routeSuspensions",
+                "grossEarningsAmount", "fuelMilesPerGallonValue", "fuelGasPricePerGallonAmount",
+                "fuelVehicleName"
+            ],
+            """
+            The one collection the shift gained since is `routeSuspensions`, which holds at most a \
+            handful of rows for a whole shift rather than one per position, and is the shape this \
+            test exists to keep the route out of.
+            """
         )
         #expect(!properties.contains("routeSamples"))
 

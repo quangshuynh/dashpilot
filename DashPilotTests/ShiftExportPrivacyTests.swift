@@ -89,7 +89,11 @@ struct ShiftExportPrivacyTests {
         #expect(
             Set(try #require(encoded).keys) == [
                 "status", "isPartial", "recordedDistanceMetres", "recordedDistanceMiles",
-                "segmentCount", "gapCount", "usableSampleCount", "usesInferredContinuity"
+                "segmentCount", "gapCount", "usableSampleCount", "usesInferredContinuity",
+                // A count and a duration. How much and how often the driver was
+                // away from the vehicle, and never when: the instants stay in
+                // the store, exactly as a pause's do.
+                "suspensionCount", "suspendedSeconds"
             ]
         )
     }

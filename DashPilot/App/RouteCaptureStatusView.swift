@@ -40,6 +40,7 @@ struct RouteCaptureStatusView: View {
         case .idle, .tracking: "Location tracking active"
         case .pausedInBackground: "Route recording paused"
         case .shiftPaused: "Route recording stopped"
+        case .routeSuspended: "Route recording stopped while parked"
         case .unavailable(.permissionRequired): "Location permission required"
         case .unavailable: "Location unavailable"
         }
@@ -50,6 +51,7 @@ struct RouteCaptureStatusView: View {
         case .idle, .tracking: "location.fill"
         case .pausedInBackground: "pause.circle"
         case .shiftPaused: "pause.circle"
+        case .routeSuspended: "parkingsign.circle"
         case .unavailable: "location.slash"
         }
     }
@@ -59,6 +61,7 @@ struct RouteCaptureStatusView: View {
         case .idle, .tracking: .green
         case .pausedInBackground: .orange
         case .shiftPaused: .orange
+        case .routeSuspended: .orange
         case .unavailable: .secondary
         }
     }
@@ -76,6 +79,12 @@ struct RouteCaptureStatusView: View {
             """
             The shift is paused, so nothing is being recorded. Resuming starts a new recording, and \
             the distance between where you paused and where you resume is not counted.
+            """
+        case .routeSuspended:
+            """
+            You recorded the vehicle as parked, so nothing is being recorded while you are away from \
+            it. Your shift is still running. Resuming starts a new recording, and the distance between \
+            where you parked and where you drive off from is not counted.
             """
         case .unavailable(.permissionRequired), .unavailable(.permissionDenied):
             "Turn on location access for DashPilot to record this shift's route."

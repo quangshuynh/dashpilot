@@ -49,6 +49,16 @@ nonisolated extension ShiftEndCorrectionError: LocalizedError {
             This shift records a pause that ends after that time, and a pause has to be inside the \
             shift. Correct or delete that pause first, or choose a later end time.
             """
+        case .invalidCorrection(.routeSuspensionIsOpen):
+            """
+            This shift records a stretch parked that was never ended, so moving its end time would \
+            change how much of its route is accounted for. That has to be sorted out first.
+            """
+        case .invalidCorrection(.cutsThroughRecordedRouteSuspension):
+            """
+            This shift records a stretch parked that ends after that time, and it explains a gap in \
+            the shift's route. Choose a later end time.
+            """
         case let .invalidCorrection(.precedesRecordedDeliveryWork(event)):
             """
             \(event.deliveryTitle) has \(event.eventTitle) recorded at \

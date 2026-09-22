@@ -51,6 +51,18 @@ nonisolated struct ActiveShiftMetrics: Equatable, Sendable {
     /// measurement rather than a missing value.
     let pausedTime: ShiftPausedTime
 
+    /// How much of the shift so far the driver recorded the vehicle as parked,
+    /// and how many times. ``RouteSuspendedTime/none`` for a shift the driver
+    /// never parked, which is a measurement rather than a missing value.
+    ///
+    /// **It is carried and never subtracted.** Walking into a shop to collect an
+    /// order is working, so ``workingDuration`` is untouched by it and every
+    /// rate derived from it keeps the denominator it had. What it explains is
+    /// the route: capture is stopped for its whole length, so the recorded
+    /// distance is lower and the route is partial, and this is the figure that
+    /// says how much of that the driver asked for.
+    let suspendedTime: RouteSuspendedTime
+
     /// Elapsed time so far less the time the shift has been paused.
     ///
     /// **The figure the screen leads with**, and the same definition the
@@ -85,6 +97,7 @@ nonisolated struct ActiveShiftMetrics: Equatable, Sendable {
         lifecycleState: ShiftLifecycleState,
         elapsedDuration: TimeInterval,
         pausedTime: ShiftPausedTime,
+        suspendedTime: RouteSuspendedTime = .none,
         workingDuration: TimeInterval,
         recordedDistance: RouteDistance,
         deliverySummary: DeliverySummary,
@@ -93,6 +106,7 @@ nonisolated struct ActiveShiftMetrics: Equatable, Sendable {
         self.lifecycleState = lifecycleState
         self.elapsedDuration = elapsedDuration
         self.pausedTime = pausedTime
+        self.suspendedTime = suspendedTime
         self.workingDuration = workingDuration
         self.recordedDistance = recordedDistance
         self.deliverySummary = deliverySummary
@@ -102,8 +116,34 @@ nonisolated struct ActiveShiftMetrics: Equatable, Sendable {
     /// Whether the driver has the shift paused right now.
     var isPaused: Bool { lifecycleState == .paused }
 
+    /// Whether the driver has the vehicle recorded as parked right now.
+    ///
+    /// An ended or paused shift is never parked, which is the model's rule and
+    /// is restated here only in the sense that ``lifecycleState`` is consulted
+    /// alongside the rows.
+    var isRouteSuspended: Bool {
+        lifecycleState == .running && suspendedTime.isSuspended
+    }
+
+    /// What a glanceable surface says while the vehicle is recorded as parked,
+    /// or `nil` when it is not.
+    ///
+    /// Short enough for a Lock Screen and careful about the two facts that must
+    /// not be confused: the **route** is not recording, and the **shift** still
+    /// is.
+    var routeSuspendedNotice: String? {
+        isRouteSuspended ? "Parked · route not recording" : nil
+    }
+
+    /// The same fact spoken, where a middle dot is punctuation rather than a
+    /// word.
+    var spokenRouteSuspendedNotice: String? {
+        guard isRouteSuspended else { return nil }
+        return "Parked. Your route is not being recorded, and your shift is still running."
+    }
+
     /// The vocabulary for what the route can be said to show.
-    var routeQuality: RouteQuality { RouteQuality(recordedDistance) }
+    var routeQuality: RouteQuality { RouteQuality(recordedDistance, suspendedTime: suspendedTime) }
 
     /// The amount recorded for the shift, or `nil` when none is.
     ///
@@ -225,6 +265,7 @@ extension Shift {
             lifecycleState: lifecycleState,
             elapsedDuration: elapsed(asOf: referenceDate),
             pausedTime: pausedTime(asOf: referenceDate),
+            suspendedTime: suspendedTime(asOf: referenceDate),
             workingDuration: workingDuration(asOf: referenceDate),
             recordedDistance: recordedDistance,
             deliverySummary: deliverySummary,

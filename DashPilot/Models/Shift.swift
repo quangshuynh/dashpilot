@@ -14,6 +14,14 @@ nonisolated enum ShiftError: Error, Equatable {
     case negativeEarnings
     /// A pause was requested on a shift that already has one open.
     case alreadyPaused
+    /// Parking was requested on a shift that already records the vehicle as
+    /// parked.
+    case alreadyParked
+    /// Resuming driving was requested on a shift that records no open
+    /// suspension.
+    case notParked
+    /// The suspension model rejected the transition.
+    case invalidRouteSuspension(RouteSuspensionError)
     /// A resume was requested on a shift with no open pause.
     case notPaused
     /// A lifecycle transition was requested on a shift that has already ended.
@@ -92,6 +100,18 @@ nonisolated final class Shift {
     /// leaving rows describing a shift that no longer exists.
     @Relationship(deleteRule: .cascade, inverse: \ShiftPause.shift)
     private(set) var pauses: [ShiftPause] = []
+
+    /// The stretches of this shift the driver recorded the vehicle as parked
+    /// while they were away from it.
+    ///
+    /// Cascading, like the pauses beside it: a deleted shift takes its own
+    /// statements about itself with it.
+    ///
+    /// **Nothing here is subtracted from anything.** These rows say why a route
+    /// has gaps in it, and no duration, rate, period figure or export total
+    /// reads them as time not worked. See ``RouteSuspension``.
+    @Relationship(deleteRule: .cascade, inverse: \RouteSuspension.shift)
+    private(set) var routeSuspensions: [RouteSuspension] = []
 
     /// Gross earnings for this shift, exactly as entered, or `nil` if none were.
     ///
@@ -230,6 +250,7 @@ nonisolated final class Shift {
             startedAt: startedAt,
             recordedEnd: endedAt,
             pauses: pauseIntervals,
+            suspensions: routeSuspensionIntervals,
             deliveryEvents: numberedDeliveries.flatMap { numbered in
                 numbered.delivery.recordedEvents.map { recorded in
                     RecordedDeliveryEvent(
@@ -973,6 +994,110 @@ extension Shift {
     /// hold.
     func addMissedPause(_ correction: ShiftPauseCorrection) -> ShiftPause {
         ShiftPause(shift: self, startedAt: correction.startedAt, endedAt: correction.endedAt)
+    }
+
+    // MARK: Parked for a pickup
+
+    /// The suspension the driver has not ended, if any.
+    ///
+    /// Read from the rows rather than from a flag, exactly as ``openPause`` is,
+    /// and for the same reason: the rows are the authority, so a shift left
+    /// parked when the app was terminated comes back parked with no recovery
+    /// code at all.
+    ///
+    /// The newest open row wins. Parking an already parked shift is refused, so
+    /// there is never more than one; taking the newest means a store that
+    /// somehow holds two produces the state a driver would expect.
+    var openRouteSuspension: RouteSuspension? {
+        routeSuspensions.filter(\.isOpen).max { $0.startedAt < $1.startedAt }
+    }
+
+    /// This shift's suspensions in the order they began.
+    var routeSuspensionsInOrder: [RouteSuspension] {
+        routeSuspensions.sorted { $0.startedAt < $1.startedAt }
+    }
+
+    /// The interval each of this shift's suspensions describes.
+    var routeSuspensionIntervals: [RouteSuspensionInterval] {
+        routeSuspensionsInOrder.map(\.interval)
+    }
+
+    /// Whether the driver has the vehicle recorded as parked right now.
+    ///
+    /// **An ended shift is never parked**, whatever its rows say, exactly as an
+    /// ended shift is never paused: ending closes an open suspension in the same
+    /// write, so a finished shift holding one is an anomaly the app cannot
+    /// write, and reporting it as parked would leave a finished shift looking
+    /// live.
+    ///
+    /// A **paused** shift is never parked either, and that ordering is
+    /// deliberate: pausing closes the suspension, because a driver who has
+    /// stopped working has stopped shopping.
+    var isRouteSuspended: Bool {
+        endedAt == nil && openPause == nil && openRouteSuspension != nil
+    }
+
+    /// How much of this shift the driver recorded the vehicle as parked, as of
+    /// `referenceDate`.
+    ///
+    /// The adapter between the model and ``RouteSuspendedTimeCalculator``,
+    /// holding no rule of its own. Nothing is stored.
+    func suspendedTime(
+        asOf referenceDate: Date,
+        using calculator: RouteSuspendedTimeCalculator = RouteSuspendedTimeCalculator()
+    ) -> RouteSuspendedTime {
+        guard !routeSuspensions.isEmpty else { return .none }
+        return calculator.suspendedTime(of: routeSuspensionIntervals, within: measuredWindow(asOf: referenceDate))
+    }
+
+    /// The parked time of a finished shift, or `nil` while it is unfinished.
+    var completedSuspendedTime: RouteSuspendedTime? {
+        endedAt.map { suspendedTime(asOf: $0) }
+    }
+
+    /// Opens a suspension: the driver has parked and is walking away from the
+    /// vehicle.
+    ///
+    /// The model keeps the invariants nothing else may break: a shift that has
+    /// ended cannot be parked, one already parked cannot be parked again, and a
+    /// **paused** shift cannot be parked, because pausing says the driver
+    /// stopped working and parking says they are doing the job on foot.
+    ///
+    /// The context insert is the caller's, exactly as it is for
+    /// ``beginPause(at:)``, so a refused or failed write leaves the store
+    /// holding nothing the model does not also hold.
+    ///
+    /// - Throws: ``ShiftError/shiftAlreadyEnded``, ``ShiftError/alreadyParked``,
+    ///   ``ShiftError/alreadyPaused`` or ``ShiftError/endPrecedesStart`` when
+    ///   `date` precedes the shift start.
+    @discardableResult
+    func beginRouteSuspension(at date: Date) throws -> RouteSuspension {
+        guard endedAt == nil else { throw ShiftError.shiftAlreadyEnded }
+        guard openPause == nil else { throw ShiftError.alreadyPaused }
+        guard openRouteSuspension == nil else { throw ShiftError.alreadyParked }
+        guard date >= startedAt else { throw ShiftError.endPrecedesStart }
+
+        return RouteSuspension(shift: self, startedAt: date)
+    }
+
+    /// Closes the open suspension: the driver is driving again.
+    ///
+    /// Allowed on an ended or paused shift, unlike opening one, because both of
+    /// those **close** an open suspension as part of their own write. A rule
+    /// that refused here would leave the one row the app must never leave open.
+    ///
+    /// - Throws: ``ShiftError/notParked``, or
+    ///   ``ShiftError/invalidRouteSuspension(_:)`` when the row refuses the
+    ///   timestamp.
+    @discardableResult
+    func endOpenRouteSuspension(at date: Date) throws -> RouteSuspension {
+        guard let suspension = openRouteSuspension else { throw ShiftError.notParked }
+        do {
+            try suspension.end(at: date)
+        } catch let error as RouteSuspensionError {
+            throw ShiftError.invalidRouteSuspension(error)
+        }
+        return suspension
     }
 
     /// Closes the open pause.

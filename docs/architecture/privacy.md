@@ -66,10 +66,10 @@ counts and errors. Coordinates, addresses and earnings amounts are never logged.
 
 | Category | Records | Never records |
 | --- | --- | --- |
-| `shift` | A shift started, ended or was deleted; a transition refused; a failed store read or write | When a shift ran, what it earned, how far it went |
+| `shift` | A shift started, ended or was deleted; a shift was paused or resumed; a shift was recorded as parked or as driving again; a transition refused; a failed store read or write | When a shift ran, when it was paused or parked, what it earned, how far it went |
 | `delivery` | That a delivery started, advanced to a named state, or was refused by rule; how many deliveries an offer recorded and how many are now active on the shift; that a delivery moved between offers, that two offers were combined, that an offer was separated, and that an offer left holding nothing was removed; that a completed delivery's recorded times were corrected; a failed store read or write | Which delivery or which offers any of it was about, when any of it happened, where it happened, what it paid, which lifecycle stage a correction moved, what it moved to and how many stages moved, and how many deliveries a correction moved |
 | `location` | Authorization transitions, Location Services availability, accuracy changes, unrecognised platform values | Any position, because this layer never reads one |
-| `route-capture` | Capture started or stopped, why it could not start, how many samples were retained and persisted, and the *name* of the rule that rejected a candidate | Latitude, longitude, address or route geometry |
+| `route-capture` | Capture started or stopped, why it could not start, how many samples were retained and persisted, and the *name* of the rule that rejected a candidate — including `routeSuspended`, for a fix that arrived while the vehicle was recorded as parked | Latitude, longitude, address or route geometry |
 | `earnings` | That an amount was added, updated or removed, or that a save failed | The amount |
 | `pickup-place` | That a place was assigned, changed, removed, reused, created, renamed or merged; that a name, rename or merge was refused, by rule; that a save failed | The name typed, the normalised key derived from it, and how many deliveries a merge moved |
 | `expenses` | That an expense was recorded, updated or deleted, which **category** it was, whether a note exists, and that a write was refused by rule or failed | The amount, the date the money was spent, and any word of the note |
@@ -94,6 +94,12 @@ not when a sample was recorded. How long a named driver waits at a named place i
 data about a real person, and there is no failure to report: a place with too little history is a
 normal result the screen states in words. Deriving a place's history writes nothing and records
 nothing.
+
+**A stretch recorded parked is logged the way a pause is: that one happened, and never when.** The
+minutes a driver spends inside a shop are the same kind of statement about their day a break is, and
+the log records the transition and the rule that refused one. The count and the duration a completed
+shift states are derived from the rows every time they are read, and reach no log at all; the export
+carries them because the driver asked for the file.
 
 **A deletion records nothing about the shift.** Not when it ran, not what it earned, not how far it
 went. A deletion is the last moment to start writing a driver's history into a log.
