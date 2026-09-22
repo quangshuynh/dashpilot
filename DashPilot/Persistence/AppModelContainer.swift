@@ -52,6 +52,9 @@ enum AppModelContainer {
         if LaunchArgument.isPresent(LaunchArgument.seededPausedHistory) {
             return try PreviewSupport.seededPausedHistoryContainer()
         }
+        if LaunchArgument.isPresent(LaunchArgument.seededParkedHistory) {
+            return try PreviewSupport.seededParkedHistoryContainer()
+        }
         if LaunchArgument.isPresent(LaunchArgument.seededLateEndHistory) {
             return try PreviewSupport.seededLateEndHistoryContainer()
         }

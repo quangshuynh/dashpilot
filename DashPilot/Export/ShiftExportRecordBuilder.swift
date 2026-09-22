@@ -38,7 +38,11 @@ nonisolated extension Shift {
             pauseCount: pausedTime.intervalCount,
             currencyCode: Money.displayCurrencyCode,
             grossEarnings: ExportAmount.recorded(grossEarnings),
-            route: ShiftRouteExport(recordedDistance),
+            // The suspensions travel with the route because they are what makes
+            // a short recorded distance intelligible: a reader can tell a shift
+            // whose driver spent forty minutes in two shops from one whose
+            // capture failed. Nothing about them touches a duration or a rate.
+            route: ShiftRouteExport(recordedDistance, suspendedTime: completedSuspendedTime ?? .none),
             // The assumptions as recorded, never the estimate derived from
             // them: the file states what the driver entered, and a reader
             // reproduces the arithmetic from the recorded mileage above.

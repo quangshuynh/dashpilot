@@ -29,6 +29,12 @@ nonisolated enum ShiftLifecycleError: Error {
     case shiftAlreadyPaused(pausedAt: Date)
     /// A resume was requested on a shift that is not paused.
     case shiftNotPaused
+    /// Parking was requested on a shift that already records the vehicle as
+    /// parked.
+    case shiftAlreadyParked(parkedAt: Date)
+    /// Resuming driving was requested on a shift that does not record the
+    /// vehicle as parked.
+    case shiftNotParked
     /// The shift model rejected the transition.
     case invalidTransition(ShiftError)
     /// The local store could not be read or written.
@@ -49,6 +55,8 @@ nonisolated extension ShiftLifecycleError: Equatable {
             lhsCount == rhsCount
         case let (.shiftAlreadyPaused(lhsDate), .shiftAlreadyPaused(rhsDate)): lhsDate == rhsDate
         case (.shiftNotPaused, .shiftNotPaused): true
+        case let (.shiftAlreadyParked(lhsDate), .shiftAlreadyParked(rhsDate)): lhsDate == rhsDate
+        case (.shiftNotParked, .shiftNotParked): true
         case let (.invalidTransition(lhsError), .invalidTransition(rhsError)): lhsError == rhsError
         case (.storeUnavailable, .storeUnavailable): true
         default: false
@@ -83,6 +91,14 @@ nonisolated extension ShiftLifecycleError: LocalizedError {
             "This shift is already paused. Resume it before pausing it again."
         case .shiftNotPaused:
             "This shift is not paused, so there is nothing to resume."
+        case .shiftAlreadyParked:
+            "DashPilot already has this shift recorded as parked. Resume driving before parking again."
+        case .shiftNotParked:
+            "This shift is not recorded as parked, so there is nothing to resume."
+        case .invalidTransition(.alreadyParked):
+            "DashPilot already has this shift recorded as parked. Resume driving before parking again."
+        case .invalidTransition(.notParked):
+            "This shift is not recorded as parked, so there is nothing to resume."
         case .invalidTransition(.alreadyPaused):
             "This shift is already paused. Resume it before pausing it again."
         case .invalidTransition(.notPaused):
@@ -283,10 +299,18 @@ struct ShiftService {
         // moved back since the driver paused must not close that pause before it
         // began, which the model would refuse and which would leave a driver
         // unable to end a paused shift at all.
-        let earliest = max(shift.startedAt, shift.openPause?.startedAt ?? shift.startedAt)
+        let earliest = max(
+            shift.startedAt,
+            max(
+                shift.openPause?.startedAt ?? shift.startedAt,
+                shift.openRouteSuspension?.startedAt ?? shift.startedAt
+            )
+        )
         let endDate = max(date, earliest)
         if endDate != date {
-            AppLog.shift.warning("End timestamp preceded the shift start or its open pause; clamped forward")
+            AppLog.shift.warning(
+                "End timestamp preceded the shift start, its open pause or its open suspension; clamped forward"
+            )
         }
 
         do {
@@ -297,6 +321,15 @@ struct ShiftService {
             if shift.openPause != nil {
                 try shift.endOpenPause(at: endDate)
                 AppLog.shift.info("Ending a paused shift; the pause was closed at the end time")
+            }
+            // And for the same reason: a suspension left open on a finished
+            // shift would describe a state the app cannot produce, and
+            // `isRouteSuspended` would have to decide which of two stored facts
+            // to believe. A driver who ends a shift from inside a shop is
+            // recorded as parked right up to the end, which is what happened.
+            if shift.openRouteSuspension != nil {
+                try shift.endOpenRouteSuspension(at: endDate)
+                AppLog.shift.info("Ending a parked shift; the suspension was closed at the end time")
             }
             try shift.end(at: endDate)
         } catch let error as ShiftError {
@@ -386,6 +419,14 @@ struct ShiftService {
 
         let pause: ShiftPause
         do {
+            // A driver who pauses from inside a shop has stopped working, which
+            // outranks being parked: the suspension closes at the same instant,
+            // so the shift is paused rather than both. Route capture is already
+            // stopped by either state, so nothing about the route moves.
+            if shift.openRouteSuspension != nil {
+                try shift.endOpenRouteSuspension(at: pauseDate)
+                AppLog.shift.info("Pausing a parked shift; the suspension was closed at the pause time")
+            }
             pause = try shift.beginPause(at: pauseDate)
         } catch let error as ShiftError {
             context.rollback()
@@ -460,6 +501,159 @@ struct ShiftService {
         }
 
         AppLog.shift.info("Shift resumed")
+        return shift
+    }
+
+    // MARK: Parked for a pickup
+
+    /// Records that the driver has parked and is walking away from the vehicle.
+    ///
+    /// ## What this is, and what it deliberately is not
+    ///
+    /// One row opened on the shift, and nothing else. The shift keeps running:
+    /// `endedAt` stays `nil`, its working duration keeps growing, every rate it
+    /// will produce keeps the denominator it had, its deliveries keep their own
+    /// lifecycles and their timers keep counting. **Shopping is working**, and a
+    /// driver inside a shop collecting an order is doing the job.
+    ///
+    /// The one consequence is to the **route**: the caller reconciles capture
+    /// afterwards, which stops it, and resuming necessarily starts a **new
+    /// capture session**. Nothing is recorded across the stretch, so nothing may
+    /// be measured across it either, and ``RouteMileageCalculator`` counts it as
+    /// the gap it is rather than drawing a line from the parking space to
+    /// wherever the driver pulls away. **No sample is deleted and no distance is
+    /// invented.**
+    ///
+    /// ## Why a paused shift refuses it
+    ///
+    /// Pausing says the driver stopped working; parking says they are working on
+    /// foot. Recording both would be the app claiming two things about the same
+    /// minutes. The driver resumes the shift first, which is one tap and which
+    /// they have to make anyway before any delivery can move.
+    ///
+    /// ## Stacked deliveries do not enter into it
+    ///
+    /// There is no check against how many deliveries are open, in either
+    /// direction, and that is the design rather than an omission. Whether the
+    /// vehicle is moving is a fact about the driver and their vehicle: a driver
+    /// shopping for one order while carrying another has one vehicle and it is
+    /// parked. So there is at most one suspension at a time, it belongs to the
+    /// shift, and no delivery starts, ends or owns one.
+    ///
+    /// - Throws: ``ShiftLifecycleError/noActiveShift`` if none is running,
+    ///   ``ShiftLifecycleError/shiftAlreadyParked(parkedAt:)`` if the vehicle is
+    ///   already recorded as parked,
+    ///   ``ShiftLifecycleError/shiftAlreadyPaused(pausedAt:)`` if the shift is
+    ///   paused, or ``ShiftLifecycleError/storeUnavailable(underlying:)`` if the
+    ///   write fails.
+    @discardableResult
+    func parkActiveShift(at date: Date = .now) throws -> Shift {
+        guard let shift = try activeShift() else {
+            AppLog.shift.notice("Refused to record parking: no shift is running")
+            throw ShiftLifecycleError.noActiveShift
+        }
+
+        if let paused = shift.openPause {
+            AppLog.shift.notice("Refused to record parking: the shift is paused")
+            throw ShiftLifecycleError.shiftAlreadyPaused(pausedAt: paused.startedAt)
+        }
+
+        if let open = shift.openRouteSuspension {
+            AppLog.shift.notice("Refused to record parking: the shift is already parked")
+            throw ShiftLifecycleError.shiftAlreadyParked(parkedAt: open.startedAt)
+        }
+
+        // A driver must always be able to say they have parked, for the reason
+        // they must always be able to pause: a device clock behind the recorded
+        // start would otherwise refuse the transition.
+        let parkDate = max(date, shift.startedAt)
+        if parkDate != date {
+            AppLog.shift.warning("Parked timestamp preceded the shift start; clamped to the start time")
+        }
+
+        let suspension: RouteSuspension
+        do {
+            suspension = try shift.beginRouteSuspension(at: parkDate)
+        } catch let error as ShiftError {
+            context.rollback()
+            AppLog.shift.error(
+                "Shift rejected the parked transition: \(String(describing: error), privacy: .public)"
+            )
+            throw ShiftLifecycleError.invalidTransition(error)
+        }
+        context.insert(suspension)
+
+        do {
+            try context.save()
+        } catch {
+            // Discards the pending row: the shift must not read as parked while
+            // the store still holds it recording. The caller reconciles capture
+            // afterwards either way, so capture comes back to whatever the store
+            // actually says.
+            context.rollback()
+            AppLog.shift.error("Failed to persist a route suspension: \(error)")
+            throw ShiftLifecycleError.storeUnavailable(underlying: error)
+        }
+
+        AppLog.shift.info("Shift recorded as parked; route capture stops")
+        return shift
+    }
+
+    /// Records that the driver is driving again.
+    ///
+    /// Closes the open suspension. Route capture is the caller's to reconcile
+    /// afterwards, and it necessarily starts a **new capture session**: nothing
+    /// was recorded across the stretch, so nothing may be measured across it.
+    ///
+    /// **Only a driver ever calls this.** Nothing in DashPilot resumes a
+    /// suspension because a speed changed, because a position moved or because a
+    /// delivery advanced. A rule that guessed would be the app deciding a driver
+    /// had returned to their car, and the cost of guessing wrong is a walk
+    /// recorded as vehicle mileage.
+    ///
+    /// - Throws: ``ShiftLifecycleError/noActiveShift`` if none is running,
+    ///   ``ShiftLifecycleError/shiftNotParked`` if the vehicle is not recorded as
+    ///   parked, or ``ShiftLifecycleError/storeUnavailable(underlying:)`` if the
+    ///   write fails.
+    @discardableResult
+    func resumeDrivingOnActiveShift(at date: Date = .now) throws -> Shift {
+        guard let shift = try activeShift() else {
+            AppLog.shift.notice("Refused to resume driving: no shift is running")
+            throw ShiftLifecycleError.noActiveShift
+        }
+
+        guard let suspension = shift.openRouteSuspension else {
+            AppLog.shift.notice("Refused to resume driving: the shift is not parked")
+            throw ShiftLifecycleError.shiftNotParked
+        }
+
+        // Clamped forward for the reason the pause resume is: a clock that moved
+        // back since the driver parked must not close the row before it began,
+        // which would leave a driver unable to resume at all.
+        let resumeDate = max(date, suspension.startedAt)
+        if resumeDate != date {
+            AppLog.shift.warning("Driving timestamp preceded the recorded parking; clamped to it")
+        }
+
+        do {
+            try shift.endOpenRouteSuspension(at: resumeDate)
+        } catch let error as ShiftError {
+            context.rollback()
+            AppLog.shift.error(
+                "Shift rejected the driving transition: \(String(describing: error), privacy: .public)"
+            )
+            throw ShiftLifecycleError.invalidTransition(error)
+        }
+
+        do {
+            try context.save()
+        } catch {
+            context.rollback()
+            AppLog.shift.error("Failed to persist the end of a route suspension: \(error)")
+            throw ShiftLifecycleError.storeUnavailable(underlying: error)
+        }
+
+        AppLog.shift.info("Shift recording again after parking; a new capture session opens")
         return shift
     }
 

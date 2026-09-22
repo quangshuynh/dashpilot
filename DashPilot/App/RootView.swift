@@ -64,7 +64,9 @@ struct RootView: View {
                             captureState: routeCapture.state,
                             pause: pauseShift,
                             resume: resumeShift,
-                            end: endShift
+                            end: endShift,
+                            park: park,
+                            resumeDriving: resumeDriving
                         )
                     } else {
                         StartShiftPanel(start: startShift)
@@ -427,6 +429,26 @@ struct RootView: View {
         // what the store actually holds.
         routeCapture.prepareForShiftPause()
         perform { try ShiftService(context: modelContext).pauseActiveShift() }
+        routeCapture.synchronize()
+        liveActivity.reconcile()
+    }
+
+    private func park() {
+        // Before, for the reason pausing stops first: no position taken after
+        // the tap should be judged against a shift the store is about to record
+        // as parked. `synchronize()` afterwards restarts capture if the write
+        // did not go through.
+        routeCapture.prepareForRouteSuspension()
+        perform { try ShiftService(context: modelContext).parkActiveShift() }
+        routeCapture.synchronize()
+        liveActivity.reconcile()
+    }
+
+    private func resumeDriving() {
+        // After, not before: capture starts only once the store holds a shift
+        // that is driving again, so a refused or failed write cannot leave it
+        // recording a walk.
+        perform { try ShiftService(context: modelContext).resumeDrivingOnActiveShift() }
         routeCapture.synchronize()
         liveActivity.reconcile()
     }

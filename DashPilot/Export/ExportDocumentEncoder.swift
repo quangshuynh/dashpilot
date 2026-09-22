@@ -137,11 +137,11 @@ nonisolated struct ExportDocumentEncoder: Equatable, Sendable {
 
         for shift in document.shifts {
             guard !shift.deliveries.isEmpty else {
-                writer.appendRow(Self.shiftFields(shift) + Self.emptyDeliveryFields)
+                writer.appendRow(Self.shiftFields(shift) + Self.emptyDeliveryFields + Self.trailingShiftFields(shift))
                 continue
             }
             for delivery in shift.deliveries {
-                writer.appendRow(Self.shiftFields(shift) + Self.deliveryFields(delivery))
+                writer.appendRow(Self.shiftFields(shift) + Self.deliveryFields(delivery) + Self.trailingShiftFields(shift))
             }
         }
 
@@ -214,7 +214,24 @@ nonisolated struct ExportDocumentEncoder: Equatable, Sendable {
         // The column to sum for what deliveries actually paid. Empty, never
         // `0.00`, wherever the platform amount was not recorded: a delivery
         // holding a tip and no platform figure has no total to state.
-        "deliveryEffectiveEarnings"
+        "deliveryEffectiveEarnings",
+        // Appended, never inserted beside the route columns they belong with,
+        // for the reason every column since version 3 has been appended: moving
+        // an existing one breaks a positional reader and would bump the format
+        // version on its own.
+        //
+        // They are in the CSV at all — unlike a delivery's individual tips, and
+        // unlike the driver's current preferences — because they change how the
+        // column four places to the left should be read. A spreadsheet summing
+        // `shiftRecordedDistanceMiles` over a driver's week has no other way to
+        // tell a shift whose recording was deliberately stopped from one whose
+        // recording failed, and the file already carries `shiftPausedSeconds`
+        // for exactly the same reason on the time side.
+        //
+        // `shiftRouteSuspendedSeconds` is **never** subtracted from
+        // `shiftWorkingSeconds`. A driver inside a shop is working.
+        "shiftRouteSuspensionCount",
+        "shiftRouteSuspendedSeconds"
     ]
 
     /// An absent value.
@@ -252,6 +269,21 @@ nonisolated struct ExportDocumentEncoder: Equatable, Sendable {
             amount(shift.grossPerRecordedMile),
             String(shift.deliveredCount),
             String(shift.cancelledCount)
+        ]
+    }
+
+    /// The two shift columns that sit at the **end** of the row rather than with
+    /// the other shift columns.
+    ///
+    /// Appended, never inserted, for the reason every column added since version
+    /// 3 has been: moving an existing one breaks a positional reader. They are
+    /// therefore written after the delivery fields, which is why they are not
+    /// part of ``shiftFields(_:)``, and they are repeated on every row of a
+    /// shift exactly as its other columns are.
+    private static func trailingShiftFields(_ shift: ShiftExportRecord) -> [String] {
+        [
+            String(shift.route.suspensionCount),
+            integer(shift.route.suspendedSeconds)
         ]
     }
 

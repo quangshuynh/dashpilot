@@ -56,6 +56,7 @@ struct ShiftLiveActivity: Widget {
             }
             DynamicIslandExpandedRegion(.bottom) {
                 VStack(alignment: .leading, spacing: 8) {
+                    ShiftActivityParkedNotice(state: state)
                     Text(state.mileageLine)
                         .font(.subheadline)
                         .monospacedDigit()
@@ -111,6 +112,8 @@ struct ShiftActivityLockScreenView: View {
                 Spacer(minLength: 8)
                 ShiftActivityWorkingTime(state: state)
             }
+
+            ShiftActivityParkedNotice(state: state)
 
             Text(state.mileageLine)
                 .font(.subheadline)
@@ -214,6 +217,29 @@ struct ShiftActivityDeliveryLine: View {
 /// was built at, and a listener would be told a duration that stopped moving.
 /// The label goes on the name, ahead of the figure, so VoiceOver says what the
 /// number that follows measures.
+/// The one line that says the route has stopped because the driver parked.
+///
+/// Drawn directly above the mileage figure, which is the figure it explains: a
+/// distance that has stopped growing with no reason beside it reads as a
+/// recording fault. It is **not** the paused styling and must not become it —
+/// the status line above still says the shift is running, because it is.
+///
+/// Absent entirely when the driver has not parked, so a card the feature never
+/// touches is the card it always was.
+struct ShiftActivityParkedNotice: View {
+    let state: ShiftActivityAttributes.ContentState
+
+    var body: some View {
+        if let notice = state.routeSuspendedNotice {
+            Label(notice, systemImage: "parkingsign.circle.fill")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.orange)
+                .lineLimit(1)
+                .accessibilityLabel(state.spokenRouteSuspendedNotice ?? notice)
+        }
+    }
+}
+
 struct ShiftActivityDeliveryTimers: View {
     let state: ShiftActivityAttributes.ContentState
 

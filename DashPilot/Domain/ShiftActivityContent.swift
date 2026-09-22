@@ -128,6 +128,10 @@ nonisolated enum ShiftActivityContent {
 
         return ShiftActivityAttributes.ContentState(
             isPaused: metrics.isPaused,
+            // Never instead of `isPaused`, and never folded into it: a parked
+            // shift is a running shift whose route has stopped, and the card has
+            // to be able to say both.
+            routeSuspendedNotice: metrics.routeSuspendedNotice,
             workingDuration: metrics.workingDuration,
             asOf: asOf,
             mileageStatement: metrics.mileageStatement(locale: locale),

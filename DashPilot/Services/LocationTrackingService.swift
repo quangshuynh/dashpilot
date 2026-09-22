@@ -221,6 +221,18 @@ final class LocationTrackingService {
             return
         }
 
+        // And the same reasoning one step further. A driver who parked and
+        // walked away said the vehicle is not moving; reporting a permission
+        // problem instead would explain a stop they already know the reason for.
+        // It is judged **after** the pause because pausing closes an open
+        // suspension, so a store holding both is an anomaly and the stronger
+        // statement wins.
+        guard !shift.isRouteSuspended else {
+            stopCapturing()
+            transition(to: .routeSuspended)
+            return
+        }
+
         // Permission is judged before the app's own position, because it
         // outranks it: a shift that cannot be recorded at all should say why,
         // not report a pause it would not come back from anyway.
@@ -269,6 +281,18 @@ final class LocationTrackingService {
     /// and the few seconds of route that stop cost are honestly reported as a
     /// break rather than measured across.
     func prepareForShiftPause() {
+        stopCapturing()
+    }
+
+    /// Stops capture ahead of recording that the vehicle is parked.
+    ///
+    /// The same ordering rule the two above keep, for the same reason: updates
+    /// are stopped and pending samples are written *before* the suspension is
+    /// recorded, so no position taken after the driver tapped Parked is retained
+    /// against a stretch the app is reporting as unrecorded. A refused write
+    /// leaves ``synchronize()`` to restart capture in a new session, which costs
+    /// a real gap of a few seconds and invents nothing.
+    func prepareForRouteSuspension() {
         stopCapturing()
     }
 
@@ -350,6 +374,7 @@ final class LocationTrackingService {
                 shiftStart: shift.startedAt,
                 shiftEnd: shift.endedAt,
                 isPaused: shift.isPaused,
+                isRouteSuspended: shift.isRouteSuspended,
                 lastAccepted: lastAccepted,
                 now: now()
             )
@@ -364,7 +389,7 @@ final class LocationTrackingService {
             // was in flight. Reconciling settles which state that is, and the
             // stop is what guarantees the next accepted sample opens a new
             // capture session.
-            if reason == .shiftEnded || reason == .shiftPaused {
+            if reason == .shiftEnded || reason == .shiftPaused || reason == .routeSuspended {
                 stopCapturing()
                 synchronize()
             }

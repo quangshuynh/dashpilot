@@ -152,6 +152,20 @@ nonisolated enum LaunchArgument {
     /// it can never touch a real store.
     static let seededPausedHistory = "-dashpilot-seeded-paused-history"
 
+    /// Runs against a throwaway store holding one **completed** shift with a
+    /// stretch recorded parked between its two capture sessions.
+    ///
+    /// The consequences of parking are what a journey has to be able to read,
+    /// and no sequence of taps reaches them: a UI test cannot drive a simulator
+    /// into recording a route, and a live journey that parks and resumes records
+    /// a stretch measured in seconds. This fixture records 4.5 mi over two
+    /// segments with one gap, 25 minutes parked, and a working duration of the
+    /// whole two hours — which is the claim that shopping is working.
+    ///
+    /// Every time, amount and coordinate is invented. Debug builds only, and in
+    /// memory, so it can never touch a real store.
+    static let seededParkedHistory = "-dashpilot-seeded-parked-history"
+
     /// Runs against a throwaway store holding one **completed** shift whose
     /// recorded end is twenty minutes later than the driver actually stopped,
     /// with a capture session recorded in those twenty minutes.
@@ -267,6 +281,7 @@ nonisolated enum LaunchArgument {
         seededMalformedOffer,
         seededMissedLifecycle,
         seededPausedHistory,
+        seededParkedHistory,
         seededLateEndHistory,
         seededLateDeliveryHistory,
         seededOlderWeeks,

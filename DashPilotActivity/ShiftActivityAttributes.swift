@@ -72,6 +72,23 @@ nonisolated struct ShiftActivityAttributes: ActivityAttributes, Sendable {
         /// finds out at the end of the day.
         let isPaused: Bool
 
+        /// What the card says while the driver has the vehicle recorded as
+        /// parked, or `nil` when they do not.
+        ///
+        /// A sentence rather than a flag, for the reason ``mileageStatement`` is
+        /// one: the app owns the words and the extension draws them. Optional so
+        /// that a snapshot ActivityKit persisted before this field existed still
+        /// decodes — a `ContentState` that fails to decode is an activity the
+        /// app cannot see, and an activity the app cannot see is a second card.
+        ///
+        /// It is **not** ``isPaused``, and the card must never read as though it
+        /// were. A parked shift is still running, its working clock is still
+        /// counting and its deliveries are still open; what has stopped is the
+        /// route. The notice is here at all because a Lock Screen is where the
+        /// driver will be looking while they are inside the shop, and forgetting
+        /// to leave the state is the expensive way this feature fails.
+        let routeSuspendedNotice: String?
+
         /// Working time as of ``asOf``, in seconds.
         ///
         /// **Working**, not elapsed: the same definition the app's panel leads
@@ -159,6 +176,7 @@ nonisolated struct ShiftActivityAttributes: ActivityAttributes, Sendable {
 
         init(
             isPaused: Bool,
+            routeSuspendedNotice: String? = nil,
             workingDuration: TimeInterval,
             asOf: Date,
             mileageStatement: String,
@@ -170,6 +188,7 @@ nonisolated struct ShiftActivityAttributes: ActivityAttributes, Sendable {
             controls: [ShiftActivityControl]
         ) {
             self.isPaused = isPaused
+            self.routeSuspendedNotice = routeSuspendedNotice
             self.workingDuration = workingDuration
             self.asOf = asOf
             self.mileageStatement = mileageStatement

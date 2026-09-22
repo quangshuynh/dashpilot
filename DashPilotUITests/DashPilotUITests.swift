@@ -22,6 +22,9 @@ final class DashPilotUITests: XCTestCase {
     /// Must match `LaunchArgument.seededExpectedPay`, for the same reason.
     private static let seededExpectedPayArgument = "-dashpilot-seeded-expected-pay"
 
+    /// Must match `LaunchArgument.seededParkedHistory`, for the same reason.
+    private static let seededParkedHistoryArgument = "-dashpilot-seeded-parked-history"
+
     /// Must match `LaunchArgument.seededMissedLifecycle`, for the same reason.
     private static let seededMissedLifecycleArgument = "-dashpilot-seeded-missed-lifecycle"
 
@@ -186,6 +189,21 @@ final class DashPilotUITests: XCTestCase {
     private func launchWithStackedOffer() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments.append(Self.seededStackedOfferArgument)
+        launchInPortrait(app)
+        return app
+    }
+
+    /// Launches against a throwaway store holding one completed shift with a
+    /// stretch recorded parked between its two capture sessions.
+    ///
+    /// 4.5 mi over two segments, 25 minutes parked, and a working duration of
+    /// the whole two hours. A journey cannot produce this shape: a simulator
+    /// cannot be driven into recording a route, and a live journey that parks
+    /// and resumes records a stretch measured in seconds.
+    @MainActor
+    private func launchWithParkedHistory() -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments.append(Self.seededParkedHistoryArgument)
         launchInPortrait(app)
         return app
     }
@@ -1535,6 +1553,135 @@ final class DashPilotUITests: XCTestCase {
             "The delivered one leaves the list"
         )
         XCTAssertEqual(accepted.label, "Delivery 2. Mark arrived at pickup")
+    }
+
+    // MARK: Parked for a pickup
+
+    /// Recording the vehicle as parked stops the route, says so in two places,
+    /// and leaves the shift running.
+    @MainActor
+    func testParkingStopsTheRouteAndLeavesTheShiftRunning() throws {
+        let app = launchWithStubbedLocation()
+
+        let startShift = app.buttons["startShiftButton"]
+        XCTAssertTrue(startShift.waitForExistence(timeout: 10))
+        startShift.tap()
+
+        let status = app.descendants(matching: .any)["routeCaptureStatus"]
+        XCTAssertTrue(status.waitForExistence(timeout: 10))
+        XCTAssertTrue(
+            waitForLabel(status, toContain: "Location tracking active"),
+            "The shift starts recording: \(status.label)"
+        )
+
+        let park = app.buttons["parkShiftButton"]
+        XCTAssertTrue(scrollTo(park, in: app), "Parking is offered on a running shift")
+        XCTAssertTrue(
+            park.label.contains("shift keeps running"),
+            "The control says aloud what it does not do: \(park.label)"
+        )
+        park.tap()
+
+        // The capture status says recording has stopped, and says why.
+        XCTAssertTrue(
+            waitForLabel(status, toContain: "Route recording stopped while parked"),
+            "Capture status: \(status.label)"
+        )
+
+        // And the panel says it again where the driver is looking, with the
+        // shift's own state unchanged beside it.
+        let notice = app.descendants(matching: .any)["parkedShiftNotice"]
+        XCTAssertTrue(notice.waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            notice.label.contains("shift is still running"),
+            "Parked is not paused, and the notice must not read as though it were: \(notice.label)"
+        )
+        XCTAssertTrue(
+            app.descendants(matching: .any)["activeShiftStatus"].exists,
+            "The shift still reports itself as running rather than paused"
+        )
+        XCTAssertFalse(
+            app.descendants(matching: .any)["pausedShiftStatus"].exists,
+            "No pause was recorded"
+        )
+        XCTAssertTrue(
+            app.descendants(matching: .any)["workingTime"].exists,
+            "And its working time is still on screen, still counting"
+        )
+    }
+
+    /// Resuming driving is one tap, and it starts recording again.
+    @MainActor
+    func testResumingDrivingStartsRecordingAgain() throws {
+        let app = launchWithStubbedLocation()
+
+        let startShift = app.buttons["startShiftButton"]
+        XCTAssertTrue(startShift.waitForExistence(timeout: 10))
+        startShift.tap()
+
+        let park = app.buttons["parkShiftButton"]
+        XCTAssertTrue(scrollTo(park, in: app))
+        park.tap()
+
+        let resume = app.buttons["resumeDrivingButton"]
+        XCTAssertTrue(resume.waitForExistence(timeout: 5), "Leaving the state is one tap")
+        XCTAssertFalse(park.exists, "And parking is not offered while already parked")
+        resume.tap()
+
+        let status = app.descendants(matching: .any)["routeCaptureStatus"]
+        XCTAssertTrue(
+            waitForLabel(status, toContain: "Location tracking active"),
+            "Recording starts again: \(status.label)"
+        )
+        XCTAssertFalse(
+            app.descendants(matching: .any)["parkedShiftNotice"].exists,
+            "And the notice goes with it"
+        )
+        XCTAssertTrue(app.buttons["parkShiftButton"].exists, "Parking is offered again")
+    }
+
+    /// A completed shift that was parked says how much of its short route the
+    /// driver asked for, and reports every minute of it as worked.
+    @MainActor
+    func testACompletedParkedShiftExplainsItsShortRoute() throws {
+        let app = launchWithParkedHistory()
+
+        let row = app.descendants(matching: .any)["completedShiftRow"].firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 10))
+        row.tap()
+
+        let mileage = app.descendants(matching: .any)["shiftDetailRecordedMileage"]
+        XCTAssertTrue(scrollTo(mileage, in: app))
+        XCTAssertTrue(
+            waitForLabel(mileage, toContain: "4.5 miles recorded"),
+            "The two capture sessions, with nothing measured across the stretch parked: \(mileage.label)"
+        )
+
+        // The caveats are read out inside the same combined element as the
+        // figure they qualify, which is the arrangement that stops a listener
+        // hearing a mileage with nothing attached to it.
+        let caveats = mileage
+        XCTAssertTrue(
+            caveats.label.contains("1 stretch parked"),
+            "It says what the driver recorded: \(caveats.label)"
+        )
+        XCTAssertTrue(caveats.label.contains("25 min"), caveats.label)
+        XCTAssertTrue(
+            caveats.label.contains("time you recorded as parked"),
+            "And the partial sentence stops claiming miles were driven across it: \(caveats.label)"
+        )
+        XCTAssertFalse(
+            caveats.label.contains("more miles were driven than were recorded"),
+            "That sentence is untrue of a vehicle that spent the stretch in a parking space"
+        )
+
+        // Nothing was subtracted from the shift's own time. A paused shift shows
+        // a Paused row and a Working row; this one shows neither, because
+        // shopping is working and working equals elapsed to the second.
+        XCTAssertFalse(
+            app.descendants(matching: .any)["shiftDetailPausedTime"].exists,
+            "Parking records no pause"
+        )
     }
 
     // MARK: What each stacked delivery is waiting for

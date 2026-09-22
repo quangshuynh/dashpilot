@@ -25,6 +25,15 @@ nonisolated enum RouteSampleRejection: String, Equatable, Sendable, CaseIterable
     /// a fix already in flight when the driver paused must not be retained
     /// against a stretch the app is reporting as unrecorded.
     case shiftPaused
+    /// The driver has the vehicle recorded as parked, so the route is not being
+    /// recorded.
+    ///
+    /// Kept apart from ``shiftPaused`` because the two are different facts about
+    /// the shift: a paused shift is not being worked, while a parked one is
+    /// being worked on foot. It exists at all to close the same window the other
+    /// two close: a fix already in flight when the driver tapped Parked must not
+    /// be retained against a stretch the app is reporting as unrecorded.
+    case routeSuspended
     /// The fix predates the start of the shift.
     case beforeShiftStart
     /// The fix is older than the pipeline is willing to accept, typically the
@@ -128,6 +137,10 @@ nonisolated struct RouteSampleFilter: Equatable, Sendable {
         /// Whether the driver has the shift paused. `true` rejects every
         /// sample: a paused shift records no route.
         var isPaused: Bool
+        /// Whether the driver has the vehicle recorded as parked. `true` rejects
+        /// every sample: a parked vehicle records no route, and what would be
+        /// recorded is a walk.
+        var isRouteSuspended: Bool
         /// The most recent sample already retained for this shift, if any.
         var lastAccepted: LocationSample?
         /// The current time, supplied rather than read so staleness is testable.
@@ -137,12 +150,14 @@ nonisolated struct RouteSampleFilter: Equatable, Sendable {
             shiftStart: Date,
             shiftEnd: Date? = nil,
             isPaused: Bool = false,
+            isRouteSuspended: Bool = false,
             lastAccepted: LocationSample? = nil,
             now: Date
         ) {
             self.shiftStart = shiftStart
             self.shiftEnd = shiftEnd
             self.isPaused = isPaused
+            self.isRouteSuspended = isRouteSuspended
             self.lastAccepted = lastAccepted
             self.now = now
         }
@@ -170,6 +185,10 @@ nonisolated struct RouteSampleFilter: Equatable, Sendable {
         // its pause rows say, and the two reasons must not depend on which
         // stored fact happened to be read first.
         guard !context.isPaused else { return .reject(.shiftPaused) }
+        // After paused, which wins when both hold: pausing closes an open
+        // suspension, so a store holding both is an anomaly, and "you paused" is
+        // the stronger statement about a shift that is not being worked.
+        guard !context.isRouteSuspended else { return .reject(.routeSuspended) }
         guard candidate.timestamp >= context.shiftStart else { return .reject(.beforeShiftStart) }
         guard context.now.timeIntervalSince(candidate.timestamp) <= maximumAge else {
             return .reject(.stale)

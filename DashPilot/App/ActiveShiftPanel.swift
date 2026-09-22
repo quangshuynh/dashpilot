@@ -40,6 +40,10 @@ struct ActiveShiftPanel: View {
     let pause: () -> Void
     let resume: () -> Void
     let end: () -> Void
+    /// Records that the driver has parked and is walking away from the vehicle.
+    let park: () -> Void
+    /// Records that the driver is driving again.
+    let resumeDriving: () -> Void
 
     /// How often the stored route is read again while the shift is running.
     ///
@@ -70,6 +74,8 @@ struct ActiveShiftPanel: View {
     @State private var routeMeasurement: ActiveRouteMeasurement?
 
     private var isPaused: Bool { shift.isPaused }
+
+    private var isRouteSuspended: Bool { shift.isRouteSuspended }
 
     /// Everything the panel states about the shift, as of now.
     ///
@@ -105,6 +111,8 @@ struct ActiveShiftPanel: View {
                 .font(.subheadline)
                 .accessibilityIdentifier("pausedAtTime")
             }
+
+            parkedNotice
 
             if let metrics {
                 recordedMileage(metrics)
@@ -283,6 +291,39 @@ struct ActiveShiftPanel: View {
         }
     }
 
+    /// What the driver is told while the vehicle is recorded as parked.
+    ///
+    /// Prominent and permanent for as long as the state lasts, because the
+    /// expensive failure of this feature is forgetting to leave it: a driver who
+    /// drives the rest of the shift parked records none of it. The shift's own
+    /// status above still says the shift is running, which is the fact this
+    /// notice must not contradict; what it says is that the **route** is not
+    /// being recorded, and when it stopped.
+    @ViewBuilder
+    private var parkedNotice: some View {
+        if isRouteSuspended, let parkedAt = shift.openRouteSuspension?.startedAt {
+            VStack(alignment: .leading, spacing: 2) {
+                // A symbol and a sentence, never a tint alone.
+                Label("Parked · route not recording", systemImage: "parkingsign.circle.fill")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.orange)
+
+                Text("Since \(parkedAt.formatted(date: .omitted, time: .shortened)). Your shift is still running.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(
+                """
+                Parked. DashPilot stopped recording your route at \
+                \(parkedAt.formatted(date: .omitted, time: .shortened)). Your shift is still running and \
+                its working time is still counting.
+                """
+            )
+            .accessibilityIdentifier("parkedShiftNotice")
+        }
+    }
+
     /// Pause or Resume, and End.
     ///
     /// Resume is the prominent control on a paused shift, because it is the one
@@ -291,6 +332,39 @@ struct ActiveShiftPanel: View {
     /// delivery action below, which is tapped many times a shift.
     @ViewBuilder
     private var controls: some View {
+        // Above the shift controls, because it is the one a driver reaches for
+        // several times a shift while pausing and ending are tapped once. It is
+        // prominent only while parked: leaving the state is the tap that matters,
+        // and a driver who never parks should not meet a second prominent
+        // control beside their delivery buttons.
+        if isRouteSuspended {
+            Button(action: resumeDriving) {
+                Text("Resume Driving")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+            .accessibilityLabel("Resume driving. DashPilot starts recording your route again.")
+            .accessibilityIdentifier("resumeDrivingButton")
+        } else if !isPaused {
+            // Withheld while paused rather than refused there: a paused shift
+            // records no route either, so parking would claim a second reason
+            // for a stop the driver already has one for.
+            Button(action: park) {
+                Label("Parked for a Pickup", systemImage: "parkingsign.circle")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.large)
+            .accessibilityLabel(
+                """
+                Parked for a pickup. Stops recording your route while you are away from the vehicle. \
+                Your shift keeps running.
+                """
+            )
+            .accessibilityIdentifier("parkShiftButton")
+        }
+
         if isPaused {
             Button(action: resume) {
                 Text("Resume Shift")
