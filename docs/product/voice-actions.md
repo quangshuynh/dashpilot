@@ -1,6 +1,6 @@
 # Voice and system actions
 
-The six shortest actions in DashPilot can be performed without looking at the phone: by voice, from
+The eight shortest actions in DashPilot can be performed without looking at the phone: by voice, from
 the Shortcuts app, from Spotlight, or from anywhere else iOS offers an App Shortcut. This is the
 driving-safety case the app is designed around. A start time recorded when the driver says so is more
 accurate than one recorded three minutes later, once the phone has been picked up, unlocked and
@@ -17,6 +17,8 @@ every rule that refuses a tap refuses a sentence.
 | End Shift | The end of the running shift, paused or not | No shift is running, or a delivery on it is still in progress |
 | Pause Shift | A pause starting now, so the paused time is not counted as working time | No shift is running, it is already paused, or a delivery on it is still in progress |
 | Resume Shift | The end of the pause | No shift is running, or it is not paused |
+| Park Vehicle | That the vehicle is parked and the driver is away from it, which stops route recording and subtracts nothing from working time | No shift is running, it is already parked, or it is paused |
+| Resume Driving | The end of the parked stretch, after which recording begins again as a new recording | No shift is running, or it is not recorded as parked |
 | Start Delivery | One delivery accepted now, in an offer of one, alongside any already running | No shift is running, or the shift is paused |
 | Record Delivery Progress | The next event of the delivery in progress: arrived at the pickup, then picked up, then delivered | No shift is running, no delivery is in progress, or **more than one delivery is in progress** |
 
@@ -26,6 +28,8 @@ Suggested phrases, offered by the system as soon as the app is installed:
 - "End my shift in DashPilot"
 - "Pause my shift in DashPilot", "Take a break in DashPilot"
 - "Resume my shift in DashPilot", "Start working again in DashPilot"
+- "Park my vehicle in DashPilot", "I have parked in DashPilot"
+- "Resume driving in DashPilot", "I am driving again in DashPilot"
 - "Start a delivery in DashPilot"
 - "Record delivery progress in DashPilot"
 
@@ -48,6 +52,12 @@ driver's sentence into a record they did not mean. So DashPilot records nothing 
 The refusal lifts by itself. Once one of the two has been delivered or cancelled, the next spoken
 step reaches the one that is left.
 
+`Park Vehicle` and `Resume Driving` are not affected either, and for a different reason: whether the
+vehicle is moving is a fact about the driver and their vehicle rather than about any one order. One
+driver has one vehicle however many orders are in the car, so neither asks for a delivery, neither is
+refused by how many are open, and DashPilot does not infer **why** the driver parked. See
+[Parked for a pickup](recorded-mileage.md#parked-for-a-pickup).
+
 `Start Delivery` is not affected, because it names no existing delivery: it creates one, in an offer
 of one. Two deliveries that share an **offer** are still two deliveries, so a spoken step is refused
 over them exactly as it is over two separate offers. Recording an offer that held several deliveries
@@ -67,14 +77,22 @@ There is no screen to glance at afterwards, so the confirmation is the whole rep
 - "Shift paused after 2 hours, 30 minutes of working time. Route recording is stopped until you
   resume."
 - "Shift resumed after 45 minutes paused. Open DashPilot to start recording your route again."
+- "Vehicle parked. Route recording is stopped until you resume driving. Your shift is still running
+  and its working time is still counting."
+- "Driving again after 25 minutes parked. Open DashPilot to start recording your route again."
 - "Delivery 2 started. 2 deliveries in progress."
 - "Delivery 1 recorded as picked up."
 
-Two of those carry a caution rather than only a fact, because a driver acting by voice has no screen
+Four of those carry a caution rather than only a fact, because a driver acting by voice has no screen
 to notice the difference on. Pausing says recording has stopped; resuming says a recording can only
 be *started* with the app open, so a shift resumed from behind another app records nothing until
 DashPilot is opened. Ending reports the shift's **working** time, which is the figure the app will
 go on using.
+
+**Parking says both halves, and that is the one confirmation whose wording is load-bearing.** The
+route has stopped, which is what parking is for; the shift has not, which is what parking is not. A
+driver who heard only the first half could reasonably believe they had recorded a break. The word
+*pause* appears in neither parked sentence, and a test sweeps for it.
 
 The event named is read back from the delivery after the write, so a confirmation cannot describe an
 event the store did not record. A fact DashPilot does not have is left out rather than filled in: a
@@ -101,10 +119,10 @@ waits.
 | Recording earnings, per shift or per delivery | An amount is dictated, misheard and then believed. Amounts are typed, afterwards, on a screen |
 | Recording an expense | The same, with a category and a date as well |
 | Naming a pickup place | A dictated name would create a new place under a spelling the driver never saw |
-| Anything about location | Nothing about position is asked for or reported here |
+| Anything about location | Nothing about position is asked for or reported here. `Park Vehicle` is a statement the driver makes about their vehicle, not a position DashPilot reads |
 | Reading back a summary, a rate or a total | A figure heard without its coverage and its wording is a figure misread |
 
-None of the six intents takes a parameter, so nothing a driver says is stored, and no shortcut,
+None of the eight intents takes a parameter, so nothing a driver says is stored, and no shortcut,
 suggestion or tile carries a value.
 
 ## Privacy
@@ -112,19 +130,20 @@ suggestion or tile carries a value.
 - **Nothing is donated.** DashPilot does not donate performed intents to the system. App Shortcuts
   are offered from installation, which is all the discovery this needs; a donation would additionally
   feed the system's prediction of what a driver does and when, and a model of somebody's working
-  pattern is not a side effect worth accepting for six voice commands.
+  pattern is not a side effect worth accepting for eight voice commands.
 - **The intents run on a locked device**, because a phone in a cradle is locked for most of a shift.
   What they write is a timestamp the driver just witnessed, and what they say back is that same fact.
 - **The log records which action ran and which rule refused it**, and never a timestamp, a count of
   what was said, or anything else. See [Privacy and logging](../architecture/privacy.md).
 
-## The Live Activity's five controls are these actions again
+## The Live Activity's seven controls are these actions again
 
-Pause, Resume, End, Start Delivery and the delivery step can also be pressed on the shift's Lock
-Screen card. They are declared as separate intents, because a Live Activity button has to be a
-`LiveActivityIntent` and has to exist in the widget extension, and they are **not discoverable**:
-Siri and the Shortcuts app already offer these actions, and two tiles doing the same thing would be
-two things to learn. The six discoverable shortcuts are unchanged by them.
+Pause, Resume, End, Start Delivery, the delivery step, Park Vehicle and Resume Driving can also be
+pressed on the shift's Lock Screen card. They are declared as separate intents, because a Live
+Activity button has to be a `LiveActivityIntent` and has to exist in the widget extension, and they
+are **not discoverable**: Siri and the Shortcuts app already offer these actions, and two tiles doing
+the same thing would be two things to learn. The eight discoverable shortcuts are unchanged by
+them.
 
 What they are not is a second implementation. Each one calls `IntentLifecycleService`, exactly as the
 spoken actions do, so a shift paused from the Lock Screen is refused by the same rule with the same
@@ -132,7 +151,7 @@ sentence. See [The shift on the Lock Screen](live-activity.md).
 
 ## Where the rules live
 
-`IntentLifecycleService` is the only type the six intents call. It owns no lifecycle logic: it calls
+`IntentLifecycleService` is the only type the eight intents call. It owns no lifecycle logic: it calls
 `ShiftService` and `DeliveryService`, carries their refusals through word for word, and adds the one
 rule above. If a rule there disagreed with the app, the app would be right, so there is no rule there
 to disagree with. See [Architecture overview](../architecture/overview.md#system-surfaces-app-intents).

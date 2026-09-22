@@ -129,6 +129,79 @@ struct ResumeShiftIntent: AppIntent {
     }
 }
 
+/// Recording that the vehicle is parked and the driver is away from it.
+///
+/// ## The interaction this exists to remove
+///
+/// A driver pulling up outside a shop has two bags to carry and a phone to
+/// unlock. Until this intent, saying "I have parked" meant finding DashPilot,
+/// opening it and tapping, which is exactly the interaction this project designs
+/// against and exactly the one that makes forgetting likely. The state is worth
+/// nothing unless the driver can enter it without looking.
+///
+/// ## It adds no rule and infers no reason
+///
+/// Every refusal is ``ShiftService/parkActiveShift(at:)``'s, reached through
+/// ``IntentLifecycleService`` exactly as the button in the app reaches it.
+/// DashPilot does not ask, guess or record **why** the vehicle is parked, and
+/// this is a shift operation rather than a delivery one: no delivery need be in
+/// progress, and no number of them refuses it.
+struct ParkVehicleIntent: AppIntent {
+    static let title: LocalizedStringResource = "Park Vehicle"
+
+    static let description: IntentDescription? = IntentDescription(
+        """
+        Records that you have parked and are away from the vehicle. Route recording stops until you \
+        resume driving, and the distance across the stretch is not counted. Your shift keeps running \
+        and its working time keeps counting.
+        """,
+        categoryName: "Shift",
+        searchKeywords: ["park", "parked", "vehicle", "pickup"]
+    )
+
+    static let supportedModes: IntentModes = .background
+
+    static let authenticationPolicy = IntentAuthenticationPolicy.alwaysAllowed
+
+    @MainActor
+    func perform() async throws -> some IntentResult & ProvidesDialog {
+        .result(dialog: try IntentLifecycleService.forIntent().parkVehicle().dialog)
+    }
+}
+
+/// Recording that the driver is driving again.
+///
+/// The other half of the pair, and the half that matters most: forgetting to
+/// leave the parked state costs the rest of the shift's route, so leaving it has
+/// to be at least as easy as entering it was.
+///
+/// Route recording begins again as a **new** capture session, which is the
+/// existing behaviour rather than a new one: nothing was recorded across the
+/// stretch, so nothing may be measured across it, and the straight line from the
+/// parking space to wherever the driver pulls away is never drawn.
+struct ResumeDrivingIntent: AppIntent {
+    static let title: LocalizedStringResource = "Resume Driving"
+
+    static let description: IntentDescription? = IntentDescription(
+        """
+        Records that you are driving again after parking. Route recording begins again when you open \
+        DashPilot, as a new recording: the distance between where you parked and where you drove off \
+        is not counted.
+        """,
+        categoryName: "Shift",
+        searchKeywords: ["driving", "resume", "unpark", "vehicle"]
+    )
+
+    static let supportedModes: IntentModes = .background
+
+    static let authenticationPolicy = IntentAuthenticationPolicy.alwaysAllowed
+
+    @MainActor
+    func perform() async throws -> some IntentResult & ProvidesDialog {
+        .result(dialog: try IntentLifecycleService.forIntent().resumeDriving().dialog)
+    }
+}
+
 nonisolated extension IntentLifecycleOutcome {
     /// The confirmation as a system surface takes it.
     ///

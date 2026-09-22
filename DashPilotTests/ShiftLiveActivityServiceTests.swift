@@ -191,7 +191,7 @@ struct ShiftLiveActivityServiceTests {
         try shifts.startShift(at: start)
         service.reconcile()
         let started = presenter.live.first
-        #expect(presenter.onlyContent?.controls == [.startDelivery, .pause, .end])
+        #expect(presenter.onlyContent?.controls == [.startDelivery, .park, .pause, .end])
 
         clock.now = at(600)
         try shifts.pauseActiveShift(at: at(600))
@@ -204,7 +204,7 @@ struct ShiftLiveActivityServiceTests {
         try shifts.resumeActiveShift(at: at(1_200))
         service.reconcile()
         #expect(presenter.onlyContent?.isPaused == false)
-        #expect(presenter.onlyContent?.controls == [.startDelivery, .pause, .end])
+        #expect(presenter.onlyContent?.controls == [.startDelivery, .park, .pause, .end])
 
         clock.now = at(1_800)
         try shifts.endActiveShift(at: at(1_800))
@@ -239,6 +239,45 @@ struct ShiftLiveActivityServiceTests {
         #expect(presenter.updateCount == 1, "An hour on a break is not an hour of redraws")
     }
 
+    @Test("Parking swaps the card's control and says so, without pausing anything")
+    func swapsTheParkedControlOnTheCard() throws {
+        let context = try makeContext()
+        let presenter = RecordingShiftActivityPresenter()
+        let clock = Clock(start)
+        let service = makeService(context: context, presenter: presenter, clock: clock)
+        let shifts = ShiftService(context: context)
+
+        try shifts.startShift(at: start)
+        service.reconcile()
+        #expect(presenter.onlyContent?.controls.contains(.park) == true)
+        #expect(presenter.onlyContent?.routeSuspendedNotice == nil)
+
+        clock.now = at(600)
+        try shifts.parkActiveShift(at: at(600))
+        service.reconcile()
+        #expect(presenter.onlyContent?.controls.first == .resumeDriving)
+        #expect(presenter.onlyContent?.controls.contains(.park) == false)
+        #expect(presenter.onlyContent?.routeSuspendedNotice != nil)
+        #expect(presenter.onlyContent?.isPaused == false, "The card must not read as paused")
+        #expect(presenter.onlyContent?.workingDuration == 600)
+
+        clock.now = at(1_200)
+        service.reconcile()
+        // Working time keeps counting through a parked stretch, and the system
+        // draws it from the shift's own start: parking pushes nothing and holds
+        // nothing still, unlike a pause.
+        #expect(presenter.onlyContent?.workingTimerAnchor == start)
+        #expect(presenter.updateCount == 1, "Ten quiet minutes parked is not ten minutes of redraws")
+
+        clock.now = at(1_800)
+        try shifts.resumeDrivingOnActiveShift(at: at(1_800))
+        service.reconcile()
+        #expect(presenter.onlyContent?.controls.contains(.park) == true)
+        #expect(presenter.onlyContent?.routeSuspendedNotice == nil)
+        #expect(presenter.startCount == 1, "One card throughout")
+        #expect(presenter.endCount == 0)
+    }
+
     // MARK: Deliveries
 
     @Test("A delivery starting and advancing changes what the surface offers")
@@ -255,20 +294,20 @@ struct ShiftLiveActivityServiceTests {
         clock.now = at(60)
         let delivery = try deliveries.startDelivery(at: at(60))
         service.reconcile()
-        #expect(presenter.onlyContent?.controls == [.deliveryStep(.arriveAtPickup), .startDelivery])
+        #expect(presenter.onlyContent?.controls == [.deliveryStep(.arriveAtPickup), .startDelivery, .park])
         #expect(presenter.onlyContent?.activeDeliveryCount == 1)
 
         clock.now = at(120)
         try deliveries.markArrivedAtPickup(delivery, at: at(120))
         service.reconcile()
-        #expect(presenter.onlyContent?.controls == [.deliveryStep(.pickUp), .startDelivery])
+        #expect(presenter.onlyContent?.controls == [.deliveryStep(.pickUp), .startDelivery, .park])
         #expect(presenter.onlyContent?.deliveryStatus == "Waiting at the pickup")
 
         clock.now = at(180)
         try deliveries.markPickedUp(delivery, at: at(180))
         try deliveries.markDelivered(delivery, at: at(240))
         service.reconcile()
-        #expect(presenter.onlyContent?.controls == [.startDelivery, .pause, .end])
+        #expect(presenter.onlyContent?.controls == [.startDelivery, .park, .pause, .end])
         #expect(presenter.onlyContent?.completedDeliveryCount == 1)
     }
 
@@ -283,7 +322,7 @@ struct ShiftLiveActivityServiceTests {
         try ShiftService(context: context).startShift(at: start)
         _ = try deliveries.startDelivery(at: at(60))
         service.reconcile()
-        #expect(presenter.onlyContent?.controls == [.deliveryStep(.arriveAtPickup), .startDelivery])
+        #expect(presenter.onlyContent?.controls == [.deliveryStep(.arriveAtPickup), .startDelivery, .park])
 
         clock.now = at(120)
         _ = try deliveries.startDelivery(at: at(120))
@@ -291,7 +330,7 @@ struct ShiftLiveActivityServiceTests {
 
         // Start Delivery survives, because it names no existing order and
         // therefore cannot be aimed at the wrong one.
-        #expect(presenter.onlyContent?.controls == [.startDelivery])
+        #expect(presenter.onlyContent?.controls == [.startDelivery, .park])
         #expect(presenter.onlyContent?.deliveryStatus == nil)
         #expect(presenter.onlyContent?.controlNotice != nil)
     }
@@ -573,6 +612,7 @@ struct ShiftActivityUpdatePolicyTests {
 
     private func state(
         isPaused: Bool = false,
+        parkedNotice: String? = nil,
         workingDuration: TimeInterval = 600,
         asOf: TimeInterval = 600,
         mileage: String = "1.0 mi recorded",
@@ -585,6 +625,7 @@ struct ShiftActivityUpdatePolicyTests {
     ) -> ShiftActivityAttributes.ContentState {
         ShiftActivityAttributes.ContentState(
             isPaused: isPaused,
+            routeSuspendedNotice: parkedNotice,
             workingDuration: workingDuration,
             asOf: start.addingTimeInterval(asOf),
             mileageStatement: mileage,
@@ -624,6 +665,32 @@ struct ShiftActivityUpdatePolicyTests {
             ShiftActivityUpdatePolicy.change(from: base, to: state(status: "Waiting at the pickup")) == .material
         )
         #expect(ShiftActivityUpdatePolicy.change(from: base, to: state(controls: [])) == .material)
+    }
+
+    /// The state whose whole job is to be seen while the driver is away from the
+    /// vehicle. It reaches the card at once rather than on the route's throttle,
+    /// and so does the control that leaves it.
+    @Test("Parking and driving again are material, both in the notice and in the control")
+    func parkingIsMaterial() {
+        let driving = state(controls: [.startDelivery, .park, .pause, .end])
+        let parked = state(
+            parkedNotice: "Parked, route not recording",
+            controls: [.resumeDriving, .startDelivery, .pause, .end]
+        )
+
+        #expect(ShiftActivityUpdatePolicy.change(from: driving, to: parked) == .material)
+        #expect(ShiftActivityUpdatePolicy.change(from: parked, to: driving) == .material)
+        #expect(
+            ShiftActivityUpdatePolicy.change(
+                from: driving,
+                to: state(parkedNotice: "Parked, route not recording", controls: driving.controls)
+            ) == .material,
+            "The notice alone is enough, without any control moving"
+        )
+        #expect(
+            ShiftActivityUpdatePolicy.change(from: parked, to: parked) == .none,
+            "A parked card that has not moved is not redrawn"
+        )
     }
 
     /// The one case every count on the card hides: an order finishing at the

@@ -77,6 +77,33 @@ It keeps recording nothing until they open its fuel editor and tap
 Writing today's figures into last month's work would put an assumption the driver
 never made into their history.
 
+### The one correction to a shift still being worked
+
+A shift's assumptions are otherwise editable only once it has finished, and that
+rule has one deliberate exception. While the **running** shift's route has
+recorded no distance, the driver can correct its snapshot from the running
+shift's own panel: a driver who started in the wrong vehicle should not have to
+work a whole shift under a figure they can already see is wrong.
+
+It is narrow on purpose:
+
+- **Only before any driving is recorded.** Once the route has measured a
+  distance, changing what a mile is assumed to cost would restate what those
+  miles are estimated to have consumed, with nothing to point at, so the
+  correction closes. The rule is measured distance and never elapsed time.
+- **No route evidence is touched.** Nothing is deleted or rewritten to make a
+  correction possible.
+- **It copies, it does not link.** The vehicle's current name and economy, and
+  the current gas price, are copied as facts. Settings is not written and a later
+  change to it does not follow.
+- **It is not a default being reapplied.** The snapshot taken when a shift starts
+  may only ever fill an empty pair and happens without anybody asking; this
+  replaces a recorded pair and only ever happens because the driver saved.
+
+Correcting the assumptions of shifts already recorded, as a group, is not a
+feature DashPilot has. The remedy for one finished shift is its own fuel editor.
+See [Correcting the vehicle](shift-workflow.md#correcting-the-vehicle-before-any-driving-is-recorded).
+
 ### Which vehicle a shift says it was worked in
 
 A shift that took its economy from a vehicle also records **what that vehicle was
@@ -89,6 +116,10 @@ behind it is renamed or deleted. The name is recorded beside an economy only whe
 it **is** that vehicle's economy: a driver who types a different figure by hand
 records no vehicle, because DashPilot does not know which vehicle covers that
 many miles on a gallon.
+
+The **running** shift shows the same two facts on its own panel, so a driver with
+two vehicles who forgot to switch can see it without opening Settings. See
+[Which vehicle the shift is using](shift-workflow.md#which-vehicle-the-shift-is-using).
 
 ## Missing is not zero
 

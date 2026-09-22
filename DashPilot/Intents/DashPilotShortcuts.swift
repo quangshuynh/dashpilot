@@ -3,10 +3,17 @@ import AppIntents
 /// The spoken phrases the system offers without the driver configuring
 /// anything.
 ///
-/// Six, and they are the six short lifecycle actions. Everything else
+/// Eight, and they are the eight short lifecycle actions. Everything else
 /// DashPilot does (an amount, a cost, a pickup name, a summary) either needs a
 /// value dictated or needs a screen read, and neither belongs in a sentence
 /// said while driving.
+///
+/// The last two are the parked pair. They are here rather than left to the app's
+/// own buttons because a driver with two bags in their hands is exactly the
+/// driver who cannot unlock a phone, and a state nobody can enter or leave
+/// hands-free is a state that gets forgotten. They name the **vehicle**, never a
+/// delivery and never a break: parking is not pausing, and no phrase here may
+/// let the two be said the same way.
 ///
 /// ## Nothing is donated
 ///
@@ -66,6 +73,26 @@ nonisolated struct DashPilotShortcuts: AppShortcutsProvider {
             ],
             shortTitle: "Resume Shift",
             systemImageName: "play.circle"
+        )
+        AppShortcut(
+            intent: ParkVehicleIntent(),
+            phrases: [
+                "Park my vehicle in \(.applicationName)",
+                "Park my \(.applicationName) vehicle",
+                "I have parked in \(.applicationName)"
+            ],
+            shortTitle: "Park Vehicle",
+            systemImageName: "parkingsign.circle"
+        )
+        AppShortcut(
+            intent: ResumeDrivingIntent(),
+            phrases: [
+                "Resume driving in \(.applicationName)",
+                "I am driving again in \(.applicationName)",
+                "Start driving again in \(.applicationName)"
+            ],
+            shortTitle: "Resume Driving",
+            systemImageName: "car.fill"
         )
         AppShortcut(
             intent: StartDeliveryIntent(),

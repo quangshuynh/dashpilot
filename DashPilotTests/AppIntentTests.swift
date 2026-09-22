@@ -159,6 +159,8 @@ struct AppIntentTests {
         [
             Metadata(StartShiftIntent.self),
             Metadata(EndShiftIntent.self),
+            Metadata(ParkVehicleIntent.self),
+            Metadata(ResumeDrivingIntent.self),
             Metadata(StartDeliveryIntent.self),
             Metadata(RecordDeliveryProgressIntent.self)
         ]
@@ -189,6 +191,8 @@ struct AppIntentTests {
         #expect(everyIntent.map(\.title) == [
             "Start Shift",
             "End Shift",
+            "Park Vehicle",
+            "Resume Driving",
             "Start Delivery",
             "Record Delivery Progress"
         ])
@@ -341,9 +345,220 @@ struct AppIntentTests {
         #expect(resume.lowercased().contains("open dashpilot"), "A session can only be started in the foreground")
     }
 
-    @Test("Six shortcuts are offered, and they are the six lifecycle actions")
+    @Test("Eight shortcuts are offered, and they are the eight lifecycle actions")
     func shortcutsCoverTheLifecycleActionsOnly() {
-        #expect(DashPilotShortcuts.appShortcuts.count == 6)
+        #expect(DashPilotShortcuts.appShortcuts.count == 8)
+    }
+
+    // MARK: Parking and driving again
+
+    @Test("Parking by intent records the vehicle as parked without pausing the shift")
+    func parkIntentRecordsTheSuspension() async throws {
+        try await withStore { context in
+            _ = try await StartShiftIntent().perform()
+            _ = try await ParkVehicleIntent().perform()
+
+            let shift = try #require(try context.fetch(FetchDescriptor<Shift>()).first)
+            #expect(shift.isRouteSuspended, "The state the app's own panel reads")
+            #expect(shift.routeSuspensions.count == 1)
+            #expect(shift.openRouteSuspension?.isOpen == true)
+            // Parking is not pausing, on this surface as on every other.
+            #expect(shift.lifecycleState == .running)
+            #expect(shift.pauses.isEmpty)
+            #expect(shift.endedAt == nil)
+        }
+    }
+
+    /// The state an intent writes is the state the screen reads: one derivation,
+    /// one row, and no second flag anywhere.
+    @Test("An intent's parking is the same state the app's own panel reads")
+    func parkIntentWritesTheStateTheAppReads() async throws {
+        try await withStore { context in
+            _ = try await StartShiftIntent().perform()
+            _ = try await ParkVehicleIntent().perform()
+
+            let shift = try #require(try ShiftService(context: context).activeShift())
+            #expect(shift.isRouteSuspended)
+            #expect(shift.activeMetrics(for: .none, asOf: .now).isRouteSuspended)
+            #expect(shift.suspendedTime(asOf: .now).openIntervalCount == 1)
+        }
+    }
+
+    @Test("Parking with nothing running is refused, and so is driving again")
+    func parkAndResumeDrivingRefuseWithNoShift() async throws {
+        try await withStore { context in
+            await #expect(throws: IntentLifecycleError.shift(.noActiveShift)) {
+                _ = try await ParkVehicleIntent().perform()
+            }
+            await #expect(throws: IntentLifecycleError.shift(.noActiveShift)) {
+                _ = try await ResumeDrivingIntent().perform()
+            }
+
+            let suspensions = try context.fetch(FetchDescriptor<RouteSuspension>())
+            #expect(suspensions.isEmpty)
+        }
+    }
+
+    @Test("Parking an already parked shift is refused and writes nothing")
+    func parkIntentRefusesWhenAlreadyParked() async throws {
+        try await withStore { context in
+            _ = try await StartShiftIntent().perform()
+            _ = try await ParkVehicleIntent().perform()
+            let opened = try #require(
+                try context.fetch(FetchDescriptor<Shift>()).first?.openRouteSuspension?.startedAt
+            )
+
+            await #expect(throws: IntentLifecycleError.shift(.shiftAlreadyParked(parkedAt: opened))) {
+                _ = try await ParkVehicleIntent().perform()
+            }
+
+            let shift = try #require(try context.fetch(FetchDescriptor<Shift>()).first)
+            #expect(shift.routeSuspensions.count == 1, "A refused control opens no second row")
+            #expect(shift.openRouteSuspension?.startedAt == opened)
+        }
+    }
+
+    @Test("Driving again while parked closes the suspension")
+    func resumeDrivingIntentClosesTheSuspension() async throws {
+        try await withStore { context in
+            _ = try await StartShiftIntent().perform()
+            _ = try await ParkVehicleIntent().perform()
+            _ = try await ResumeDrivingIntent().perform()
+
+            let shift = try #require(try context.fetch(FetchDescriptor<Shift>()).first)
+            #expect(shift.isRouteSuspended == false)
+            #expect(shift.openRouteSuspension == nil)
+            #expect(shift.routeSuspensions.count == 1, "The stretch is kept, not deleted")
+            #expect(shift.routeSuspensions.first?.endedAt != nil)
+            #expect(shift.lifecycleState == .running)
+        }
+    }
+
+    @Test("Driving again on a shift that is not parked is refused")
+    func resumeDrivingIntentRefusesWhenNotParked() async throws {
+        try await withStore { context in
+            _ = try await StartShiftIntent().perform()
+
+            await #expect(throws: IntentLifecycleError.shift(.shiftNotParked)) {
+                _ = try await ResumeDrivingIntent().perform()
+            }
+
+            let shift = try #require(try context.fetch(FetchDescriptor<Shift>()).first)
+            #expect(shift.routeSuspensions.isEmpty)
+        }
+    }
+
+    /// The intent holds no rule of its own: this is
+    /// ``ShiftService/parkActiveShift(at:)``'s refusal of a paused shift,
+    /// reaching a spoken surface unchanged.
+    @Test("Parking a paused shift is refused by the service, not by the intent")
+    func parkIntentDoesNotBypassServiceValidation() async throws {
+        try await withStore { context in
+            _ = try await StartShiftIntent().perform()
+            _ = try await PauseShiftIntent().perform()
+
+            await #expect(throws: IntentLifecycleError.self) {
+                _ = try await ParkVehicleIntent().perform()
+            }
+
+            let shift = try #require(try context.fetch(FetchDescriptor<Shift>()).first)
+            #expect(shift.routeSuspensions.isEmpty, "A refused intent writes nothing")
+            #expect(shift.lifecycleState == .paused, "And changes nothing else either")
+        }
+    }
+
+    /// Parking is a **shift** operation. Nothing about it consults the
+    /// deliveries, in either direction, because one driver has one vehicle
+    /// however many orders are in the car.
+    @Test("Parking needs no delivery, and is refused by no number of them")
+    func parkIntentIsAShiftOperation() async throws {
+        try await withStore { context in
+            _ = try await StartShiftIntent().perform()
+            // No delivery at all.
+            _ = try await ParkVehicleIntent().perform()
+            _ = try await ResumeDrivingIntent().perform()
+
+            // And two stacked ones, which refuse a pause and a step.
+            _ = try await StartDeliveryIntent().perform()
+            _ = try await StartDeliveryIntent().perform()
+            _ = try await ParkVehicleIntent().perform()
+
+            let shift = try #require(try context.fetch(FetchDescriptor<Shift>()).first)
+            #expect(shift.isRouteSuspended)
+            #expect(shift.activeDeliveries.count == 2, "And no delivery moved")
+            #expect(shift.activeDeliveries.allSatisfy { $0.state == .accepted })
+        }
+    }
+
+    /// Route capture is the caller's to reconcile and is not this layer's, but
+    /// the rule the route depends on is: a resumed stretch must leave the rows
+    /// that were recorded before it exactly as they were, so the mileage
+    /// calculation still refuses to measure across the gap.
+    @Test("Parking and driving again leave every recorded position untouched")
+    func parkIntentTouchesNoRouteSample() async throws {
+        try await withStore { context in
+            _ = try await StartShiftIntent().perform()
+            let shift = try #require(try context.fetch(FetchDescriptor<Shift>()).first)
+
+            let session = UUID()
+            let before = shift.startedAt.addingTimeInterval(60)
+            for offset in 0..<2 {
+                context.insert(
+                    RouteSample(
+                        shift: shift,
+                        timestamp: before.addingTimeInterval(Double(offset) * 10),
+                        latitude: 44.0 + Double(offset) / 1_000,
+                        longitude: -123.0,
+                        horizontalAccuracy: 5,
+                        captureSessionID: session
+                    )
+                )
+            }
+            try context.save()
+            let recorded = shift.routeSamples().map(\.timestamp)
+            #expect(recorded.count == 2)
+
+            _ = try await ParkVehicleIntent().perform()
+            _ = try await ResumeDrivingIntent().perform()
+
+            #expect(shift.routeSamples().map(\.timestamp) == recorded)
+            #expect(shift.routeSampleCount == 2, "No position is deleted or invented")
+        }
+    }
+
+    @Test("Park and Resume Driving run without opening the app, on a locked device")
+    func parkAndResumeDrivingRunInTheBackground() {
+        #expect(ParkVehicleIntent.supportedModes == .background)
+        #expect(ResumeDrivingIntent.supportedModes == .background)
+        #expect(ParkVehicleIntent.authenticationPolicy == .alwaysAllowed)
+        #expect(ResumeDrivingIntent.authenticationPolicy == .alwaysAllowed)
+    }
+
+    @Test("The parked descriptions say what stops, what does not, and what is not counted")
+    func parkAndResumeDrivingDescriptionsStateTheirEffects() throws {
+        let park = String(localized: try #require(ParkVehicleIntent.description?.descriptionText)).lowercased()
+        let driving = String(localized: try #require(ResumeDrivingIntent.description?.descriptionText)).lowercased()
+
+        #expect(park.contains("route recording stops"))
+        #expect(park.contains("shift keeps running"), "Parking is not pausing, and the description says so")
+        #expect(park.contains("not counted"), "The distance across the stretch is named")
+        #expect(driving.contains("not counted"))
+        #expect(driving.contains("open dashpilot"), "A session can only be started in the foreground")
+    }
+
+    /// The confirmation is the only report a driver standing away from the car
+    /// gets, so the two facts the state confuses have to be in it.
+    @Test("The spoken confirmations separate the route from the shift")
+    func parkedConfirmationsSeparateTheRouteFromTheShift() {
+        let parked = IntentLifecycleOutcome.vehicleParked.confirmation.lowercased()
+
+        #expect(parked.contains("route recording is stopped"))
+        #expect(parked.contains("shift is still running"))
+        #expect(!parked.contains("pause"), "Parking is not a pause and must never be said as one")
+
+        let driving = IntentLifecycleOutcome.drivingResumed(parkedDuration: 1_500).confirmation.lowercased()
+        #expect(driving.contains("driving again"))
+        #expect(driving.contains("open dashpilot"))
     }
 
     // MARK: The Live Activity's own controls
@@ -363,12 +578,16 @@ struct AppIntentTests {
         #expect(EndShiftFromActivityIntent.supportedModes == .background)
         #expect(StartDeliveryFromActivityIntent.supportedModes == .background)
         #expect(RecordDeliveryProgressFromActivityIntent.supportedModes == .background)
+        #expect(ParkVehicleFromActivityIntent.supportedModes == .background)
+        #expect(ResumeDrivingFromActivityIntent.supportedModes == .background)
 
         #expect(PauseShiftFromActivityIntent.authenticationPolicy == .alwaysAllowed)
         #expect(ResumeShiftFromActivityIntent.authenticationPolicy == .alwaysAllowed)
         #expect(EndShiftFromActivityIntent.authenticationPolicy == .alwaysAllowed)
         #expect(StartDeliveryFromActivityIntent.authenticationPolicy == .alwaysAllowed)
         #expect(RecordDeliveryProgressFromActivityIntent.authenticationPolicy == .alwaysAllowed)
+        #expect(ParkVehicleFromActivityIntent.authenticationPolicy == .alwaysAllowed)
+        #expect(ResumeDrivingFromActivityIntent.authenticationPolicy == .alwaysAllowed)
     }
 
     @Test("No Live Activity control appears in Shortcuts beside the spoken action it repeats")
@@ -378,10 +597,13 @@ struct AppIntentTests {
         #expect(EndShiftFromActivityIntent.isDiscoverable == false)
         #expect(StartDeliveryFromActivityIntent.isDiscoverable == false)
         #expect(RecordDeliveryProgressFromActivityIntent.isDiscoverable == false)
+        #expect(ParkVehicleFromActivityIntent.isDiscoverable == false)
+        #expect(ResumeDrivingFromActivityIntent.isDiscoverable == false)
 
         #expect(PauseShiftIntent.isDiscoverable, "The spoken action is the discoverable one")
+        #expect(ParkVehicleIntent.isDiscoverable, "And it is the one that parks, too")
         #expect(StartDeliveryIntent.isDiscoverable, "And it is the one that starts a delivery, too")
-        #expect(DashPilotShortcuts.appShortcuts.count == 6, "And the shortcut count is unchanged by them")
+        #expect(DashPilotShortcuts.appShortcuts.count == 8, "And the shortcut count is unchanged by them")
     }
 
     @Test("Pausing and resuming from the Live Activity writes what the app's own button writes")
@@ -443,6 +665,83 @@ struct AppIntentTests {
             let deliveries = try context.fetch(FetchDescriptor<Delivery>())
             #expect(deliveries.count == 2)
             #expect(deliveries.allSatisfy { $0.state == .accepted }, "Neither delivery was advanced")
+        }
+    }
+
+    // MARK: Parking from the Live Activity
+
+    @Test("Parking from the Live Activity writes what the app's own button writes")
+    func activityIntentsParkAndDriveAgain() async throws {
+        try await withStore { context in
+            _ = try await StartShiftIntent().perform()
+            _ = try await ParkVehicleFromActivityIntent().perform()
+
+            let shift = try #require(try context.fetch(FetchDescriptor<Shift>()).first)
+            #expect(shift.isRouteSuspended)
+            #expect(shift.lifecycleState == .running, "Parking is not pausing, whichever surface asked")
+            #expect(shift.pauses.isEmpty)
+
+            _ = try await ResumeDrivingFromActivityIntent().perform()
+            #expect(shift.isRouteSuspended == false)
+            #expect(shift.routeSuspensions.count == 1, "The stretch is kept, not deleted")
+        }
+    }
+
+    /// The card offers only one of the pair, but the layer that matters is the
+    /// store: a snapshot on screen can be a moment out of date.
+    @Test("A stale parked press is refused by the same rule, with the same sentence")
+    func activityParkedIntentsCarryTheServicesOwnRefusals() async throws {
+        try await withStore { context in
+            _ = try await StartShiftIntent().perform()
+
+            await #expect(throws: IntentLifecycleError.shift(.shiftNotParked)) {
+                _ = try await ResumeDrivingFromActivityIntent().perform()
+            }
+
+            _ = try await ParkVehicleFromActivityIntent().perform()
+            await #expect(throws: IntentLifecycleError.self) {
+                _ = try await ParkVehicleFromActivityIntent().perform()
+            }
+
+            let shift = try #require(try context.fetch(FetchDescriptor<Shift>()).first)
+            #expect(shift.routeSuspensions.count == 1, "A refused control opens no second row")
+        }
+    }
+
+    @Test("Parking from the Live Activity mutates the shift that is running, and only it")
+    func activityParkMutatesTheRunningShift() async throws {
+        try await withStore { context in
+            // A finished shift the card could never be describing.
+            let finished = try ShiftService(context: context).startShift(at: .now.addingTimeInterval(-7_200))
+            try ShiftService(context: context).endActiveShift(at: .now.addingTimeInterval(-3_600))
+
+            _ = try await StartShiftIntent().perform()
+            _ = try await ParkVehicleFromActivityIntent().perform()
+
+            let shifts = try context.fetch(FetchDescriptor<Shift>())
+            #expect(shifts.count == 2)
+            #expect(finished.routeSuspensions.isEmpty, "The shift that ended is untouched")
+            let running = try #require(shifts.first { $0.endedAt == nil })
+            #expect(running.routeSuspensions.count == 1)
+        }
+    }
+
+    @Test("Parking from the Live Activity asks the card to catch up, and a refusal does not")
+    func activityParkReconciles() async throws {
+        try await withStoreWatchingActivity { _, recorder in
+            _ = try await StartShiftIntent().perform()
+            #expect(recorder.count == 1)
+
+            _ = try await ParkVehicleFromActivityIntent().perform()
+            #expect(recorder.count == 2)
+
+            await #expect(throws: IntentLifecycleError.self) {
+                _ = try await ParkVehicleFromActivityIntent().perform()
+            }
+            #expect(recorder.count == 2, "A refusal wrote nothing, so there is nothing to catch up with")
+
+            _ = try await ResumeDrivingFromActivityIntent().perform()
+            #expect(recorder.count == 3)
         }
     }
 

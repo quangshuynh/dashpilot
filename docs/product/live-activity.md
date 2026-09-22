@@ -86,9 +86,10 @@ rules permit:
 
 | The shift is | The card offers |
 | --- | --- |
-| Running, with no delivery open | **Start Delivery**, **Pause Shift**, **End Shift** |
-| Running, with exactly one delivery open | That delivery's next step (**Arrived at Pickup**, then **Picked Up**, then **Delivered**), and **Start Delivery** |
-| Running, with two or more deliveries open | **Start Delivery**, and the reason there is no step |
+| Running, with no delivery open | **Start Delivery**, **Park Vehicle**, **Pause Shift**, **End Shift** |
+| Running, with exactly one delivery open | That delivery's next step (**Arrived at Pickup**, then **Picked Up**, then **Delivered**), **Start Delivery**, **Park Vehicle** |
+| Running, with two or more deliveries open | **Start Delivery**, **Park Vehicle**, and the reason there is no step |
+| Parked | **Resume Driving** first, then whatever the row above offers, with **Park Vehicle** replaced |
 | Paused | **Resume Shift**, **End Shift** |
 
 A delivery [reopened in the app](delivery-lifecycle.md#taking-back-a-delivery-marked-delivered-by-mistake)
@@ -100,9 +101,33 @@ Ending a **paused** shift is permitted, and closes the pause at the end instant 
 driver resume work they did not do, so End stays on the card while paused. See
 [Shift workflow](shift-workflow.md).
 
-Where three controls do not fit on one line, at the larger text sizes, they wrap to a second row
+Where the controls do not fit on one line, at the larger text sizes, they wrap to further rows of two
 rather than having their labels cut short. A button a driver has to guess at is how the wrong thing
 gets recorded.
+
+### Parked, and it is never the pause button
+
+**Exactly one of the parked pair is on the card at a time**: `Park Vehicle` while the shift is
+driving, `Resume Driving` while it is parked. Which one is read from the shift rather than chosen, so
+the control shown is always the transition the store would accept, and the two are never together
+because one of them would always be refused.
+
+`Resume Driving` leads the card and carries the emphasis, which is the judgement the app's own panel
+makes: leaving the state is the tap that matters, because forgetting to leave it costs the rest of
+the shift's route. `Park Vehicle` is unemphasised, for the reason `Pause Shift` is.
+
+**Parking is not pausing, and the card must never let it read as one.** A parked shift keeps running,
+its working clock keeps counting from the shift's own start and its deliveries stay open; what has
+stopped is the route. The two controls sit on the same card and are told apart by their words and
+their symbols: `Park vehicle` and `Resume driving` are what a listener hears, and neither ever says
+*pause*.
+
+The parked control is offered whatever the shift is carrying, including two orders open, because
+whether the vehicle is moving is a fact about the driver and their vehicle rather than about any one
+order. The ambiguity that withholds the step has nothing to bite on, and the rule that withholds
+Pause and End is about time nobody worked rather than about a vehicle nobody moved. A **paused** shift
+offers neither, because a paused shift is never parked. See
+[Parked for a pickup](recorded-mileage.md#parked-for-a-pickup).
 
 ### Starting a delivery
 
@@ -225,7 +250,11 @@ says whether capture is running right now, and why it is not, is the app's own s
   about it leaves the device. See [Privacy and logging](../architecture/privacy.md).
 - **A Dynamic Island is not assumed.** Every supported device shows the Lock Screen presentation; the
   island is a second reading of the same card on the hardware that has one, and no fact appears only
-  there.
+  there. Its compact and minimal presentations carry no control at all and are unchanged by the
+  parked pair; the minimal one's single spoken value does gain the parked sentence, because it is the
+  only line a listener has there.
+- **Nothing about the vehicle.** The card carries no vehicle name, no miles per gallon and no gas
+  price. Parking is a statement about whether the vehicle is moving, and it needed none of them.
 
 ## If Live Activities are turned off
 

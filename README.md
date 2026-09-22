@@ -45,7 +45,9 @@ derived legitimately from device sensors and stored history is typed by the driv
   number of deliveries may stay open. It belongs to the shift rather than to a delivery, because a
   driver shopping for one order while carrying another has one vehicle and it is parked. Leaving the
   state is always explicit, and a completed shift says how many stretches it recorded and how long
-  they came to, beside the route they explain.
+  they came to, beside the route they explain. Both halves can be recorded **without opening the
+  app**, by voice or from the shift's Lock Screen card, because a driver with two bags in their hands
+  cannot unlock a phone.
 - **Correcting a recorded pause**, from a finished shift's own record: a pause recorded at the wrong
   moment can have either end or both moved, one recorded by mistake can be deleted, and a pause the
   driver took and never recorded can be added. A stretch is refused rather than nudged if it ends
@@ -110,15 +112,17 @@ derived legitimately from device sensors and stored history is typed by the driv
   one, on a running shift or from history. A correction changes membership only. No lifecycle time,
   pickup place, amount or terminal state moves with it, neither acceptance time is rewritten, and an
   offer holds no money, duration or distance of its own.
-- **Voice and system actions** for the six short lifecycle steps (start a shift, pause it, resume it,
-  end it, start a delivery, record that delivery's next event) through App Intents, with the app
+- **Voice and system actions** for the eight short lifecycle steps (start a shift, pause it, resume
+  it, end it, park the vehicle, drive again, start a delivery, record that delivery's next event)
+  through App Intents, with the app
   never coming to the screen. Each calls the same service the button calls, and a spoken delivery step is recorded only
   while exactly one delivery is in progress; with more, DashPilot records nothing and says so. No
   intent takes a dictated value.
 - **A Live Activity for the shift in progress**, on the Lock Screen and in the Dynamic Island: the
   working time, what the route has recorded, how the deliveries stand, **how long each delivery in
   progress has been open**, and the controls the shift's
-  own lifecycle rules permit, including starting one more delivery. Pressing one runs the same
+  own lifecycle rules permit, including starting one more delivery and **recording the vehicle as
+  parked or driving again**. Pressing one runs the same
   service the app's button runs; with two deliveries in progress it offers no step, because no button
   there can say which order it meant. No amount, rate, place or coordinate appears on it.
 - **Optional pickup identity**: a delivery can name the place it was collected from, typed by the
@@ -160,6 +164,12 @@ derived legitimately from device sensors and stored history is typed by the driv
   filled in for the driver; its fuel editor offers `Use Current Defaults`, which fills the fields and
   writes nothing until they save. No price is looked up, no station is searched and nothing about
   where the device is is used.
+- **The running shift says which vehicle it is using**, from its own snapshot and never from the
+  current selection, so a driver with two vehicles who forgot to switch can see it without opening
+  Settings. A shift that recorded nothing says so rather than borrowing today's selection. While that
+  shift's route has recorded **no distance**, one `Change` control corrects its snapshot in place: it
+  copies another vehicle's current name and economy, or the current gas price, onto this shift alone,
+  writes nothing in Settings, and closes as soon as any driving has been recorded.
 - **Recorded operating expenses**: fuel, parking and tolls, maintenance, supplies or other, each
   with an amount, a date, and an optional short note. An expense belongs to a **date** rather than to
   a shift, so nothing is attributed to work the driver did not attribute it to and no cost is divided
@@ -289,7 +299,7 @@ The short version, with the full list in [`docs/reference/limitations.md`](docs/
   amount on a delivery is there only because the driver typed it for that delivery. Delivery active
   time is only as good as the tapping, overlapping deliveries are unioned rather than summed, their
   hourly figures are never added together, and non-delivery time is not idle time.
-- **Voice actions cover six lifecycle steps and nothing else.** No cancelling, no amounts, no costs,
+- **Voice actions cover eight lifecycle steps and nothing else.** No cancelling, no amounts, no costs,
   no pickup names, nothing read back, and a shift started by voice records no route until the app is
   opened.
 - **The shift's Live Activity shows and controls, and never alerts.** It carries the working time,

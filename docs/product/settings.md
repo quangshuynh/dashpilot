@@ -41,6 +41,10 @@ So:
 - Deleting a vehicle leaves every shift worked in it exactly as it was, still
   naming that vehicle.
 - Selecting a different vehicle changes the next shift and nothing before it.
+- None of the above reaches the shift **currently running** either. Its panel goes
+  on naming the vehicle it recorded when it started, which is the question a
+  driver mid-shift is actually asking. See
+  [Which vehicle the shift is using](shift-workflow.md#which-vehicle-the-shift-is-using).
 
 That is structural rather than a rule somebody has to keep: a finished shift holds
 the facts it was estimated under, and there is nothing for it to follow. See
@@ -115,6 +119,19 @@ shows `Use Current Defaults` under the two fields, with the figures it would fil
 in named. Tapping it fills the fields; the shift records them only when the
 driver taps Save. Abandoning the sheet writes nothing.
 
+## Correcting the shift in progress
+
+A driver who started a shift in the wrong vehicle can correct **that shift's own
+snapshot**, from the running shift's panel, and only while its route has recorded
+no distance. Choosing a vehicle there copies that vehicle's current name and
+miles per gallon onto the shift; nothing in Settings is written, the selection is
+not moved, and a later change to either does not follow. The correction closes
+once driving has been recorded.
+
+That is the only way a preference ever reaches a shift after it has started, and
+it only ever happens because the driver saved. See
+[Correcting the vehicle](shift-workflow.md#correcting-the-vehicle-before-any-driving-is-recorded).
+
 ## Accessibility
 
 - A vehicle row is one element that speaks its name, its economy with the unit
@@ -133,6 +150,10 @@ place names and expense notes are: they stay on the device and are **never
 logged**. The fuel economy and the gas price are never logged either. The log
 records only that a vehicle was added, changed or removed, that the selection
 changed, that a price was recorded or removed, and which rule refused one.
+
+Correcting a running shift's snapshot logs the same way: that a correction
+happened, and which rule refused one. Never the vehicle, never the economy and
+never the price.
 
 Nothing here reaches the network, because there is no network code in DashPilot.
 
