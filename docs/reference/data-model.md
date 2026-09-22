@@ -49,6 +49,8 @@ Derived, never stored:
 | `recordedDistance(...)` | A `RouteDistance` measured from the retained route |
 | `grossEarnings` | The stored decimal as a `Money`, or `nil` |
 | `fuelAssumptions` | The two stored columns as a `FuelAssumptions`, which is the only place they become one |
+| `vehicleContext` | The name and economy this shift recorded, as a `ShiftVehicleContext`. Reads no preference |
+| `mayCorrectRunningFuelAssumptions(...)` | Whether the shift is still running **and** its route has measured no distance, which is the correction's whole eligibility rule |
 | `fuelEstimate(for:)` | A `FuelEstimate` over a recorded distance and this shift's own assumptions, or the reason there is none |
 | `profitability(for:)` | A `ShiftProfitability`: recorded earnings less the estimated fuel, and that over the shift's working hours |
 | `activeDeliveries` | This shift's deliveries that are neither delivered nor cancelled, in acceptance order |
@@ -461,6 +463,7 @@ none either — it is unioned from timestamps already stored, every time it is s
 | `RouteQuality` | The tested vocabulary describing a measured route |
 | `GeographicDistance` | One haversine implementation, shared by capture and measurement |
 | `ShiftLifecycleState` | Running, paused or ended, derived from a shift's own rows |
+| `ShiftVehicleContext` | The vehicle name and fuel economy a shift recorded, and the words the running shift's panel says them in. Reads the shift's snapshot and never a preference |
 | `ShiftPauseInterval` | One recorded pause as a value: its bounds, its clipping and its malformed case |
 | `ShiftPausedTime`, `ShiftPausedTimeCalculator` | The union of a shift's pauses, with the counts behind it |
 | `DateRangeUnion` | The one sweep that merges overlapping stretches, shared by paused time and delivery active time |
