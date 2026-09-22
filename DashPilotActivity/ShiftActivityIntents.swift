@@ -1,7 +1,7 @@
 import AppIntents
 import Foundation
 
-/// The five actions a driver can take from the shift's Live Activity.
+/// The seven actions a driver can take from the shift's Live Activity.
 ///
 /// Named apart from the intents themselves so there is exactly one switch over
 /// them, in ``ShiftActivityIntentBridge``, rather than a lifecycle call buried
@@ -12,6 +12,8 @@ nonisolated enum ShiftActivityAction: String, CaseIterable, Sendable {
     case endShift
     case startDelivery
     case recordDeliveryProgress
+    case parkVehicle
+    case resumeDriving
 }
 
 #if DASHPILOT_WIDGET
@@ -67,6 +69,8 @@ enum ShiftActivityIntentBridge {
         case .endShift: _ = try service.endShift()
         case .startDelivery: _ = try service.startDelivery()
         case .recordDeliveryProgress: _ = try service.recordDeliveryProgress()
+        case .parkVehicle: _ = try service.parkVehicle()
+        case .resumeDriving: _ = try service.resumeDriving()
         }
     }
 }
@@ -256,6 +260,90 @@ struct RecordDeliveryProgressFromActivityIntent: LiveActivityIntent {
     @MainActor
     func perform() async throws -> some IntentResult {
         try ShiftActivityIntentBridge.perform(.recordDeliveryProgress)
+        return .result()
+    }
+}
+
+/// Recording that the vehicle is parked, from the Lock Screen.
+///
+/// ## Why this control is the one the surface most needed
+///
+/// A driver pulls up outside a shop with the phone in a cradle and locked. The
+/// state is worth nothing unless they can enter it there, and the expensive
+/// failure of the whole feature is forgetting to leave it, which costs the rest
+/// of the shift's route. Both halves therefore belong on the surface the driver
+/// is already looking at.
+///
+/// ## It is not a pause, and the card must never let it read as one
+///
+/// A parked shift keeps running, keeps counting working time and keeps its
+/// deliveries open. Pausing is a separate control with a separate label sitting
+/// on the same card, and the two are told apart by their words and their symbols
+/// rather than by which one happens to be emphasised.
+///
+/// Refused by ``ShiftService/parkActiveShift(at:)``, through
+/// ``IntentLifecycleService``, exactly as the app's own button and the spoken
+/// action are. The card does not offer the control on a shift that is already
+/// parked or paused either, but the layer that matters is this one: a snapshot
+/// on screen can be a moment out of date, and the store never is.
+struct ParkVehicleFromActivityIntent: LiveActivityIntent {
+    static let title: LocalizedStringResource = "Park Vehicle from Live Activity"
+
+    static let description: IntentDescription? = IntentDescription(
+        """
+        Records that you have parked and are away from the vehicle, from the shift's Live Activity. \
+        Route recording stops until you resume driving. Your shift keeps running and its working time \
+        keeps counting.
+        """,
+        categoryName: "Shift"
+    )
+
+    static let supportedModes: IntentModes = .background
+    static let isDiscoverable = false
+    static let authenticationPolicy = IntentAuthenticationPolicy.alwaysAllowed
+
+    init() {}
+
+    @MainActor
+    func perform() async throws -> some IntentResult {
+        try ShiftActivityIntentBridge.perform(.parkVehicle)
+        return .result()
+    }
+}
+
+/// Recording that the driver is driving again, from the Lock Screen.
+///
+/// The half that matters most, and the reason the card replaces Park with it for
+/// exactly as long as the state lasts: a driver walking back to the vehicle sees
+/// one control, and it is the one that starts recording again.
+///
+/// Recording resumes as a **new** capture session, which is the existing rule
+/// rather than a new one: nothing was recorded across the stretch, so nothing is
+/// measured across it, and no line is drawn from the parking space to wherever
+/// the vehicle pulls away. As with resuming a paused shift, a session can only
+/// be *started* with the app on screen, and the app's own capture status line
+/// says so the moment the driver looks.
+struct ResumeDrivingFromActivityIntent: LiveActivityIntent {
+    static let title: LocalizedStringResource = "Resume Driving from Live Activity"
+
+    static let description: IntentDescription? = IntentDescription(
+        """
+        Records that you are driving again after parking, from the shift's Live Activity. Route \
+        recording begins again when you open DashPilot, as a new recording: the distance between \
+        where you parked and where you drove off is not counted.
+        """,
+        categoryName: "Shift"
+    )
+
+    static let supportedModes: IntentModes = .background
+    static let isDiscoverable = false
+    static let authenticationPolicy = IntentAuthenticationPolicy.alwaysAllowed
+
+    init() {}
+
+    @MainActor
+    func perform() async throws -> some IntentResult {
+        try ShiftActivityIntentBridge.perform(.resumeDriving)
         return .result()
     }
 }
