@@ -159,8 +159,31 @@ struct SettingsService {
     /// assumptions, which is the ordinary state of every shift recorded before
     /// this existed, and is never an estimate of `$0.00`.
     func currentFuelDefaults() -> FuelDefaults {
-        let price = (try? existingSettings())??.gasPricePerGallon
-        guard let vehicle = selectedVehicle() else {
+        Self.fuelDefaults(
+            settings: (try? existingSettings()) ?? nil,
+            vehicles: selectedVehicle().map { [$0] } ?? []
+        )
+    }
+
+    /// The one rule that turns the driver's preferences into what a shift
+    /// starting now would record.
+    ///
+    /// Shared by ``currentFuelDefaults()``, which ``ShiftService/startShift(at:)``
+    /// copies, and by the Home screen's ``NextShiftVehicleContext``, which draws
+    /// the same figures from rows it already observes. Keeping it in one place
+    /// is what makes the row beside `Start Shift` say exactly what the shift
+    /// will record, rather than a second reading of the settings that could
+    /// drift from the first.
+    ///
+    /// The selected vehicle is the profile whose identifier the settings hold.
+    /// None selected, or an identifier no profile in `vehicles` carries, is no
+    /// vehicle: nothing is chosen on the driver's behalf, and a deleted profile
+    /// is never borrowed.
+    static func fuelDefaults(settings: DriverSettings?, vehicles: [VehicleProfile]) -> FuelDefaults {
+        let price = settings?.gasPricePerGallon
+        guard let id = settings?.selectedVehicleID,
+              let vehicle = vehicles.first(where: { $0.id == id })
+        else {
             return FuelDefaults(vehicleName: nil, milesPerGallon: nil, gasPricePerGallon: price)
         }
         return vehicle.defaults(gasPricePerGallon: price)
