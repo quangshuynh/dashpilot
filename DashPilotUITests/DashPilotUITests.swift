@@ -5653,13 +5653,7 @@ final class DashPilotUITests: XCTestCase {
         typeFuelAssumptions(milesPerGallon: "0", gasPrice: "3.50", in: app)
         app.buttons["saveFuelAssumptionsButton"].tap()
 
-        // `firstMatch`, because a `Label` renders as an element containing its
-        // own text and both carry the identifier: reading `.label` off the
-        // unqualified query fails on the multiple match rather than on anything
-        // about the screen.
-        let message = app.descendants(matching: .any)
-            .matching(identifier: "fuelAssumptionsValidationMessage")
-            .firstMatch
+        let message = validationMessage("fuelAssumptionsValidationMessage", in: app)
         XCTAssertTrue(message.waitForExistence(timeout: 5), "The driver should be told why it was refused")
         XCTAssertTrue(
             message.label.contains("more than zero"),
@@ -6346,7 +6340,7 @@ final class DashPilotUITests: XCTestCase {
         nameField.tap()
         nameField.typeText("The van")
         app.buttons["saveVehicleButton"].tap()
-        let message = app.descendants(matching: .any).matching(identifier: "vehicleValidationMessage").firstMatch
+        let message = validationMessage("vehicleValidationMessage", in: app)
         XCTAssertTrue(message.waitForExistence(timeout: 5), "A vehicle with no economy is refused")
         XCTAssertTrue(
             message.label.contains("miles per gallon"),
@@ -7002,6 +6996,21 @@ final class DashPilotUITests: XCTestCase {
         field.tap()
         let existing = (field.value as? String) ?? ""
         field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: existing.count))
+    }
+
+    /// The sentence of a validation message drawn as a `Label` with a warning
+    /// symbol.
+    ///
+    /// The identifier is mirrored onto the label's icon as well as its text, and
+    /// the icon's own label is "Warning". Which of the two an `.any` query
+    /// matches first is decided by the runtime's accessibility tree rather than
+    /// by the screen: iOS 27 puts the text first and iOS 26.5 puts the icon
+    /// first, so a journey reading `.label` off that query passed locally and
+    /// read "Warning" in CI. The icon is never a static text, so this query can
+    /// only ever resolve to the sentence.
+    @MainActor
+    private func validationMessage(_ identifier: String, in app: XCUIApplication) -> XCUIElement {
+        app.staticTexts.matching(identifier: identifier).firstMatch
     }
 
     /// A row and a detail metric are each one combined accessibility element, so
@@ -7848,10 +7857,7 @@ final class DashPilotUITests: XCTestCase {
 
         app.buttons["saveExpenseButton"].tap()
 
-        // The identifier is mirrored onto the label's icon as well as its text,
-        // and the icon's label is "Warning", so the sentence is read off the
-        // static text rather than off whichever element matches first.
-        let message = app.staticTexts.matching(identifier: "expenseValidationMessage").firstMatch
+        let message = validationMessage("expenseValidationMessage", in: app)
         XCTAssertTrue(message.waitForExistence(timeout: 5), "The refusal is explained rather than silent")
         XCTAssertTrue(
             message.label.lowercased().contains("negative"),
