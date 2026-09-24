@@ -417,6 +417,12 @@ Three lessons are worth repeating when adding journeys:
   been reading it without scrolling.
 - SwiftUI mirrors an `accessibilityIdentifier` onto a button's label element as well, so an alert
   button matches twice. Use `.firstMatch`.
+- A validation message drawn as a `Label` carries its identifier on its warning icon as well as on
+  its text, and the icon's own label is `Warning`. **`.firstMatch` over an `.any` query is then not
+  enough**: which of the two comes first is decided by the runtime's accessibility tree, and iOS
+  27.0 puts the text first while iOS 26.5 puts the icon first, so a journey reading the sentence
+  that way passed locally and read `Warning` in CI. Read it through `validationMessage(_:in:)`, which
+  queries static texts only and so can never resolve to the icon.
 - Proving a sheet does **not** appear needs an ordering argument rather than a sleep. The
   expected-pay confirmation is raised by the same state change that removes the delivered card, so
   waiting for the card to go and then finding no sheet is a real negative; the journey then opens
