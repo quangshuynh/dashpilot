@@ -464,6 +464,7 @@ none either — it is unioned from timestamps already stored, every time it is s
 | `GeographicDistance` | One haversine implementation, shared by capture and measurement |
 | `ShiftLifecycleState` | Running, paused or ended, derived from a shift's own rows |
 | `ShiftVehicleContext` | The vehicle name and fuel economy a shift recorded, and the words the running shift's panel says them in. Reads the shift's snapshot and never a preference |
+| `NextShiftVehicleContext` | The vehicle, fuel economy and gas price the **next** shift will record, and the words the start panel says them in. Built from the same `FuelDefaults` the start copies, through `SettingsService.fuelDefaults(settings:vehicles:)`, and never read once a shift is running. Persists nothing |
 | `ShiftPauseInterval` | One recorded pause as a value: its bounds, its clipping and its malformed case |
 | `ShiftPausedTime`, `ShiftPausedTimeCalculator` | The union of a shift's pauses, with the counts behind it |
 | `DateRangeUnion` | The one sweep that merges overlapping stretches, shared by paused time and delivery active time |
