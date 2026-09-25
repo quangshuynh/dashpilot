@@ -127,10 +127,27 @@ struct HistoryFetchScopeMeasurementTests {
         }
         #expect(lastWeek.elements.count == Self.shiftsPerWeek)
 
+        // The shipping path: identifiers handed to a context of its own, which
+        // Older Weeks runs off the main actor. The main actor pays only for
+        // collecting the identifiers.
+        var ids: [UUID] = []
+        let collecting = clock.measure { ids = lastWeek.elements.map(\.id) }
+        var offMain: HistoryWeekSummary?
+        let background = clock.measure {
+            offMain = HistoryFetchScope.weekSummary(of: lastWeek.week, shiftIDs: ids, in: store.container)
+        }
+        let direct = HistoryWeekSummary(
+            week: lastWeek.week,
+            records: lastWeek.elements.map { $0.periodRecord(for: $0.recordedDistance()) }
+        )
+        #expect(offMain == direct, "The context of its own derives the same figures")
+
         Report.line("")
         Report.line(
-            "One older week's summary, \(Self.shiftsPerWeek) shifts of 3,000 positions each: "
-                + "\(ms(elapsed)) ms, paid once when the week's section is built."
+            "One older week's summary, \(Self.shiftsPerWeek) shifts of 3,000 positions each. "
+                + "Before, on the main actor as the section appeared: \(ms(elapsed)) ms. "
+                + "After: \(ms(collecting)) ms on the main actor to collect identifiers, and "
+                + "\(ms(background)) ms on a context of its own, which Older Weeks runs off the main actor."
         )
     }
 

@@ -239,4 +239,31 @@ struct HistoryFetchScopeTests {
         #expect(onScreen.count < 3)
         #expect(document.shifts.count == expected)
     }
+
+    // MARK: A week's summary, off the main actor
+
+    @Test("A week summarised through its own context is the same summary, and skips a deleted shift")
+    func weekSummaryThroughItsOwnContext() throws {
+        let monday = try date(2026, 9, 14, 9)
+        let first = try completedShift(at: monday)
+        try first.setGrossEarnings(Money(minorUnits: 8_000))
+        let second = try completedShift(at: try date(2026, 9, 16, 17), hours: 3)
+        try second.setGrossEarnings(Money(minorUnits: 6_000))
+        try context.save()
+
+        let week = try week(monday)
+        let direct = HistoryWeekSummary(
+            week: week,
+            records: [first, second].map { $0.periodRecord(for: $0.recordedDistance()) }
+        )
+        let ids = [first, second].map(\.id)
+
+        #expect(HistoryFetchScope.weekSummary(of: week, shiftIDs: ids, in: container) == direct)
+
+        context.delete(second)
+        try context.save()
+        let afterDeletion = HistoryFetchScope.weekSummary(of: week, shiftIDs: ids, in: container)
+        #expect(afterDeletion.completedShiftCount == 1)
+        #expect(afterDeletion.metrics.recordedGrossEarnings == Money(minorUnits: 8_000))
+    }
 }

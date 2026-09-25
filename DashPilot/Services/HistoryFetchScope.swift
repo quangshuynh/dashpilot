@@ -115,6 +115,36 @@ nonisolated enum HistoryFetchScope {
     }
 }
 
+nonisolated extension HistoryFetchScope {
+    /// One week's summary, derived through a context of its own so that it can
+    /// run off the main actor.
+    ///
+    /// Measuring a week means walking every route in it, which for twelve
+    /// ordinary shifts is over half a second, and Older Weeks asks for it as
+    /// each week scrolls into view. The derivation is exactly
+    /// ``HistoryWeekSummary``'s, over the same shifts' saved facts; only the
+    /// thread it runs on moves. Identifiers rather than models cross the actor
+    /// boundary, and a shift that has since been deleted is simply not there.
+    ///
+    /// **Fetched by a predicate on the stored `id`, never through
+    /// `ModelContext.model(for:)`.** That call hands back a model for an
+    /// identifier whose row is gone, and reading it traps; a shift deleted
+    /// while its week was being worked out would have taken the app down.
+    static func weekSummary(
+        of week: HistoryWeek,
+        shiftIDs: [UUID],
+        in container: ModelContainer
+    ) -> HistoryWeekSummary {
+        let context = ModelContext(container)
+        let descriptor = FetchDescriptor<Shift>(predicate: #Predicate { shiftIDs.contains($0.id) })
+        let shifts = (try? context.fetch(descriptor)) ?? []
+        return HistoryWeekSummary(
+            week: week,
+            records: shifts.map { $0.periodRecord(for: $0.recordedDistance()) }
+        )
+    }
+}
+
 /// How much History holds outside the week on screen.
 nonisolated struct HistoryOtherWeeksSummary: Equatable, Sendable {
     let weekCount: Int

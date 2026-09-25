@@ -11,13 +11,15 @@ import SwiftUI
 /// lines it is given, in the order it is given them. A total assembled in a view
 /// body is the second definition this project keeps out of the app.
 ///
-/// ## Why it measures in a task rather than in `body`
+/// ## Why it measures in a task, off the main actor
 ///
 /// The summary needs every shift in the week measured, and a shift's route can
 /// hold thousands of positions. A `List` materialises a section when it comes
 /// near the viewport, so the work happens for the weeks a driver actually
 /// scrolls to and once each, rather than for every week in the store on every
-/// redraw. Nothing is cached in the store: the figures are derived from the
+/// redraw, and it runs on a context of its own off the main actor, because a
+/// week of ordinary shifts is over half a second of route walking and the list
+/// has to keep scrolling meanwhile. Nothing is cached in the store: the figures are derived from the
 /// route and the recorded facts each time the section is built, exactly as
 /// ``CompletedShiftRow`` derives its own.
 struct HistoryWeekSummaryView: View {
@@ -29,6 +31,7 @@ struct HistoryWeekSummaryView: View {
     /// been heard first.
     let spokenWeekTitle: String
 
+    @Environment(\.modelContext) private var modelContext
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.locale) private var locale
 
@@ -60,7 +63,7 @@ struct HistoryWeekSummaryView: View {
             }
         }
         .padding(.vertical, 4)
-        .task(id: week.id) { summary = derive() }
+        .task(id: week.id) { await derive() }
         // One element, so a listener hears the week as a week rather than as a
         // dozen unrelated fragments, and hears each unit and each coverage said
         // in full.
@@ -125,17 +128,27 @@ struct HistoryWeekSummaryView: View {
     }
 
     /// Measures each shift's route once and hands the records to the one
-    /// aggregation.
+    /// aggregation, off the main actor.
+    ///
+    /// A week of ordinary shifts is over half a second of route walking, paid
+    /// as the section scrolls into view, so it runs through
+    /// ``HistoryFetchScope/weekSummary(of:shiftIDs:in:)`` on a context of its
+    /// own and the list keeps scrolling meanwhile. The figures are the same:
+    /// one calculator over the same saved facts.
     ///
     /// The expenses overload is deliberately not used: an ``Expense`` belongs to
     /// a date rather than to a shift, this screen is a list of shifts, and a
     /// cost recorded on a day nobody worked has nothing to do with the week's
     /// shifts. What a period cost, and what its earnings come to after those
     /// costs, is on the period summary.
-    private func derive() -> HistoryWeekSummary {
-        HistoryWeekSummary(
-            week: week,
-            records: shifts.map { $0.periodRecord(for: $0.recordedDistance()) }
-        )
+    private func derive() async {
+        let week = week
+        let ids = shifts.map(\.id)
+        let container = modelContext.container
+        let derived = await Task.detached(priority: .userInitiated) {
+            HistoryFetchScope.weekSummary(of: week, shiftIDs: ids, in: container)
+        }.value
+        guard !Task.isCancelled else { return }
+        summary = derived
     }
 }
