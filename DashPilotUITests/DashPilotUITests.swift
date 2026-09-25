@@ -1217,6 +1217,103 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertGreaterThanOrEqual(vehicle.frame.height, 44, "The row is not squeezed to fit")
     }
 
+    // MARK: Long histories
+
+    /// The cents of every `$50.xx` or `$51.xx` amount in the long-history
+    /// fixture's visible older rows. The fixture pays `$50.00` plus the number
+    /// of weeks ago in cents, so newest first means these only ever grow.
+    @MainActor
+    private func visibleWeeklyCents(in app: XCUIApplication) -> [Int] {
+        olderWeekRows(in: app).allElementsBoundByIndex.compactMap { row -> Int? in
+            guard let range = row.label.range(of: #"\$5[01]\.\d\d"#, options: .regularExpression) else {
+                return nil
+            }
+            let text = row.label[range].dropFirst()
+            guard let value = Double(text) else { return nil }
+            return Int((value * 100).rounded())
+        }
+    }
+
+    /// Returns from a shift's detail to Older Weeks, which is where it was
+    /// opened from; ``goBack(in:)`` expects the root screen.
+    @MainActor
+    private func goBackToOlderWeeks(in app: XCUIApplication) {
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        XCTAssertTrue(app.navigationBars["Older Weeks"].waitForExistence(timeout: 5))
+    }
+
+    /// Two and a half years of weeks, newest first all the way down, and the
+    /// oldest shift is reachable, opens, and leaves the list where it was.
+    @MainActor
+    func testALongHistoryIsNewestFirstAndItsOldestShiftIsReachable() throws {
+        let app = launchWithLongHistory()
+        openOlderWeeks(in: app)
+
+        let oldest = olderWeekRows(in: app).matching(NSPredicate(format: "label CONTAINS %@", "$12.34")).firstMatch
+        var seen: [Int] = []
+        var swipes = 0
+        while !(oldest.exists && oldest.isHittable), swipes < 160 {
+            for cents in visibleWeeklyCents(in: app) where !seen.contains(cents) {
+                seen.append(cents)
+            }
+            app.swipeUp(velocity: .fast)
+            swipes += 1
+        }
+        XCTAssertTrue(oldest.isHittable, "The oldest shift, from about two and a half years ago, is reachable")
+        XCTAssertGreaterThan(seen.count, 40, "Most of the fixture's weeks went past: \(seen.count)")
+        XCTAssertEqual(seen, seen.sorted(), "Newest week first, the whole way down: \(seen)")
+
+        // Its week is summarised like any other.
+        let summaries = app.descendants(matching: .any).matching(identifier: "olderWeekSummary")
+        let oldestWeek = summaries.matching(NSPredicate(format: "label CONTAINS %@", "$12.34")).firstMatch
+        XCTAssertTrue(oldestWeek.waitForExistence(timeout: 10), "The oldest week has its own summary")
+
+        oldest.tap()
+        let earnings = app.descendants(matching: .any)["shiftDetailEarnings"]
+        XCTAssertTrue(earnings.waitForExistence(timeout: 5))
+        XCTAssertTrue(earnings.label.contains("$12.34"), "It opens its own detail: \(earnings.label)")
+
+        goBackToOlderWeeks(in: app)
+        XCTAssertTrue(oldest.waitForExistence(timeout: 5))
+        XCTAssertTrue(oldest.isHittable, "Coming back returns to where the driver was, not to the top")
+
+        // And the list carries on from there: back up towards newer weeks.
+        app.swipeDown()
+        XCTAssertTrue(
+            olderWeekRows(in: app).firstMatch.waitForExistence(timeout: 5),
+            "The list is still a list after returning"
+        )
+    }
+
+    /// At the largest accessibility size a shift several weeks down is still
+    /// reachable and opens, and its week's summary is never a tiny cell.
+    @MainActor
+    func testALongHistoryIsNavigableAtTheLargestTextSize() throws {
+        let app = launchWithLongHistory(textSize: Self.accessibilityXXXLTextSize)
+        openOlderWeeks(in: app, maxSwipes: 25)
+
+        let target = olderWeekRows(in: app).matching(NSPredicate(format: "label CONTAINS %@", "$50.06")).firstMatch
+        XCTAssertTrue(scrollUntilHittable(target, in: app, maxSwipes: 80), "A shift a few weeks down is reachable")
+
+        let summaries = app.descendants(matching: .any).matching(identifier: "olderWeekSummary")
+        for index in 0..<min(summaries.count, 3) {
+            let summary = summaries.element(boundBy: index)
+            if summary.exists, summary.isHittable {
+                XCTAssertGreaterThan(summary.frame.height, 44, "A summary is never a tiny cell")
+            }
+        }
+
+        target.tap()
+        // At this size the earnings section is below the fold of the detail
+        // screen, so it is scrolled to rather than expected on arrival.
+        XCTAssertTrue(app.navigationBars.buttons.element(boundBy: 0).waitForExistence(timeout: 5))
+        let earnings = app.descendants(matching: .any)["shiftDetailEarnings"]
+        XCTAssertTrue(scrollTo(earnings, in: app, maxSwipes: 20), "The tapped shift's detail opens")
+        XCTAssertTrue(earnings.label.contains("$50.06"), "Showed: \(earnings.label)")
+        goBackToOlderWeeks(in: app)
+        XCTAssertTrue(target.waitForExistence(timeout: 5), "Returning keeps the place in the list")
+    }
+
     /// A week the driver has not worked yet says so, and does not quietly fill
     /// itself with the week before.
     @MainActor
