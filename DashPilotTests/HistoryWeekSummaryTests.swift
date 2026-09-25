@@ -124,11 +124,11 @@ struct HistoryWeekSummaryTests {
         )
 
         #expect(summary.completedShiftCount == 1)
-        #expect(try line(.shifts, in: summary).value == "1")
+        #expect(try line(.activity, in: summary).value == "1")
         #expect(try line(.earnings, in: summary).value == "$120.00")
         #expect(try line(.working, in: summary).value == DurationText.short(4 * 3_600))
         #expect(try line(.mileage, in: summary).value.contains("40"))
-        #expect(try line(.deliveries, in: summary).value == "6")
+        #expect(try line(.activity, in: summary).detail == "6 deliveries completed")
     }
 
     @Test("Several shifts are added up, and the total is the calculator's own")
@@ -325,7 +325,8 @@ struct HistoryWeekSummaryTests {
         )
 
         let lines = summary.lines(locale: Locale(identifier: "en_US"))
-        #expect(lines.map(\.id) == [.shifts, .earnings, .working, .mileage, .deliveries])
+        #expect(lines.map(\.id) == [.earnings, .working, .mileage, .activity])
+        #expect(lines.filter { $0.prominence == .primary }.map(\.id) == [.earnings, .working, .mileage])
 
         let spoken = summary.spokenSummary(locale: Locale(identifier: "en_US"))
         #expect(spoken.contains("completed shift"))
@@ -394,7 +395,7 @@ struct HistoryWeekSummaryTests {
 
         let net = try line(.estimatedNet, in: summary)
         #expect(net.value == "$92.00", "$100.00 recorded less $8.00 estimated, over the shift that has both")
-        #expect(net.detail == "1 of 2 shifts")
+        #expect(net.detail == "1 of 2 shifts · before recorded expenses")
         #expect(
             net.spoken.contains("never added together"),
             "The overlap with a recorded fuel expense travels with the figure: \(net.spoken)"
@@ -426,6 +427,208 @@ struct HistoryWeekSummaryTests {
 
         #expect(summary.completedShiftCount == 1)
         #expect(summary.metrics.recordedGrossEarnings == (try money("45.00")))
-        #expect(try line(.deliveries, in: summary).value == "2")
+        #expect(try line(.activity, in: summary).detail == "2 deliveries completed")
+    }
+
+    // MARK: The hierarchy, and the two nets
+
+    private func fuelled(
+        _ base: PeriodShiftRecord,
+        milesPerGallon: Decimal = 25,
+        price: String = "4.00"
+    ) throws -> PeriodShiftRecord {
+        PeriodShiftRecord(
+            startedAt: base.startedAt,
+            workingDuration: base.workingDuration,
+            grossEarnings: base.grossEarnings,
+            recordedDistance: base.recordedDistance,
+            deliverySummary: base.deliverySummary,
+            fuelEstimate: FuelEstimateCalculator().estimate(
+                recordedDistance: base.recordedDistance,
+                assumptions: FuelAssumptions(milesPerGallon: milesPerGallon, gasPricePerGallon: try money(price))
+            )
+        )
+    }
+
+    @Test("The shift and delivery counts share one line, each outcome named")
+    func countsShareALine() throws {
+        let summary = HistoryWeekSummary(
+            week: try fixtureWeek,
+            records: [
+                record(startedAt: at(day: 0, hour: 9), delivered: 5, cancelled: 1),
+                record(startedAt: at(day: 2, hour: 9), delivered: 7)
+            ]
+        )
+
+        let activity = try line(.activity, in: summary)
+        #expect(activity.prominence == .secondary)
+        #expect(activity.value == "2")
+        #expect(activity.detail == "12 deliveries completed · 1 cancelled")
+        #expect(activity.spoken.hasPrefix("2 completed shifts."))
+    }
+
+    @Test("Complete fuel coverage is stated rather than left as the case with no caveat")
+    func completeFuelCoverageIsStated() throws {
+        let summary = HistoryWeekSummary(
+            week: try fixtureWeek,
+            records: [
+                try fuelled(record(startedAt: at(day: 0, hour: 9), earnings: try money("100.00"), route: route(miles: 50))),
+                try fuelled(record(startedAt: at(day: 2, hour: 9), earnings: try money("60.00"), route: route(miles: 25)))
+            ]
+        )
+
+        // 75 recorded miles at 25 MPG is 3 gallons, at $4.00 is $12.00.
+        let fuel = try line(.estimatedFuel, in: summary)
+        #expect(fuel.value == "$12.00")
+        #expect(fuel.detail == "2 of 2 shifts · 75.0 of 75.0 recorded miles")
+        #expect(fuel.spoken.contains("across every completed shift"))
+
+        let net = try line(.estimatedNet, in: summary)
+        #expect(net.value == "$148.00")
+        #expect(net.detail == "Every shift this week · before recorded expenses")
+    }
+
+    @Test("Partial fuel coverage is never scaled up to the week")
+    func partialFuelIsNotExtrapolated() throws {
+        let summary = HistoryWeekSummary(
+            week: try fixtureWeek,
+            records: [
+                try fuelled(record(startedAt: at(day: 0, hour: 9), earnings: try money("100.00"), route: route(miles: 50))),
+                record(startedAt: at(day: 2, hour: 9), earnings: try money("60.00"), route: route(miles: 150))
+            ]
+        )
+
+        // The estimate is the one covered shift's $8.00. Scaling it to the
+        // week's 200 recorded miles would claim $32.00 of fuel nobody recorded
+        // an economy for.
+        let fuel = try line(.estimatedFuel, in: summary)
+        #expect(fuel.value == "$8.00")
+        #expect(fuel.value != "$32.00")
+        #expect(fuel.detail == "1 of 2 shifts · 50.0 of 200.0 recorded miles")
+    }
+
+    @Test("A partial route makes the fuel a floor and the net a ceiling, on the card as well as aloud")
+    func partialRoutesQualifyFuelAndNet() throws {
+        let summary = HistoryWeekSummary(
+            week: try fixtureWeek,
+            records: [
+                try fuelled(record(
+                    startedAt: at(day: 0, hour: 9),
+                    earnings: try money("100.00"),
+                    route: route(miles: 50, gapCount: 1)
+                ))
+            ]
+        )
+
+        #expect(try #require(try line(.estimatedFuel, in: summary).detail).contains("partial routes, so a floor"))
+        #expect(try #require(try line(.estimatedNet, in: summary).detail).hasSuffix("a ceiling"))
+    }
+
+    @Test("A recorded gas price of zero is a recorded zero, not a missing estimate")
+    func zeroGasPriceIsRecorded() throws {
+        let summary = HistoryWeekSummary(
+            week: try fixtureWeek,
+            records: [
+                try fuelled(
+                    record(startedAt: at(day: 0, hour: 9), earnings: try money("100.00"), route: route(miles: 50)),
+                    price: "0.00"
+                )
+            ]
+        )
+
+        #expect(try line(.estimatedFuel, in: summary).value == "$0.00")
+        #expect(try line(.estimatedNet, in: summary).value == "$100.00")
+    }
+
+    @Test("The estimated net is over the shifts that have both halves, not week earnings less week fuel")
+    func estimatedNetUsesThePairedSubset() throws {
+        let summary = HistoryWeekSummary(
+            week: try fixtureWeek,
+            records: [
+                // Both halves: $100.00 less $8.00.
+                try fuelled(record(startedAt: at(day: 0, hour: 9), earnings: try money("100.00"), route: route(miles: 50))),
+                // An estimate of $4.00 and no amount.
+                try fuelled(record(startedAt: at(day: 1, hour: 9), route: route(miles: 25))),
+                // An amount and no estimate.
+                record(startedAt: at(day: 2, hour: 9), earnings: try money("60.00"), route: route(miles: 30))
+            ]
+        )
+
+        let net = try line(.estimatedNet, in: summary)
+        #expect(net.value == "$92.00")
+        // $160.00 of week earnings less $12.00 of week fuel is the tempting
+        // arithmetic, and it is a figure no set of shifts earned.
+        #expect(net.value != "$148.00")
+        #expect(try line(.earnings, in: summary).value == "$160.00")
+        #expect(try line(.estimatedFuel, in: summary).value == "$12.00")
+        #expect(net.detail == "1 of 3 shifts · before recorded expenses")
+    }
+
+    @Test("Recorded expenses reach neither net on the card, so fuel is never subtracted twice")
+    func recordedExpensesAreNotSubtracted() throws {
+        let records = [
+            try fuelled(record(startedAt: at(day: 0, hour: 9), earnings: try money("100.00"), route: route(miles: 50)))
+        ]
+        let week = try fixtureWeek
+        let fillUp = ExpenseRecord(occurredAt: at(day: 0, hour: 20), amount: try money("30.00"), category: .fuel)
+
+        let summary = HistoryWeekSummary(week: week, records: records)
+        let withExpenses = calculator.metrics(of: records, expenses: [fillUp], in: week.period)
+
+        // The estimated net is the same figure whether or not a fuel purchase
+        // was recorded that week: nothing subtracts the purchase from it.
+        #expect(summary.metrics.estimatedNetAfterFuel == withExpenses.estimatedNetAfterFuel)
+        #expect(try line(.estimatedNet, in: summary).value == "$92.00")
+        // $100.00 less $30.00 recorded less $8.00 estimated counts the fuel twice.
+        #expect(try line(.estimatedNet, in: summary).value != "$62.00")
+
+        // The recorded-expense net exists at period scope and is not on the card.
+        #expect(withExpenses.netAfterRecordedExpenses.amount == (try money("70.00")))
+        #expect(!summary.metrics.netAfterRecordedExpenses.isAvailable)
+        for line in summary.lines(locale: Locale(identifier: "en_US")) {
+            #expect(!line.value.contains("70.00"))
+            #expect(!line.title.localizedCaseInsensitiveContains("expense"))
+        }
+    }
+
+    @Test("Aloud, the week names itself, then its shifts, then each figure with its coverage")
+    func spokenSummaryIsCoherent() throws {
+        let summary = HistoryWeekSummary(
+            week: try fixtureWeek,
+            records: [
+                record(
+                    startedAt: at(day: 1, hour: 9),
+                    working: 4 * 3_600,
+                    earnings: try money("120.00"),
+                    route: route(miles: 40),
+                    delivered: 6
+                )
+            ]
+        )
+
+        let spoken = summary.spokenSummary(
+            weekTitle: "Week of September 14 through September 20",
+            locale: Locale(identifier: "en_US")
+        )
+        #expect(spoken.hasPrefix("Week of September 14 through September 20. 1 completed shift. 6 deliveries completed."))
+        let earnings = try #require(spoken.range(of: "Recorded gross earnings"))
+        let working = try #require(spoken.range(of: "working time"))
+        let mileage = try #require(spoken.range(of: "Recorded mileage"))
+        #expect(earnings.lowerBound < working.lowerBound)
+        #expect(working.lowerBound < mileage.lowerBound)
+    }
+
+    @Test("The card never grows past six lines, three of them primary")
+    func theCardIsBounded() throws {
+        let summary = HistoryWeekSummary(
+            week: try fixtureWeek,
+            records: [
+                try fuelled(record(startedAt: at(day: 0, hour: 9), earnings: try money("100.00"), route: route(miles: 50), delivered: 3))
+            ]
+        )
+
+        let lines = summary.lines(locale: Locale(identifier: "en_US"))
+        #expect(lines.count == 6)
+        #expect(lines.filter { $0.prominence == .primary }.count == 3)
     }
 }

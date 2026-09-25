@@ -90,7 +90,11 @@ private struct OlderHistoryWeeksList: View {
                     // It is a row of the section rather than part of the
                     // heading so that the dates stay one line, which is what
                     // keeps the list from being pushed down a screenful.
-                    HistoryWeekSummaryView(week: group.week, shifts: group.elements)
+                    HistoryWeekSummaryView(
+                        week: group.week,
+                        shifts: group.elements,
+                        spokenWeekTitle: spokenHeading(for: group.week)
+                    )
 
                     ForEach(group.elements) { shift in
                         // A link to the screen rather than to the value the root

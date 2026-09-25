@@ -100,8 +100,8 @@ nonisolated extension PeriodFuelEstimate {
     func mileageCoverageStatement(locale: Locale = .autoupdatingCurrent) -> String? {
         guard totalDistance.isMeasured else { return nil }
         return """
-            \(coveredDistance.formattedMiles(locale: locale)) of \
-            \(totalDistance.formattedMiles(locale: locale)) recorded miles
+            \(coveredDistance.formattedMilesNumber(locale: locale)) of \
+            \(totalDistance.formattedMilesNumber(locale: locale)) recorded miles
             """
     }
 
