@@ -521,6 +521,15 @@ extension Shift {
         ShiftVehicleContext(vehicleName: fuelVehicleName, milesPerGallon: fuelMilesPerGallonValue)
     }
 
+    /// The vehicle and fuel assumptions this shift recorded, for History.
+    ///
+    /// Built from ``vehicleContext`` and ``fuelAssumptions`` and nothing else,
+    /// so a finished shift is described by its own snapshot however the
+    /// driver's settings have changed since.
+    var recordedVehicle: RecordedShiftVehicle {
+        RecordedShiftVehicle(context: vehicleContext, gasPricePerGallon: fuelAssumptions.gasPricePerGallon)
+    }
+
     /// Records the assumptions this shift's fuel estimate is worked out under,
     /// replacing whatever was recorded before.
     ///
