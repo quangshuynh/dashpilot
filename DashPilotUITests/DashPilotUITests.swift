@@ -49,6 +49,10 @@ final class DashPilotUITests: XCTestCase {
     /// Must match `LaunchArgument.seededOlderWeeksOnly`, for the same reason.
     private static let seededOlderWeeksOnlyArgument = "-dashpilot-seeded-older-weeks-only"
 
+    /// About two and a half years of synthetic work; see
+    /// `LaunchArgument.seededLongHistory` for its shape.
+    private static let seededLongHistoryArgument = "-dashpilot-seeded-long-history"
+
     /// Must match `LaunchArgument.stubbedLocation`, for the same reason.
     private static let stubbedLocationArgument = "-dashpilot-stubbed-location"
 
@@ -786,6 +790,30 @@ final class DashPilotUITests: XCTestCase {
         return app
     }
 
+    /// Launches the long-history fixture, optionally at a given text size.
+    @MainActor
+    private func launchWithLongHistory(textSize: String? = nil) -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments.append(Self.seededLongHistoryArgument)
+        if let textSize {
+            app.launchArguments += ["-UIPreferredContentSizeCategoryName", textSize]
+        }
+        launchInPortrait(app)
+        return app
+    }
+
+    /// Opens Older Weeks from the root screen.
+    @MainActor
+    private func openOlderWeeks(in app: XCUIApplication, maxSwipes: Int = 12) {
+        let older = app.buttons["olderHistoryWeeksLink"]
+        XCTAssertTrue(scrollUntilHittable(older, in: app, maxSwipes: maxSwipes), "View Older Weeks is reachable")
+        older.tap()
+        XCTAssertTrue(
+            app.descendants(matching: .any).matching(identifier: "olderWeekSummary").firstMatch
+                .waitForExistence(timeout: 10)
+        )
+    }
+
     /// Everything on screen whose label contains `text`.
     ///
     /// Used for the negative claims below. A `List` renders only the rows near
@@ -1023,6 +1051,80 @@ final class DashPilotUITests: XCTestCase {
 
         let row = olderWeekRows(in: app).firstMatch
         XCTAssertTrue(scrollTo(row, in: app, maxSwipes: 20), "The shifts under it are still reachable")
+    }
+
+    /// A week whose fuel is estimated for some shifts says whose, and keeps the
+    /// estimated net apart from recorded expenses.
+    @MainActor
+    func testAWeeksFuelEstimateStatesItsCoverage() throws {
+        let app = launchWithLongHistory()
+        openOlderWeeks(in: app)
+
+        // Last week: three shifts, two of which recorded fuel assumptions.
+        let lastWeek = app.descendants(matching: .any).matching(identifier: "olderWeekSummary").firstMatch
+        XCTAssertTrue(waitForLabel(lastWeek, toContain: "3 completed shifts"), "Showed: \(lastWeek.label)")
+        XCTAssertTrue(lastWeek.label.contains("Recorded gross earnings, $185.00"), "Showed: \(lastWeek.label)")
+        XCTAssertTrue(
+            lastWeek.label.contains("Estimated fuel") && lastWeek.label.contains("across 2 of 3 completed shifts"),
+            "The estimate says it covers two of the three shifts: \(lastWeek.label)"
+        )
+        XCTAssertTrue(lastWeek.label.contains("recorded miles"), "And how much of the driving: \(lastWeek.label)")
+        XCTAssertTrue(
+            lastWeek.label.contains("Estimated net after fuel") && lastWeek.label.contains("never added together"),
+            "The net carries the sentence that keeps it apart from recorded fuel: \(lastWeek.label)"
+        )
+        XCTAssertFalse(lastWeek.label.contains("Net after recorded expenses"), "Only one net is on the card")
+    }
+
+    /// A week nobody recorded fuel for carries no fuel figure, and certainly
+    /// not a zero.
+    @MainActor
+    func testAWeekWithoutFuelShowsNoFuelFigure() throws {
+        let app = launchWithOlderWeeks()
+        openOlderWeeks(in: app)
+
+        let lastWeek = app.descendants(matching: .any).matching(identifier: "olderWeekSummary").firstMatch
+        XCTAssertTrue(waitForLabel(lastWeek, toContain: "$55.00"), "Showed: \(lastWeek.label)")
+        XCTAssertFalse(lastWeek.label.contains("Estimated fuel"), "Showed: \(lastWeek.label)")
+        XCTAssertFalse(lastWeek.label.contains("$0.00"), "Missing is never a zero: \(lastWeek.label)")
+    }
+
+    /// The summary is one coherent sentence: the week, then its shifts, then
+    /// the three figures that describe it, in that order.
+    @MainActor
+    func testTheWeeklySummaryNamesItsWeekThenItsFigures() throws {
+        let app = launchWithLongHistory()
+        openOlderWeeks(in: app)
+
+        let header = app.descendants(matching: .any).matching(identifier: "olderWeekHeader").firstMatch
+        let summary = app.descendants(matching: .any).matching(identifier: "olderWeekSummary").firstMatch
+        XCTAssertTrue(waitForLabel(summary, toContain: "completed shifts"))
+        XCTAssertTrue(
+            summary.label.hasPrefix(header.label),
+            "The summary names its own week first: \(summary.label) / \(header.label)"
+        )
+
+        let label = summary.label
+        let order = ["3 completed shifts", "Recorded gross earnings", "working time", "Recorded mileage"]
+            .compactMap { label.range(of: $0)?.lowerBound }
+        XCTAssertEqual(order.count, 4, "Every figure is spoken: \(label)")
+        XCTAssertEqual(order, order.sorted(), "In the order a listener needs them: \(label)")
+    }
+
+    /// At the largest accessibility size the fuller card still says every
+    /// figure whole, and the shifts under it are still reachable.
+    @MainActor
+    func testTheFullWeeklySummarySurvivesLargeText() throws {
+        let app = launchWithLongHistory(textSize: Self.accessibilityXXXLTextSize)
+        openOlderWeeks(in: app, maxSwipes: 25)
+
+        let summary = app.descendants(matching: .any).matching(identifier: "olderWeekSummary").firstMatch
+        XCTAssertTrue(waitForLabel(summary, toContain: "$185.00"), "Showed: \(summary.label)")
+        XCTAssertTrue(summary.label.contains("Estimated fuel"))
+        XCTAssertGreaterThan(summary.frame.height, 44, "A summary is never a tiny cell")
+
+        let row = olderWeekRows(in: app).firstMatch
+        XCTAssertTrue(scrollTo(row, in: app, maxSwipes: 25), "The shifts under it are still reachable")
     }
 
     /// A week the driver has not worked yet says so, and does not quietly fill

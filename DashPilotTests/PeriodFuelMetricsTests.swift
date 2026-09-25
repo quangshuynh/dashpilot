@@ -151,7 +151,9 @@ struct PeriodFuelMetricsTests {
         #expect(metrics.fuel.mileageCoveragePercentage == 65)
 
         let statement = try #require(metrics.fuel.mileageCoverageStatement(locale: Locale(identifier: "en_US")))
-        #expect(statement.contains("of"), "Showed: \(statement)")
+        // The unit once, at the end, as the sentence is documented: an earlier
+        // build printed `75.0 mi of 115.0 mi recorded miles`.
+        #expect(statement == "75.0 of 115.0 recorded miles", "Showed: \(statement)")
         #expect(metrics.fuel.shiftCoverageStatement == "2 of 3 shifts")
     }
 
