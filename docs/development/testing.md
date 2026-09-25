@@ -415,7 +415,11 @@ Three lessons are worth repeating when adding journeys:
 - A `List` only renders rows near the viewport, so anything below the fold does not exist until it
   is scrolled to. This bites again whenever a section above grows: adding one sentence to the
   earnings footer pushed the route section off the first screen and failed two journeys that had
-  been reading it without scrolling.
+  been reading it without scrolling. It bit again when the start panel gained the next shift's
+  vehicle line: the seeded fixture's second history row went below the fold and eight journeys
+  indexing into it failed. Reach history rows through `revealHistoryRows(_:in:)`, which scrolls until
+  the last wanted row is hittable, so `count` and `element(boundBy:)` describe the fixture rather
+  than the screen.
 - SwiftUI mirrors an `accessibilityIdentifier` onto a button's label element as well, so an alert
   button matches twice. Use `.firstMatch`.
 - A validation message drawn as a `Label` carries its identifier on its warning icon as well as on
