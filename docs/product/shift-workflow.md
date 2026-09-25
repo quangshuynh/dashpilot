@@ -530,20 +530,26 @@ absent rather than shown empty.
 ### How a whole week went
 
 Each week on that screen opens with a summary of every shift in it, above the shifts themselves, so
-that the question a driver scrolls back with is answered before they start opening rows:
+that the question a driver scrolls back with, *what did this week look like?*, is answered before
+they start opening rows. Three figures lead and are drawn larger; the rest sit under a divider,
+smaller:
 
-```
-Sep 14 - Sep 20
+```text
+Sep 14 - 20, 2026
 
-Shifts                    5
-Earnings            $428.30
-                          4 of 5 shifts
-Working              14h 42m
-                          5 of 5 shifts
-Recorded miles       187.4 mi
-                          5 of 5 shifts measured · 1 partial
-Deliveries               31
-                          31 deliveries completed
+Recorded earnings                   $185.00
+3 of 3 shifts
+Working time                           6 hr
+3 of 3 shifts
+Recorded miles                      89.4 mi
+3 of 3 shifts measured
+-------------------------------------------
+Shifts                                    3
+5 deliveries completed · 1 cancelled
+Estimated fuel                        $4.77
+2 of 3 shifts · 59.6 of 89.4 recorded miles
+Estimated net after fuel            $120.23
+2 of 3 shifts · before recorded expenses
 ```
 
 **Nothing is defined for History.** Every figure is the period summary's, derived by the same
@@ -557,17 +563,48 @@ routes measured. None of those is necessarily every shift, so each line that can
 sources says how many shifts are behind it. `4 of 5 shifts` under a subtotal is the difference
 between a subtotal and a claim about the week.
 
+**Fuel is estimated only over the shifts that recorded enough to say**, and says so in two units:
+how many of the week's shifts, and how many of its recorded miles. It is never scaled up to the whole
+week, and each shift is estimated under the economy and price **it** recorded, never today's. The
+**estimated net after fuel** is worked out over the shifts that recorded both an amount and an
+estimate, which is why its coverage can differ from the earnings line above it, and it is labelled
+as coming before recorded expenses. Where a route in the week is partial, the fuel line says the
+estimate is a floor and the net line says it is a ceiling. A week where no shift recorded fuel
+assumptions carries neither line, rather than two lines saying so on every week a driver scrolls
+past; the shift's own detail screen is where an absent estimate is explained.
+
+**Deliberately not on the card:** elapsed time (working time is what every rate divides by), net
+after recorded expenses (an expense belongs to a date rather than to a shift, and one net on a small
+card cannot be mistaken for the other), and any vehicle. A week can hold shifts worked in different
+vehicles, and a vehicle's name is a label a shift recorded rather than an identity, so the card does
+not count or merge names. Each shift's detail says what that shift recorded. The rates, delivery
+active time and pickup waits are on the period summary, one tap from the root screen.
+
 **Missing is never a zero.** A week where nobody recorded an amount says `Not recorded`, not `$0.00`;
-a week whose routes measured nothing says `Not measured`, not `0.0 mi`. A running shift is not in any
-of it, by the rule that keeps running shifts out of every historical aggregate.
+a week whose routes measured nothing says `Not measured`, not `0.0 mi`. A recorded gas price of zero
+is a fact and is counted as one. A running shift is not in any of it, by the rule that keeps running
+shifts out of every historical aggregate.
 
-For a listener the whole week is one element, spoken as one sentence with every unit and every
-coverage said in full, because there is no caption in view to read afterwards. At large text sizes
-each figure stacks under its own label rather than being shortened to fit beside it.
+For a listener the whole week is one element, spoken as one sentence: the week's name, then how many
+shifts, then each figure with every unit and every coverage said in full, because there is no
+caption in view to read afterwards. At large text sizes each figure stacks under its own label
+rather than being shortened to fit beside it, and nothing is shrunk to fit.
 
-The summary is derived when a week comes into view and thrown away with it. Nothing is stored: a
-week's totals are worked out from the same recorded facts every time they are shown, exactly as a
-shift's mileage is.
+The summary is worked out when a week comes into view, on a context of its own **off the main
+actor**, because a week of ordinary shifts is about half a second of route walking and the list has
+to keep scrolling meanwhile. Nothing is stored: a week's totals are worked out from the same recorded
+facts every time they are shown, exactly as a shift's mileage is.
+
+### What History reads, and what it costs
+
+The root screen reads **the current week's shifts and nothing more**, plus a count of every other
+completed shift, so that the list a driver reads while working does not grow with their history. How
+many weeks those other shifts fall in, for the `66 weeks · 68 shifts` line under View Older Weeks,
+is worked out off the main actor. Opening Older Weeks is where the rest of the history is read, and
+that is the driver asking for it. Measured on a synthetic store holding five years of work (3,124
+completed shifts), the root screen's refresh went from about 175 to 220 ms to about 1 ms, and opening
+Older Weeks costs about 80 to 100 ms once. **Export All History still reads the whole store** through
+its own fetch, never the screen's.
 
 **Nothing is deleted, archived or aged out.** This is what is shown where, and nothing else: every
 completed shift is still in the store, still exported, still counted by every period summary, and
@@ -591,7 +628,7 @@ numbers*.
 | Earnings | The recorded amount or "No amount recorded", and Add or Edit Earnings |
 | Route | Recorded mileage, capture segments, capture gaps, and what qualifies them |
 | Performance | All three derived gross rates, or the reason each could not be derived |
-| Estimated Fuel | The estimated fuel cost over this shift's recorded mileage, the estimated gallons, the fuel economy and gas price it was estimated under, and Add or Edit Fuel Assumptions |
+| Estimated Fuel | The estimated fuel cost over this shift's recorded mileage, the estimated gallons, the vehicle, fuel economy and gas price this shift recorded, and Add or Edit Fuel Assumptions |
 | Estimated Net | Recorded earnings, the estimated fuel cost being subtracted, the estimated net after fuel and the estimated net per working hour |
 | Pauses | Each recorded pause with its times and length, Edit and Delete for each, and Add Missed Pause |
 | Deliveries | How many were completed and cancelled, and what each one recorded |
@@ -609,6 +646,25 @@ figure exactly where it is, and only those two sections say they are unavailable
 It is a summary, not a dashboard: no chart, no map, no gauge and no score. Only completed shifts
 have a detail screen, because a running shift has no finalised duration, no earnings it may record
 and nothing that may be deleted.
+
+### Which vehicle a finished shift recorded
+
+The fuel section's assumptions open with a `Vehicle` row, above the fuel economy and gas price it
+recorded, so the block reads as what this shift was estimated under:
+
+```text
+Vehicle                   2020 Honda Civic
+Miles per gallon                        34
+Gas price per gallon                 $3.29
+```
+
+It is the shift's **own snapshot** and nothing else. Renaming or deleting that vehicle in Settings,
+selecting another one and changing the current gas price all leave it exactly as it is. A shift that
+recorded no vehicle name (one worked before vehicles existed, or whose economy was typed by hand)
+reads `Not recorded`, and nothing fills it from today's selection or guesses a vehicle from a
+matching economy. A missing economy or price says `Not recorded` rather than `0`; a price recorded as
+zero reads `$0.00`, because that is what was recorded. VoiceOver hears the block as one sentence per
+row, the vehicle's row saying it was recorded with this shift.
 
 ## Entering earnings
 
