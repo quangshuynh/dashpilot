@@ -1047,8 +1047,7 @@ final class DashPilotUITests: XCTestCase {
     @MainActor
     func testOpensTheDetailOfTheTappedShift() throws {
         let app = launchWithSeededHistory()
-        let history = rows(in: app)
-        XCTAssertTrue(history.firstMatch.waitForExistence(timeout: 10))
+        let history = revealHistoryRows(2, in: app)
         XCTAssertEqual(history.count, 2, "The fixture holds one shift with earnings and one without")
 
         // The older shift: no amount, no route.
@@ -1183,8 +1182,7 @@ final class DashPilotUITests: XCTestCase {
     @MainActor
     func testShiftWithoutDeliveriesInventsNoActiveTime() throws {
         let app = launchWithSeededHistory()
-        let history = rows(in: app)
-        XCTAssertTrue(history.firstMatch.waitForExistence(timeout: 10))
+        let history = revealHistoryRows(2, in: app)
 
         history.element(boundBy: 1).tap()
 
@@ -1247,8 +1245,7 @@ final class DashPilotUITests: XCTestCase {
     @MainActor
     func testDetailInventsNoRouteInformation() throws {
         let app = launchWithSeededHistory()
-        let history = rows(in: app)
-        XCTAssertTrue(history.firstMatch.waitForExistence(timeout: 10))
+        let history = revealHistoryRows(2, in: app)
 
         history.element(boundBy: 1).tap()
 
@@ -1265,8 +1262,7 @@ final class DashPilotUITests: XCTestCase {
     @MainActor
     func testDetailExplainsRatesItCannotDerive() throws {
         let app = launchWithSeededHistory()
-        let history = rows(in: app)
-        XCTAssertTrue(history.firstMatch.waitForExistence(timeout: 10))
+        let history = revealHistoryRows(2, in: app)
 
         let withoutEarnings = history.element(boundBy: 1)
         XCTAssertFalse(
@@ -5243,8 +5239,7 @@ final class DashPilotUITests: XCTestCase {
     @MainActor
     func testDeletesACompletedShift() throws {
         let app = launchWithSeededHistory()
-        let history = rows(in: app)
-        XCTAssertTrue(history.firstMatch.waitForExistence(timeout: 10))
+        let history = revealHistoryRows(2, in: app)
         XCTAssertEqual(history.count, 2)
 
         history.element(boundBy: 0).tap()
@@ -5288,7 +5283,7 @@ final class DashPilotUITests: XCTestCase {
 
         XCTAssertTrue(app.buttons["deleteShiftButton"].waitForExistence(timeout: 5), "Detail is still open")
         goBack(in: app)
-        XCTAssertTrue(waitForCount(rows(in: app), toEqual: 2), "Both shifts are still in history")
+        XCTAssertEqual(revealHistoryRows(2, in: app).count, 2, "Both shifts are still in history")
     }
 
     // MARK: Helpers
@@ -5688,8 +5683,7 @@ final class DashPilotUITests: XCTestCase {
         recordFuelAssumptions(milesPerGallon: "25", gasPrice: "3.50", in: app)
         goBack(in: app)
 
-        let history = rows(in: app)
-        XCTAssertTrue(history.firstMatch.waitForExistence(timeout: 10))
+        let history = revealHistoryRows(2, in: app)
         history.element(boundBy: 1).tap()
 
         let addButton = app.buttons["editFuelAssumptionsButton"]
@@ -5836,8 +5830,7 @@ final class DashPilotUITests: XCTestCase {
         // The fixture's second shift recorded no amount, and the assumptions
         // above seed its editor, so it can reach a fuel estimate without
         // reaching an amount.
-        let history = rows(in: app)
-        XCTAssertTrue(history.firstMatch.waitForExistence(timeout: 10))
+        let history = revealHistoryRows(2, in: app)
         history.element(boundBy: 1).tap()
 
         let net = app.descendants(matching: .any)["shiftDetailEstimatedNetAfterFuel"]
@@ -6885,6 +6878,29 @@ final class DashPilotUITests: XCTestCase {
     @MainActor
     private func rows(in app: XCUIApplication) -> XCUIElementQuery {
         app.descendants(matching: .any).matching(identifier: "completedShiftRow")
+    }
+
+    /// History's completed shift rows, scrolled until the first `count` of them
+    /// are rendered.
+    ///
+    /// A `List` renders only rows near the viewport, so the second row of the
+    /// two-shift fixture does not exist until it is scrolled to, and how far
+    /// that is depends on everything above history. Adding the next shift's
+    /// vehicle line to the start panel was enough to push it below the fold and
+    /// fail eight journeys that had been indexing into it unscrolled. Scrolling
+    /// until the last wanted row is **hittable** means every row before it is
+    /// rendered too, so `element(boundBy:)` and `count` are then about the
+    /// fixture rather than about the screen. A row that cannot be revealed
+    /// fails here, loudly, rather than resolving to a different one.
+    @MainActor
+    private func revealHistoryRows(_ count: Int, in app: XCUIApplication) -> XCUIElementQuery {
+        let history = rows(in: app)
+        XCTAssertTrue(history.firstMatch.waitForExistence(timeout: 10))
+        XCTAssertTrue(
+            scrollUntilHittable(history.element(boundBy: count - 1), in: app),
+            "History should reveal \(count) completed shifts"
+        )
+        return history
     }
 
     /// Runs one shift start-to-finish.
