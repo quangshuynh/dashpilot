@@ -345,9 +345,15 @@ more profitable than another.
 ### In History
 
 Each week under **View Older Weeks** carries the same two figures above its shifts, with the same
-coverage, and only when the week has them. A week where no shift recorded assumptions simply does not
-carry the lines, because a summary above a list is not the place to explain an absent estimate: the
-shift's own detail screen is, because that is where it can be acted on.
+coverage, and only when the week has them. The fuel line states both coverages (`2 of 3 shifts ·
+59.6 of 89.4 recorded miles`) and the net line is labelled as coming before recorded expenses; a
+partial route in the week makes the fuel a floor and the net a ceiling, and the card says so. Each
+shift is estimated under the assumptions **it** recorded, so a week is never restated by today's gas
+price. Net after recorded expenses is deliberately not on that card: it stays on the period summary,
+so the two nets never sit side by side on a small card where they could be read as one. A week where
+no shift recorded assumptions simply does not carry the lines, because a summary above a list is not
+the place to explain an absent estimate: the shift's own detail screen is, because that is where it
+can be acted on.
 
 ## What these figures are not
 
