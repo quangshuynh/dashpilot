@@ -1127,6 +1127,96 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertTrue(scrollTo(row, in: app, maxSwipes: 25), "The shifts under it are still reachable")
     }
 
+    // MARK: Historical vehicle context
+
+    /// Opens the first shift under Older Weeks: last week's Friday, worked in
+    /// the synthetic van at a recorded gas price of zero.
+    @MainActor
+    private func openLastWeeksFridayShift(in app: XCUIApplication, maxSwipes: Int = 12) {
+        openOlderWeeks(in: app, maxSwipes: maxSwipes)
+        let row = olderWeekRows(in: app).firstMatch
+        XCTAssertTrue(scrollUntilHittable(row, in: app, maxSwipes: maxSwipes))
+        XCTAssertTrue(waitForLabel(row, toContain: "$45.00"), "Showed: \(row.label)")
+        row.tap()
+    }
+
+    /// A finished shift says which vehicle and assumptions it recorded, beside
+    /// its fuel estimate, including a price recorded as zero.
+    @MainActor
+    func testAHistoricalShiftShowsTheVehicleItRecorded() throws {
+        let app = launchWithLongHistory()
+        openLastWeeksFridayShift(in: app)
+
+        let vehicle = app.descendants(matching: .any)["shiftDetailFuelVehicle"]
+        XCTAssertTrue(scrollTo(vehicle, in: app))
+        XCTAssertTrue(
+            waitForLabel(vehicle, toContain: "Vehicle recorded with this shift: Synthetic Van"),
+            "Showed: \(vehicle.label)"
+        )
+        XCTAssertTrue(vehicle.label.contains("20 miles per gallon"), "Showed: \(vehicle.label)")
+        XCTAssertTrue(vehicle.label.contains("gas $0.00 per gallon"), "A recorded zero is said: \(vehicle.label)")
+
+        let price = app.descendants(matching: .any)["shiftDetailFuelGasPrice"]
+        XCTAssertTrue(scrollTo(price, in: app))
+        XCTAssertTrue(waitForLabel(price, toContain: "$0.00 per gallon assumed"), "Showed: \(price.label)")
+    }
+
+    /// A shift that recorded no vehicle says so, and does not borrow the one
+    /// selected in Settings today.
+    @MainActor
+    func testAShiftThatRecordedNoVehicleStaysUnnamed() throws {
+        let app = launchWithLongHistory()
+
+        openSettings(in: app)
+        addVehicle(named: "Today's Car", milesPerGallon: "31", in: app)
+        goBack(in: app)
+
+        openFirstShift(in: app)
+        let vehicle = app.descendants(matching: .any)["shiftDetailFuelVehicle"]
+        XCTAssertTrue(scrollTo(vehicle, in: app))
+        XCTAssertTrue(
+            waitForLabel(vehicle, toContain: "No vehicle recorded for this shift"),
+            "Showed: \(vehicle.label)"
+        )
+        XCTAssertFalse(vehicle.label.contains("Today's Car"), "Nothing is borrowed from Settings")
+        XCTAssertFalse(
+            app.descendants(matching: .any)["shiftDetailFuelMilesPerGallon"].exists,
+            "No economy is invented either"
+        )
+    }
+
+    /// Selecting and pricing a different vehicle today leaves last week's
+    /// recorded vehicle exactly as it was.
+    @MainActor
+    func testSettingsChangesDoNotReachAHistoricalShift() throws {
+        let app = launchWithLongHistory()
+
+        openSettings(in: app)
+        addVehicle(named: "Synthetic Van", milesPerGallon: "9", in: app)
+        setCurrentGasPrice("5.55", in: app)
+        goBack(in: app)
+
+        openLastWeeksFridayShift(in: app)
+        let vehicle = app.descendants(matching: .any)["shiftDetailFuelVehicle"]
+        XCTAssertTrue(scrollTo(vehicle, in: app))
+        XCTAssertTrue(waitForLabel(vehicle, toContain: "20 miles per gallon"), "Showed: \(vehicle.label)")
+        XCTAssertFalse(vehicle.label.contains("9 miles per gallon"), "Showed: \(vehicle.label)")
+        XCTAssertFalse(vehicle.label.contains("$5.55"), "Showed: \(vehicle.label)")
+    }
+
+    /// At the largest accessibility size the vehicle row still says the whole
+    /// name and every figure.
+    @MainActor
+    func testTheHistoricalVehicleSurvivesLargeText() throws {
+        let app = launchWithLongHistory(textSize: Self.accessibilityXXXLTextSize)
+        openLastWeeksFridayShift(in: app, maxSwipes: 25)
+
+        let vehicle = app.descendants(matching: .any)["shiftDetailFuelVehicle"]
+        XCTAssertTrue(scrollUntilHittable(vehicle, in: app, maxSwipes: 40))
+        XCTAssertTrue(waitForLabel(vehicle, toContain: "Synthetic Van"), "Showed: \(vehicle.label)")
+        XCTAssertGreaterThanOrEqual(vehicle.frame.height, 44, "The row is not squeezed to fit")
+    }
+
     /// A week the driver has not worked yet says so, and does not quietly fill
     /// itself with the week before.
     @MainActor
