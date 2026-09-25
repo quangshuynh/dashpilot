@@ -15,37 +15,64 @@ import SwiftUI
 ///
 /// ## What it costs to show
 ///
-/// The query is the same one the previous screen runs, and the weeks are built
-/// by the same ``HistoryWeek/partition(_:by:asOf:calendar:)`` call, so the two
-/// lists cannot disagree about where the boundary is. A `List` materialises only
-/// the rows near the viewport, and a row measures its own route only once it
-/// appears, so opening a long history draws a screenful rather than a lifetime.
-/// Fetching in pages is a separate piece of work: it needs a fetch limit, a
-/// cursor and a rule for what a partial week means, and none of that is worth
-/// building before a store exists that needs it.
+/// Opening it is the one place History reads more than a week, and that is the
+/// driver asking for it. It fetches the completed shifts **outside** the current
+/// week through ``HistoryFetchScope/otherWeeks(_:)`` and groups them with the
+/// same ``HistoryWeek/partition(_:by:asOf:calendar:)`` the app has always used,
+/// once per body. Measured on an on-disk store holding five years of work, that
+/// is about 100 ms on arrival; a `List` then materialises only the sections near
+/// the viewport, and each week measures its own routes only when it appears.
+/// That was judged cheap enough not to page: a cursor, a fetch limit and a rule
+/// for what a partially loaded week means are not worth building for a cost paid
+/// once, on an explicit tap. `HistoryFetchScopeMeasurementTests` is where to
+/// look again if stores grow past that.
 struct OlderHistoryWeeksView: View {
     @Environment(\.calendar) private var calendar
-    @Environment(\.locale) private var locale
     @Environment(\.scenePhase) private var scenePhase
-
-    /// Every completed shift, newest first. The current week's are dropped by
-    /// the partition below rather than by the query, because the query's
-    /// predicate would be a second statement of a boundary this app already has
-    /// exactly one of.
-    @Query(filter: #Predicate<Shift> { $0.endedAt != nil }, sort: \Shift.startedAt, order: .reverse)
-    private var completedShifts: [Shift]
 
     /// What "now" is, for deciding which week is the current one and therefore
     /// which weeks belong on this screen. Re-read on return to the foreground,
     /// for the reason the previous screen re-reads it.
     @State private var now = Date.now
 
-    private var weeks: [HistoryWeekGroup<Shift>] {
-        HistoryWeek.partition(completedShifts, by: \.startedAt, asOf: now, calendar: calendar)?
-            .otherWeeks ?? []
+    var body: some View {
+        OlderHistoryWeeksList(week: HistoryWeek(containing: now, calendar: calendar), now: now)
+            .navigationTitle("Older Weeks")
+            .navigationBarTitleDisplayMode(.inline)
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .active { now = .now }
+            }
+    }
+}
+
+/// The weeks themselves, for one current week.
+///
+/// A view of its own because its `@Query` names that week, and a query is built
+/// when its view is initialised: a new week initialises a new one.
+private struct OlderHistoryWeeksList: View {
+    let week: HistoryWeek?
+    let now: Date
+
+    @Environment(\.calendar) private var calendar
+    @Environment(\.locale) private var locale
+
+    /// Every completed shift outside the current week, newest first. Grouped
+    /// below by the partition rather than by a second statement of where a
+    /// week begins.
+    @Query private var otherShifts: [Shift]
+
+    init(week: HistoryWeek?, now: Date) {
+        self.week = week
+        self.now = now
+        _otherShifts = Query(HistoryFetchScope.otherWeeks(week))
     }
 
     var body: some View {
+        // Once per body: the grouping walks every shift on this screen, and the
+        // list, the empty notice and each section read the same result.
+        let weeks = HistoryWeek.partition(otherShifts, by: \.startedAt, asOf: now, calendar: calendar)?
+            .otherWeeks ?? []
+
         List {
             if weeks.isEmpty {
                 Section {
@@ -93,11 +120,6 @@ struct OlderHistoryWeeksView: View {
                     Text(shiftCount(group.elements.count))
                 }
             }
-        }
-        .navigationTitle("Older Weeks")
-        .navigationBarTitleDisplayMode(.inline)
-        .onChange(of: scenePhase) { _, phase in
-            if phase == .active { now = .now }
         }
     }
 
