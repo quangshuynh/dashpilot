@@ -836,8 +836,10 @@ final class DashPilotUITests: XCTestCase {
 
         // Two weeks, three shifts: the fixture's two older weeks, one holding a
         // single shift and one holding two.
+        // The week count is worked out off the main actor, so it is waited for
+        // rather than read the instant the row appears.
         XCTAssertTrue(
-            older.label.contains("2 weeks") && older.label.contains("3 shifts"),
+            waitForLabel(older, toContain: "2 weeks · 3 shifts"),
             "The control says how much is behind it: \(older.label)"
         )
     }
@@ -7751,6 +7753,21 @@ final class DashPilotUITests: XCTestCase {
         let name = exportFileName(in: app)
         XCTAssertTrue(name.contains("DashPilot-History-"), "\(name)")
         XCTAssertTrue(name.contains("2 shifts"), "The seeded history holds two completed shifts: \(name)")
+    }
+
+    /// History's root lists one week and reads only that week from the store,
+    /// and exporting all history still means every completed shift there is.
+    @MainActor
+    func testExportAllHistoryIsNotScopedToTheWeekOnScreen() throws {
+        let app = launchWithOlderWeeks()
+        XCTAssertTrue(waitForCount(rows(in: app), toEqual: 1), "The root lists this week's one shift")
+
+        openExport("exportAllHistoryButton", in: app)
+        let name = exportFileName(in: app)
+        XCTAssertTrue(
+            name.contains("4 shifts"),
+            "The file holds this week's shift and the three before it: \(name)"
+        )
     }
 
     /// A running shift offers no export anywhere: not on the shift panel, and

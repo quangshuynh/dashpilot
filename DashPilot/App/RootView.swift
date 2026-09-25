@@ -11,7 +11,6 @@ struct RootView: View {
     @Environment(ShiftLiveActivityService.self) private var liveActivity
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.calendar) private var calendar
-    @Environment(\.locale) private var locale
 
     /// Unfinished shifts, newest first.
     ///
@@ -23,9 +22,6 @@ struct RootView: View {
     /// the anomaly rather than the screen hiding it.
     @Query(filter: #Predicate<Shift> { $0.endedAt == nil }, sort: \Shift.startedAt, order: .reverse)
     private var unfinishedShifts: [Shift]
-
-    @Query(filter: #Predicate<Shift> { $0.endedAt != nil }, sort: \Shift.startedAt, order: .reverse)
-    private var completedShifts: [Shift]
 
     @State private var lifecycleError: ShiftLifecycleError?
 
@@ -44,14 +40,13 @@ struct RootView: View {
 
     private var activeShift: Shift? { unfinishedShifts.first }
 
-    /// The completed shifts split into the current week and the weeks before
-    /// it.
+    /// The Monday-to-Sunday week History is scoped to.
     ///
-    /// ``HistoryWeek`` owns every rule here, including which week is current
-    /// and which week a shift belongs to. This screen chooses nothing; it draws
-    /// one side of the split and hands the other to ``OlderHistoryWeeksView``.
-    private var history: HistoryWeekPartition<Shift>? {
-        HistoryWeek.partition(completedShifts, by: \.startedAt, asOf: now, calendar: calendar)
+    /// ``HistoryWeek`` owns the rule, and this is one calendar question rather
+    /// than a pass over the store: the section below fetches that week's shifts
+    /// and nothing else, and is initialised again when this changes.
+    private var currentWeek: HistoryWeek? {
+        HistoryWeek(containing: now, calendar: calendar)
     }
 
     var body: some View {
@@ -107,77 +102,8 @@ struct RootView: View {
                     Text("Location")
                 }
 
-                Section {
-                    // The entry point to everything that spans shifts, at the
-                    // head of history rather than buried inside one shift: a
-                    // summary of a day, a week, a month or a chosen range is not
-                    // a property of any single shift in it.
-                    //
-                    // Named for what the screen is rather than for the four
-                    // lengths it offers: listing them here would have to be
-                    // corrected every time one is added, and the screen already
-                    // says which one it is showing.
-                    NavigationLink {
-                        PeriodSummaryView()
-                    } label: {
-                        Label("Period Summaries", systemImage: "calendar")
-                    }
-                    .accessibilityIdentifier("periodSummaryLink")
-
-                    // Beside the summaries rather than inside a shift: this one
-                    // spans every shift there is. Absent when history is empty,
-                    // because an export control over no records is an offer the
-                    // app would have to refuse.
-                    if !completedShifts.isEmpty {
-                        Button {
-                            isExportingHistory = true
-                        } label: {
-                            Label(ExportScope.allHistory.actionTitle, systemImage: "square.and.arrow.up")
-                        }
-                        .accessibilityLabel(ExportScope.allHistory.spokenActionLabel)
-                        .accessibilityIdentifier("exportAllHistoryButton")
-                    }
-
-                    ForEach(currentWeekShifts) { shift in
-                        // The whole row is one destination: a finished shift is
-                        // a thing to open, not a row with controls scattered
-                        // across it. Everything that was a button here now
-                        // lives on the screen it opens.
-                        NavigationLink(value: shift) {
-                            CompletedShiftRow(shift: shift)
-                        }
-                        .accessibilityIdentifier("completedShiftRow")
-                    }
-
-                    // Last in the section, under the week it is an alternative
-                    // to, and styled as an ordinary row rather than as the
-                    // prominent thing on screen: this week is what History is
-                    // for, and the older weeks are where a driver goes when they
-                    // want something else. Absent when there is nothing older,
-                    // because a screen that would open on an empty list is not
-                    // worth offering.
-                    if let history, history.hasOtherWeeks {
-                        NavigationLink {
-                            OlderHistoryWeeksView()
-                        } label: {
-                            Label {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text("View Older Weeks")
-                                    Text(olderWeeksSummary(history))
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-                            } icon: {
-                                Image(systemName: "calendar.badge.clock")
-                            }
-                        }
-                        .accessibilityLabel("View older weeks. \(olderWeeksSummary(history))")
-                        .accessibilityIdentifier("olderHistoryWeeksLink")
-                    }
-                } header: {
-                    historyHeader
-                } footer: {
-                    historyFooter
+                CurrentWeekHistorySection(week: currentWeek, now: now) {
+                    isExportingHistory = true
                 }
             }
             .navigationTitle("DashPilot")
@@ -250,8 +176,8 @@ struct RootView: View {
             // Restarted whenever the week on screen changes, which is what makes
             // one sleep enough: the task for the week that has just begun is
             // started by the same state change that ended the last one.
-            .task(id: history?.currentWeek.week.end) {
-                guard let end = history?.currentWeek.week.end else { return }
+            .task(id: currentWeek?.end) {
+                guard let end = currentWeek?.end else { return }
                 await advancePastWeekEnd(end)
             }
             .onChange(of: scenePhase) { _, phase in
@@ -308,78 +234,6 @@ struct RootView: View {
                 Text(error.errorDescription ?? "The shift could not be updated.")
             }
         }
-    }
-
-    /// The shifts the default list draws: the current Monday-to-Sunday week's.
-    ///
-    /// Falls back to every completed shift if the calendar cannot describe the
-    /// week containing now. That is not reachable with any ordinary calendar,
-    /// and the fallback is deliberately the permissive one: a driver seeing
-    /// more history than the screen intended can still find their work, and a
-    /// driver seeing none cannot.
-    private var currentWeekShifts: [Shift] {
-        history?.currentWeek.elements ?? completedShifts
-    }
-
-    /// The section heading, naming the week the list is scoped to.
-    ///
-    /// **One line, and that is a constraint rather than a preference.** The
-    /// first build put the dates on a second line under the word, and it cost
-    /// nine red journeys: the header sits above the rows, so every point it
-    /// grows pushes the list down, and the second `completedShiftRow` fell out
-    /// of what the `List` had rendered. Nine journeys that open or count a
-    /// second shift failed on a row that existed in the store and not in the
-    /// accessibility tree. The dates moved to the footer, which is below the
-    /// rows and can grow freely.
-    ///
-    /// VoiceOver still hears the dates here, because a listener has no footer
-    /// in view to read afterwards.
-    @ViewBuilder
-    private var historyHeader: some View {
-        if let week = history?.currentWeek.week {
-            Text("History · \(week.title(asOf: now, calendar: calendar, locale: locale))")
-                .accessibilityLabel("History. \(week.spokenTitle(asOf: now, calendar: calendar, locale: locale))")
-                .accessibilityIdentifier("historyHeader")
-        } else {
-            Text("History")
-        }
-    }
-
-    /// What the section says under itself: which days it is showing, and what
-    /// it is not showing.
-    ///
-    /// Below the rows, so it may be as long as it needs to be. An empty current
-    /// week is never left looking like an empty app: if there is older work the
-    /// footer says so, and the control to reach it is the row directly above.
-    @ViewBuilder
-    private var historyFooter: some View {
-        if completedShifts.isEmpty {
-            Text("Completed shifts will appear here.")
-        } else if let week = history?.currentWeek.week {
-            let dates = week.rangeStatement(calendar: calendar, locale: locale)
-            if currentWeekShifts.isEmpty {
-                Text("No completed shifts in \(dates) yet. Earlier weeks are under View Older Weeks.")
-                    .accessibilityIdentifier("emptyCurrentWeekNotice")
-            } else if history?.hasOtherWeeks == true {
-                Text("Showing \(dates). Everything before it is under View Older Weeks.")
-            } else {
-                Text("Showing \(dates).")
-            }
-        }
-    }
-
-    /// How much is waiting behind the older-weeks control.
-    ///
-    /// Counts and nothing else. Neither word says *older*, because
-    /// ``HistoryWeekPartition/otherWeeks`` also carries a week later than this
-    /// one where a device clock has been moved backwards, and the screen it
-    /// opens names every week by its own dates.
-    private func olderWeeksSummary(_ history: HistoryWeekPartition<Shift>) -> String {
-        let weeks = history.otherWeeks.count
-        let shifts = history.otherWeekRecordCount
-        let weekText = weeks == 1 ? "1 week" : "\(weeks) weeks"
-        let shiftText = shifts == 1 ? "1 shift" : "\(shifts) shifts"
-        return "\(weekText) · \(shiftText)"
     }
 
     /// Moves ``now`` on when the week on screen ends.
