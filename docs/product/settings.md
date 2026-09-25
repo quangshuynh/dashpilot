@@ -40,7 +40,9 @@ So:
   under the old figure.
 - Deleting a vehicle leaves every shift worked in it exactly as it was, still
   naming that vehicle.
-- Selecting a different vehicle changes the next shift and nothing before it.
+- Selecting a different vehicle changes the next shift and nothing before it. The
+  root screen says which vehicle that is, above `Start Shift`. See
+  [Which vehicle the next shift will record](shift-workflow.md#which-vehicle-the-next-shift-will-record).
 - None of the above reaches the shift **currently running** either. Its panel goes
   on naming the vehicle it recorded when it started, which is the question a
   driver mid-shift is actually asking. See

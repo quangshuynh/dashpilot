@@ -32,8 +32,30 @@ flowchart TD
 ## Starting a shift
 
 The root screen offers a start control while no shift is running. Starting records a start
-timestamp and nothing else. At most one shift may be unfinished at a time, and the rule is checked
-against the store, so the absence of the button is presentation and not the protection.
+timestamp and copies the driver's current vehicle and gas price onto the new shift, which owns that
+copy from then on (see [Settings and vehicles](settings.md)). At most one shift may be unfinished at a
+time, and the rule is checked against the store, so the absence of the button is presentation and not
+the protection.
+
+### Which vehicle the next shift will record
+
+Above `Start Shift`, one short line says which vehicle the shift about to be started will record,
+with its miles per gallon and the current gas price under it where those are set: `2020 Honda Civic`,
+then `34 MPG · Gas $3.29/gal`. A driver with two vehicles can see before the tap whether they forgot
+to switch.
+
+It is read through the same rule the start copies from, so what it says is what the shift records.
+Changing the selected vehicle in Settings and coming back changes it, because no shift exists yet.
+Once the shift starts, this line is gone and the running shift's own line takes its place, read from
+the shift's snapshot (see [Which vehicle the shift is using](#which-vehicle-the-shift-is-using)).
+
+Nothing selected reads `No vehicle selected`. A missing figure is left out rather than written as
+`0 MPG` or `$0.00`, no vehicle is chosen on the driver's behalf, and **none of this refuses a start**:
+a shift started with nothing to copy records no assumptions. Looking at the line writes nothing.
+
+VoiceOver reads it as a separate element from the button: `Next shift vehicle, 2020 Honda Civic, 34
+miles per gallon, gas $3.29 per gallon`, or `No vehicle selected for the next shift`. It wraps at large
+text sizes rather than truncating the vehicle's name.
 
 A shift can also be started by voice, without opening the app: see
 [Voice and system actions](voice-actions.md). The rule is the same either way, because the same

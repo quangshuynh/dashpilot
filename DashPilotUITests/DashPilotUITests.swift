@@ -1047,8 +1047,7 @@ final class DashPilotUITests: XCTestCase {
     @MainActor
     func testOpensTheDetailOfTheTappedShift() throws {
         let app = launchWithSeededHistory()
-        let history = rows(in: app)
-        XCTAssertTrue(history.firstMatch.waitForExistence(timeout: 10))
+        let history = revealHistoryRows(2, in: app)
         XCTAssertEqual(history.count, 2, "The fixture holds one shift with earnings and one without")
 
         // The older shift: no amount, no route.
@@ -1183,8 +1182,7 @@ final class DashPilotUITests: XCTestCase {
     @MainActor
     func testShiftWithoutDeliveriesInventsNoActiveTime() throws {
         let app = launchWithSeededHistory()
-        let history = rows(in: app)
-        XCTAssertTrue(history.firstMatch.waitForExistence(timeout: 10))
+        let history = revealHistoryRows(2, in: app)
 
         history.element(boundBy: 1).tap()
 
@@ -1247,8 +1245,7 @@ final class DashPilotUITests: XCTestCase {
     @MainActor
     func testDetailInventsNoRouteInformation() throws {
         let app = launchWithSeededHistory()
-        let history = rows(in: app)
-        XCTAssertTrue(history.firstMatch.waitForExistence(timeout: 10))
+        let history = revealHistoryRows(2, in: app)
 
         history.element(boundBy: 1).tap()
 
@@ -1265,8 +1262,7 @@ final class DashPilotUITests: XCTestCase {
     @MainActor
     func testDetailExplainsRatesItCannotDerive() throws {
         let app = launchWithSeededHistory()
-        let history = rows(in: app)
-        XCTAssertTrue(history.firstMatch.waitForExistence(timeout: 10))
+        let history = revealHistoryRows(2, in: app)
 
         let withoutEarnings = history.element(boundBy: 1)
         XCTAssertFalse(
@@ -5243,8 +5239,7 @@ final class DashPilotUITests: XCTestCase {
     @MainActor
     func testDeletesACompletedShift() throws {
         let app = launchWithSeededHistory()
-        let history = rows(in: app)
-        XCTAssertTrue(history.firstMatch.waitForExistence(timeout: 10))
+        let history = revealHistoryRows(2, in: app)
         XCTAssertEqual(history.count, 2)
 
         history.element(boundBy: 0).tap()
@@ -5288,7 +5283,7 @@ final class DashPilotUITests: XCTestCase {
 
         XCTAssertTrue(app.buttons["deleteShiftButton"].waitForExistence(timeout: 5), "Detail is still open")
         goBack(in: app)
-        XCTAssertTrue(waitForCount(rows(in: app), toEqual: 2), "Both shifts are still in history")
+        XCTAssertEqual(revealHistoryRows(2, in: app).count, 2, "Both shifts are still in history")
     }
 
     // MARK: Helpers
@@ -5653,13 +5648,7 @@ final class DashPilotUITests: XCTestCase {
         typeFuelAssumptions(milesPerGallon: "0", gasPrice: "3.50", in: app)
         app.buttons["saveFuelAssumptionsButton"].tap()
 
-        // `firstMatch`, because a `Label` renders as an element containing its
-        // own text and both carry the identifier: reading `.label` off the
-        // unqualified query fails on the multiple match rather than on anything
-        // about the screen.
-        let message = app.descendants(matching: .any)
-            .matching(identifier: "fuelAssumptionsValidationMessage")
-            .firstMatch
+        let message = validationMessage("fuelAssumptionsValidationMessage", in: app)
         XCTAssertTrue(message.waitForExistence(timeout: 5), "The driver should be told why it was refused")
         XCTAssertTrue(
             message.label.contains("more than zero"),
@@ -5694,8 +5683,7 @@ final class DashPilotUITests: XCTestCase {
         recordFuelAssumptions(milesPerGallon: "25", gasPrice: "3.50", in: app)
         goBack(in: app)
 
-        let history = rows(in: app)
-        XCTAssertTrue(history.firstMatch.waitForExistence(timeout: 10))
+        let history = revealHistoryRows(2, in: app)
         history.element(boundBy: 1).tap()
 
         let addButton = app.buttons["editFuelAssumptionsButton"]
@@ -5842,8 +5830,7 @@ final class DashPilotUITests: XCTestCase {
         // The fixture's second shift recorded no amount, and the assumptions
         // above seed its editor, so it can reach a fuel estimate without
         // reaching an amount.
-        let history = rows(in: app)
-        XCTAssertTrue(history.firstMatch.waitForExistence(timeout: 10))
+        let history = revealHistoryRows(2, in: app)
         history.element(boundBy: 1).tap()
 
         let net = app.descendants(matching: .any)["shiftDetailEstimatedNetAfterFuel"]
@@ -6057,6 +6044,191 @@ final class DashPilotUITests: XCTestCase {
             "No vehicle recorded for this shift",
             "Borrowing the current selection would claim a vehicle this shift never recorded"
         )
+    }
+
+    // MARK: The next shift's vehicle
+
+    /// Before a shift exists, Home says which vehicle Start Shift will record,
+    /// and Start Shift is still the plain action it was.
+    @MainActor
+    func testHomeNamesTheVehicleTheNextShiftWillRecord() throws {
+        let app = launchWithEmptyStore()
+
+        openSettings(in: app)
+        addVehicle(named: "2020 Honda Civic", milesPerGallon: "34", in: app)
+        goBack(in: app)
+
+        let next = app.descendants(matching: .any)["nextShiftVehicle"]
+        XCTAssertTrue(next.waitForExistence(timeout: 5), "Home says what the next shift will record")
+        XCTAssertEqual(next.label, "Next shift vehicle")
+        XCTAssertEqual(next.value as? String, "2020 Honda Civic, 34 miles per gallon")
+        XCTAssertTrue(app.buttons["startShiftButton"].isHittable, "Start Shift stays its own control")
+        XCTAssertFalse(
+            app.descendants(matching: .any)["activeShiftVehicle"].exists,
+            "The running shift's row and this one never share a screen or an identifier"
+        )
+    }
+
+    /// No shift exists yet, so a change in Settings is a change to what the next
+    /// shift will record, and Home follows it.
+    @MainActor
+    func testHomeFollowsTheSelectionUntilAShiftStarts() throws {
+        let app = launchWithEmptyStore()
+
+        openSettings(in: app)
+        addVehicle(named: "2020 Honda Civic", milesPerGallon: "34", in: app)
+        goBack(in: app)
+
+        let next = app.descendants(matching: .any)["nextShiftVehicle"]
+        XCTAssertTrue(next.waitForExistence(timeout: 5))
+        XCTAssertEqual(next.value as? String, "2020 Honda Civic, 34 miles per gallon")
+
+        openSettings(in: app)
+        addVehicle(named: "2012 Toyota Camry", milesPerGallon: "28", in: app)
+        let camry = vehicleRow(containing: "2012 Toyota Camry", in: app)
+        XCTAssertTrue(scrollUntilHittable(camry, in: app))
+        camry.tap()
+        XCTAssertTrue(waitForLabel(vehicleRow(containing: "2012 Toyota Camry", in: app), toContain: "Selected"))
+        goBack(in: app)
+
+        XCTAssertTrue(
+            waitForLabelValue(next, toEqual: "2012 Toyota Camry, 28 miles per gallon"),
+            "Home follows the selection while no shift has recorded one: \(String(describing: next.value))"
+        )
+        XCTAssertTrue(app.buttons["startShiftButton"].exists, "Changing a setting started nothing")
+        XCTAssertFalse(app.descendants(matching: .any)["activeShiftVehicle"].exists)
+    }
+
+    /// The source of truth changes at the tap: before it, Settings; after it,
+    /// the shift's own snapshot, which a later change in Settings does not move.
+    @MainActor
+    func testStartingAShiftSwitchesHomeToTheShiftsOwnVehicle() throws {
+        let app = launchWithEmptyStore()
+
+        openSettings(in: app)
+        addVehicle(named: "2020 Honda Civic", milesPerGallon: "34", in: app)
+        goBack(in: app)
+
+        let next = app.descendants(matching: .any)["nextShiftVehicle"]
+        XCTAssertTrue(next.waitForExistence(timeout: 5))
+        XCTAssertEqual(next.value as? String, "2020 Honda Civic, 34 miles per gallon")
+
+        app.buttons["startShiftButton"].tap()
+
+        let running = app.descendants(matching: .any)["activeShiftVehicle"]
+        XCTAssertTrue(scrollTo(running, in: app))
+        XCTAssertEqual(
+            running.value as? String,
+            "2020 Honda Civic, 34 miles per gallon",
+            "What Home said is what was recorded"
+        )
+        XCTAssertFalse(next.exists, "The next shift's row leaves with the Start Shift control")
+
+        openSettings(in: app)
+        addVehicle(named: "2012 Toyota Camry", milesPerGallon: "28", in: app)
+        let camry = vehicleRow(containing: "2012 Toyota Camry", in: app)
+        XCTAssertTrue(scrollUntilHittable(camry, in: app))
+        camry.tap()
+        XCTAssertTrue(waitForLabel(vehicleRow(containing: "2012 Toyota Camry", in: app), toContain: "Selected"))
+        goBack(in: app)
+
+        let unmoved = app.descendants(matching: .any)["activeShiftVehicle"]
+        XCTAssertTrue(scrollTo(unmoved, in: app))
+        XCTAssertEqual(
+            unmoved.value as? String,
+            "2020 Honda Civic, 34 miles per gallon",
+            "The running shift reads its snapshot, not the selection"
+        )
+        XCTAssertFalse(app.descendants(matching: .any)["nextShiftVehicle"].exists)
+    }
+
+    /// Nothing selected is said as that, and it refuses nothing.
+    @MainActor
+    func testHomeSaysNoVehicleIsSelectedAndStillStarts() throws {
+        let app = launchWithEmptyStore()
+
+        let next = app.descendants(matching: .any)["nextShiftVehicle"]
+        XCTAssertTrue(next.waitForExistence(timeout: 10))
+        XCTAssertEqual(next.value as? String, "No vehicle selected for the next shift")
+
+        let startShift = app.buttons["startShiftButton"]
+        XCTAssertTrue(startShift.isEnabled)
+        startShift.tap()
+
+        let running = app.descendants(matching: .any)["activeShiftVehicle"]
+        XCTAssertTrue(scrollTo(running, in: app), "The shift started")
+        XCTAssertEqual(running.value as? String, "No vehicle recorded for this shift", "And invented no vehicle")
+    }
+
+    /// A price with no vehicle: the known half is said, the missing half is
+    /// left out rather than written as zero, and Start Shift is still allowed.
+    @MainActor
+    func testHomeSaysOnlyWhatIsKnownAboutTheNextShift() throws {
+        let app = launchWithEmptyStore()
+
+        openSettings(in: app)
+        setCurrentGasPrice("3.29", in: app)
+        goBack(in: app)
+
+        let next = app.descendants(matching: .any)["nextShiftVehicle"]
+        XCTAssertTrue(next.waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            waitForLabelValue(next, toEqual: "No vehicle selected for the next shift, gas $3.29 per gallon"),
+            "Showed: \(String(describing: next.value))"
+        )
+        let shown = (next.value as? String) ?? ""
+        XCTAssertFalse(shown.contains("miles per gallon"), "A missing economy is not written as 0 MPG")
+
+        app.buttons["startShiftButton"].tap()
+        let running = app.descendants(matching: .any)["activeShiftVehicle"]
+        XCTAssertTrue(scrollTo(running, in: app), "Incomplete defaults refuse nothing")
+        XCTAssertEqual(running.value as? String, "No vehicle recorded for this shift")
+    }
+
+    /// At the largest accessibility text size, a long vehicle name wraps inside
+    /// the screen rather than running off it, and Start Shift stays reachable.
+    @MainActor
+    func testTheNextShiftsVehicleWrapsAtLargeTextSizes() throws {
+        let app = XCUIApplication()
+        app.launchArguments.append(Self.inMemoryStoreArgument)
+        app.launchArguments += ["-UIPreferredContentSizeCategoryName", Self.accessibilityXXXLTextSize]
+        launchInPortrait(app)
+
+        let name = "2020 Honda Civic Hatchback Sport Touring"
+        openSettings(in: app)
+        let add = app.buttons["addVehicleButton"]
+        XCTAssertTrue(scrollUntilHittable(add, in: app, maxSwipes: 20))
+        add.tap()
+        let nameField = app.textFields["vehicleNameField"]
+        XCTAssertTrue(nameField.waitForExistence(timeout: 5))
+        nameField.tap()
+        nameField.typeText(name)
+
+        // At this size the wrapped name pushes the economy field under the
+        // keyboard, where a synthesized tap does not focus it. Saving without
+        // an economy is refused, and the refusal focuses that field and scrolls
+        // it into view itself, so the figure is typed into a field the editor
+        // has focused rather than one a tap may have missed.
+        app.buttons["saveVehicleButton"].tap()
+        XCTAssertTrue(validationMessage("vehicleValidationMessage", in: app).waitForExistence(timeout: 5))
+        let economyField = app.textFields["vehicleMilesPerGallonField"]
+        let focused = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "hasKeyboardFocus == true"),
+            object: economyField
+        )
+        XCTAssertEqual(XCTWaiter().wait(for: [focused], timeout: 5), .completed)
+        economyField.typeText("34")
+        app.buttons["saveVehicleButton"].tap()
+        XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 5))
+        goBack(in: app)
+
+        let next = app.descendants(matching: .any)["nextShiftVehicle"]
+        XCTAssertTrue(next.waitForExistence(timeout: 5))
+        XCTAssertEqual(next.value as? String, "\(name), 34 miles per gallon", "The whole name is kept")
+        let window = app.windows.firstMatch.frame
+        XCTAssertLessThanOrEqual(next.frame.maxX, window.maxX, "The row wraps rather than running off the screen")
+        XCTAssertGreaterThan(next.frame.height, 60, "A name this long at this size takes more than one line")
+        XCTAssertTrue(scrollUntilHittable(app.buttons["startShiftButton"], in: app))
     }
 
     // MARK: Correcting the running shift's vehicle
@@ -6346,7 +6518,7 @@ final class DashPilotUITests: XCTestCase {
         nameField.tap()
         nameField.typeText("The van")
         app.buttons["saveVehicleButton"].tap()
-        let message = app.descendants(matching: .any).matching(identifier: "vehicleValidationMessage").firstMatch
+        let message = validationMessage("vehicleValidationMessage", in: app)
         XCTAssertTrue(message.waitForExistence(timeout: 5), "A vehicle with no economy is refused")
         XCTAssertTrue(
             message.label.contains("miles per gallon"),
@@ -6708,6 +6880,29 @@ final class DashPilotUITests: XCTestCase {
         app.descendants(matching: .any).matching(identifier: "completedShiftRow")
     }
 
+    /// History's completed shift rows, scrolled until the first `count` of them
+    /// are rendered.
+    ///
+    /// A `List` renders only rows near the viewport, so the second row of the
+    /// two-shift fixture does not exist until it is scrolled to, and how far
+    /// that is depends on everything above history. Adding the next shift's
+    /// vehicle line to the start panel was enough to push it below the fold and
+    /// fail eight journeys that had been indexing into it unscrolled. Scrolling
+    /// until the last wanted row is **hittable** means every row before it is
+    /// rendered too, so `element(boundBy:)` and `count` are then about the
+    /// fixture rather than about the screen. A row that cannot be revealed
+    /// fails here, loudly, rather than resolving to a different one.
+    @MainActor
+    private func revealHistoryRows(_ count: Int, in app: XCUIApplication) -> XCUIElementQuery {
+        let history = rows(in: app)
+        XCTAssertTrue(history.firstMatch.waitForExistence(timeout: 10))
+        XCTAssertTrue(
+            scrollUntilHittable(history.element(boundBy: count - 1), in: app),
+            "History should reveal \(count) completed shifts"
+        )
+        return history
+    }
+
     /// Runs one shift start-to-finish.
     ///
     /// Also asserts the safety rule the earnings flow depends on: nothing offers
@@ -7002,6 +7197,21 @@ final class DashPilotUITests: XCTestCase {
         field.tap()
         let existing = (field.value as? String) ?? ""
         field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: existing.count))
+    }
+
+    /// The sentence of a validation message drawn as a `Label` with a warning
+    /// symbol.
+    ///
+    /// The identifier is mirrored onto the label's icon as well as its text, and
+    /// the icon's own label is "Warning". Which of the two an `.any` query
+    /// matches first is decided by the runtime's accessibility tree rather than
+    /// by the screen: iOS 27 puts the text first and iOS 26.5 puts the icon
+    /// first, so a journey reading `.label` off that query passed locally and
+    /// read "Warning" in CI. The icon is never a static text, so this query can
+    /// only ever resolve to the sentence.
+    @MainActor
+    private func validationMessage(_ identifier: String, in app: XCUIApplication) -> XCUIElement {
+        app.staticTexts.matching(identifier: identifier).firstMatch
     }
 
     /// A row and a detail metric are each one combined accessibility element, so
@@ -7848,10 +8058,7 @@ final class DashPilotUITests: XCTestCase {
 
         app.buttons["saveExpenseButton"].tap()
 
-        // The identifier is mirrored onto the label's icon as well as its text,
-        // and the icon's label is "Warning", so the sentence is read off the
-        // static text rather than off whichever element matches first.
-        let message = app.staticTexts.matching(identifier: "expenseValidationMessage").firstMatch
+        let message = validationMessage("expenseValidationMessage", in: app)
         XCTAssertTrue(message.waitForExistence(timeout: 5), "The refusal is explained rather than silent")
         XCTAssertTrue(
             message.label.lowercased().contains("negative"),

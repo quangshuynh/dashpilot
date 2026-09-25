@@ -491,6 +491,21 @@ struct RootView: View {
 private struct StartShiftPanel: View {
     let start: () -> Void
 
+    @Environment(\.locale) private var locale
+
+    // Observed rather than read once, so a driver who changes vehicle in
+    // Settings and comes back sees the new one without anything to refresh.
+    // Reading them writes nothing: no settings row is created by looking.
+    @Query private var vehicles: [VehicleProfile]
+    @Query private var settingsRows: [DriverSettings]
+
+    /// What the next shift will record, through the same rule the start copies.
+    private var nextVehicle: NextShiftVehicleContext {
+        NextShiftVehicleContext(
+            defaults: SettingsService.fuelDefaults(settings: settingsRows.first, vehicles: vehicles)
+        )
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("No Shift in Progress")
@@ -498,6 +513,7 @@ private struct StartShiftPanel: View {
             Text("Start a shift when you begin driving. DashPilot records its start and end times on this device.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
+            nextVehicleRow
             Button(action: start) {
                 Text("Start Shift")
                     .frame(maxWidth: .infinity)
@@ -507,6 +523,42 @@ private struct StartShiftPanel: View {
             .accessibilityIdentifier("startShiftButton")
         }
         .padding(.vertical, 8)
+    }
+
+    /// The vehicle the shift about to be started will record, in the running
+    /// shift's own visual language so the two read as the same fact before and
+    /// after the tap. A separate element from the button, so `Start Shift`
+    /// stays the plain action it was.
+    private var nextVehicleRow: some View {
+        let vehicle = nextVehicle
+
+        return HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Image(systemName: "car.fill")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(vehicle.title)
+                    .font(.subheadline)
+                    // Secondary where none is selected, because an absence
+                    // should not read with the weight of a fact.
+                    .foregroundStyle(vehicle.hasVehicle ? .primary : .secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if let detail = vehicle.detail(locale: locale) {
+                    Text(detail)
+                        .font(.caption)
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(vehicle.spokenLabel)
+        .accessibilityValue(vehicle.spokenValue(locale: locale))
+        .accessibilityHint("Recorded on the shift when you start it. Change it in Settings.")
+        .accessibilityIdentifier("nextShiftVehicle")
     }
 }
 
