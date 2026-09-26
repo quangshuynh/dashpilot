@@ -1,12 +1,12 @@
-# Settings: vehicles and fuel defaults
+# Settings: vehicles, fuel defaults and the pickup workflow
 
 DashPilot keeps a small set of reusable preferences so that figures a driver
 would otherwise retype on every shift are typed once. It is reached from the gear
 in the top left of the main screen.
 
 It opens with the **default vehicle** the next shift will record, then the
-**vehicles** the driver works in, the **gas price** they last paid, and an
-**About** section:
+**vehicles** the driver works in, the **gas price** they last paid, one
+**pickup workflow** switch, and an **About** section:
 
 ```
 Settings
@@ -30,16 +30,20 @@ Fuel Defaults
   Current gas price               $3.19 / gallon
   Recorded on your next shift
 
+Pickup Workflow
+  Pick up order when parking                 ( off )
+
 About
   Acknowledgements
 ```
 
 With nothing selected the first section says `No vehicle selected` and that the
 next shift records no miles per gallon, rather than drawing an empty card.
-Starting a shift is never refused over it. The screen says nothing about a shift
-already running, because nothing on it reaches one.
+Starting a shift is never refused over it. Nothing about the vehicle or the gas
+price reaches a shift already running. The pickup switch is the one preference
+that acts during a shift, and only at the moment Park is pressed.
 
-## Everything here is a default for the next shift
+## The vehicle and the gas price are defaults for the next shift
 
 This is the one sentence the screen exists to get across: the default vehicle
 says `Used for your next shift`, the gas price says `Recorded on your next shift`,
@@ -151,6 +155,46 @@ That is the only way a preference ever reaches a shift after it has started, and
 it only ever happens because the driver saved. See
 [Correcting the vehicle](shift-workflow.md#correcting-the-vehicle-before-any-driving-is-recorded).
 
+## Pick up order when parking
+
+**Off unless the driver turns it on.** A driver who never opens this switch parks exactly as they
+always have.
+
+When it is on, pressing Park (in the app, by voice or on the Lock Screen) records the vehicle as
+parked and then, if **exactly one** delivery in progress is at `Arrived at Pickup`, records that
+delivery as `Picked Up` too, through the same operation the `Picked Up` button on its card runs. It
+exists for the moment a driver has arrived, parked, and is walking in: one tap instead of two.
+
+| Deliveries in progress when Park is pressed | What is recorded |
+| --- | --- |
+| Exactly one at `Arrived at Pickup` (any number of others heading to a pickup or already carried) | Parked, and that delivery `Picked Up` |
+| Two or more at `Arrived at Pickup` | Parked only. Neither delivery moves, and the panel says why |
+| None at a pickup, one or more still heading to one | Parked only, and the panel says no arrival is recorded |
+| None at a pickup, none heading to one | Parked only, and nothing more is said |
+
+What it deliberately will not do:
+
+- **It never records an arrival.** A delivery still `Accepted` is not moved. Parking says the vehicle
+  stopped, not which place it stopped at, and recording an arrival and a pickup at the same instant
+  would also put a pickup wait of exactly zero into that place's history.
+- **It never chooses between two orders.** Not the oldest, not the newest, not the first card and not
+  the nearest. With two at a pickup, the driver records the one they are collecting on its card.
+- **It never undoes parking.** Parking is saved first. If the pickup is then refused or cannot be
+  saved, the vehicle stays parked and the panel says the pickup was not recorded.
+- **It never touches a delivery already picked up, delivered or cancelled.**
+
+**The pickup is recorded at the moment Park is pressed.** That is what the driver said by pressing
+it, and DashPilot does not know when the order was actually handed over. One consequence is worth
+knowing: that delivery's [recorded pickup wait](pickup-wait.md) runs from its arrival to the moment
+of parking, not to the moment the bag changed hands.
+
+Nothing here is a detection. The panel's line says the pickup was **marked** when the driver parked,
+and its spoken form names this setting, so a listener knows the event came from their automation.
+
+Unlike the vehicle and the gas price, this switch is not copied onto anything. It is read at the
+moment Park is pressed and nowhere else, and turning it off changes the next press and no delivery
+already recorded.
+
 ## Accessibility
 
 - The default vehicle is one element: "Default vehicle: 2020 Honda Civic, 34
@@ -168,6 +212,10 @@ it only ever happens because the driver saved. See
   recorded one.
 - Both footers carry the historical-stability sentence, so the rule is readable
   rather than something a driver has to infer from behaviour.
+- `Pick up order when parking` is a standard switch whose spoken hint says what it
+  records and that nothing is recorded when two or more deliveries are waiting.
+  The line Park adds beneath the parked notice carries a symbol and words, never a
+  tint alone, and names the delivery it moved.
 
 ## Acknowledgements
 
@@ -188,13 +236,21 @@ Correcting a running shift's snapshot logs the same way: that a correction
 happened, and which rule refused one. Never the vehicle, never the economy and
 never the price.
 
+Parking with the pickup setting on logs only that the automation was applied, that
+no delivery was at a pickup, or how many were when it declined to choose. Never
+which delivery, never when, and never where.
+
 Nothing here reaches the network, because there is no network code in DashPilot.
 
 ## In an export
 
 The driver's current preferences are **not** exported. Not the vehicle list, not
-the selection, not the gas price. An export is a record of work done, and what a
+the selection, not the gas price, and not the pickup-when-parking switch. An export is a record of work done, and what a
 driver has selected today says nothing about the shifts in it.
+
+A delivery picked up by the parking setting exports exactly as one picked up
+from its card: its `pickedUpAt` is the instant recorded, and nothing marks which
+control recorded it.
 
 What is exported is the shift's own snapshot: the fuel economy, the gas price and
 the vehicle name it recorded, each an explicit `null` where it recorded none. See

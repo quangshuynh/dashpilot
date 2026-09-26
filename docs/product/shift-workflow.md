@@ -279,6 +279,24 @@ above applies to all three ways of saying it, because all three call the same tw
 See [Voice and system actions](voice-actions.md) and
 [The shift on the Lock Screen](live-activity.md).
 
+### Recording the pickup with the same tap
+
+A driver who turns on `Pick up order when parking` in Settings can let Park also record the pickup
+of the **one** delivery waiting at its pickup. It is off by default, and with it off nothing above
+changes.
+
+It is one operation behind all three surfaces, so the app's button, `Park my vehicle in DashPilot`
+and the Lock Screen's `Park Vehicle` behave identically. Parking is recorded first, and always stands;
+the pickup follows through the delivery's own `Picked Up` operation, at the same instant, and only
+when exactly one delivery is at `Arrived at Pickup`. Two at a pickup record neither, and a delivery
+still heading to its pickup is never given an arrival. The panel then says so under the parked
+notice, for example `Delivery 2 marked Picked Up when you parked.` or `Pickup not recorded: 2
+deliveries are at a pickup`. There is no confirmation to answer first, because the point is fewer
+taps at a door.
+
+The stretch parked still belongs to the shift and to no delivery. See
+[Pick up order when parking](settings.md#pick-up-order-when-parking).
+
 ## Correcting a recorded pause
 
 A pause is two taps made at a kerb, and it is the easiest thing in DashPilot to record at the wrong
