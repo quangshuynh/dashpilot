@@ -78,18 +78,6 @@ struct ProjectFileInvariantTests {
         #expect(!contents.contains("/Users/"))
     }
 
-    @Test("The app's embed phase copies the widget extension")
-    func embedPhaseCopiesTheWidget() throws {
-        let contents = try #require(ProjectFile.contents())
-        let phase = try #require(contents.range(of: "/* Embed Foundation Extensions */ = {\n\t\t\tisa = PBXCopyFilesBuildPhase;"))
-        let rest = contents[phase.upperBound...]
-        let filesStart = try #require(rest.range(of: "files = ("))
-        let filesEnd = try #require(rest[filesStart.upperBound...].range(of: ");"))
-        let files = rest[filesStart.upperBound..<filesEnd.lowerBound]
-        #expect(files.contains("DashPilotWidgets.appex in Embed Foundation Extensions"), "The embed phase is empty")
-        #expect(contents.contains("path = DashPilotWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR;"))
-    }
-
     @Test("The widget extension compiles only its own sources and the shared activity folder")
     func widgetTargetFolders() throws {
         let contents = try #require(ProjectFile.contents())

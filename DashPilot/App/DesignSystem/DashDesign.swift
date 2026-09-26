@@ -89,16 +89,31 @@ struct DashStatusLabel: View {
 /// rather than the metric one, so an absence never reads with the weight of a
 /// number.
 struct DashMetric: View {
+    /// How much weight a figure carries: the one a surface leads with, or one
+    /// of the figures under it.
+    enum Emphasis {
+        case hero
+        case standard
+
+        var role: DashTypography.Role {
+            switch self {
+            case .hero: .metricHero
+            case .standard: .metric
+            }
+        }
+    }
+
     let value: String
     let label: String
     var detail: String?
     /// `false` where ``value`` is a sentence standing in for a missing figure.
     var isFigure = true
+    var emphasis: Emphasis = .standard
 
     var body: some View {
         VStack(alignment: .leading, spacing: DashSpacing.xs) {
             Text(value)
-                .dashFont(isFigure ? .metric : .body)
+                .dashFont(isFigure ? emphasis.role : .body)
                 .foregroundStyle(isFigure ? .primary : .secondary)
                 .fixedSize(horizontal: false, vertical: true)
             Text(label)
@@ -111,6 +126,146 @@ struct DashMetric: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// One secondary figure: what it is beside what it says, and what is behind it
+/// under both.
+///
+/// For the figures under a surface's headline, where a ``DashMetric`` would give
+/// every line the same weight. The title and the value share a line where they
+/// fit and stack where they do not, and always stack at accessibility sizes,
+/// because a shortened title beside a shortened figure is worse than a second
+/// line and the first thing a truncation takes is the word that makes a figure
+/// honest. Nothing shrinks to fit.
+///
+/// Where the figure does not exist the caller passes the words that say so and
+/// `isFigure: false`, which draws them in the quieter colour rather than with
+/// the weight of a number.
+struct DashValueRow: View {
+    let title: String
+    let value: String
+    var detail: String?
+    var isFigure = true
+    /// Draws the value in the emphasis role: the result a group of lines
+    /// arrives at, such as the net at the foot of a ledger.
+    var isProminent = false
+
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: DashSpacing.xs) {
+            if dynamicTypeSize.isAccessibilitySize {
+                titleText
+                valueText
+            } else {
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .firstTextBaseline, spacing: DashSpacing.md) {
+                        titleText
+                        Spacer(minLength: DashSpacing.md)
+                        valueText.multilineTextAlignment(.trailing)
+                    }
+                    VStack(alignment: .leading, spacing: DashSpacing.xs) {
+                        titleText
+                        valueText
+                    }
+                }
+            }
+            if let detail {
+                Text(detail)
+                    .dashFont(.supporting)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var titleText: some View {
+        Text(title)
+            .dashFont(.body)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var valueText: some View {
+        Text(value)
+            .dashFont(isProminent ? .emphasis : .body)
+            .monospacedDigit()
+            .foregroundStyle(isFigure ? .primary : .secondary)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+/// What a surface says when it has nothing to show, or when a figure cannot
+/// be worked out: a short title, an explanation, and nothing decorative.
+///
+/// One vocabulary for every empty, missing and unavailable state, so a driver
+/// learns once what "nothing here" looks like and never mistakes it for a
+/// figure. The title says what is absent, the message says why or what would
+/// change it, and an action, where one is useful, is the caller's own control
+/// placed after this rather than folded into it. No illustration and no asset:
+/// the words are the state.
+///
+/// One accessibility element, so a listener hears the absence as one statement
+/// rather than a heading and a caption that might belong to different things.
+struct DashNotice: View {
+    let title: String
+    var message: String?
+    var symbol: String?
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: DashSpacing.md) {
+            if let symbol {
+                Image(systemName: symbol)
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+            }
+            VStack(alignment: .leading, spacing: DashSpacing.xs) {
+                Text(title)
+                    .dashFont(.emphasis)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let message {
+                    Text(message)
+                        .dashFont(.supporting)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(message.map { "\(title). \($0)" } ?? title)
+    }
+}
+
+/// Why what was typed could not be saved, said in words beside a warning
+/// symbol.
+///
+/// The symbol is hidden from assistive technologies and the identifier is on
+/// the sentence alone. A SwiftUI `Label` mirrors its identifier onto its icon,
+/// whose own label is "Warning", and which of the two a query met first was
+/// decided by the runtime's accessibility tree: that is how a journey read
+/// "Warning" in CI and the sentence locally. Here there is one element to find,
+/// and it is the sentence a listener hears. Red is the third signal after the
+/// symbol and the words, never the only one.
+struct DashValidationMessage: View {
+    let message: String
+    let identifier: String
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: DashSpacing.md) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.red)
+                .accessibilityHidden(true)
+            Text(message)
+                .dashFont(.body)
+                .foregroundStyle(.red)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier(identifier)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }

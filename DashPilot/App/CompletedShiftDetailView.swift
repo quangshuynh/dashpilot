@@ -13,9 +13,20 @@ import SwiftUI
 /// row is the wrong place to tell them.
 ///
 /// It is a summary, not a dashboard. No chart, no map, no gauge and no score:
-/// the shift's own recorded facts, the three rates derived from them, the log of
-/// deliveries recorded during it, and the two destructive-ish actions that
-/// belong to a finished shift — editing what it paid, and deleting it.
+/// the shift's own recorded facts, the rates derived from them, the log of
+/// deliveries recorded during it, and the controls that correct or remove what
+/// it recorded.
+///
+/// ## The hierarchy
+///
+/// Summary (what it paid, how long, how far), Performance (the times and the
+/// rates over them), Driving (the route and how far to trust it), Costs (the
+/// estimated fuel and the net after it), then the two lists that grow with the
+/// shift (deliveries and pauses), then Corrections, Export and Delete. Normal
+/// information comes first and is drawn loudest; corrections sit in their own
+/// quiet section below every figure they change; deletion stands apart at the
+/// foot of the screen. A correction that belongs to one delivery or one pause
+/// stays on that row, beside the fact it changes.
 ///
 /// Only completed shifts reach it. A running shift has no finalised duration, no
 /// earnings it is allowed to record and nothing that may be deleted, and the
@@ -102,29 +113,29 @@ struct CompletedShiftDetailView: View {
 
     private var content: some View {
         List {
-            shiftSection
-            earningsSection
-            routeSection
+            // Read top to bottom, the screen goes from the figures a driver
+            // opens it for to the controls that change them.
+            //
+            // The first four sections summarise the shift in a fixed number of
+            // lines: what it paid and how long and far it went, then how that
+            // time and money break down, then what the route measured, then
+            // what it is estimated to have cost. Recorded facts come before
+            // estimates, so reading down goes from the trustworthy part to the
+            // part built on assumptions rather than interleaving them.
+            summarySection
             performanceSection
-            // The two estimated sections come **after** every recorded figure
-            // and every gross rate, deliberately. What the driver recorded and
-            // what the route measured are the trustworthy part of this screen;
-            // an estimate derived from two assumptions is not, and reading down
-            // the screen should go from the one to the other rather than
-            // interleave them. Keeping Performance where it was also leaves the
-            // rate rows at the offset the existing journeys reach them at.
-            fuelSection
-            profitabilitySection
-            // The last two reading sections, deliberately, and in this order.
-            // The four above summarise the shift in a fixed number of lines;
-            // these two grow with it, and a long list between the header and
-            // the figures would bury everything that summarises the shift.
-            // Pauses come before the delivery log because the figures they
-            // correct — the paused and working times — are the ones at the top
-            // of the screen, and because a shift records far fewer pauses than
-            // deliveries.
-            pausesSection
+            drivingSection
+            costsSection
+            // The two sections that grow with the shift come after everything
+            // that summarises it, so a long delivery list never buries the
+            // figures. Pauses are after the deliveries because each pause row is
+            // mostly a correction surface, and a shift records far fewer of them.
             deliveriesSection
+            pausesSection
+            // Corrections to what the shift recorded, then taking a copy, then
+            // the one irreversible action, each in a section of its own so that
+            // normal information dominates and destruction stands apart.
+            correctionsSection
             exportSection
             deleteSection
         }
@@ -194,17 +205,146 @@ struct CompletedShiftDetailView: View {
         }
     }
 
-    // MARK: Shift
+    // MARK: Summary
 
-    private var shiftSection: some View {
+    /// The three figures a driver opens a finished shift for: what it paid, how
+    /// long it was worked, and how far its route recorded.
+    ///
+    /// Earnings lead, because a finished shift is the one place an amount can
+    /// be recorded, and the two quantities share a row under it. Everything
+    /// else on the screen is a breakdown of these or an estimate built on them.
+    /// Each figure is its own accessibility element, spoken with its unit, and
+    /// an absent one is said in words rather than drawn as a zero.
+    private var summarySection: some View {
         Section {
-            LabeledContent("Started") {
-                Text(shift.startedAt, format: .dateTime.hour().minute())
-            }
-            if let endedAt = shift.endedAt {
-                LabeledContent("Ended") {
-                    Text(endedAt, format: .dateTime.hour().minute())
+            VStack(alignment: .leading, spacing: DashSpacing.lg) {
+                earningsMetric
+
+                // Entering what a shift paid is ordinary data entry rather than
+                // a correction, so it sits beside the figure it fills, quietly.
+                Button {
+                    isEditingEarnings = true
+                } label: {
+                    Label(
+                        shift.grossEarnings == nil ? "Add Earnings" : "Edit Earnings",
+                        systemImage: shift.grossEarnings == nil ? "plus.circle" : "pencil"
+                    )
+                    .dashFont(.body)
                 }
+                .buttonStyle(.borderless)
+                .accessibilityIdentifier("editShiftEarningsButton")
+
+                DashMetricRow {
+                    workingMetric
+                    mileageMetric
+                }
+            }
+            .padding(.vertical, DashSpacing.sm)
+        } header: {
+            Text("Summary")
+        } footer: {
+            Text(
+                """
+                Recorded earnings are what you chose to record for this shift. DashPilot is not \
+                connected to any delivery platform, so nothing is imported, and amounts you record \
+                against individual deliveries are separate: this figure is never worked out from \
+                them. A shift with no amount recorded is not the same as one that paid \
+                \(Money.zero.formatted(locale: locale)); removing an amount is offered inside the \
+                editor.
+                """
+            )
+        }
+    }
+
+    /// What the shift recorded paying, or the words that say nothing was.
+    private var earningsMetric: some View {
+        Group {
+            if let earnings = shift.grossEarnings {
+                DashMetric(
+                    value: earnings.formatted(locale: locale),
+                    label: "Recorded earnings",
+                    emphasis: .hero
+                )
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Recorded gross earnings, \(earnings.formatted(locale: locale))")
+            } else {
+                DashMetric(value: "No amount recorded", label: "Recorded earnings", isFigure: false)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("No amount recorded")
+            }
+        }
+        .accessibilityIdentifier("shiftDetailEarnings")
+    }
+
+    /// How long the shift was worked: elapsed less its pauses, which is what
+    /// every hourly figure on this screen divides by. A paused shift says how
+    /// much was taken off, so the shorter figure is not read as a mistake.
+    @ViewBuilder
+    private var workingMetric: some View {
+        if let working = shift.completedWorkingDuration {
+            let paused = shift.completedPausedTime
+            DashMetric(
+                value: DurationText.short(working),
+                label: "Working time",
+                detail: paused.flatMap { $0.hasPauses ? "\(DurationText.short($0.duration)) paused" : nil }
+            )
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("\(DurationText.spoken(working)) working time")
+            .accessibilityIdentifier("shiftDetailSummaryWorkingTime")
+        } else {
+            DashMetric(value: "Not available", label: "Working time", isFigure: false)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("No working time available")
+                .accessibilityIdentifier("shiftDetailSummaryWorkingTime")
+        }
+    }
+
+    /// What the route recorded, with the partial marker beside it where the
+    /// route is partial: recorded miles are a floor, and the figure never
+    /// appears without saying so.
+    @ViewBuilder
+    private var mileageMetric: some View {
+        if let quality {
+            DashMetric(
+                value: recordedDistance?.isMeasured == true
+                    ? recordedDistance?.formattedMiles(locale: locale) ?? ""
+                    : "Not measured",
+                label: "Recorded miles",
+                detail: quality.partialMarker,
+                isFigure: recordedDistance?.isMeasured == true
+            )
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(quality.spokenMileageStatement(locale: locale))
+            .accessibilityIdentifier("shiftDetailSummaryMileage")
+        } else {
+            DashMetric(value: "Measuring…", label: "Recorded miles", isFigure: false)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Measuring the recorded route")
+                .accessibilityIdentifier("shiftDetailSummaryMileage")
+        }
+    }
+
+    // MARK: Performance
+
+    /// How the shift's time breaks down, and the rates derived from it.
+    ///
+    /// The times come first because every rate under them divides by one of
+    /// them. The working figure is repeated here only for a paused shift, beside
+    /// the elapsed and paused figures it is the difference of; on every other
+    /// shift it equals the elapsed one to the second.
+    private var performanceSection: some View {
+        Section {
+            DashValueRow(
+                title: "Started",
+                value: shift.startedAt.formatted(.dateTime.hour().minute().locale(locale))
+            )
+            .accessibilityElement(children: .combine)
+            if let endedAt = shift.endedAt {
+                DashValueRow(
+                    title: "Ended",
+                    value: endedAt.formatted(.dateTime.hour().minute().locale(locale))
+                )
+                .accessibilityElement(children: .combine)
             }
             if let duration = shift.completedDuration {
                 durationRow(
@@ -261,24 +401,34 @@ struct CompletedShiftDetailView: View {
                 }
             }
 
-            // Here rather than in a section of its own, because the fact it
-            // corrects is three rows above it and the figures it moves are the
-            // two below that. Offered only once the shift has an end to correct;
-            // the service refuses a running shift regardless of what any screen
-            // presents.
-            if shift.endedAt != nil {
-                Button {
-                    isCorrectingEnd = true
-                } label: {
-                    Label("Correct End Time", systemImage: "clock.arrow.circlepath")
-                }
-                .accessibilityLabel("Correct the time this shift ended")
-                .accessibilityIdentifier("correctShiftEndButton")
+            if let metrics {
+                rateRow(
+                    "Per shift hour",
+                    spokenAs: "gross earnings per shift hour",
+                    rate: metrics.grossPerWorkingHour,
+                    identifier: "shiftDetailHourlyRate"
+                )
+                rateRow(
+                    "Per active delivery hour",
+                    spokenAs: "gross earnings per delivery active hour",
+                    rate: metrics.grossPerDeliveryActiveHour,
+                    identifier: "shiftDetailActiveHourlyRate"
+                )
+                rateRow(
+                    "Per recorded mile",
+                    spokenAs: "gross earnings per recorded mile",
+                    rate: metrics.grossPerRecordedMile,
+                    identifier: "shiftDetailPerMileRate"
+                )
+            } else {
+                Text("Working out this shift's rates…")
+                    .dashFont(.body)
+                    .foregroundStyle(.secondary)
             }
         } header: {
-            Text("Shift")
+            Text("Performance")
         } footer: {
-            Text(deliveryTimeExplanation)
+            Text(performanceExplanation)
         }
     }
 
@@ -288,9 +438,30 @@ struct CompletedShiftDetailView: View {
     /// because it explains a discrepancy a driver can otherwise see — the
     /// delivery list adding up to more than the figure above it — and stating it
     /// for a shift with no stacked work would explain nothing.
-    private var deliveryTimeExplanation: String {
+    private var performanceExplanation: String {
+        (timeSentences + [rateSentence]).joined(separator: " ")
+    }
+
+    /// What every rate above has in common, and what each one divides by.
+    ///
+    /// "Per shift hour" divides by **working** time, the same figure the hourly
+    /// rate has divided by since pauses existed; an earlier wording said it
+    /// divided by the whole elapsed shift, which stopped being true for any
+    /// shift that was paused.
+    private var rateSentence: String {
+        """
+        Every rate here is gross: nothing for fuel, wear, insurance or tax is subtracted anywhere \
+        in DashPilot. Per shift hour divides by working time, waiting and repositioning \
+        included. Per active delivery hour divides by the time a recorded delivery was open, \
+        counting deliveries you worked at once only once; it is not a wage. Per recorded mile \
+        divides by recorded miles, which are normally fewer than the miles driven, so it is \
+        normally higher than earnings per mile driven.
+        """
+    }
+
+    private var timeSentences: [String] {
         guard deliveryActiveTime.isAvailable else {
-            return ([elapsedSentence] + pauseSentences).joined(separator: " ")
+            return [elapsedSentence] + pauseSentences
         }
 
         var sentences = [elapsedSentence]
@@ -316,7 +487,7 @@ struct CompletedShiftDetailView: View {
             know what you were doing during either.
             """
         )
-        return sentences.joined(separator: " ")
+        return sentences
     }
 
     private var elapsedSentence: String {
@@ -329,7 +500,7 @@ struct CompletedShiftDetailView: View {
         var sentences = [
             """
             Working time is the elapsed time less the time you had the shift paused, and it is what \
-            the hourly rate below divides by.
+            every hourly rate divides by.
             """
         ]
         sentences.append(
@@ -346,7 +517,7 @@ struct CompletedShiftDetailView: View {
         sentences.append(
             """
             A pause you corrected or added afterwards does not change the route: no recorded \
-            position is ever added, moved or deleted, so the recorded mileage above still covers \
+            position is ever added, moved or deleted, so the recorded mileage still covers \
             everything this shift recorded.
             """
         )
@@ -364,12 +535,10 @@ struct CompletedShiftDetailView: View {
         duration: TimeInterval,
         identifier: String
     ) -> some View {
-        LabeledContent(title) {
-            Text(DurationText.short(duration)).monospacedDigit()
-        }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(DurationText.spoken(duration)) \(spokenTitle)")
-        .accessibilityIdentifier(identifier)
+        DashValueRow(title: title, value: DurationText.short(duration))
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("\(DurationText.spoken(duration)) \(spokenTitle)")
+            .accessibilityIdentifier(identifier)
     }
 
     // MARK: Pauses
@@ -404,6 +573,7 @@ struct CompletedShiftDetailView: View {
             let pauses = shift.numberedPauses
             if pauses.isEmpty {
                 Text("No pauses recorded")
+                    .dashFont(.body)
                     .foregroundStyle(.secondary)
                     .accessibilityIdentifier("shiftDetailNoPauses")
             } else {
@@ -417,20 +587,19 @@ struct CompletedShiftDetailView: View {
                 pauseBeingEdited = .adding
             } label: {
                 Label("Add Missed Pause", systemImage: "plus.circle")
+                    .dashFont(.body)
             }
             .accessibilityLabel("Add a pause you did not record during the shift")
             .accessibilityIdentifier("addMissedPauseButton")
 
             if let pauseCorrectionMessage {
-                Label(pauseCorrectionMessage, systemImage: "exclamationmark.triangle.fill")
-                    .font(.footnote)
-                    .foregroundStyle(.red)
-                    .fixedSize(horizontal: false, vertical: true)
-                    // One element carrying the sentence rather than a glyph
-                    // called "Warning" beside it, and never a colour alone.
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel(pauseCorrectionMessage)
-                    .accessibilityIdentifier("shiftDetailPauseCorrectionMessage")
+                // The shared refusal shape: one element carrying the sentence
+                // rather than a glyph called "Warning" beside it, and never a
+                // colour alone.
+                DashValidationMessage(
+                    message: pauseCorrectionMessage,
+                    identifier: "shiftDetailPauseCorrectionMessage"
+                )
             }
         } header: {
             Text("Pauses")
@@ -461,14 +630,11 @@ struct CompletedShiftDetailView: View {
     private func pauseRow(_ numbered: NumberedPause) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             VStack(alignment: .leading, spacing: 2) {
-                LabeledContent(numbered.title) {
-                    Text(pauseTimes(numbered.pause)).monospacedDigit()
-                }
-                .font(.subheadline.weight(.semibold))
+                DashValueRow(title: numbered.title, value: pauseTimes(numbered.pause))
 
                 if let duration = pauseDuration(numbered.pause) {
                     Text(DurationText.short(duration))
-                        .font(.footnote)
+                        .dashFont(.supporting)
                         .foregroundStyle(.secondary)
                         .monospacedDigit()
                 } else {
@@ -477,8 +643,8 @@ struct CompletedShiftDetailView: View {
                     // than hidden or shown as zero, because a pause that cannot
                     // be measured is left out of the shift's paused total and
                     // the driver should be told which one.
-                    Text("This pause's times cannot be measured, so it is not counted in the paused time above.")
-                        .font(.footnote)
+                    Text("This pause's times cannot be measured, so it is not counted in the paused time.")
+                        .dashFont(.supporting)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -586,59 +752,26 @@ struct CompletedShiftDetailView: View {
         }
     }
 
-    // MARK: Earnings
+    // MARK: Driving
 
-    private var earningsSection: some View {
-        Section {
-            if let earnings = shift.grossEarnings {
-                LabeledContent("Gross earnings") {
-                    Text(earnings.formatted(locale: locale))
-                        .monospacedDigit()
-                }
-                .accessibilityIdentifier("shiftDetailEarnings")
-            } else {
-                Text("No amount recorded")
-                    .foregroundStyle(.secondary)
-                    .accessibilityIdentifier("shiftDetailEarnings")
-            }
-
-            Button {
-                isEditingEarnings = true
-            } label: {
-                Label(
-                    shift.grossEarnings == nil ? "Add Earnings" : "Edit Earnings",
-                    systemImage: shift.grossEarnings == nil ? "plus.circle" : "pencil"
-                )
-            }
-            .accessibilityIdentifier("editShiftEarningsButton")
-        } header: {
-            Text("Earnings")
-        } footer: {
-            Text(
-                """
-                What this shift paid, as you choose to record it. DashPilot is not connected to any \
-                delivery platform, so nothing is imported. A shift with no amount recorded is not the \
-                same as one that paid \(Money.zero.formatted(locale: locale)) — removing an amount is \
-                offered inside the editor. Amounts you record against individual deliveries are \
-                separate, and this figure is never worked out from them.
-                """
-            )
-        }
-    }
-
-    // MARK: Route
-
-    private var routeSection: some View {
+    /// What the route recorded, and how far it can be trusted.
+    ///
+    /// The figure, then every caveat on it, then the capture segments and gaps
+    /// the caveats are about. A stretch recorded as parked is stated here, in
+    /// the route's own words, and never beside a pause: parking stops the route
+    /// and subtracts nothing from working time, pausing does both, and the two
+    /// are kept in different sections so they cannot be read as one.
+    private var drivingSection: some View {
         Section {
             if let quality {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: DashSpacing.sm) {
                     Text(quality.mileageStatement(locale: locale))
-                        .font(.headline)
+                        .dashFont(.emphasis)
                         .monospacedDigit()
 
                     ForEach(routeCaveats(of: quality), id: \.self) { caveat in
                         Text(caveat)
-                            .font(.footnote)
+                            .dashFont(.supporting)
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -654,17 +787,22 @@ struct CompletedShiftDetailView: View {
                 .accessibilityIdentifier("shiftDetailRecordedMileage")
 
                 if let segments = quality.segmentStatement {
-                    Text(segments).accessibilityIdentifier("shiftDetailCaptureSegments")
+                    Text(segments)
+                        .dashFont(.body)
+                        .accessibilityIdentifier("shiftDetailCaptureSegments")
                 }
                 if let gaps = quality.gapStatement {
-                    Text(gaps).accessibilityIdentifier("shiftDetailCaptureGaps")
+                    Text(gaps)
+                        .dashFont(.body)
+                        .accessibilityIdentifier("shiftDetailCaptureGaps")
                 }
             } else {
                 Text("Measuring the recorded route…")
+                    .dashFont(.body)
                     .foregroundStyle(.secondary)
             }
         } header: {
-            Text("Route")
+            Text("Driving")
         } footer: {
             Text(
                 """
@@ -694,7 +832,7 @@ struct CompletedShiftDetailView: View {
         ].compactMap { $0 }
     }
 
-    // MARK: Estimated fuel
+    // MARK: Costs
 
     /// What this shift's **recorded** miles are estimated to have consumed, and
     /// what that fuel cost at the price this shift recorded.
@@ -710,31 +848,33 @@ struct CompletedShiftDetailView: View {
     /// - It covers **recorded** mileage only. Recorded miles are a floor on the
     ///   miles driven, so where the route is partial the estimate is a floor
     ///   too, and the section says so in the same words the route section does.
-    private var fuelSection: some View {
+    private var costsSection: some View {
         Section {
             if let fuelEstimate {
                 fuelCostRow(fuelEstimate)
 
                 if let consumption = fuelEstimate.consumption {
-                    LabeledContent("Estimated gallons") {
-                        Text(consumption.formattedGallons(locale: locale)).monospacedDigit()
-                    }
-                    .accessibilityElement(children: .combine)
-                    .accessibilityLabel(
-                        """
-                        \(consumption.formattedGallons(width: .wide, locale: locale)) estimated, \
-                        from recorded mileage
-                        """
-                    )
-                    .accessibilityIdentifier("shiftDetailEstimatedGallons")
+                    DashValueRow(title: "Estimated gallons", value: consumption.formattedGallons(locale: locale))
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel(
+                            """
+                            \(consumption.formattedGallons(width: .wide, locale: locale)) estimated, \
+                            from recorded mileage
+                            """
+                        )
+                        .accessibilityIdentifier("shiftDetailEstimatedGallons")
                 }
 
                 assumptionRows
             } else {
                 Text("Working out this shift's fuel estimate…")
+                    .dashFont(.body)
                     .foregroundStyle(.secondary)
             }
 
+            // Filling in or changing the two assumptions is how a missing
+            // estimate becomes one, so the control sits with the figures it
+            // feeds rather than with the corrections at the foot of the screen.
             Button {
                 isEditingFuel = true
             } label: {
@@ -742,12 +882,15 @@ struct CompletedShiftDetailView: View {
                     shift.fuelAssumptions.hasAny ? "Edit Fuel Assumptions" : "Add Fuel Assumptions",
                     systemImage: shift.fuelAssumptions.hasAny ? "pencil" : "plus.circle"
                 )
+                .dashFont(.body)
             }
             .accessibilityIdentifier("editFuelAssumptionsButton")
+
+            netLedger
         } header: {
-            Text("Estimated Fuel")
+            Text("Costs")
         } footer: {
-            Text(fuelFooterStatement)
+            Text(costsFooterStatement)
         }
     }
 
@@ -758,32 +901,27 @@ struct CompletedShiftDetailView: View {
     /// not a shift whose fuel was free.
     @ViewBuilder
     private func fuelCostRow(_ estimate: FuelEstimate) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        Group {
             switch estimate {
             case let .available(consumption):
-                LabeledContent("Estimated fuel cost") {
-                    Text(consumption.cost.formatted(locale: locale)).monospacedDigit()
-                }
-                Text("Based on recorded mileage")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                if consumption.isRoutePartial {
-                    Text(Self.partialFuelStatement)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+                DashValueRow(
+                    title: "Estimated fuel cost",
+                    value: consumption.cost.formatted(locale: locale),
+                    detail: consumption.isRoutePartial
+                        ? "Based on recorded mileage. \(Self.partialFuelStatement)"
+                        : "Based on recorded mileage",
+                    isProminent: true
+                )
             case let .unavailable(reason):
-                LabeledContent("Estimated fuel cost") {
-                    Text("Not available").foregroundStyle(.secondary)
-                }
-                Text(reason.explanation)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                DashValueRow(
+                    title: "Estimated fuel cost",
+                    value: "Not available",
+                    detail: reason.explanation,
+                    isFigure: false
+                )
             }
         }
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .ignore)
         .accessibilityLabel(fuelCostAccessibilityLabel(estimate))
         .accessibilityIdentifier("shiftDetailEstimatedFuelCost")
     }
@@ -826,25 +964,19 @@ struct CompletedShiftDetailView: View {
 
         // First, as the heading of the block. It is a label rather than an
         // input: no figure on this screen reads it.
-        LabeledContent("Vehicle") {
-            Text(vehicle.title)
-                .foregroundStyle(vehicle.vehicleName == nil ? .secondary : .primary)
-                .multilineTextAlignment(.trailing)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(vehicle.spokenLabel(locale: locale))
-        .accessibilityIdentifier("shiftDetailFuelVehicle")
+        DashValueRow(title: "Vehicle", value: vehicle.title, isFigure: vehicle.vehicleName != nil)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(vehicle.spokenLabel(locale: locale))
+            .accessibilityIdentifier("shiftDetailFuelVehicle")
 
         if assumptions.hasAny {
-            LabeledContent("Miles per gallon") {
-                if let milesPerGallon = assumptions.milesPerGallon {
-                    Text(MilesPerGallonInput(locale: locale).text(for: milesPerGallon)).monospacedDigit()
-                } else {
-                    Text("Not recorded").foregroundStyle(.secondary)
-                }
-            }
-            .accessibilityElement(children: .combine)
+            DashValueRow(
+                title: "Miles per gallon",
+                value: assumptions.milesPerGallon.map { MilesPerGallonInput(locale: locale).text(for: $0) }
+                    ?? "Not recorded",
+                isFigure: assumptions.milesPerGallon != nil
+            )
+            .accessibilityElement(children: .ignore)
             .accessibilityLabel(
                 assumptions.milesPerGallon.map {
                     "\(MilesPerGallonInput(locale: locale).text(for: $0)) miles per gallon assumed"
@@ -852,14 +984,14 @@ struct CompletedShiftDetailView: View {
             )
             .accessibilityIdentifier("shiftDetailFuelMilesPerGallon")
 
-            LabeledContent("Gas price per gallon") {
-                if let gasPrice = assumptions.gasPricePerGallon {
-                    Text(gasPrice.formatted(locale: locale)).monospacedDigit()
-                } else {
-                    Text("Not recorded").foregroundStyle(.secondary)
-                }
-            }
-            .accessibilityElement(children: .combine)
+            // A recorded price of zero is drawn as the zero it is: it is a
+            // figure, and only a price that was never recorded is words.
+            DashValueRow(
+                title: "Gas price per gallon",
+                value: assumptions.gasPricePerGallon?.formatted(locale: locale) ?? "Not recorded",
+                isFigure: assumptions.gasPricePerGallon != nil
+            )
+            .accessibilityElement(children: .ignore)
             .accessibilityLabel(
                 assumptions.gasPricePerGallon.map {
                     "\($0.formatted(locale: locale)) per gallon assumed"
@@ -879,18 +1011,30 @@ struct CompletedShiftDetailView: View {
         used than this estimates.
         """
 
-    private var fuelFooterStatement: String {
+    /// What the estimates on this section are, and are not, in one place.
+    ///
+    /// Three claims have to be made every time an estimate is shown, because
+    /// each is one a reader would otherwise supply for themselves: the figures
+    /// are the driver's own assumptions recorded with this shift, an estimate
+    /// is not a recorded expense, and nothing here is profit.
+    private var costsFooterStatement: String {
         """
         Estimated fuel cost is recorded miles divided by your miles per gallon, priced at your gas \
         price per gallon. Both figures are your own assumptions, recorded with this shift, so \
-        entering different ones later leaves this shift's estimate where it is. It is an estimate \
-        and not a recorded expense: it is not proof of fuel bought, fuel burned, what this vehicle \
-        costs to run, or anything deductible. A fuel purchase you record under Expenses is a \
-        separate, recorded fact, and DashPilot never adds one to the other.
+        entering different ones later leaves this shift's estimate where it is. Estimated net after \
+        fuel is what you recorded this shift paying, less that estimate, and per working hour divides \
+        by the same working time the gross rate does. An estimate is not a recorded expense: it is \
+        not proof of fuel bought, fuel burned, what this vehicle costs to run, or anything deductible. \
+        Recorded expenses are not part of the net, because DashPilot does not attribute a cost to a \
+        shift; net after recorded expenses is a figure the period summaries carry instead. If you \
+        also recorded a fuel purchase under Expenses, it and this estimate may describe the same \
+        money in two places, and DashPilot never adds or nets the two together. This is not profit, \
+        take-home pay or a tax figure: nothing for wear, insurance, maintenance or tax is subtracted \
+        anywhere in DashPilot.
         """
     }
 
-    // MARK: Estimated net
+    // MARK: Estimated net, the lower half of Costs
 
     /// What this shift is estimated to have been left with once its estimated
     /// fuel is taken off what it recorded paying.
@@ -905,66 +1049,49 @@ struct CompletedShiftDetailView: View {
     /// **The section is shown even when there is no estimate**, stating the
     /// reason, because a fuel estimate is not a precondition for reading a
     /// completed shift and a section that vanishes teaches nothing.
-    private var profitabilitySection: some View {
-        Section {
-            if let profitability {
-                ledgerRow(
-                    "Recorded earnings",
-                    spokenAs: "recorded gross earnings for this shift",
-                    amount: profitability.recordedEarnings,
-                    missingStatement: EstimatedNetUnavailability.earningsNotRecorded.explanation,
-                    identifier: "shiftDetailNetRecordedEarnings"
-                )
-                ledgerRow(
-                    "Estimated fuel cost",
-                    spokenAs: "estimated fuel cost, based on recorded mileage",
-                    amount: profitability.fuelEstimate.cost.map { -$0 },
-                    missingStatement: EstimatedNetUnavailability.fuelNotEstimated.explanation,
-                    identifier: "shiftDetailNetEstimatedFuel"
-                )
-                netRow(
-                    "Estimated net after fuel",
-                    spokenAs: "estimated net after fuel",
-                    net: profitability.estimatedNetAfterFuel,
-                    isProminent: true,
-                    identifier: "shiftDetailEstimatedNetAfterFuel"
-                )
-                netRow(
-                    "Estimated net per working hour",
-                    spokenAs: "estimated net after fuel per working hour",
-                    net: profitability.estimatedNetPerWorkingHour,
-                    isProminent: false,
-                    identifier: "shiftDetailEstimatedNetPerWorkingHour"
-                )
-
-                if profitability.isRoutePartial, profitability.hasAnyFigure {
-                    Text(Self.partialNetStatement)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .accessibilityIdentifier("shiftDetailEstimatedNetPartialNotice")
-                }
-            } else {
-                Text("Working out this shift's estimated net…")
-                    .foregroundStyle(.secondary)
-            }
-        } header: {
-            Text("Estimated Net")
-        } footer: {
-            Text(
-                """
-                Estimated net after fuel is what you recorded this shift paying, less the estimated \
-                fuel cost above. The earnings are recorded; the fuel is estimated, so the result is \
-                an estimate too. Per working hour divides by the same working time the gross rate \
-                does. Recorded expenses are not part of this: DashPilot does not attribute a cost \
-                to a shift, so net after recorded expenses is a figure the period summaries carry \
-                instead. If you also recorded a fuel purchase under Expenses, that cost and this \
-                estimate may describe the same money in two places, and DashPilot does not know \
-                which shifts a tank was burned on, so it never adds or nets the two together. This \
-                is not profit, take-home pay or a tax figure: nothing for wear, insurance, \
-                maintenance or tax is subtracted anywhere in DashPilot.
-                """
+    @ViewBuilder
+    private var netLedger: some View {
+        if let profitability {
+            ledgerRow(
+                "Recorded earnings",
+                spokenAs: "recorded gross earnings for this shift",
+                amount: profitability.recordedEarnings,
+                missingStatement: EstimatedNetUnavailability.earningsNotRecorded.explanation,
+                identifier: "shiftDetailNetRecordedEarnings"
             )
+            ledgerRow(
+                "Estimated fuel cost",
+                spokenAs: "estimated fuel cost, based on recorded mileage",
+                amount: profitability.fuelEstimate.cost.map { -$0 },
+                missingStatement: EstimatedNetUnavailability.fuelNotEstimated.explanation,
+                identifier: "shiftDetailNetEstimatedFuel"
+            )
+            netRow(
+                "Estimated net after fuel",
+                spokenAs: "estimated net after fuel",
+                net: profitability.estimatedNetAfterFuel,
+                isProminent: true,
+                identifier: "shiftDetailEstimatedNetAfterFuel"
+            )
+            netRow(
+                "Estimated net per working hour",
+                spokenAs: "estimated net after fuel per working hour",
+                net: profitability.estimatedNetPerWorkingHour,
+                isProminent: false,
+                identifier: "shiftDetailEstimatedNetPerWorkingHour"
+            )
+
+            if profitability.isRoutePartial, profitability.hasAnyFigure {
+                Text(Self.partialNetStatement)
+                    .dashFont(.supporting)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("shiftDetailEstimatedNetPartialNotice")
+            }
+        } else {
+            Text("Working out this shift's estimated net…")
+                .dashFont(.body)
+                .foregroundStyle(.secondary)
         }
     }
 
@@ -982,22 +1109,14 @@ struct CompletedShiftDetailView: View {
         missingStatement: String,
         identifier: String
     ) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        Group {
             if let amount {
-                LabeledContent(title) {
-                    Text(amount.formatted(locale: locale)).monospacedDigit()
-                }
+                DashValueRow(title: title, value: amount.formatted(locale: locale))
             } else {
-                LabeledContent(title) {
-                    Text("Not available").foregroundStyle(.secondary)
-                }
-                Text(missingStatement)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                DashValueRow(title: title, value: "Not available", detail: missingStatement, isFigure: false)
             }
         }
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .ignore)
         .accessibilityLabel(
             amount.map { "\($0.formatted(locale: locale)) \(spokenTitle)" }
                 ?? "No \(spokenTitle). \(missingStatement)"
@@ -1019,25 +1138,15 @@ struct CompletedShiftDetailView: View {
         isProminent: Bool,
         identifier: String
     ) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        Group {
             switch net {
             case let .available(amount):
-                LabeledContent(title) {
-                    Text(amount.formatted(locale: locale))
-                        .monospacedDigit()
-                        .fontWeight(isProminent ? .semibold : .regular)
-                }
+                DashValueRow(title: title, value: amount.formatted(locale: locale), isProminent: isProminent)
             case let .unavailable(reason):
-                LabeledContent(title) {
-                    Text("Not available").foregroundStyle(.secondary)
-                }
-                Text(reason.explanation)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                DashValueRow(title: title, value: "Not available", detail: reason.explanation, isFigure: false)
             }
         }
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .ignore)
         .accessibilityLabel(netAccessibilityLabel(spokenTitle: spokenTitle, net: net))
         .accessibilityIdentifier(identifier)
     }
@@ -1058,50 +1167,6 @@ struct CompletedShiftDetailView: View {
         fuel was used than was estimated, so less was left than is shown here.
         """
 
-    // MARK: Performance
-
-    private var performanceSection: some View {
-        Section {
-            if let metrics {
-                rateRow(
-                    "Per shift hour",
-                    spokenAs: "gross earnings per shift hour",
-                    rate: metrics.grossPerWorkingHour,
-                    identifier: "shiftDetailHourlyRate"
-                )
-                rateRow(
-                    "Per active delivery hour",
-                    spokenAs: "gross earnings per delivery active hour",
-                    rate: metrics.grossPerDeliveryActiveHour,
-                    identifier: "shiftDetailActiveHourlyRate"
-                )
-                rateRow(
-                    "Per recorded mile",
-                    spokenAs: "gross earnings per recorded mile",
-                    rate: metrics.grossPerRecordedMile,
-                    identifier: "shiftDetailPerMileRate"
-                )
-            } else {
-                Text("Working out this shift's rates…")
-                    .foregroundStyle(.secondary)
-            }
-        } header: {
-            Text("Performance")
-        } footer: {
-            Text(
-                """
-                Every figure here is gross: nothing for fuel, wear, insurance or tax is subtracted \
-                anywhere in DashPilot. Per shift hour divides by the whole elapsed shift, waiting \
-                and repositioning included. Per active delivery hour divides by the time a recorded \
-                delivery was open, counting deliveries you worked at once only once — it is not a \
-                wage, and it says nothing about what you were doing in that time. Per recorded mile \
-                divides by recorded miles, which are normally fewer than the miles driven, so it is \
-                normally higher than earnings per mile driven.
-                """
-            )
-        }
-    }
-
     /// One derived rate, or one sentence saying why there is not one.
     ///
     /// An unavailable rate is never a dash or a zero. The visible label is short
@@ -1115,23 +1180,15 @@ struct CompletedShiftDetailView: View {
         rate: ShiftRate,
         identifier: String
     ) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        Group {
             switch rate {
             case let .available(amount):
-                LabeledContent(title) {
-                    Text(amount.formatted(locale: locale)).monospacedDigit()
-                }
+                DashValueRow(title: title, value: amount.formatted(locale: locale))
             case let .unavailable(reason):
-                LabeledContent(title) {
-                    Text("Not available").foregroundStyle(.secondary)
-                }
-                Text(reason.explanation)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                DashValueRow(title: title, value: "Not available", detail: reason.explanation, isFigure: false)
             }
         }
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .ignore)
         .accessibilityLabel(rateAccessibilityLabel(spokenTitle: spokenTitle, rate: rate))
         .accessibilityIdentifier(identifier)
     }
@@ -1176,7 +1233,7 @@ struct CompletedShiftDetailView: View {
             let summary = shift.deliverySummary
 
             Text(summary.statement)
-                .font(.headline)
+                .dashFont(.emphasis)
                 .accessibilityLabel(summary.spokenStatement)
                 .accessibilityIdentifier("shiftDetailDeliverySummary")
 
@@ -1193,15 +1250,6 @@ struct CompletedShiftDetailView: View {
                 DeliveryHistoryRow(numbered: numbered, offer: offers[numbered.id])
             }
 
-            // One control for the whole list rather than one per row: grouping
-            // is a statement about which deliveries arrived together, so it is
-            // corrected by looking at all of them at once. Absent on a shift
-            // holding a single delivery, where there is nothing to regroup.
-            if shift.deliveries.count > 1 {
-                Button("Correct Grouping") { isCorrectingOffers = true }
-                    .accessibilityLabel("Correct which deliveries were accepted together")
-                    .accessibilityIdentifier("correctOffersButton")
-            }
         } header: {
             Text("Deliveries")
         } footer: {
@@ -1214,6 +1262,61 @@ struct CompletedShiftDetailView: View {
                 delivery active time counts shared minutes once, and a per-delivery hourly figure \
                 covers only that delivery's own lifecycle. Any amount here is one you recorded \
                 against that delivery; nothing is taken from, or added to, the shift's own amount.
+                """
+            )
+        }
+    }
+
+    // MARK: Corrections
+
+    /// The corrections that act on the shift as a whole rather than on one
+    /// delivery or one pause, below every figure they change.
+    ///
+    /// Each one rewrites a recorded fact, so they are gathered here, quietly,
+    /// instead of sitting beside the figures with the same weight as the data.
+    /// Every one opens its own sheet that states the consequence before
+    /// anything is written, and the service behind each refuses a running shift
+    /// whatever this screen offers. A correction that belongs to a single
+    /// delivery stays on that delivery's row, and one that belongs to a pause
+    /// on that pause's row, because that is where the fact it changes is.
+    private var correctionsSection: some View {
+        Section {
+            // Offered only once the shift has an end to correct; the service
+            // refuses a running shift regardless of what any screen presents.
+            if shift.endedAt != nil {
+                Button {
+                    isCorrectingEnd = true
+                } label: {
+                    Label("Correct End Time", systemImage: "clock.arrow.circlepath")
+                        .dashFont(.body)
+                }
+                .accessibilityLabel("Correct the time this shift ended")
+                .accessibilityIdentifier("correctShiftEndButton")
+            }
+
+            // One control for the whole list rather than one per row: grouping
+            // is a statement about which deliveries arrived together, so it is
+            // corrected by looking at all of them at once. Absent on a shift
+            // holding a single delivery, where there is nothing to regroup.
+            if shift.deliveries.count > 1 {
+                Button {
+                    isCorrectingOffers = true
+                } label: {
+                    Label("Correct Grouping", systemImage: "square.stack.3d.up")
+                        .dashFont(.body)
+                }
+                .accessibilityLabel("Correct which deliveries were accepted together")
+                .accessibilityIdentifier("correctOffersButton")
+            }
+        } header: {
+            Text("Corrections")
+        } footer: {
+            Text(
+                """
+                Correcting the end time changes the shift's elapsed and working time and every rate \
+                over them; an earlier end also removes the route recorded after it, which the editor \
+                states before anything is deleted. Correcting grouping changes which deliveries \
+                arrived together and nothing else.
                 """
             )
         }
@@ -1454,14 +1557,14 @@ private struct DeliveryHistoryRow: View {
                     "\(numbered.title) · \(delivery.state.historyDescription)",
                     systemImage: delivery.state.symbolName
                 )
-                .font(.subheadline.weight(.semibold))
+                .dashFont(.emphasis)
 
                 // Which offer this delivery arrived in, said only where it
                 // arrived with others. It is the one fact about a finished
                 // delivery that the row cannot derive from its own timestamps.
                 if let caption = offer?.groupingCaption(of: numbered) {
                     Text(caption)
-                        .font(.caption)
+                        .dashFont(.supporting)
                         .foregroundStyle(.secondary)
                 }
 
@@ -1471,7 +1574,7 @@ private struct DeliveryHistoryRow: View {
                 // every delivery would be noise on the ordinary case.
                 if let place = delivery.pickupPlace {
                     Label(place.displayName, systemImage: "bag")
-                        .font(.footnote)
+                        .dashFont(.body)
                 }
 
                 ForEach(events, id: \.label) { event in
@@ -1479,7 +1582,7 @@ private struct DeliveryHistoryRow: View {
                         Text(event.date, format: .dateTime.hour().minute())
                             .monospacedDigit()
                     }
-                    .font(.footnote)
+                    .dashFont(.body)
                 }
 
                 ForEach(intervals, id: \.label) { interval in
@@ -1487,7 +1590,7 @@ private struct DeliveryHistoryRow: View {
                         Text(DurationText.short(interval.duration))
                             .monospacedDigit()
                     }
-                    .font(.footnote)
+                    .dashFont(.body)
                     .foregroundStyle(.secondary)
                 }
 
@@ -1510,7 +1613,7 @@ private struct DeliveryHistoryRow: View {
                         Text(earnings.formatted(locale: locale))
                             .monospacedDigit()
                     }
-                    .font(.footnote)
+                    .dashFont(.body)
                 }
 
                 // Both absent on the ordinary delivery, which is what keeps this
@@ -1521,20 +1624,20 @@ private struct DeliveryHistoryRow: View {
                         Text(tipsTotal.formatted(locale: locale))
                             .monospacedDigit()
                     }
-                    .font(.footnote)
+                    .dashFont(.body)
 
                     if let total = effectiveEarnings.amount {
                         LabeledContent("Total recorded") {
                             Text(total.formatted(locale: locale))
                                 .monospacedDigit()
                         }
-                        .font(.footnote)
+                        .dashFont(.body)
                     } else {
                         // Tips with no platform amount beside them. Said out
                         // loud, because a tip figure standing alone on a row
                         // would otherwise read as what the delivery earned.
                         Text("No platform pay recorded, so there is no total.")
-                            .font(.caption)
+                            .dashFont(.supporting)
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -1546,7 +1649,7 @@ private struct DeliveryHistoryRow: View {
                         Text(rate.formatted(locale: locale))
                             .monospacedDigit()
                     }
-                    .font(.footnote)
+                    .dashFont(.body)
                     .foregroundStyle(.secondary)
                 }
 
@@ -1561,7 +1664,7 @@ private struct DeliveryHistoryRow: View {
                         Text(expected.formatted(locale: locale))
                             .monospacedDigit()
                     }
-                    .font(.footnote)
+                    .dashFont(.body)
                     .foregroundStyle(.secondary)
 
                     // Said once, only where the absence is real. A delivery with
@@ -1571,7 +1674,7 @@ private struct DeliveryHistoryRow: View {
                     // row as though it were the earnings.
                     if delivery.grossEarnings == nil {
                         Text("No gross earnings recorded.")
-                            .font(.caption)
+                            .dashFont(.supporting)
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -1581,7 +1684,10 @@ private struct DeliveryHistoryRow: View {
             .accessibilityIdentifier("shiftDetailDeliveryRow")
 
             // The corrections this delivery offers, laid out in a grid rather
-            // than in one row. See ``availableActions`` and ``actionColumns``.
+            // than in one row, under a rule so the controls read as secondary to
+            // the record above them. See ``availableActions`` and
+            // ``actionColumns``.
+            Divider()
             LazyVGrid(columns: actionColumns, alignment: .leading, spacing: 8) {
                 ForEach(availableActions) { action in
                     // The identifier is the action's own identity, set here
@@ -1593,11 +1699,7 @@ private struct DeliveryHistoryRow: View {
             }
 
             if let correctionMessage {
-                Label(correctionMessage, systemImage: "exclamationmark.triangle.fill")
-                    .font(.footnote)
-                    .foregroundStyle(.red)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityIdentifier("shiftDetailCorrectionMessage")
+                DashValidationMessage(message: correctionMessage, identifier: "shiftDetailCorrectionMessage")
             }
         }
         .padding(.vertical, 2)

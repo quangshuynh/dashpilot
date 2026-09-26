@@ -190,31 +190,28 @@ so.
 
 ## What the screen shows
 
-On a completed shift's detail, under the recorded figures and the gross rates:
-
-**Estimated Fuel**
+On a completed shift's detail, in the **Costs** section, under the recorded
+figures, the gross rates and the route:
 
 - `Estimated fuel cost`, with `Based on recorded mileage` under it, or a sentence
   naming the half that is missing
 - `Estimated gallons`
-- `Miles per gallon` and `Gas price per gallon`, as recorded for this shift
+- `Vehicle`, `Miles per gallon` and `Gas price per gallon`, as recorded for this
+  shift
 - `Add Fuel Assumptions` / `Edit Fuel Assumptions`
+- then the net, as a ledger in the order the subtraction happens:
+  `Recorded earnings`, `Estimated fuel cost` as the amount being subtracted,
+  `Estimated net after fuel` (drawn heavier, as the result) and
+  `Estimated net per working hour`
 
-**Estimated Net**
-
-- `Recorded earnings`
-- `Estimated fuel cost`, as the amount being subtracted
-- `Estimated net after fuel`
-- `Estimated net per working hour`
-
-The sections sit after everything recorded, deliberately. What the driver
+The section sits after everything recorded, deliberately. What the driver
 recorded and what the route measured are the trustworthy part of the screen, and
 reading down it should go from the recorded to the estimated rather than mix
 them.
 
 **A shift with no estimate is still fully readable.** Every recorded amount,
-duration, count and gross rate is exactly where it was, and only the estimated
-sections say they are unavailable and why. A fuel estimate is never a
+duration, count and gross rate is exactly where it was, and only the Costs
+section says what is unavailable and why. A fuel estimate is never a
 precondition for reading a completed shift.
 
 ## Working time is the app's existing definition

@@ -504,16 +504,39 @@ time — can be corrected afterwards. See [Correcting a shift's end time](#corre
 ## History
 
 History shows **the week the driver is in**, Monday through Sunday, and nothing else. The heading
-says which week, and the footer under the list says which days:
+says which week, the section opens with that week's own figures, and the footer under the list says
+which days:
 
 ```text
 HISTORY · THIS WEEK
-...
+
+$482.40
+Recorded earnings
+6 of 6 shifts
+
+21 hr, 34 min        286.4 mi
+Working time         Recorded miles
+6 of 6 shifts        6 of 6 shifts measured
+------------------------------------------
+6 shifts · 31 deliveries completed · 2 cancelled
+
+(the week's shifts)
+
 Showing Sep 14 – 20, 2026.
 ```
 
-Completed shifts in that week appear between them, newest first, each row a compact summary and a
-single tap target:
+The figures are the same weekly summary each older week carries (see
+[How a whole week went](#how-a-whole-week-went)), with the week's recorded earnings as the largest
+figure in History. A figure that was never recorded is said in words, never drawn as a zero, and an
+empty week draws no summary at all: it says the week holds no completed shifts yet. The summary is
+worked out off the main actor from the week's own shifts, once for each change to what they record,
+so a shift running meanwhile restarts nothing.
+
+**Period Summaries** and **Export All History** sit in a small section of their own above History,
+because they span every shift rather than this week's.
+
+Completed shifts in the week appear under the summary, newest first, each row a compact summary and
+a single tap target:
 
 ```text
 Sat, Sep 19                              $86.25
@@ -557,26 +580,31 @@ absent rather than shown empty.
 
 Each week on that screen opens with a summary of every shift in it, above the shifts themselves, so
 that the question a driver scrolls back with, *what did this week look like?*, is answered before
-they start opening rows. Three figures lead and are drawn larger; the rest sit under a divider,
-smaller:
+they start opening rows. The week's recorded earnings lead, working time and recorded miles share a
+row under them (a column where the row cannot hold them, and always at accessibility sizes), and the
+rest sit under a divider, quieter:
 
 ```text
 Sep 14 - 20, 2026
 
-Recorded earnings                   $185.00
+$185.00
+Recorded earnings
 3 of 3 shifts
-Working time                           6 hr
-3 of 3 shifts
-Recorded miles                      89.4 mi
-3 of 3 shifts measured
+
+6 hr                 89.4 mi
+Working time         Recorded miles
+3 of 3 shifts        3 of 3 shifts measured
 -------------------------------------------
-Shifts                                    3
-5 deliveries completed · 1 cancelled
+3 shifts · 5 deliveries completed · 1 cancelled
 Estimated fuel                        $4.77
 2 of 3 shifts · 59.6 of 89.4 recorded miles
 Estimated net after fuel            $120.23
 2 of 3 shifts · before recorded expenses
 ```
+
+The heading of each week is drawn in the primary colour and a heavier weight than an ordinary
+section heading, so where one week ends and the next begins is the most obvious thing on the screen.
+The headings do not pin while scrolling, because the grouped list style does not support it.
 
 **Nothing is defined for History.** Every figure is the period summary's, derived by the same
 aggregation over the week's own period, which is what keeps one definition of "what a week came to"
@@ -625,7 +653,7 @@ facts every time they are shown, exactly as a shift's mileage is.
 
 The root screen reads **the current week's shifts and nothing more**, plus a count of every other
 completed shift, so that the list a driver reads while working does not grow with their history. How
-many weeks those other shifts fall in, for the `66 weeks · 68 shifts` line under View Older Weeks,
+many weeks those other shifts fall in, for the `67 weeks · 69 shifts` line under View Older Weeks,
 is worked out off the main actor. Opening Older Weeks is where the rest of the history is read, and
 that is the driver asking for it. Measured on a synthetic store holding five years of work (3,124
 completed shifts), the root screen's refresh went from about 175 to 220 ms to about 1 ms, and opening
@@ -637,8 +665,9 @@ completed shift is still in the store, still exported, still counted by every pe
 still one tap from its own detail screen. A shift that leaves the current week at Monday midnight
 moves from one list to the other, and the app does not have to be relaunched for it to do so.
 
-If the current week holds nothing, History says that the week holds nothing and leaves the older
-weeks where they are. It does not reach back for the last shift worked to avoid an empty list: a
+If the current week holds nothing, History says `No completed shifts this week yet` and leaves the
+older weeks where they are; a driver with no history at all reads `No completed shifts yet` and
+where one will come from. It does not reach back for the last shift worked to avoid an empty list: a
 week with no work in it is a fact, and filling it with the week before would be the screen answering
 a question nobody asked.
 
@@ -650,23 +679,30 @@ numbers*.
 
 | Section | What it holds |
 | --- | --- |
-| Shift | Start time, end time, elapsed duration, and, for a shift that was paused, its paused and working durations, with Correct End Time |
-| Earnings | The recorded amount or "No amount recorded", and Add or Edit Earnings |
-| Route | Recorded mileage, capture segments, capture gaps, and what qualifies them |
-| Performance | All three derived gross rates, or the reason each could not be derived |
-| Estimated Fuel | The estimated fuel cost over this shift's recorded mileage, the estimated gallons, the vehicle, fuel economy and gas price this shift recorded, and Add or Edit Fuel Assumptions |
-| Estimated Net | Recorded earnings, the estimated fuel cost being subtracted, the estimated net after fuel and the estimated net per working hour |
+| Summary | The recorded amount as the headline, or "No amount recorded", with Add or Edit Earnings; working time and recorded miles under it |
+| Performance | Start and end times, elapsed duration, and, for a shift that was paused, its paused and working durations; delivery active and non-delivery time; all three derived gross rates, or the reason each could not be derived |
+| Driving | Recorded mileage, what qualifies it (a partial route, stretches recorded as parked), capture segments and capture gaps |
+| Costs | The estimated fuel cost over this shift's recorded mileage, the estimated gallons, the vehicle, fuel economy and gas price this shift recorded, Add or Edit Fuel Assumptions, and the estimated net ledger: recorded earnings, the estimated fuel being subtracted, the estimated net after fuel and the estimated net per working hour |
+| Deliveries | How many were completed and cancelled, and what each one recorded, with its own corrections under it |
 | Pauses | Each recorded pause with its times and length, Edit and Delete for each, and Add Missed Pause |
-| Deliveries | How many were completed and cancelled, and what each one recorded |
-| Delete | Delete Shift, behind a confirmation |
+| Corrections | Correct End Time, and Correct Grouping on a shift with more than one delivery |
+| Export | Export this shift |
+| Delete | Delete Shift, behind a confirmation, in a section of its own |
 
-The pause list and the delivery log are the last two reading sections because they are the two that
-grow with the shift; the sections above them summarise it in a fixed number of lines.
+Reading down, the screen goes from the figures a driver opens it for to the controls that change
+them. The first four sections summarise the shift in a fixed number of lines; the delivery log and
+the pause list come after them because they grow with the shift. Corrections that act on the whole
+shift are gathered in their own quiet section below every figure they change, and deletion stands
+apart at the foot. A correction that belongs to one delivery or one pause stays on that row, beside
+the fact it changes, under a rule that separates it from the record.
 
-The two estimated sections come after everything recorded, deliberately. What the driver recorded and
-what the route measured are the trustworthy part of this screen, and reading down it should go from
-the recorded to the estimated rather than mix them. A shift with no fuel estimate keeps every other
-figure exactly where it is, and only those two sections say they are unavailable and why. See
+A stretch recorded as parked is stated in Driving, in the route's words, and never beside a pause:
+parking stops the route and subtracts nothing from working time, pausing does both.
+
+The estimates come after everything recorded, deliberately. What the driver recorded and what the
+route measured are the trustworthy part of this screen, and reading down it should go from the
+recorded to the estimated rather than mix them. A shift with no fuel estimate keeps every other
+figure exactly where it is, and only the Costs section says what is unavailable and why. See
 [Estimated fuel and net](estimated-fuel.md).
 
 It is a summary, not a dashboard: no chart, no map, no gauge and no score. Only completed shifts
@@ -675,7 +711,7 @@ and nothing that may be deleted.
 
 ### Which vehicle a finished shift recorded
 
-The fuel section's assumptions open with a `Vehicle` row, above the fuel economy and gas price it
+The Costs section's assumptions open with a `Vehicle` row, above the fuel economy and gas price it
 recorded, so the block reads as what this shift was estimated under:
 
 ```text
