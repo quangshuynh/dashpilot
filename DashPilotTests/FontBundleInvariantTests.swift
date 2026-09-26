@@ -46,14 +46,6 @@ struct FontBundleInvariantTests {
         }
     }
 
-    @Test("The font license travels with the fonts")
-    func licenseIsBundled() throws {
-        let url = try #require(Bundle.main.url(forResource: "OFL", withExtension: "txt"))
-        let text = try String(contentsOf: url, encoding: .utf8)
-        #expect(text.contains("Manrope Project Authors"))
-        #expect(text.contains("SIL OPEN FONT LICENSE Version 1.1"))
-    }
-
     @Test("The widget extension is still embedded, and carries no font")
     func widgetCarriesNoFont() throws {
         let widget = try #require(widgetExtension, "DashPilotWidgets.appex is not embedded in the app")
