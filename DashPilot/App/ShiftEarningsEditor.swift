@@ -37,7 +37,7 @@ struct ShiftEarningsEditor: View {
                     TextField(placeholder, text: $text)
                         .keyboardType(.decimalPad)
                         .focused($isAmountFocused)
-                        .font(.title2)
+                        .dashFont(.metric)
                         .monospacedDigit()
                         .accessibilityIdentifier("earningsAmountField")
                         .accessibilityLabel("Gross earnings")
@@ -48,11 +48,7 @@ struct ShiftEarningsEditor: View {
                         }
 
                     if let message {
-                        Label(message, systemImage: "exclamationmark.triangle.fill")
-                            .font(.subheadline)
-                            .foregroundStyle(.red)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .accessibilityIdentifier("earningsValidationMessage")
+                        DashValidationMessage(message: message, identifier: "earningsValidationMessage")
                     }
                 } header: {
                     Text("Gross Earnings")
@@ -69,6 +65,7 @@ struct ShiftEarningsEditor: View {
                 if hasRecordedEarnings {
                     Section {
                         Button("Remove Earnings", role: .destructive, action: remove)
+                            .dashFont(.body)
                             .frame(maxWidth: .infinity)
                             .accessibilityIdentifier("removeEarningsButton")
                     } footer: {

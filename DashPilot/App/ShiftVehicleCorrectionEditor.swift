@@ -191,7 +191,7 @@ struct ShiftVehicleCorrectionEditor: View {
                         .fixedSize(horizontal: false, vertical: true)
                     if let detail {
                         Text(detail)
-                            .font(.caption)
+                            .dashFont(.supporting)
                             .monospacedDigit()
                             .foregroundStyle(.secondary)
                     }

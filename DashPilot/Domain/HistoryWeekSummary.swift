@@ -68,11 +68,24 @@ nonisolated extension HistoryWeekSummary {
     ///
     /// The question is *what did this week look like?*, so three figures lead
     /// and are drawn larger: what the week recorded paying, how long it was
-    /// worked, and what its routes recorded. Under them, smaller: how many
-    /// shifts and deliveries it held, and, only where the week has them, the
-    /// estimated fuel and the net after it. That is six lines at most, and it
-    /// stops there on purpose: the rates, delivery active time, pickup waits and
-    /// the comparison are the period summary's, one tap away.
+    /// worked, and what its routes recorded. Under them, smaller: what those
+    /// recorded facts come to per working hour and per recorded mile, where a
+    /// shift carried both halves, then how many shifts and deliveries the week
+    /// held, and, only where the week has them, the estimated fuel and the net
+    /// after it. That is eight lines at most, and it stops there on purpose:
+    /// delivery active time and its rate, pickup waits and the comparison are
+    /// the period summary's, one tap away.
+    ///
+    /// ## The rates are the period's own
+    ///
+    /// ``PeriodMetrics/grossPerWorkingHour`` and
+    /// ``PeriodMetrics/grossPerRecordedMile``, each aggregate over aggregate on
+    /// its own paired subset. Nothing here divides one line by another: the
+    /// earnings headline can cover different shifts from a rate, and dividing
+    /// across them would take a subtotal from one set of shifts over hours from
+    /// another. A rate no shift could contribute to is **absent** from the card,
+    /// for the reason an absent fuel estimate is: the earnings, time and miles
+    /// above already say which half is missing.
     ///
     /// ## Deliberately not here
     ///
@@ -135,6 +148,23 @@ nonisolated extension HistoryWeekSummary {
                 isFigure: metrics.recordedDistance.isMeasured
             )
         )
+
+        // What the recorded facts above come to per hour and per mile, each over
+        // the shifts that carried both halves of it.
+        for kind in [PeriodRateKind.perWorkingHour, .perRecordedMile] {
+            let rate = metrics.rate(kind)
+            guard let amount = rate.amount else { continue }
+            lines.append(
+                HistoryWeekSummaryLine(
+                    id: kind == .perWorkingHour ? .perWorkingHour : .perRecordedMile,
+                    prominence: .secondary,
+                    title: kind.title,
+                    value: amount.formatted(locale: locale),
+                    detail: rate.coverage.isComplete ? "Every shift this week" : metrics.rateBasisStatement(kind),
+                    spoken: metrics.spokenRateStatement(kind, locale: locale)
+                )
+            )
+        }
 
         // One line for the work itself: the shifts, and what their deliveries
         // came to, each outcome named rather than summed.
@@ -270,10 +300,36 @@ nonisolated struct HistoryWeekSummaryLine: Equatable, Sendable, Identifiable {
         case earnings
         case working
         case mileage
+        /// Recorded gross earnings per working hour, over its paired subset.
+        case perWorkingHour
+        /// Recorded gross earnings per recorded mile, over its paired subset.
+        case perRecordedMile
         /// The shift count and the deliveries' outcomes, on one line.
         case activity
         case estimatedFuel
         case estimatedNet
+
+        /// Whether the figure is recorded or estimated.
+        ///
+        /// Recorded lines are what the driver entered and the routes measured,
+        /// and the arithmetic over those alone. Estimated lines rest on fuel
+        /// assumptions the driver made. A view keeps the two visibly apart, and
+        /// no line of one kind is ever computed from a line of the other.
+        var basis: Basis {
+            switch self {
+            case .earnings, .working, .mileage, .perWorkingHour, .perRecordedMile, .activity: .recorded
+            case .estimatedFuel, .estimatedNet: .estimated
+            }
+        }
+    }
+
+    /// Where a figure comes from.
+    nonisolated enum Basis: Equatable, Sendable {
+        /// Entered by the driver or measured by the device, or derived from
+        /// those alone.
+        case recorded
+        /// Derived from the fuel assumptions a shift recorded.
+        case estimated
     }
 
     /// How a line is drawn. Colour and weight are never the only difference:
