@@ -60,6 +60,7 @@ struct SettingsView: View {
             defaultVehicleSection
             vehiclesSection
             fuelSection
+            aboutSection
         }
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
@@ -195,6 +196,21 @@ struct SettingsView: View {
                 changes what your next shift records, and never a shift you have already worked.
                 """
             )
+        }
+    }
+
+    /// Where DashPilot's parts come from, and the licenses they are under.
+    private var aboutSection: some View {
+        Section {
+            NavigationLink {
+                AcknowledgementsView()
+            } label: {
+                Label("Acknowledgements", systemImage: "doc.text")
+                    .dashFont(.body)
+            }
+            .accessibilityIdentifier("acknowledgementsLink")
+        } header: {
+            Text("About")
         }
     }
 
