@@ -290,8 +290,7 @@ struct DeliveryControlPanel: View {
                     .accessibilityLabel(recent.numbered.spokenUndoDeliveredLabel(restoredTo: recent.restored))
                     .accessibilityIdentifier("undoDeliveredButton")
             }
-            .padding(10)
-            .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 10))
+            .dashInsetSurface()
         }
     }
 
@@ -696,9 +695,7 @@ private struct DeliveryProgressSuggestionCard: View {
 
             controls
         }
-        .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
+        .dashInsetSurface()
     }
 
     /// Side by side at ordinary text sizes and stacked at accessibility ones,
