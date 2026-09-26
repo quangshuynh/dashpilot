@@ -7617,6 +7617,116 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertTrue(scrollTo(delete, in: app, maxSwipes: 60), "And so is the end of the screen")
     }
 
+    // MARK: Settings hierarchy
+
+    /// Settings leads with the vehicle the next shift will record, says so in
+    /// words, and says plainly when there is none.
+    @MainActor
+    func testSettingsLeadsWithTheDefaultVehicle() throws {
+        let app = launchWithEmptyStore()
+        openSettings(in: app)
+
+        let none = app.descendants(matching: .any)["noDefaultVehicleNotice"]
+        XCTAssertTrue(none.waitForExistence(timeout: 5), "No selection is stated rather than left empty")
+        XCTAssertTrue(none.label.contains("No vehicle selected"), "Showed: \(none.label)")
+        XCTAssertTrue(none.label.contains("next shift"), "And says what it means: \(none.label)")
+        attachScreenshot("settings-no-vehicle")
+
+        addVehicle(named: "2020 Honda Civic", milesPerGallon: "34", in: app)
+        let summary = app.descendants(matching: .any)["defaultVehicleSummary"]
+        XCTAssertTrue(summary.waitForExistence(timeout: 5), "The first vehicle becomes the default")
+        XCTAssertEqual(
+            summary.label,
+            "Default vehicle: 2020 Honda Civic, 34 miles per gallon. Used for your next shift."
+        )
+        XCTAssertFalse(none.exists)
+
+        let row = vehicleRow(containing: "2020 Honda Civic", in: app)
+        XCTAssertTrue(row.label.hasPrefix("Selected as the default vehicle."), "Showed: \(row.label)")
+
+        // A gas price of zero is a price, drawn and spoken as one.
+        setCurrentGasPrice("0", in: app)
+        let price = app.descendants(matching: .any)["currentGasPriceRow"]
+        XCTAssertEqual(price.value as? String, "$0.00 per gallon", "A recorded zero is not Not set")
+        attachScreenshot("settings-default-vehicle")
+
+        // Clearing the default is stated again rather than leaving a stale card.
+        row.tap()
+        XCTAssertTrue(none.waitForExistence(timeout: 5), "Tapping the default again clears it")
+        XCTAssertFalse(summary.exists)
+    }
+
+    /// The vehicle editor labels each field above it, and a refusal is a
+    /// sentence the shared helper reads rather than the symbol beside it.
+    @MainActor
+    func testTheVehicleEditorLabelsItsFieldsAndStatesARefusal() throws {
+        let app = launchWithEmptyStore()
+        openSettings(in: app)
+
+        let add = app.buttons["addVehicleButton"]
+        XCTAssertTrue(scrollUntilHittable(add, in: app))
+        add.tap()
+        let nameField = app.textFields["vehicleNameField"]
+        XCTAssertTrue(nameField.waitForExistence(timeout: 5))
+        XCTAssertEqual(nameField.label, "Vehicle name")
+        XCTAssertEqual(app.textFields["vehicleMilesPerGallonField"].label, "Miles per gallon")
+        attachScreenshot("vehicle-editor")
+
+        nameField.tap()
+        nameField.typeText("The van")
+        app.buttons["saveVehicleButton"].tap()
+        let message = validationMessage("vehicleValidationMessage", in: app)
+        XCTAssertTrue(message.waitForExistence(timeout: 5))
+        XCTAssertTrue(message.label.contains("miles per gallon"), "The sentence, not a glyph: \(message.label)")
+        XCTAssertEqual(
+            app.descendants(matching: .any).matching(identifier: "vehicleValidationMessage").count,
+            1,
+            "One element carries the refusal, so no query can find a glyph called Warning instead"
+        )
+        attachScreenshot("vehicle-editor-validation")
+    }
+
+    /// A long vehicle name at the largest text size wraps whole on the default
+    /// card and in the list, rather than being shortened.
+    @MainActor
+    func testSettingsSurvivesTheLargestTextSizeWithALongName() throws {
+        let app = launchWithEmptyStore(textSize: Self.accessibilityXXXLTextSize)
+        let name = "2020 Honda Civic Hatchback Sport Touring"
+        openSettings(in: app)
+
+        let add = app.buttons["addVehicleButton"]
+        XCTAssertTrue(scrollUntilHittable(add, in: app, maxSwipes: 20))
+        add.tap()
+        let nameField = app.textFields["vehicleNameField"]
+        XCTAssertTrue(nameField.waitForExistence(timeout: 5))
+        nameField.tap()
+        nameField.typeText(name)
+
+        // Saved once without an economy, so the refusal focuses the economy
+        // field itself: at this size a synthesized tap on a field under the
+        // keyboard does not focus it.
+        app.buttons["saveVehicleButton"].tap()
+        XCTAssertTrue(validationMessage("vehicleValidationMessage", in: app).waitForExistence(timeout: 5))
+        let economyField = app.textFields["vehicleMilesPerGallonField"]
+        let focused = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "hasKeyboardFocus == true"),
+            object: economyField
+        )
+        XCTAssertEqual(XCTWaiter().wait(for: [focused], timeout: 5), .completed)
+        economyField.typeText("34")
+        app.buttons["saveVehicleButton"].tap()
+        XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 5))
+
+        let summary = app.descendants(matching: .any)["defaultVehicleSummary"]
+        XCTAssertTrue(scrollToTop(reaching: summary, in: app), "The default card is at the top")
+        XCTAssertTrue(summary.label.contains(name), "The name is whole: \(summary.label)")
+        XCTAssertGreaterThan(summary.frame.height, 44)
+        attachScreenshot("settings-xxxl")
+
+        let row = vehicleRow(containing: name, in: app)
+        XCTAssertTrue(scrollTo(row, in: app, maxSwipes: 20), "And in the list below it")
+    }
+
     // MARK: Settings helpers
 
     @MainActor

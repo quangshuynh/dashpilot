@@ -36,20 +36,25 @@ struct VehicleProfileEditor: View {
         NavigationStack {
             Form {
                 Section {
-                    LabeledContent("Name") {
+                    // Each label above its field rather than beside it, so a long
+                    // vehicle name and the largest text sizes get the whole
+                    // width of the row instead of the half a trailing field has.
+                    labeledField("Name") {
                         TextField("2020 Honda Civic", text: $name)
-                            .multilineTextAlignment(.trailing)
+                            .dashFont(.body)
                             .focused($focusedField, equals: .name)
                             .autocorrectionDisabled()
+                            .submitLabel(.next)
+                            .onSubmit { focusedField = .milesPerGallon }
                             .accessibilityIdentifier("vehicleNameField")
                             .accessibilityLabel("Vehicle name")
                             .onChange(of: name) { _, _ in message = nil }
                     }
 
-                    LabeledContent("Miles per gallon") {
+                    labeledField("Miles per gallon") {
                         TextField(milesPerGallonPlaceholder, text: $milesPerGallonText)
+                            .dashFont(.body)
                             .keyboardType(.decimalPad)
-                            .multilineTextAlignment(.trailing)
                             .focused($focusedField, equals: .milesPerGallon)
                             .monospacedDigit()
                             .accessibilityIdentifier("vehicleMilesPerGallonField")
@@ -58,11 +63,7 @@ struct VehicleProfileEditor: View {
                     }
 
                     if let message {
-                        Label(message, systemImage: "exclamationmark.triangle.fill")
-                            .font(.subheadline)
-                            .foregroundStyle(.red)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .accessibilityIdentifier("vehicleValidationMessage")
+                        DashValidationMessage(message: message, identifier: "vehicleValidationMessage")
                     }
                 } header: {
                     Text("Vehicle")
@@ -80,6 +81,7 @@ struct VehicleProfileEditor: View {
                 if let vehicle {
                     Section {
                         Button("Delete Vehicle", role: .destructive) { isConfirmingDeletion = true }
+                            .dashFont(.body)
                             .frame(maxWidth: .infinity)
                             .accessibilityIdentifier("deleteVehicleButton")
                     } footer: {
@@ -118,6 +120,19 @@ struct VehicleProfileEditor: View {
             }
         }
         .onAppear(perform: seed)
+    }
+
+    /// A field under its own label, in the one shape every field on this
+    /// sheet takes.
+    private func labeledField(_ title: String, @ViewBuilder field: () -> some View) -> some View {
+        VStack(alignment: .leading, spacing: DashSpacing.sm) {
+            Text(title)
+                .dashFont(.metricLabel)
+                .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
+            field()
+        }
+        .padding(.vertical, DashSpacing.xs)
     }
 
     private var deletionTitle: String {
@@ -202,23 +217,24 @@ struct CurrentGasPriceEditor: View {
         NavigationStack {
             Form {
                 Section {
-                    LabeledContent("Price per gallon") {
+                    VStack(alignment: .leading, spacing: DashSpacing.sm) {
+                        Text("Price per gallon")
+                            .dashFont(.metricLabel)
+                            .foregroundStyle(.secondary)
+                            .accessibilityHidden(true)
                         TextField(placeholder, text: $gasPriceText)
+                            .dashFont(.body)
                             .keyboardType(.decimalPad)
-                            .multilineTextAlignment(.trailing)
                             .focused($isFocused)
                             .monospacedDigit()
                             .accessibilityIdentifier("currentGasPriceField")
                             .accessibilityLabel("Gas price per gallon")
                             .onChange(of: gasPriceText) { _, _ in message = nil }
                     }
+                    .padding(.vertical, DashSpacing.xs)
 
                     if let message {
-                        Label(message, systemImage: "exclamationmark.triangle.fill")
-                            .font(.subheadline)
-                            .foregroundStyle(.red)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .accessibilityIdentifier("currentGasPriceValidationMessage")
+                        DashValidationMessage(message: message, identifier: "currentGasPriceValidationMessage")
                     }
                 } header: {
                     Text("Current Gas Price")
@@ -236,6 +252,7 @@ struct CurrentGasPriceEditor: View {
                 if hasRecordedPrice {
                     Section {
                         Button("Remove Gas Price", role: .destructive, action: remove)
+                            .dashFont(.body)
                             .frame(maxWidth: .infinity)
                             .accessibilityIdentifier("removeCurrentGasPriceButton")
                     } footer: {
