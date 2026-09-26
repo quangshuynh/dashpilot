@@ -74,6 +74,6 @@ struct DashStatusLabel: View {
                 .foregroundStyle(tint)
                 .accessibilityHidden(true)
         }
-        .font(DashTypography.status)
+        .dashFont(.status)
     }
 }
