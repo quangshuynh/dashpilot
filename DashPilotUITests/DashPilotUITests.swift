@@ -8772,9 +8772,11 @@ final class DashPilotUITests: XCTestCase {
 
         app.buttons["dismissExportButton"].tap()
         // The export control is at the bottom of the list, so dismissing leaves
-        // the screen scrolled past the picker at the top of it.
+        // the screen scrolled past the picker at the top of it. The summary is
+        // longer than six swipes since its figures moved to the design system's
+        // larger roles, so this journey asks for more of them.
         let picker = app.segmentedControls["periodUnitPicker"]
-        XCTAssertTrue(scrollToTop(reaching: picker, in: app), "The summary is back")
+        XCTAssertTrue(scrollToTop(reaching: picker, in: app, swipes: 12), "The summary is back")
 
         selectPeriod("Week", in: app)
         openExport("exportPeriodButton", in: app)
