@@ -68,6 +68,9 @@ test cannot see, such as a screen that renders a sentence the model never claime
 | History weeks | The week History is scoped to, and the split that decides which screen a shift is drawn on: a week starting on Monday whatever the device's own first weekday is, Sunday closing the working week rather than opening the next one, a shift at Monday midnight in the week beginning, a week across New Year and one across a daylight-saving change, the time zone deciding which week a moment is in, older shifts grouped newest week first with two in one week under one heading and an unworked week absent rather than empty, a current week present but empty, the Monday transition moving a shift between the two sides, a shift dated after this week still listed rather than hidden, every shift claimed by exactly one side, and the wording following the Monday week rather than the device's |
 | History fetch scope | The two store reads History is drawn from, asserted against the partition they replaced: the week's own completed shifts newest first, a running shift in neither read, Monday 00:00 opening the week and Sunday 23:59:59 closing the one before, a 169-hour week across the autumn clock change, the rollover moving a shift from one read to the other, a shift dated after the week reachable under the other weeks, both reads equal to the partition's two sides row for row over nearly three years, the other weeks counted as Monday weeks, a week summarised through a context of its own equal to one summarised directly and skipping a deleted shift, and Export All History still carrying every completed shift whatever the screen reads |
 | History week summaries | What a week says above its shifts, derived twice to show it is the period calculator's own figures: the three primary figures and the secondary lines in reading order, the shift and delivery counts on one line, missing earnings and unmeasured miles never read as zero, complete fuel coverage stated, partial coverage never scaled up to the week, a partial route making the fuel a floor and the net a ceiling, a recorded zero gas price counted, the estimated net over its paired subset rather than week earnings less week fuel, recorded expenses reaching neither net so fuel is never subtracted twice, the spoken form naming its week first, and the card bounded at six lines |
+| History week refresh after an edit | An older week follows an edit to one of its shifts: an amount, an end correction (with the route after it gone), a missed pause, fuel assumptions and a deletion each move the week's revision and the summary worked out through the same off-main path; an edit to another week and a save changing nothing leave it alone |
+| Delivery time in state | How long a delivery has been at its current step, from that step's own recorded instant, for each active state; no clock for a contradictory chain or a clock reading earlier than the instant; and the reminder's evidence equal to the same span |
+| Dash typography | The bundled typeface as the app launches with it: every weight registered under the PostScript name the roles use, every `UIAppFonts` entry a file in the bundle, tabular figures equal width on request, only the changing figures asking for them, Bold Text one weight heavier, and `NSSupportsLiveActivities` and the location background mode still declared |
 | Recorded shift vehicle | What a completed shift says it was worked in: its own name, economy and price; renaming, repricing, reselecting and deleting in Settings rewriting nothing, read back through a fresh context; a shift that recorded no vehicle staying unnamed while one is selected today; an economy typed by hand naming nothing even when a profile matches it; a recorded zero price said as zero; a missing half left out rather than zero; and wording that stays true of a name recorded after the start |
 | Period comparison | The span a period is compared against — a calendar unit back, a month keeping its own length, an equal-length range before a chosen one, whole days across a daylight saving change, and a chosen range still having no selection to step to — then the comparison itself: two period results and never an average of the periods inside them, a missing figure subtracted from nothing, the five reasons a percentage is withheld, expenses never carrying one, coverage printed for both sides, differing lengths stated rather than scaled, non-neighbouring periods refused, and the words a change may be described in |
 | Period expenses | Totals and category subtotals, missing distinct from an explicit zero, membership by the expense's own timestamp across a half-open boundary and a 23-hour day, a month totalled from its own records, a day holding costs but no shift, the net's two refusals and its negative case, the gross figures unchanged by any of it, no coverage pair invented for expenses, and the words the net may and may not use |
@@ -133,6 +136,22 @@ find ~/Library/Developer/CoreSimulator/Devices -name 'dashpilot-history-fetch-pr
 
 The `TEST_RUNNER_` prefix has to be an environment variable of `xcodebuild`, and the run has to be
 serial, or it silently measures nothing.
+
+### Screenshots kept for review
+
+A few journeys keep a full-screen screenshot in the result bundle with `attachScreenshot(_:)`, named
+for the state it shows (`home-pre-shift`, `home-active-no-deliveries`, `home-parked`,
+`home-paused`, `home-one-delivery`, `home-two-stacked-deliveries`, `home-reminder`, the
+largest-text variants and `older-weeks-after-edit`). They assert nothing and compare nothing; they are
+the record a reviewer reads after a run:
+
+```bash
+xcrun xcresulttool export attachments --path <path>.xcresult --output-path <folder>
+```
+
+A journey inherits the simulator's own text size unless it passes one, so reset it after checking a
+screen by hand (`xcrun simctl ui booted content_size large`), or journeys that read an unscrolled row
+fail for a reason that has nothing to do with the change under test.
 
 ## Testing seams
 

@@ -596,6 +596,21 @@ and one they cannot.
 - **No import.** An exported file cannot be read back in. There is no restore, no merge and no way to
   move history onto another device through the app.
 
+## Appearance
+
+- **Manrope is used on the shift screen only.** The root screen's shift, delivery, location and
+  capture panels are set in it; History, the completed-shift detail, Settings, the period summary,
+  export and the Live Activity still use the system font. Both scale with Dynamic Type, so nothing is
+  unreadable, but the app does not yet look like one family throughout.
+- **The typeface's full license text is not yet in the repository.** Manrope is under the SIL Open
+  Font License 1.1; each font file carries its copyright and license reference, and
+  `DashPilot/Resources/Fonts/LICENSE-Manrope.md` names both, but the `OFL.txt` text itself should be
+  added beside the fonts from the Manrope project unchanged.
+- **Bold Text moves each role one weight heavier, up to Bold.** The heaviest bundled weight is Bold,
+  so a role already set in Bold does not get heavier.
+- **No screen has been judged on a physical iPhone in the new design.** The layouts were checked on
+  the simulator at the default size and the largest accessibility size.
+
 ## History
 
 - **History shows one week, and there is no way to widen it.** The default list is the current
@@ -622,10 +637,6 @@ and one they cannot.
   actor when the week scrolls into view, so the list keeps scrolling, but about half a second of work
   per week of ordinary shifts is still done, nothing is cached, and it is done again each time the
   week's section is built.
-- **A week's summary is not worked out again while its section stays on screen.** Editing a shift
-  from that week (its amount, its end, its fuel assumptions) and coming back leaves the week's figures
-  as they were until the section is rebuilt, by scrolling well away and back or by reopening Older
-  Weeks. The shift's own row and detail are current; the week's figures are briefly behind them.
 - **No vehicle is named for a week.** A week can hold shifts worked in different vehicles, and a
   name is a label a shift recorded rather than an identity, so the weekly summary neither lists nor
   counts them. Each shift's detail says which vehicle it recorded.
