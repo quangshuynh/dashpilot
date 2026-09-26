@@ -598,18 +598,26 @@ and one they cannot.
 
 ## Appearance
 
-- **Manrope is used on the shift screen only.** The root screen's shift, delivery, location and
-  capture panels are set in it; History, the completed-shift detail, Settings, the period summary,
-  export and the Live Activity still use the system font. Both scale with Dynamic Type, so nothing is
+- **Manrope is used on the redesigned screens only.** The root screen's shift, delivery, location,
+  capture and History panels, Older Weeks, the completed-shift detail, Settings and the vehicle
+  editor are set in it. The period summary, export, expenses, pickup places, most correction sheets
+  and the Live Activity still use the system font. Both scale with Dynamic Type, so nothing is
   unreadable, but the app does not yet look like one family throughout.
-- **The typeface's full license text is not yet in the repository.** Manrope is under the SIL Open
-  Font License 1.1; each font file carries its copyright and license reference, and
-  `DashPilot/Resources/Fonts/LICENSE-Manrope.md` names both, but the `OFL.txt` text itself should be
-  added beside the fonts from the Manrope project unchanged.
+- **The Live Activity keeps the system typeface on purpose.** The widget extension bundles no font,
+  and adding one only for visual consistency was not judged worth a second copy of the files in a
+  second bundle. A device session with the Live Activity on a real Lock Screen is where that should
+  be decided.
+- **The bundled `OFL.txt` is the Google Fonts copy of the Manrope license.** The original Manrope
+  repository named in the font files no longer exists; the license text is committed unchanged from
+  `google/fonts`, and its copyright line (2018, `googlefonts/manrope`) differs from the one in the
+  font files (2019, `sharanda/manrope`). The terms are the same SIL Open Font License 1.1.
 - **Bold Text moves each role one weight heavier, up to Bold.** The heaviest bundled weight is Bold,
   so a role already set in Bold does not get heavier.
 - **No screen has been judged on a physical iPhone in the new design.** The layouts were checked on
   the simulator at the default size and the largest accessibility size.
+- **History's first shift is below the fold on a phone.** The current week now opens with its own
+  summary, so on the root screen a driver scrolls past the shift panel, Location and that summary
+  before reaching the first row. The summary is the answer most visits want, which is why it leads.
 
 ## History
 
