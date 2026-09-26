@@ -1395,6 +1395,12 @@ final class DashPilotUITests: XCTestCase {
     @MainActor
     private func openLastWeeksFridayShift(in app: XCUIApplication, maxSwipes: Int = 12) {
         openOlderWeeks(in: app, maxSwipes: maxSwipes)
+        openLastWeeksFridayRow(in: app, maxSwipes: maxSwipes)
+    }
+
+    /// The same shift, from Older Weeks when the journey is already there.
+    @MainActor
+    private func openLastWeeksFridayRow(in app: XCUIApplication, maxSwipes: Int = 12) {
         let row = olderWeekRows(in: app).firstMatch
         XCTAssertTrue(scrollUntilHittable(row, in: app, maxSwipes: maxSwipes))
         XCTAssertTrue(waitForLabel(row, toContain: "$45.00"), "Showed: \(row.label)")
@@ -1573,6 +1579,61 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertTrue(earnings.label.contains("$50.06"), "Showed: \(earnings.label)")
         goBackToOlderWeeks(in: app)
         XCTAssertTrue(target.waitForExistence(timeout: 5), "Returning keeps the place in the list")
+    }
+
+    // MARK: A week follows an edit to its own shifts
+
+    /// Editing an older shift's amount updates its week's summary on return,
+    /// without leaving Older Weeks, and leaves the next week's summary alone.
+    @MainActor
+    func testEditingAnOlderShiftRefreshesItsWeek() throws {
+        let app = launchWithLongHistory()
+        openOlderWeeks(in: app)
+
+        let summaries = app.descendants(matching: .any).matching(identifier: "olderWeekSummary")
+        let lastWeek = summaries.firstMatch
+        XCTAssertTrue(waitForLabel(lastWeek, toContain: "Recorded gross earnings, $185.00"), "Showed: \(lastWeek.label)")
+
+        openLastWeeksFridayRow(in: app)
+        let edit = app.buttons["editShiftEarningsButton"]
+        XCTAssertTrue(scrollTo(edit, in: app))
+        edit.tap()
+        let field = app.textFields["earningsAmountField"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        clear(field, in: app)
+        type("50", into: app)
+        app.buttons["saveEarningsButton"].tap()
+        let earnings = app.descendants(matching: .any)["shiftDetailEarnings"]
+        XCTAssertTrue(waitForLabel(earnings, toContain: "$50.00"), "Showed: \(earnings.label)")
+
+        goBackToOlderWeeks(in: app)
+        XCTAssertTrue(
+            waitForLabel(lastWeek, toContain: "Recorded gross earnings, $190.00"),
+            "The week is worked out again from what the store now says: \(lastWeek.label)"
+        )
+        attachScreenshot("older-weeks-after-edit")
+    }
+
+    /// Deleting an older shift updates its week's count and total on return.
+    @MainActor
+    func testDeletingAnOlderShiftRefreshesItsWeek() throws {
+        let app = launchWithLongHistory()
+        openOlderWeeks(in: app)
+
+        let lastWeek = app.descendants(matching: .any).matching(identifier: "olderWeekSummary").firstMatch
+        XCTAssertTrue(waitForLabel(lastWeek, toContain: "3 completed shifts"), "Showed: \(lastWeek.label)")
+
+        openLastWeeksFridayRow(in: app)
+        let delete = app.buttons["deleteShiftButton"]
+        XCTAssertTrue(scrollTo(delete, in: app, maxSwipes: 20))
+        delete.tap()
+        let confirm = app.buttons.matching(identifier: "confirmDeleteShiftButton").firstMatch
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        confirm.tap()
+
+        XCTAssertTrue(app.navigationBars["Older Weeks"].waitForExistence(timeout: 5))
+        XCTAssertTrue(waitForLabel(lastWeek, toContain: "2 completed shifts"), "Showed: \(lastWeek.label)")
+        XCTAssertTrue(lastWeek.label.contains("Recorded gross earnings, $140.00"), "Showed: \(lastWeek.label)")
     }
 
     /// A week the driver has not worked yet says so, and does not quietly fill
