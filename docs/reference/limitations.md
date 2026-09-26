@@ -604,23 +604,35 @@ and one they cannot.
 - **History's week always starts on Monday; a period summary's week starts on the day the device
   says a week starts.** For a driver whose calendar starts the week on Sunday, the two screens
   describe weeks a day apart. Both name the dates they cover, so the difference is readable rather
-  than hidden, but nothing reconciles them and no figure follows History's week.
-- **The older weeks are a list, not a summary.** Each group is headed by its dates and footed by how
-  many shifts it holds. No earnings, mileage or rate is totalled per week there; that is what the
-  [period summary](../product/period-summaries.md) is for, and a second set of weekly figures
-  computed somewhere else is exactly the drift this project designs against.
-- **Every completed shift is loaded to build the two lists.** The rows are rendered lazily and a
-  route is measured only when its row appears, so what a long history costs is memory for the shift
-  records rather than work per row. There is no paging, no fetch limit and no cursor, and nothing has
-  been measured against a store holding years of work.
+  than hidden, but nothing reconciles them. The weekly summaries in Older Weeks total History's
+  Monday week, so on such a device a week there and the period summary's "week" are different spans,
+  each labelled with its own dates.
+- **Older Weeks reads every older shift when it is opened.** The root screen reads only the current
+  week and a count, but the Older Weeks screen fetches every completed shift outside the week and
+  groups them, about 80 to 100 ms once on a synthetic store holding five years of work. That was
+  judged cheap enough for a screen the driver asks for, so there is no paging, no fetch limit and no
+  cursor. While it is open, a save anywhere in the store (a running shift's route, say) makes it read
+  them again.
 - **A shift with a wrong date is filed by that date.** DashPilot does not detect a device clock that
   was wrong when a shift was recorded. A shift stored with a date in a future week is listed under
   Older Weeks rather than in the current one, which keeps it reachable but is the wrong heading for
   it. A shift's **end** can be corrected; its start cannot, and the start is what decides which week,
   day and period the shift belongs to.
-- **A week's summary measures every shift in that week.** The figures are derived when the week
-  scrolls into view and thrown away with it, so a week costs its routes once rather than per row, but
-  nothing is cached and this has not been measured against a store holding years of work.
+- **A week's summary measures every shift in that week.** The figures are worked out off the main
+  actor when the week scrolls into view, so the list keeps scrolling, but about half a second of work
+  per week of ordinary shifts is still done, nothing is cached, and it is done again each time the
+  week's section is built.
+- **A week's summary is not worked out again while its section stays on screen.** Editing a shift
+  from that week (its amount, its end, its fuel assumptions) and coming back leaves the week's figures
+  as they were until the section is rebuilt, by scrolling well away and back or by reopening Older
+  Weeks. The shift's own row and detail are current; the week's figures are briefly behind them.
+- **No vehicle is named for a week.** A week can hold shifts worked in different vehicles, and a
+  name is a label a shift recorded rather than an identity, so the weekly summary neither lists nor
+  counts them. Each shift's detail says which vehicle it recorded.
+- **Section headings in Older Weeks scroll away with their week.** The grouped list style does not
+  pin them, and pinning them would mean a different list style from every other screen. A driver
+  scrolling a long history tells weeks apart by the dated heading at the top of each group and the
+  shift count under it.
 - **A week with no fuel assumptions carries no fuel lines at all**, rather than lines saying the
   estimate is unavailable. The shift's own detail screen is where an absent estimate is explained,
   because that is where it can be acted on.

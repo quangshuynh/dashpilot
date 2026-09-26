@@ -67,6 +67,9 @@ enum AppModelContainer {
         if LaunchArgument.isPresent(LaunchArgument.seededOlderWeeks) {
             return try PreviewSupport.seededOlderWeeksContainer()
         }
+        if LaunchArgument.isPresent(LaunchArgument.seededLongHistory) {
+            return try PreviewSupport.seededLongHistoryContainer()
+        }
         if LaunchArgument.isPresent(LaunchArgument.seededOlderWeeksOnly) {
             return try PreviewSupport.seededOlderWeeksContainer(includingCurrentWeek: false)
         }

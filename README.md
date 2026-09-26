@@ -152,10 +152,11 @@ derived legitimately from device sensors and stored history is typed by the driv
   with the week and its dates named above the list, and every earlier week grouped by week behind
   **View Older Weeks**. Nothing is deleted, archived or aged out: the scope decides what is shown
   where, and every shift is still exported, still counted by every period summary and still one tap
-  from its own detail screen. Each older week opens with a **summary of every shift in it** — the
-  shifts, what they came to, the working time, the recorded mileage and the deliveries, each with the
-  count behind it — so the question a driver scrolls back with is answered before they open a row.
-  Nothing there is defined for History: it is the period summary's own aggregation over that week.
+  from its own detail screen. The root screen reads only that week from the store, so it does not
+  grow with a driver's history. Each older week opens with a **summary**: recorded earnings, working
+  time and recorded mileage first, then the shift and delivery counts and, where the week has them,
+  estimated fuel and the estimated net after fuel, each with the coverage behind it. Nothing there
+  is defined for History: it is the period summary's own aggregation over that week.
 - **Reusable settings**: the vehicles the driver works in, each a name and a fuel economy, one of
   them selected, and a current gas price per gallon. A shift **copies** the selected vehicle's name
   and economy and the current price **when it starts**, and owns its copy from then on — so editing a
@@ -185,7 +186,8 @@ derived legitimately from device sensors and stored history is typed by the driv
   A missing assumption means no estimate rather than `$0.00`, a recorded price of zero is a fact, a
   partial route makes the fuel a floor and the net a ceiling, and none of it is a recorded expense,
   profit, take-home pay or a tax figure. A shift also records **which vehicle** its economy came
-  from, as a label no figure reads, so it stays intelligible when that vehicle is renamed or deleted.
+  from, as a label no figure reads, so it stays intelligible when that vehicle is renamed or deleted;
+  the shift's detail shows that vehicle beside the economy and price it recorded, never today's.
 - **Estimated fuel and estimated net over a period**, with the coverage stated rather than rounded
   off. A period's estimate is the sum of the shifts that recorded enough to be estimated, and it
   never travels without **two** coverages — `4 of 6 shifts` and `142.3 of 188.9 recorded miles` —

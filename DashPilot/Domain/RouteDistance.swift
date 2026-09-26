@@ -119,4 +119,12 @@ nonisolated struct RouteDistance: Equatable, Sendable {
             .locale(locale)
         )
     }
+
+    /// The same conversion and the same rounding with no unit: `"142.3"`, for a
+    /// sentence that names the unit once, such as `142.3 of 188.9 recorded
+    /// miles`.
+    func formattedMilesNumber(locale: Locale = .autoupdatingCurrent) -> String {
+        Measurement(value: metres, unit: UnitLength.meters).converted(to: .miles).value
+            .formatted(.number.precision(.fractionLength(1)).locale(locale))
+    }
 }

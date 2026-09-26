@@ -804,14 +804,38 @@ struct CompletedShiftDetailView: View {
         }
     }
 
-    /// The two assumptions, stated wherever either was recorded.
+    /// The vehicle and the two assumptions this shift recorded, as a block
+    /// under the estimate they are the inputs to.
     ///
-    /// Shown even when the other half is missing, so a driver looking at "Not
-    /// available" can see which figure is already there. A half that was never
-    /// recorded says so rather than showing a zero.
+    /// **Read from the shift's own snapshot and nothing else**, through
+    /// ``Shift/recordedVehicle``: a profile renamed or deleted since, a
+    /// different selection and a new current gas price all leave this block
+    /// saying what it said. The vehicle row is always present, so a shift that
+    /// recorded no name says `Not recorded` rather than leaving a reader to
+    /// wonder whether one was lost, and it is never filled from today's
+    /// selection or inferred from a matching economy.
+    ///
+    /// The two figures are shown wherever either was recorded, so a driver
+    /// looking at "Not available" can see which half is already there. A half
+    /// that was never recorded says so rather than showing a zero; a recorded
+    /// price of zero is shown as the zero it is.
     @ViewBuilder
     private var assumptionRows: some View {
         let assumptions = shift.fuelAssumptions
+        let vehicle = shift.recordedVehicle
+
+        // First, as the heading of the block. It is a label rather than an
+        // input: no figure on this screen reads it.
+        LabeledContent("Vehicle") {
+            Text(vehicle.title)
+                .foregroundStyle(vehicle.vehicleName == nil ? .secondary : .primary)
+                .multilineTextAlignment(.trailing)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(vehicle.spokenLabel(locale: locale))
+        .accessibilityIdentifier("shiftDetailFuelVehicle")
+
         if assumptions.hasAny {
             LabeledContent("Miles per gallon") {
                 if let milesPerGallon = assumptions.milesPerGallon {
@@ -842,23 +866,6 @@ struct CompletedShiftDetailView: View {
                 } ?? "No gas price recorded"
             )
             .accessibilityIdentifier("shiftDetailFuelGasPrice")
-
-            // Last, and only where one was recorded. It is a label rather than
-            // an input — no figure on this screen reads it — so it sits under
-            // the two figures that are, and a shift whose economy was typed by
-            // hand simply does not have this row.
-            //
-            // The vehicle it names may since have been renamed or deleted. This
-            // is what the shift recorded at the time, which is the only answer
-            // that stays true.
-            if let vehicleName = shift.fuelVehicleName {
-                LabeledContent("Vehicle") {
-                    Text(vehicleName)
-                }
-                .accessibilityElement(children: .combine)
-                .accessibilityLabel("Worked in \(vehicleName), as recorded when this shift started")
-                .accessibilityIdentifier("shiftDetailFuelVehicle")
-            }
         }
     }
 
