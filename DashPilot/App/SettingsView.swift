@@ -46,67 +46,20 @@ struct SettingsView: View {
 
     private var gasPrice: Money? { settings?.gasPricePerGallon }
 
+    /// The profile new shifts copy from, resolved from the two queries this
+    /// screen already holds rather than by fetching again. A selection naming a
+    /// profile that no longer exists resolves to none, which is what a deleted
+    /// profile means.
+    private var selectedVehicle: VehicleProfile? {
+        guard let selectedVehicleID else { return nil }
+        return vehicles.first { $0.id == selectedVehicleID }
+    }
+
     var body: some View {
         List {
-            Section {
-                if vehicles.isEmpty {
-                    Text("No vehicles yet.")
-                        .foregroundStyle(.secondary)
-                        .accessibilityIdentifier("vehiclesEmptyState")
-                } else {
-                    ForEach(vehicles) { vehicle in
-                        VehicleRow(
-                            vehicle: vehicle,
-                            isSelected: vehicle.id == selectedVehicleID,
-                            locale: locale,
-                            select: { select(vehicle) },
-                            edit: { editingVehicle = .existing(vehicle) }
-                        )
-                    }
-                }
-
-                Button {
-                    editingVehicle = .new
-                } label: {
-                    Label("Add Vehicle", systemImage: "plus")
-                }
-                .accessibilityLabel("Add a vehicle")
-                .accessibilityIdentifier("addVehicleButton")
-            } header: {
-                Text("Vehicles")
-            } footer: {
-                Text(vehiclesFooter)
-            }
-
-            Section {
-                Button {
-                    isEditingGasPrice = true
-                } label: {
-                    LabeledContent("Current gas price") {
-                        Text(gasPriceStatement)
-                            .monospacedDigit()
-                            .foregroundStyle(gasPrice == nil ? .secondary : .primary)
-                    }
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel("Current gas price")
-                .accessibilityValue(spokenGasPrice)
-                .accessibilityHint("Changes what your next shift records. Shifts you have already worked keep their own.")
-                .accessibilityAddTraits(.isButton)
-                .accessibilityIdentifier("currentGasPriceRow")
-            } header: {
-                Text("Fuel")
-            } footer: {
-                Text(
-                    """
-                    What you last paid for a gallon, kept so you type it once. DashPilot looks up no \
-                    prices, knows no stations and uses nothing about where you are. Changing it \
-                    changes what your next shift records, and never a shift you have already worked.
-                    """
-                )
-            }
+            defaultVehicleSection
+            vehiclesSection
+            fuelSection
         }
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
@@ -127,26 +80,146 @@ struct SettingsView: View {
         }
     }
 
+    /// Which vehicle the next shift will record, said first and on its own.
+    ///
+    /// "Next shift" is the whole claim: a shift already running copied its
+    /// vehicle when it started and keeps it, so nothing here says or implies
+    /// that changing this moves one. With nothing selected the section says what
+    /// that means for the next shift rather than showing an empty card, and
+    /// starting a shift is never refused over it.
+    private var defaultVehicleSection: some View {
+        Section {
+            if let selectedVehicle {
+                VStack(alignment: .leading, spacing: DashSpacing.sm) {
+                    Text(selectedVehicle.name)
+                        .dashFont(.title)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(economyStatement(for: selectedVehicle))
+                        .dashFont(.metric)
+                    Text("Used for your next shift")
+                        .dashFont(.supporting)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.vertical, DashSpacing.sm)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(
+                    """
+                    Default vehicle: \(selectedVehicle.name), \(spokenEconomy(for: selectedVehicle)). \
+                    Used for your next shift.
+                    """
+                )
+                .accessibilityIdentifier("defaultVehicleSummary")
+            } else {
+                DashNotice(
+                    title: "No vehicle selected",
+                    message: vehicles.isEmpty
+                        ? "Your next shift records no miles per gallon. Add a vehicle below."
+                        : "Your next shift records no miles per gallon. Choose one below.",
+                    symbol: "car"
+                )
+                .accessibilityIdentifier("noDefaultVehicleNotice")
+            }
+        } header: {
+            Text("Default Vehicle")
+        }
+    }
+
+    private var vehiclesSection: some View {
+        Section {
+            if vehicles.isEmpty {
+                DashNotice(
+                    title: "No vehicles yet",
+                    message: "Add the vehicle you deliver in so its miles per gallon is typed once."
+                )
+                .accessibilityIdentifier("vehiclesEmptyState")
+            } else {
+                ForEach(vehicles) { vehicle in
+                    VehicleRow(
+                        vehicle: vehicle,
+                        isSelected: vehicle.id == selectedVehicleID,
+                        locale: locale,
+                        select: { select(vehicle) },
+                        edit: { editingVehicle = .existing(vehicle) }
+                    )
+                }
+            }
+
+            Button {
+                editingVehicle = .new
+            } label: {
+                Label("Add Vehicle", systemImage: "plus")
+                    .dashFont(.body)
+            }
+            .accessibilityLabel("Add a vehicle")
+            .accessibilityIdentifier("addVehicleButton")
+        } header: {
+            Text("Vehicles")
+        } footer: {
+            Text(vehiclesFooter)
+        }
+    }
+
+    /// The current gas price, which is a default for shifts not yet started.
+    ///
+    /// A recorded price of zero is a price, and is drawn as `$0.00` with the
+    /// weight of any other figure; only a price that was never set reads
+    /// `Not set`.
+    private var fuelSection: some View {
+        Section {
+            Button {
+                isEditingGasPrice = true
+            } label: {
+                DashValueRow(
+                    title: "Current gas price",
+                    value: gasPriceStatement,
+                    detail: "Recorded on your next shift",
+                    isFigure: gasPrice != nil
+                )
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Current gas price")
+            .accessibilityValue(spokenGasPrice)
+            .accessibilityHint("Changes what your next shift records. Shifts you have already worked keep their own.")
+            .accessibilityAddTraits(.isButton)
+            .accessibilityIdentifier("currentGasPriceRow")
+        } header: {
+            Text("Fuel Defaults")
+        } footer: {
+            Text(
+                """
+                What you last paid for a gallon, kept so you type it once. DashPilot looks up no \
+                prices, knows no stations and uses nothing about where you are. Changing it \
+                changes what your next shift records, and never a shift you have already worked.
+                """
+            )
+        }
+    }
+
+    private func economyStatement(for vehicle: VehicleProfile) -> String {
+        "\(MilesPerGallonInput(locale: locale).text(for: vehicle.milesPerGallon)) MPG"
+    }
+
+    private func spokenEconomy(for vehicle: VehicleProfile) -> String {
+        "\(MilesPerGallonInput(locale: locale).text(for: vehicle.milesPerGallon)) miles per gallon"
+    }
+
     /// What the vehicles section means, in the state it is actually in.
     ///
     /// Three sentences at most, and the middle one is the load-bearing one: an
     /// edit or a delete here is not a correction to anything recorded.
     private var vehiclesFooter: String {
         let stability = """
-            The selected vehicle's miles per gallon is recorded on each shift when it starts. \
+            The default vehicle's miles per gallon is recorded on each shift when it starts. \
             Editing or deleting a vehicle changes what your next shift records, and never a shift \
             you have already worked.
             """
         if vehicles.isEmpty {
-            return """
-                Add the vehicle you deliver in so its miles per gallon is typed once rather than on \
-                every shift. \(stability)
-                """
+            return stability
         }
-        if selectedVehicleID == nil {
-            return "Select the vehicle you are working in. \(stability)"
-        }
-        return stability
+        return "Tap a vehicle to make it the default, and tap the default again to clear it. \(stability)"
     }
 
     private var gasPriceStatement: String {
@@ -198,27 +271,27 @@ private struct VehicleRow: View {
     let edit: () -> Void
 
     var body: some View {
-        HStack {
+        HStack(alignment: .center, spacing: DashSpacing.lg) {
             Button(action: select) {
-                HStack(alignment: .firstTextBaseline, spacing: 12) {
-                    // Space is reserved whether or not the mark is drawn, so
-                    // the names do not shift sideways as the selection moves.
-                    Image(systemName: "checkmark")
-                        .foregroundStyle(isSelected ? Color.accentColor : Color.clear)
-                        .accessibilityHidden(true)
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(vehicle.name)
-                        Text(economyStatement)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .monospacedDigit()
+                VStack(alignment: .leading, spacing: DashSpacing.xs) {
+                    Text(vehicle.name)
+                        .dashFont(.emphasis)
+                        .foregroundStyle(.primary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(economyStatement)
+                        .dashFont(.body)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                    // The default is said in words beside a symbol, never by a
+                    // tint or a mark alone.
+                    if isSelected {
+                        DashStatusLabel(title: "Default", symbol: "checkmark.circle.fill", tint: .accentColor)
                     }
                 }
                 // The whole row, including the space between its lines: a plain
                 // button is hit-testable only where its content draws.
-                .contentShape(Rectangle())
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityElement(children: .ignore)
@@ -227,12 +300,14 @@ private struct VehicleRow: View {
             .accessibilityHint(
                 isSelected
                     ? "Stops recording new shifts under this vehicle."
-                    : "Records new shifts under this vehicle."
+                    : "Makes this the vehicle new shifts are recorded under."
             )
             .accessibilityIdentifier("vehicleRow")
 
             Button(action: edit) {
                 Image(systemName: "pencil")
+                    .frame(minWidth: 44, minHeight: 44)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.borderless)
             .accessibilityLabel("Edit \(vehicle.name)")
@@ -251,7 +326,7 @@ private struct VehicleRow: View {
     /// to a mark nobody can see.
     private var spokenLabel: String {
         let economy = MilesPerGallonInput(locale: locale).text(for: vehicle.milesPerGallon)
-        let selection = isSelected ? "Selected. " : ""
+        let selection = isSelected ? "Selected as the default vehicle. " : ""
         return "\(selection)\(vehicle.name), \(economy) miles per gallon"
     }
 }
