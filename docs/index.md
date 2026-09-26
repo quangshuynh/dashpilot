@@ -74,11 +74,13 @@ with the reason any of them could not be derived.
   suspend or end the app at any time, and nothing relaunches it, so a route can still have a gap in
   it. DashPilot says so instead of guessing across it.
 - No claim that recorded mileage equals the miles driven, and no tax or deduction figure.
-- No profit, take-home or net earnings. Gross earnings are one number the driver typed, and the one
-  place a cost is subtracted, a period's *net after recorded expenses*, is one recorded subtotal less
-  another rather than a profit figure.
-- No estimated costs. An expense exists because the driver entered it; nothing is derived from
-  mileage, hours or a vehicle model, and no expense is attributed to a shift or a delivery.
+- No profit, take-home or net earnings. Gross earnings are what the driver typed. *Net after
+  recorded expenses* is one recorded subtotal less another, *estimated net after fuel* is recorded
+  earnings less an estimate, and neither is a profit figure. Nothing subtracts both.
+- No estimated expenses. An expense exists because the driver entered it, and no expense is
+  attributed to a shift or a delivery. Estimated fuel is a separate figure, worked out over a
+  shift's recorded miles from assumptions the driver made, always labelled as an estimate and never
+  added to recorded expenses.
 - No automatic delivery detection. Every delivery event is one the driver recorded.
 - No machine learning, no offer recommendations and no automated decisions.
 
@@ -96,8 +98,8 @@ The full list, including the parts that are simply not built yet, is on
 
 !!! note "Documentation status"
 
-    This site documents schema v14 and the shift, route, earnings, metrics, detail, delivery
-    lifecycle, offer grouping, pickup identity, pickup wait, per-delivery earnings, additional tips,
-    expected pay, period summary, period comparison, history export, recorded expense, estimated fuel
-    and net, shift pause and Live Activity work completed so far. Every amount, coordinate, route, note and business name
-    in it is synthetic.
+    This site documents schema v16 and export format version 4: the shift, route, parked, pause,
+    delivery lifecycle, offer grouping, correction, pickup identity, pickup wait, earnings, tips,
+    expected pay, settings and vehicle, weekly History, period summary, period comparison, history
+    export, recorded expense, estimated fuel and net, voice action and Live Activity work completed so
+    far. Every amount, coordinate, route, note and business name in it is synthetic.
