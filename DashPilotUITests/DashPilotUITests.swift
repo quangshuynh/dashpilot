@@ -84,6 +84,29 @@ final class DashPilotUITests: XCTestCase {
         app.launch()
     }
 
+    /// Keeps a screenshot of the whole screen in the result bundle, for review.
+    ///
+    /// Not an assertion and not a snapshot comparison: it is the record a
+    /// reviewer reads with `xcresulttool export attachments`, so a layout change
+    /// can be looked at without re-running the journey by hand.
+    @MainActor
+    private func attachScreenshot(_ name: String) {
+        let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
+    /// Launches against an empty throwaway store at a given text size.
+    @MainActor
+    private func launchWithEmptyStore(textSize: String) -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments.append(Self.inMemoryStoreArgument)
+        app.launchArguments += ["-UIPreferredContentSizeCategoryName", textSize]
+        launchInPortrait(app)
+        return app
+    }
+
     /// Launches against a throwaway store so the journey starts from a known
     /// empty state and never writes into a real driver's shift history.
     @MainActor
@@ -415,6 +438,140 @@ final class DashPilotUITests: XCTestCase {
             rows(in: app).firstMatch.waitForExistence(timeout: 5),
             "The finished shift should appear in history"
         )
+    }
+
+    // MARK: Home
+
+    /// Before a shift, the panel says what starting now would record, and the
+    /// control that starts it is on the first screen.
+    @MainActor
+    func testPreShiftHomeLeadsWithWhatTheNextShiftRecords() throws {
+        let app = launchWithEmptyStore()
+
+        openSettings(in: app)
+        addVehicle(named: "2020 Honda Civic", milesPerGallon: "34", in: app)
+        setCurrentGasPrice("3.29", in: app)
+        goBack(in: app)
+
+        let vehicle = app.descendants(matching: .any)["nextShiftVehicle"]
+        XCTAssertTrue(vehicle.waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            waitForLabelValue(vehicle, toEqual: "2020 Honda Civic, 34 miles per gallon, gas $3.29 per gallon"),
+            "Showed: \(String(describing: vehicle.value))"
+        )
+        let start = app.buttons["startShiftButton"]
+        XCTAssertTrue(start.isHittable, "Start Shift is on the first screen, not below the fold")
+        XCTAssertLessThan(vehicle.frame.minY, start.frame.minY, "What will be recorded comes before the control")
+        attachScreenshot("home-pre-shift")
+    }
+
+    /// With nothing selected the panel says so and still starts a shift.
+    @MainActor
+    func testPreShiftHomeWithNoVehicleNeverBlocksTheStart() throws {
+        let app = launchWithEmptyStore()
+
+        let vehicle = app.descendants(matching: .any)["nextShiftVehicle"]
+        XCTAssertTrue(vehicle.waitForExistence(timeout: 5))
+        XCTAssertTrue(waitForLabelValue(vehicle, toEqual: "No vehicle selected for the next shift"))
+        XCTAssertFalse(vehicle.label.contains("0 MPG") || vehicle.label.contains("$0.00"))
+
+        app.buttons["startShiftButton"].tap()
+        XCTAssertTrue(app.buttons["endShiftButton"].waitForExistence(timeout: 5), "Nothing blocks the start")
+    }
+
+    /// The running shift reads top to bottom: its state, the working clock,
+    /// the figures, the vehicle, then the controls.
+    @MainActor
+    func testActiveShiftHomeLeadsWithStateThenTheWorkingClock() throws {
+        let app = launchWithEmptyStore()
+        app.buttons["startShiftButton"].tap()
+
+        let status = app.descendants(matching: .any)["activeShiftStatus"]
+        let working = app.descendants(matching: .any)["workingTime"]
+        let mileage = app.descendants(matching: .any)["liveRecordedMileage"]
+        let counts = app.descendants(matching: .any)["liveDeliveryCounts"]
+        let vehicle = app.descendants(matching: .any)["activeShiftVehicle"]
+        for element in [status, working, mileage, counts, vehicle] {
+            XCTAssertTrue(element.waitForExistence(timeout: 5), "\(element) is on the panel")
+        }
+
+        XCTAssertLessThan(status.frame.minY, working.frame.minY)
+        XCTAssertLessThan(working.frame.minY, mileage.frame.minY)
+        XCTAssertLessThan(mileage.frame.minY, vehicle.frame.minY, "Context comes after the figures")
+        XCTAssertGreaterThan(working.frame.height, mileage.frame.height / 2, "The clock is the largest figure")
+
+        XCTAssertEqual(mileage.label, "Recorded mileage")
+        XCTAssertEqual(counts.label, "Deliveries")
+        XCTAssertTrue(
+            (counts.value as? String)?.contains("No delivery in progress") == true,
+            "The counts speak the shift's own sentence: \(String(describing: counts.value))"
+        )
+        XCTAssertFalse(
+            app.descendants(matching: .any)["liveRecordedGross"].exists,
+            "No earnings figure is invented for a shift that cannot record one yet"
+        )
+        attachScreenshot("home-active-no-deliveries")
+    }
+
+    /// Parked and paused are two different states, told apart by more than
+    /// colour, and a parked shift still says it is running.
+    @MainActor
+    func testParkedAndPausedAreDistinctStates() throws {
+        let app = launchWithEmptyStore()
+        app.buttons["startShiftButton"].tap()
+
+        let park = app.buttons["parkShiftButton"]
+        XCTAssertTrue(scrollUntilHittable(park, in: app))
+        park.tap()
+
+        let parked = app.descendants(matching: .any)["parkedShiftNotice"]
+        XCTAssertTrue(parked.waitForExistence(timeout: 5))
+        XCTAssertTrue(parked.label.contains("Parked") && parked.label.contains("still running"), "Showed: \(parked.label)")
+        XCTAssertTrue(app.descendants(matching: .any)["activeShiftStatus"].exists, "A parked shift is still running")
+        XCTAssertFalse(app.descendants(matching: .any)["pausedShiftStatus"].exists, "Parked is not paused")
+        attachScreenshot("home-parked")
+
+        let resumeDriving = app.buttons["resumeDrivingButton"]
+        XCTAssertTrue(scrollUntilHittable(resumeDriving, in: app))
+        resumeDriving.tap()
+
+        let pause = app.buttons["pauseShiftButton"]
+        XCTAssertTrue(scrollUntilHittable(pause, in: app))
+        pause.tap()
+
+        XCTAssertTrue(app.descendants(matching: .any)["pausedShiftStatus"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.descendants(matching: .any)["parkedShiftNotice"].exists, "Paused is not parked")
+        XCTAssertFalse(app.buttons["parkShiftButton"].exists, "Parking is withheld while paused")
+        let working = app.descendants(matching: .any)["workingTime"]
+        XCTAssertEqual(working.label, "Working time, paused")
+        attachScreenshot("home-paused")
+    }
+
+    /// At the largest accessibility size the panel stacks rather than
+    /// squeezing, and every control is still reachable and whole.
+    @MainActor
+    func testActiveShiftHomeAtTheLargestTextSize() throws {
+        let app = launchWithEmptyStore(textSize: Self.accessibilityXXXLTextSize)
+
+        let start = app.buttons["startShiftButton"]
+        XCTAssertTrue(scrollUntilHittable(start, in: app, maxSwipes: 10))
+        attachScreenshot("home-pre-shift-xxxl")
+        start.tap()
+
+        let working = app.descendants(matching: .any)["workingTime"]
+        XCTAssertTrue(working.waitForExistence(timeout: 5))
+        let mileage = app.descendants(matching: .any)["liveRecordedMileage"]
+        XCTAssertTrue(scrollTo(mileage, in: app, maxSwipes: 10))
+        let counts = app.descendants(matching: .any)["liveDeliveryCounts"]
+        XCTAssertTrue(scrollTo(counts, in: app, maxSwipes: 10))
+        XCTAssertGreaterThanOrEqual(counts.frame.minY, mileage.frame.maxY - 1, "The figures stack rather than share a row")
+        attachScreenshot("home-active-xxxl")
+
+        for identifier in ["pauseShiftButton", "endShiftButton"] {
+            let button = app.buttons[identifier]
+            XCTAssertTrue(scrollUntilHittable(button, in: app, maxSwipes: 15), "\(identifier) is reachable")
+            XCTAssertGreaterThanOrEqual(button.frame.height, 44)
+        }
     }
 
     /// Pause a running shift, see the screen say so, and resume it.

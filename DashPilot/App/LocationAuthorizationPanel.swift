@@ -18,12 +18,12 @@ struct LocationAuthorizationPanel: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Label(title, systemImage: symbol)
-                .font(.headline)
+                .dashFont(.status)
                 .foregroundStyle(tint)
                 .accessibilityIdentifier("locationAuthorizationStatus")
 
             Text(explanation)
-                .font(.subheadline)
+                .dashFont(.body)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
