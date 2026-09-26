@@ -2,29 +2,42 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<!--
+	  The two keys this file exists for. Everything else DashPilot declares is
+	  generated from INFOPLIST_KEY_* build settings, which have no spelling for
+	  either of these, so this file carries them and the generated keys are
+	  merged into it at build time.
+
+	  location: a route capture session started with the app on screen keeps
+	  running while the driver is in another app or the phone is locked. It is
+	  what makes When In Use authorization sufficient, and it is the only mode
+	  declared: DashPilot runs no background task, no audio, no fetch, and
+	  nothing here asks iOS to relaunch the app.
+	-->
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>location</string>
 	</array>
+	<!--
+	  NSSupportsLiveActivities: one card, describing the shift in progress,
+	  which the app starts and ends itself. There is no push token, no remote
+	  update and no notification; the app updates its own activity from its own
+	  store, and nothing about it leaves the device.
+	-->
 	<key>NSSupportsLiveActivities</key>
 	<true/>
+	<!--
+	  UIAppFonts: Manrope, the one typeface DashPilot's text roles are set in,
+	  bundled with the app and registered at launch; nothing is downloaded.
+	  SIL Open Font License 1.1, see Resources/Fonts/LICENSE-Manrope.md.
+	  DashTypography falls back to the system font if a face fails to load.
+	-->
 	<key>UIAppFonts</key>
 	<array>
 		<string>Manrope-Bold.ttf</string>
 		<string>Manrope-Medium.ttf</string>
 		<string>Manrope-Regular.ttf</string>
 		<string>Manrope-SemiBold.ttf</string>
-		<string>SpaceGrotesk-Bold.ttf</string>
-		<string>SpaceGrotesk-Medium.ttf</string>
-		<string>SpaceGrotesk-SemiBold.ttf</string>
-		<string>IBMPlexSans-Bold.ttf</string>
-		<string>IBMPlexSans-Medium.ttf</string>
-		<string>IBMPlexSans-Regular.ttf</string>
-		<string>IBMPlexSans-SemiBold.ttf</string>
-		<string>DMSans-Bold.ttf</string>
-		<string>DMSans-Medium.ttf</string>
-		<string>DMSans-SemiBold.ttf</string>
-		<string>DMSans.Regular.ttf</string>
 	</array>
 </dict>
 </plist>
