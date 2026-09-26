@@ -2367,6 +2367,13 @@ final class DashPilotUITests: XCTestCase {
             waitForLabel(status, toContain: "Route recording stopped while parked"),
             "Capture status: \(status.label)"
         )
+        // It adds what the notice above it does not, what driving again does to
+        // the distance, and does not repeat what the notice already says.
+        XCTAssertTrue(status.label.contains("is not counted"), "Capture status: \(status.label)")
+        XCTAssertFalse(
+            status.label.contains("still running"),
+            "The parked notice says the shift is running; the capture line does not repeat it: \(status.label)"
+        )
 
         // And the panel says it again where the driver is looking, with the
         // shift's own state unchanged beside it.
@@ -6668,6 +6675,34 @@ final class DashPilotUITests: XCTestCase {
         )
     }
 
+    /// At the largest accessibility text size the period's figures stack
+    /// rather than truncate: the headline, a rate, and the estimated fuel are
+    /// each reachable whole, and each still says what it is.
+    @MainActor
+    func testThePeriodSummarySurvivesTheLargestTextSize() throws {
+        let app = launchWithPeriodSummary(atTextSize: Self.accessibilityXXXLTextSize)
+        // At this size the link sits below the running panel, so it is scrolled
+        // to rather than assumed to be on screen.
+        let link = app.buttons["periodSummaryLink"]
+        XCTAssertTrue(scrollUntilHittable(link, in: app, maxSwipes: 25), "History offers a way into the summaries")
+        link.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["periodTitle"].waitForExistence(timeout: 10))
+
+        let earnings = app.descendants(matching: .any)["periodEarnings"]
+        XCTAssertTrue(scrollUntilHittable(earnings, in: app, maxSwipes: 25), "The headline is reachable")
+        XCTAssertTrue(waitForLabel(earnings, toContain: "Recorded gross earnings"), "Showed: \(earnings.label)")
+        XCTAssertGreaterThan(earnings.frame.height, 44, "The headline is never a clipped single line")
+        attachScreenshot("period-summary-xxxl")
+
+        let rate = app.descendants(matching: .any)["periodWorkingHourRate"]
+        XCTAssertTrue(scrollUntilHittable(rate, in: app, maxSwipes: 25), "A rate is reachable")
+        XCTAssertTrue(rate.label.contains("gross earnings per working hour"), "Showed: \(rate.label)")
+
+        let fuel = app.descendants(matching: .any)["periodEstimatedFuel"]
+        XCTAssertTrue(scrollUntilHittable(fuel, in: app, maxSwipes: 40), "The estimate is reachable")
+        XCTAssertTrue(fuel.label.contains("1 of 2 completed shifts"), "Its coverage survives: \(fuel.label)")
+    }
+
     /// The estimated net is worked out over the shifts that record both halves,
     /// says so, and is kept apart from the net after recorded expenses.
     @MainActor
@@ -8294,9 +8329,12 @@ final class DashPilotUITests: XCTestCase {
     /// - **earlier this week**: a five-hour shift paying `$120.00` with a
     ///   partial route and two more deliveries, waiting 8 and 20 minutes.
     @MainActor
-    private func launchWithPeriodSummary() -> XCUIApplication {
+    private func launchWithPeriodSummary(atTextSize category: String? = nil) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments.append(Self.seededPeriodSummaryArgument)
+        if let category {
+            app.launchArguments += ["-UIPreferredContentSizeCategoryName", category]
+        }
         launchInPortrait(app)
         return app
     }
