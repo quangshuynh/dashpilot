@@ -616,17 +616,35 @@ whatever a fetch returned first — would attach a driver's tap to a record they
 
 ### What each card says it is waiting for
 
-Every active delivery's card states three things without being opened: **which delivery it is**, what
-it is **doing**, and what it is **waiting for**.
+Every active delivery's card states, without being opened, **which delivery it is**, what it is
+**doing and for how long**, what it records, and the **next step** as the one prominent control on it:
 
-> Delivery 1 · Waiting at the pickup
-> Next: Picked Up
+> **Delivery 2**
+> Waiting at the pickup · 7 min
+> Nowhere Noodles
+> Accepted 5:12 PM
+>
+> Next
+> [ Picked Up ]
+>
+> Change Pickup Place
+> Add Expected Pay
+> Cancel Delivery 2
 
-The last line repeats the button below it by design. A driver carrying two orders reads the cards
-rather than the buttons: two prominent controls of the same shape and size are told apart by their
-words alone, and a card whose state line says what it is waiting for is one the eye can sort without
-landing on a control to find out. VoiceOver hears the same fact as its own sentence, before it
-reaches the button.
+The time is how long the delivery has been in its current state, measured from that state's own
+recorded instant: its acceptance, its arrival or its pickup. It is the same rule the
+[reminders](#reminders-about-an-event-that-may-have-gone-unrecorded) read their evidence from, so the
+card and a reminder can never disagree about the same delivery. A chain whose recorded instants
+contradict each other has no clock rather than a wrong one, and a device clock reading earlier than
+the instant shows none rather than zero. A place and an expected amount appear only where they were
+entered.
+
+The step is the only prominent control. The details and `Cancel`, which still names its delivery and
+still asks for confirmation, sit below it one per line in a quieter style, so none of them competes
+with the step at a kerb. A driver carrying two orders reads the cards rather than the buttons: each
+card leads with its own name and its own state, so the eye can sort them without landing on a control
+to find out. VoiceOver hears the same facts in the same order, with the time in state as the last
+sentence.
 
 The shift's [Lock Screen card](live-activity.md) carries the same distinction, and needed it more: its
 single status line is withheld whenever two deliveries are open, because with two there is no "the

@@ -31,7 +31,10 @@ flowchart TD
 
 ## Starting a shift
 
-The root screen offers a start control while no shift is running. Starting records a start
+The root screen offers a start control while no shift is running. The panel answers what starting now
+would record: a quiet `No shift in progress`, then **Next shift records** with the selected vehicle's
+name and, under it, its fuel economy and the current gas price, then `Start Shift`. With nothing
+selected it says `No vehicle selected` in the quieter style and still starts a shift. Starting records a start
 timestamp and copies the driver's current vehicle and gas price onto the new shift, which owns that
 copy from then on (see [Settings and vehicles](settings.md)). At most one shift may be unfinished at a
 time, and the rule is checked against the store, so the absence of the button is presentation and not
@@ -95,17 +98,40 @@ For a shift that was never paused that is the same figure the timer always showe
 every rate the shift produces divides by, so the figure watched during the shift and the figure read
 afterwards are the same one.
 
-Under it the shift reports what it has recorded so far:
+The panel reads top to bottom in the order a driver needs it: which state the shift is in and when
+it started, the working clock as the one large figure, then a row of figures, then the context, then
+the controls:
 
 ```text
-02:14:07
+● Shift in Progress
+Started 5:46 PM
+
+2:14:07
 Worked so far
-4.5 mi recorded · partial route
-2 capture segments · 1 capture gap
-2 deliveries in progress · 3 completed
-2020 Honda Civic
-34 MPG
+
+4.5 mi              3            2
+Recorded miles      Delivered    In progress
+partial route · 2 capture segments · 1 capture gap
+
+This shift is still running. Rates are worked out once it ends.
+
+2020 Honda Civic · 34 MPG                         Change
+Location tracking active
+
+[ Parked for a Pickup ]
+[ Pause Shift ]  [ End Shift ]
 ```
+
+**The working clock leads, not earnings**, because it is the one figure that exists and moves while a
+shift runs; a running shift cannot record an amount, so an earnings headline would be a permanent
+absence. The row of figures becomes a column whenever it cannot hold them side by side, and always at
+accessibility text sizes, so no figure is ever shortened to fit beside another. The clock is set in
+tabular figures so it does not move sideways as it ticks, and it is never scaled down to fit.
+
+**Running, paused and parked each have their own symbol, word and tint**, and the tint is never the
+only signal. Parked is not a third status: a parked shift is still running and still counting working
+time, so it is a notice about the route under a status that still says the shift is in progress.
+Pause (or Resume) and End share one row where they fit and stack where they do not.
 
 The mileage is **recorded** mileage, in the same words and from the same calculation the finished
 shift uses, and it grows only while positions are being accepted. A pause stops it, and resuming
