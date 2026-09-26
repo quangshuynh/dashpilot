@@ -105,11 +105,7 @@ struct FuelAssumptionsEditor: View {
                     }
 
                     if let message {
-                        Label(message, systemImage: "exclamationmark.triangle.fill")
-                            .font(.subheadline)
-                            .foregroundStyle(.red)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .accessibilityIdentifier("fuelAssumptionsValidationMessage")
+                        DashValidationMessage(message: message, identifier: "fuelAssumptionsValidationMessage")
                     }
                 } header: {
                     Text("Fuel Assumptions")
