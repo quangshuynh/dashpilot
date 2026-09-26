@@ -93,7 +93,8 @@ struct PickupPlaceEditor: View {
                     use(place)
                 } label: {
                     Label(place.displayName, systemImage: "clock.arrow.circlepath")
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .dashFont(.body)
+                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                 }
                 // The name alone would be read as a heading rather than as a
                 // control that does something when tapped.
@@ -112,6 +113,7 @@ struct PickupPlaceEditor: View {
     private var nameSection: some View {
         Section {
             TextField("Pickup place name", text: $text)
+                .dashFont(.body)
                 .focused($isNameFocused)
                 .textInputAutocapitalization(.words)
                 .autocorrectionDisabled()
@@ -126,11 +128,7 @@ struct PickupPlaceEditor: View {
                 }
 
             if let message {
-                Label(message, systemImage: "exclamationmark.triangle.fill")
-                    .font(.subheadline)
-                    .foregroundStyle(.red)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityIdentifier("pickupPlaceValidationMessage")
+                DashValidationMessage(message: message, identifier: "pickupPlaceValidationMessage")
             }
         } header: {
             Text("Pickup Place")
@@ -151,6 +149,7 @@ struct PickupPlaceEditor: View {
     private var removeSection: some View {
         Section {
             Button("Remove Pickup Place", role: .destructive, action: remove)
+                .dashFont(.body)
                 .frame(maxWidth: .infinity)
                 .accessibilityLabel("Remove pickup place from \(numbered.title)")
                 .accessibilityIdentifier("removePickupPlaceButton")

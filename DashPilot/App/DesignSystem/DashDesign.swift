@@ -47,10 +47,15 @@ extension View {
     /// Used sparingly, and never nested. A list section is already a surface,
     /// so this is for the one thing inside it that has to read as set apart,
     /// not for every group of lines.
+    ///
+    /// Filled with the **tertiary grouped** background, which is the system's
+    /// colour for content inside a grouped cell. The secondary system
+    /// background it used before is the same colour as the cell itself in dark
+    /// mode, so the surface vanished there; in light mode the two are the same.
     func dashInsetSurface() -> some View {
         padding(DashSpacing.lg)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: DashRadius.surface))
+            .background(Color(.tertiarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: DashRadius.surface))
     }
 }
 

@@ -1,13 +1,12 @@
 import SwiftUI
 import UIKit
 
-/// The text roles DashPilot's shift, History, completed-shift, Settings and
-/// vehicle screens are written in, set in Manrope.
+/// The text roles every DashPilot screen is written in, set in Manrope.
 ///
-/// Screens outside that list still use the system font. The roles are carried
-/// over screen by screen as each is redesigned, never by replacing every font in
-/// the app at once, and the Live Activity keeps the system face: the widget
-/// extension bundles no font.
+/// Two surfaces keep the system face on purpose: the store-failure screen, which
+/// is the system's own unavailable view, and the license text in
+/// Acknowledgements, set monospaced as published. The Live Activity keeps the
+/// system face too: the widget extension bundles no font.
 ///
 /// ## Why Manrope, and only Manrope
 ///

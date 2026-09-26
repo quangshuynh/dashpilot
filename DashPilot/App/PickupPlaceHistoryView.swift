@@ -118,6 +118,7 @@ struct PickupPlaceHistoryView: View {
                 isRenaming = true
             } label: {
                 Label("Rename", systemImage: "pencil")
+                    .dashFont(.body)
             }
             .accessibilityLabel("Rename pickup place, \(place.displayName)")
             .accessibilityIdentifier("renamePickupPlaceButton")
@@ -126,6 +127,7 @@ struct PickupPlaceHistoryView: View {
                 isMerging = true
             } label: {
                 Label("Merge", systemImage: "arrow.triangle.merge")
+                    .dashFont(.body)
             }
             .disabled(mergeDestinationCount == 0)
             .accessibilityLabel("Merge pickup place, \(place.displayName)")
@@ -182,38 +184,40 @@ struct PickupPlaceHistoryView: View {
     /// never heard without the count it came from.
     private var summarySection: some View {
         Section {
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: DashSpacing.md) {
                 if let typical = metrics.typicalDuration {
-                    LabeledContent(PickupWaitMetrics.typicalTitle) {
-                        Text(DurationText.short(typical))
-                            .font(.title3.weight(.semibold))
-                            .monospacedDigit()
-                    }
+                    DashMetric(
+                        value: DurationText.short(typical),
+                        label: PickupWaitMetrics.typicalTitle,
+                        emphasis: .hero
+                    )
                 } else if let recorded = metrics.medianDuration {
                     // Exactly one wait: shown as the fact it is, without being
-                    // named as the place's typical wait.
-                    LabeledContent("Recorded wait") {
-                        Text(DurationText.short(recorded)).monospacedDigit()
-                    }
+                    // named as the place's typical wait, and one step quieter.
+                    DashMetric(value: DurationText.short(recorded), label: "Recorded wait")
                 }
 
                 Text(metrics.basisStatement)
-                    .font(.footnote)
+                    .dashFont(.body)
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
 
                 if let explanation = metrics.insufficientHistoryExplanation {
                     Text(explanation)
-                        .font(.footnote)
+                        .dashFont(.body)
                         .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
 
                 if let spread = metrics.spreadStatement {
                     Text(spread)
-                        .font(.footnote)
+                        .dashFont(.body)
                         .foregroundStyle(.secondary)
                         .monospacedDigit()
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
+            .padding(.vertical, DashSpacing.xs)
             .accessibilityElement(children: .combine)
             .accessibilityLabel(spokenSummary)
             .accessibilityIdentifier("pickupPlaceHistorySummary")
@@ -239,13 +243,11 @@ struct PickupPlaceHistoryView: View {
     private var recordedWaitsSection: some View {
         Section {
             ForEach(recentSamples, id: \.pickedUpAt) { sample in
-                LabeledContent {
-                    Text(DurationText.short(sample.duration)).monospacedDigit()
-                } label: {
-                    Text(sample.pickedUpAt, format: .dateTime.month().day().hour().minute())
-                }
-                .font(.footnote)
-                .accessibilityElement(children: .combine)
+                DashValueRow(
+                    title: sample.pickedUpAt.formatted(.dateTime.month().day().hour().minute()),
+                    value: DurationText.short(sample.duration)
+                )
+                .accessibilityElement(children: .ignore)
                 .accessibilityLabel(
                     "\(DurationText.spoken(sample.duration)) on "
                         + sample.pickedUpAt.formatted(date: .abbreviated, time: .shortened)
@@ -270,8 +272,9 @@ struct PickupPlaceHistoryView: View {
     private var explanationSection: some View {
         Section {
             Text(Self.explanation)
-                .font(.footnote)
+                .dashFont(.body)
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("pickupPlaceHistoryExplanation")
         }
     }

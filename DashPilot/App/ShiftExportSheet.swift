@@ -86,24 +86,20 @@ struct ShiftExportSheet: View {
     private var fileSection: some View {
         Section {
             if let failure {
-                Label(
-                    failure.errorDescription ?? "The export could not be created.",
-                    systemImage: "exclamationmark.triangle.fill"
+                DashValidationMessage(
+                    message: failure.errorDescription ?? "The export could not be created.",
+                    identifier: "exportFailureMessage"
                 )
-                .font(.subheadline)
-                .foregroundStyle(.red)
-                .fixedSize(horizontal: false, vertical: true)
-                .accessibilityIdentifier("exportFailureMessage")
             } else if let file {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: DashSpacing.xs) {
                     Text(file.fileName)
-                        .font(.subheadline.weight(.semibold))
+                        .dashFont(.emphasis)
                         // The name is one long token; truncating it would hide
                         // the extension, which is the part that says what the
                         // file is.
                         .fixedSize(horizontal: false, vertical: true)
                     Text(file.sizeStatement(locale: locale))
-                        .font(.caption)
+                        .dashFont(.supporting)
                         .foregroundStyle(.secondary)
                         .monospacedDigit()
                 }
@@ -113,14 +109,20 @@ struct ShiftExportSheet: View {
 
                 // `ShareLink` is the system share sheet: DashPilot hands over a
                 // file and takes no part in choosing where it goes.
+                //
+                // The one thing this sheet is for, so it is the one prominent
+                // control on it.
                 ShareLink(item: file.url) {
                     Label("Share", systemImage: "square.and.arrow.up")
-                        .frame(maxWidth: .infinity)
+                        .dashFont(.emphasis)
+                        .frame(maxWidth: .infinity, minHeight: 44)
                 }
+                .buttonStyle(.borderedProminent)
                 .accessibilityLabel(format.spokenShareLabel)
                 .accessibilityIdentifier("shareExportButton")
             } else {
                 Text("Preparing the export…")
+                    .dashFont(.body)
                     .foregroundStyle(.secondary)
                     .accessibilityIdentifier("exportPreparing")
             }
@@ -149,7 +151,7 @@ struct ShiftExportSheet: View {
         } header: {
             Text("What Leaves the Device")
         }
-        .font(.footnote)
+        .dashFont(.body)
         .foregroundStyle(.secondary)
     }
 

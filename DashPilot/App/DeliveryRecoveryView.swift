@@ -155,7 +155,7 @@ struct DeliveryRecoveryView: View {
                 .accessibilityIdentifier("reopenDeliveryRowButton")
             } else if let refusal = candidate.refusal {
                 Text(Self.refusalStatement(refusal))
-                    .font(.footnote)
+                    .dashFont(.body)
                     .foregroundStyle(.secondary)
                     .accessibilityIdentifier("deliveryRecoveryRefusedRow")
             }
@@ -177,11 +177,11 @@ struct DeliveryRecoveryView: View {
                 "\(candidate.numbered.title) · \(DeliveryState.delivered.historyDescription)",
                 systemImage: DeliveryState.delivered.symbolName
             )
-            .font(.subheadline.weight(.semibold))
+            .dashFont(.emphasis)
 
             if let place = delivery.pickupPlace {
                 Text(place.displayName)
-                    .font(.caption)
+                    .dashFont(.supporting)
                     .foregroundStyle(.secondary)
             }
 
@@ -190,7 +190,7 @@ struct DeliveryRecoveryView: View {
                     Text(deliveredAt, format: .dateTime.hour().minute())
                         .monospacedDigit()
                 }
-                .font(.caption)
+                .dashFont(.supporting)
                 .foregroundStyle(.secondary)
             }
 
@@ -199,7 +199,7 @@ struct DeliveryRecoveryView: View {
                     "Goes back to \(restored.statusDescription.lowercased())",
                     systemImage: restored.symbolName
                 )
-                .font(.caption)
+                .dashFont(.supporting)
                 .foregroundStyle(.secondary)
             }
         }
@@ -260,7 +260,7 @@ struct DeliveryRecoveryView: View {
                 delivered or cancelled.
                 """
             )
-            .font(.footnote)
+            .dashFont(.body)
             .foregroundStyle(.secondary)
             .accessibilityIdentifier("deliveryRecoveryExplanation")
         }
@@ -269,7 +269,9 @@ struct DeliveryRecoveryView: View {
     private var emptySection: some View {
         Section {
             Text("No delivery in this shift is recorded as delivered")
+                .dashFont(.emphasis)
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("deliveryRecoveryUnavailable")
         } footer: {
             Text("This is where a delivery you marked delivered by mistake is put back among the ones you are working.")
@@ -281,7 +283,9 @@ struct DeliveryRecoveryView: View {
     private var unavailableSection: some View {
         Section {
             Text("A delivery can only be reopened while its shift is running")
+                .dashFont(.emphasis)
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("deliveryRecoveryShiftNotRunning")
         } footer: {
             Text(
@@ -296,11 +300,7 @@ struct DeliveryRecoveryView: View {
 
     private func failureSection(_ message: String) -> some View {
         Section {
-            Label(message, systemImage: "exclamationmark.triangle.fill")
-                .font(.subheadline)
-                .foregroundStyle(.red)
-                .fixedSize(horizontal: false, vertical: true)
-                .accessibilityIdentifier("deliveryRecoveryMessage")
+            DashValidationMessage(message: message, identifier: "deliveryRecoveryMessage")
         }
     }
 

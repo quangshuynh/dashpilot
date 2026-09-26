@@ -131,7 +131,7 @@ struct DeliveryTipsEditor: View {
                     The tips below are what has been recorded.
                     """
                 )
-                .font(.caption)
+                .dashFont(.supporting)
                 .foregroundStyle(.secondary)
                 .accessibilityLabel(numbered.spokenNoPlatformPayBesideTips)
                 .accessibilityIdentifier("deliveryTipsNoPlatformPayNotice")
@@ -186,7 +186,7 @@ struct DeliveryTipsEditor: View {
                         edit = .correcting(tip)
                     } label: {
                         Label("Edit Tip", systemImage: "pencil")
-                            .font(.footnote)
+                            .dashFont(.body)
                     }
                     .buttonStyle(.borderless)
                     .accessibilityLabel("Edit tip \(index + 1) for \(numbered.title)")
@@ -198,6 +198,7 @@ struct DeliveryTipsEditor: View {
                 edit = .adding
             } label: {
                 Label("Add a Tip", systemImage: "plus.circle")
+                    .dashFont(.body)
             }
             .accessibilityIdentifier("addDeliveryTipButton")
             .accessibilityLabel("Add an additional tip to \(numbered.title)")
@@ -229,14 +230,16 @@ struct DeliveryTipsEditor: View {
         // Plain stacks rather than a `LabeledContent`, which inside a button's
         // label is a row shape that reads as a control of its own.
         HStack(alignment: .firstTextBaseline) {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: DashSpacing.xs) {
                 Text("Tip \(number)")
+                    .dashFont(.body)
                 Text(methodAndTime(of: tip))
-                    .font(.caption)
+                    .dashFont(.supporting)
                     .foregroundStyle(.secondary)
             }
             Spacer(minLength: 12)
             Text(tip.amount.formatted(locale: locale))
+                .dashFont(.emphasis)
                 .monospacedDigit()
         }
     }
@@ -322,7 +325,7 @@ struct DeliveryTipEntryEditor: View {
                     TextField(placeholder, text: $text)
                         .keyboardType(.decimalPad)
                         .focused($isAmountFocused)
-                        .font(.title2)
+                        .dashFont(.metric)
                         .monospacedDigit()
                         .accessibilityIdentifier("deliveryTipAmountField")
                         .accessibilityLabel("Additional tip for \(numbered.title)")
@@ -361,19 +364,14 @@ struct DeliveryTipEntryEditor: View {
 
                 if let message {
                     Section {
-                        Label(message, systemImage: "exclamationmark.triangle.fill")
-                            .font(.subheadline)
-                            .foregroundStyle(.red)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .accessibilityElement(children: .ignore)
-                            .accessibilityLabel(message)
-                            .accessibilityIdentifier("deliveryTipValidationMessage")
+                        DashValidationMessage(message: message, identifier: "deliveryTipValidationMessage")
                     }
                 }
 
                 if isCorrecting {
                     Section {
                         Button("Remove This Tip", role: .destructive, action: remove)
+                            .dashFont(.body)
                             .frame(maxWidth: .infinity)
                             .accessibilityIdentifier("removeDeliveryTipButton")
                             .accessibilityLabel("Remove this additional tip from \(numbered.title)")

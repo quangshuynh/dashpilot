@@ -87,18 +87,13 @@ struct ExpenseEditor: View {
             TextField(placeholder, text: $amountText)
                 .keyboardType(.decimalPad)
                 .focused($isAmountFocused)
-                .font(.title2)
-                .monospacedDigit()
+                .dashFont(.metric)
                 .accessibilityIdentifier("expenseAmountField")
                 .accessibilityLabel("Expense amount")
                 .onChange(of: amountText) { _, _ in message = nil }
 
             if let message {
-                Label(message, systemImage: "exclamationmark.triangle.fill")
-                    .font(.subheadline)
-                    .foregroundStyle(.red)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityIdentifier("expenseValidationMessage")
+                DashValidationMessage(message: message, identifier: "expenseValidationMessage")
             }
         } header: {
             Text("Amount")
@@ -171,6 +166,7 @@ struct ExpenseEditor: View {
     private var deleteSection: some View {
         Section {
             Button("Delete Expense", role: .destructive, action: delete)
+                .dashFont(.body)
                 .frame(maxWidth: .infinity)
                 .accessibilityIdentifier("deleteExpenseButton")
         } footer: {
