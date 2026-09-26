@@ -6,10 +6,6 @@
 	objectVersion = 77;
 	objects = {
 
-/* Begin PBXBuildFile section */
-		CEA1000C304B519700E7E150 /* DashPilotWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = CEA10002304B519700E7E150 /* DashPilotWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
-/* End PBXBuildFile section */
-
 /* Begin PBXContainerItemProxy section */
 		CE1982B4304B519700E7E150 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -34,11 +30,24 @@
 		};
 /* End PBXContainerItemProxy section */
 
+/* Begin PBXCopyFilesBuildPhase section */
+		CEA1000B304B519700E7E150 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
-		CE1982A6304B519200E7E150 /* DashPilot.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DashPilot.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		CE1982B3304B519700E7E150 /* DashPilotTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DashPilotTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		CE1982BD304B519700E7E150 /* DashPilotUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DashPilotUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		CEA10002304B519700E7E150 /* DashPilotWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = DashPilotWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		CE1982A6304B519200E7E150 /* DashPilot.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; name = DashPilot.app; path = "/Users/user/Desktop/coding/DashPilot/build/Debug-iphoneos/DashPilot.app"; sourceTree = "<absolute>"; };
+		CE1982B3304B519700E7E150 /* DashPilotTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; name = DashPilotTests.xctest; path = "/Users/user/Desktop/coding/DashPilot/build/Debug-iphoneos/DashPilot.app/PlugIns/DashPilotTests.xctest"; sourceTree = "<absolute>"; };
+		CE1982BD304B519700E7E150 /* DashPilotUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; name = DashPilotUITests.xctest; path = "/Users/user/Desktop/coding/DashPilot/build/Debug-iphoneos/DashPilotUITests-Runner.app/PlugIns/DashPilotUITests.xctest"; sourceTree = "<absolute>"; };
+		CEA10002304B519700E7E150 /* DashPilotWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; name = DashPilotWidgets.appex; path = "/Users/user/Desktop/coding/DashPilot/build/Debug-iphoneos/DashPilotWidgets.appex"; sourceTree = "<absolute>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -77,9 +86,9 @@
 			path = DashPilotUITests;
 			sourceTree = "<group>";
 		};
-		CEA10007304B519700E7E150 /* DashPilotActivity */ = {
+		CE3E10A930678BCE001CDD45 /* Fonts */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = DashPilotActivity;
+			path = Fonts;
 			sourceTree = "<group>";
 		};
 		CEA10006304B519700E7E150 /* DashPilotWidgets */ = {
@@ -88,6 +97,11 @@
 				CEA1000F304B519700E7E150 /* Exceptions for "DashPilotWidgets" folder in "DashPilotWidgets" target */,
 			);
 			path = DashPilotWidgets;
+			sourceTree = "<group>";
+		};
+		CEA10007304B519700E7E150 /* DashPilotActivity */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = DashPilotActivity;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -132,19 +146,8 @@
 				CEA10006304B519700E7E150 /* DashPilotWidgets */,
 				CE1982B6304B519700E7E150 /* DashPilotTests */,
 				CE1982C0304B519700E7E150 /* DashPilotUITests */,
-				CE1982A7304B519200E7E150 /* Products */,
+				CE3E10A930678BCE001CDD45 /* Fonts */,
 			);
-			sourceTree = "<group>";
-		};
-		CE1982A7304B519200E7E150 /* Products */ = {
-			isa = PBXGroup;
-			children = (
-				CE1982A6304B519200E7E150 /* DashPilot.app */,
-				CE1982B3304B519700E7E150 /* DashPilotTests.xctest */,
-				CE1982BD304B519700E7E150 /* DashPilotUITests.xctest */,
-				CEA10002304B519700E7E150 /* DashPilotWidgets.appex */,
-			);
-			name = Products;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -166,6 +169,7 @@
 			);
 			fileSystemSynchronizedGroups = (
 				CE1982A8304B519200E7E150 /* DashPilot */,
+				CE3E10A930678BCE001CDD45 /* Fonts */,
 				CEA10007304B519700E7E150 /* DashPilotActivity */,
 			);
 			name = DashPilot;
@@ -234,8 +238,9 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				CEA10007304B519700E7E150 /* DashPilotActivity */,
+				CE3E10A930678BCE001CDD45 /* Fonts */,
 				CEA10006304B519700E7E150 /* DashPilotWidgets */,
+				CEA10007304B519700E7E150 /* DashPilotActivity */,
 			);
 			name = DashPilotWidgets;
 			packageProductDependencies = (
@@ -280,7 +285,7 @@
 			mainGroup = CE19829D304B519200E7E150;
 			minimizedProjectReferenceProxies = 1;
 			preferredProjectObjectVersion = 77;
-			productRefGroup = CE1982A7304B519200E7E150 /* Products */;
+			productRefGroup = CE19829D304B519200E7E150;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -291,20 +296,6 @@
 			);
 		};
 /* End PBXProject section */
-
-/* Begin PBXCopyFilesBuildPhase section */
-		CEA1000B304B519700E7E150 /* Embed Foundation Extensions */ = {
-			isa = PBXCopyFilesBuildPhase;
-			buildActionMask = 2147483647;
-			dstPath = "";
-			dstSubfolderSpec = 13;
-			files = (
-				CEA1000C304B519700E7E150 /* DashPilotWidgets.appex in Embed Foundation Extensions */,
-			);
-			name = "Embed Foundation Extensions";
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXResourcesBuildPhase section */
 		CE1982A4304B519200E7E150 /* Resources */ = {
