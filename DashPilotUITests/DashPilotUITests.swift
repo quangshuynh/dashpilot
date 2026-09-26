@@ -574,6 +574,110 @@ final class DashPilotUITests: XCTestCase {
         }
     }
 
+    // MARK: Active delivery cards
+
+    /// The card of one delivery in progress, found by the name it leads with.
+    @MainActor
+    private func deliveryCard(_ title: String, in app: XCUIApplication) -> XCUIElement {
+        app.descendants(matching: .any).matching(
+            NSPredicate(format: "identifier == %@ AND label BEGINSWITH %@", "activeDeliveryStatus", title)
+        ).firstMatch
+    }
+
+    /// One delivery's card says which delivery, what state and for how long,
+    /// then puts the next step above everything else that can be done to it.
+    @MainActor
+    func testADeliveryCardLeadsWithItsStateThenItsNextStep() throws {
+        let app = launchWithEmptyStore()
+        app.buttons["startShiftButton"].tap()
+        let startDelivery = app.buttons["startDeliveryButton"]
+        XCTAssertTrue(scrollUntilHittable(startDelivery, in: app))
+        startDelivery.tap()
+
+        let card = deliveryCard("Delivery 1", in: app)
+        XCTAssertTrue(card.waitForExistence(timeout: 5))
+        XCTAssertTrue(card.label.contains("Next step, mark arrived at pickup"), "Showed: \(card.label)")
+        XCTAssertTrue(
+            card.label.contains("In this state for"),
+            "The time at this step is said, from the recorded acceptance: \(card.label)"
+        )
+
+        let action = app.buttons["deliveryActionButton"]
+        let cancel = app.buttons["cancelDeliveryButton"]
+        XCTAssertTrue(scrollUntilHittable(cancel, in: app))
+        XCTAssertLessThan(card.frame.minY, action.frame.minY)
+        XCTAssertLessThan(action.frame.minY, cancel.frame.minY, "Cancelling sits below the step, not beside it")
+        XCTAssertGreaterThan(action.frame.height, cancel.frame.height - 1, "The step is the dominant control")
+        XCTAssertGreaterThanOrEqual(cancel.frame.height, 44, "A quiet control is still a full-size target")
+        XCTAssertTrue(action.label.contains("Delivery 1"), "The step names its delivery: \(action.label)")
+        attachScreenshot("home-one-delivery")
+    }
+
+    /// Two deliveries in different states read as two deliveries: each card
+    /// leads with its own name, its own state and its own step.
+    @MainActor
+    func testStackedDeliveriesInDifferentStatesStayDistinct() throws {
+        let app = launchWithActiveDelivery()
+
+        let second = deliveryCard("Delivery 2", in: app)
+        let third = deliveryCard("Delivery 3", in: app)
+        XCTAssertTrue(scrollTo(second, in: app))
+        XCTAssertTrue(scrollTo(third, in: app))
+
+        XCTAssertTrue(second.label.contains("Next step, mark arrived at pickup"), "Showed: \(second.label)")
+        XCTAssertTrue(third.label.contains("Next step, mark delivery completed"), "Showed: \(third.label)")
+        XCTAssertTrue(second.label.contains("In this state for 25 minutes"), "Its own clock: \(second.label)")
+        XCTAssertTrue(third.label.contains("In this state for 4 minutes"), "And this one its own: \(third.label)")
+
+        let actions = app.buttons.matching(identifier: "deliveryActionButton")
+        let labels = actions.allElementsBoundByIndex.map(\.label)
+        XCTAssertTrue(labels.contains { $0.contains("Delivery 2") }, "\(labels)")
+        XCTAssertTrue(labels.contains { $0.contains("Delivery 3") }, "\(labels)")
+        attachScreenshot("home-two-stacked-deliveries")
+    }
+
+    /// The reminder still says it is a suggestion from the driver's own times,
+    /// in the new card as in the old.
+    @MainActor
+    func testTheRestyledReminderStillClaimsNoObservation() throws {
+        let app = launchWithMissedLifecycle()
+
+        let reminder = app.descendants(matching: .any).matching(identifier: "deliverySuggestion").firstMatch
+        XCTAssertTrue(scrollTo(reminder, in: app))
+        XCTAssertTrue(reminder.label.contains("DashPilot cannot tell where you are"), "Showed: \(reminder.label)")
+        XCTAssertTrue(reminder.label.contains("not something it observed"), "Showed: \(reminder.label)")
+        let confirm = app.buttons.matching(identifier: "deliverySuggestionActionButton").firstMatch
+        XCTAssertGreaterThanOrEqual(confirm.frame.height, 44)
+        attachScreenshot("home-reminder")
+    }
+
+    /// At the largest accessibility size a card grows downwards: the name and
+    /// state are whole, and the step and cancelling are both still full-size.
+    @MainActor
+    func testADeliveryCardAtTheLargestTextSize() throws {
+        let app = XCUIApplication()
+        app.launchArguments.append(Self.seededActiveDeliveryArgument)
+        app.launchArguments += ["-UIPreferredContentSizeCategoryName", Self.accessibilityXXXLTextSize]
+        launchInPortrait(app)
+
+        let card = deliveryCard("Delivery 2", in: app)
+        XCTAssertTrue(scrollTo(card, in: app, maxSwipes: 25))
+        XCTAssertTrue(card.label.contains("Next step"), "Showed: \(card.label)")
+
+        let action = app.buttons.matching(
+            NSPredicate(format: "identifier == %@ AND label CONTAINS %@", "deliveryActionButton", "Delivery 2")
+        ).firstMatch
+        XCTAssertTrue(scrollUntilHittable(action, in: app, maxSwipes: 25))
+        XCTAssertGreaterThanOrEqual(action.frame.height, 44)
+        attachScreenshot("home-delivery-xxxl")
+
+        let cancel = app.buttons.matching(
+            NSPredicate(format: "identifier == %@ AND label CONTAINS %@", "cancelDeliveryButton", "Delivery 2")
+        ).firstMatch
+        XCTAssertTrue(scrollUntilHittable(cancel, in: app, maxSwipes: 25))
+        XCTAssertGreaterThanOrEqual(cancel.frame.height, 44)
+    }
+
     /// Pause a running shift, see the screen say so, and resume it.
     ///
     /// The three states a shift can be in have to be distinguishable without
@@ -1874,9 +1978,9 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertFalse(app.buttons["deliveryActionButton"].exists, "A finished delivery has no next step")
 
         // And the shift can now be ended, with the delivery recorded against it.
+        XCTAssertTrue(scrollToTop(reaching: app.buttons["endShiftButton"], in: app))
         app.buttons["endShiftButton"].tap()
-        let row = rows(in: app).firstMatch
-        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        let row = revealHistoryRows(1, in: app).firstMatch
         row.tap()
         let summary = app.descendants(matching: .any)["shiftDetailDeliverySummary"]
         XCTAssertTrue(scrollTo(summary, in: app))
@@ -3106,6 +3210,10 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertEqual(carrying.label, "Delivery 3. Mark delivery completed")
         carrying.tap()
 
+        // Back up to the shift's own controls, which the delivery cards pushed
+        // out of the list's rendered rows, the way the journey above does.
+        XCTAssertTrue(waitForCount(app.buttons.matching(identifier: "deliveryActionButton"), toEqual: 0))
+        XCTAssertTrue(scrollToTop(reaching: app.buttons["endShiftButton"], in: app))
         app.buttons["endShiftButton"].tap()
         openFirstShift(in: app)
         let summary = app.descendants(matching: .any)["shiftDetailDeliverySummary"]

@@ -152,6 +152,29 @@ nonisolated struct DeliveryLifecycleRecord: Equatable, Sendable {
         }
     }
 
+    /// When the delivery entered the state it is in now: that state's own
+    /// recorded instant.
+    ///
+    /// The one definition of "how long has it been at this step", read by the
+    /// running card's clock and by ``DeliveryProgressAssistance``'s evidence,
+    /// so the two can never disagree about the same delivery. `nil` for a chain
+    /// the lifecycle could not have produced, because an out-of-order row does
+    /// not say which of its instants to measure from.
+    var currentStateStartedAt: Date? {
+        guard isChronological, !recordsPickupWithoutArrival else { return nil }
+        return instant(of: state)
+    }
+
+    /// How long the delivery has been in its current state as of `now`, or
+    /// `nil` where there is no instant to measure from or the clock reads
+    /// earlier than it. Never clamped to zero: a negative span is a moved
+    /// clock, not a delivery that has just begun.
+    func timeInCurrentState(asOf now: Date) -> TimeInterval? {
+        guard let since = currentStateStartedAt else { return nil }
+        let elapsed = now.timeIntervalSince(since)
+        return elapsed >= 0 ? elapsed : nil
+    }
+
     /// The same row with one stage's instant replaced.
     ///
     /// **It replaces and never creates.** A stage this row does not record is
