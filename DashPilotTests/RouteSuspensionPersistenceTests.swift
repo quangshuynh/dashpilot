@@ -29,20 +29,19 @@ struct RouteSuspensionPersistenceTests {
 
     // MARK: Schema
 
-    /// The plan's own shape, asserted here because v16 is the current version.
+    /// Version 16's own identifier and entities, which stay here now that it is
+    /// frozen.
     ///
-    /// The repository's convention is that the count of versions and stages
-    /// lives in the suite belonging to whichever version is current, so it is
-    /// updated in one place rather than in several. It moved here from
-    /// `VehicleSettingsPersistenceTests`, which owned it while v15 was current.
-    @Test("Version 16 is the current version, and it is the one that adds the suspension")
+    /// The **plan's** version and stage counts moved to
+    /// `ParkPickupPersistenceTests` when v17 became current, by the convention
+    /// that they live in the current version's suite and are updated in one
+    /// place.
+    @Test("Version 16 is the version that added the suspension, and it is now frozen")
     func schemaVersion() throws {
         #expect(DashPilotSchemaV16.versionIdentifier == Schema.Version(16, 0, 0))
-        #expect(DashPilotMigrationPlan.schemas.count == 16)
-        #expect(DashPilotMigrationPlan.stages.count == 15)
-        #expect(DashPilotMigrationPlan.schemas.last is DashPilotSchemaV16.Type)
+        #expect(DashPilotMigrationPlan.schemas.contains { $0 is DashPilotSchemaV16.Type })
 
-        let entities = Set(ModelContainerFactory.currentSchema.entities.map(\.name))
+        let entities = Set(Schema(versionedSchema: DashPilotSchemaV16.self).entities.map(\.name))
         #expect(
             entities == [
                 "Shift", "RouteSample", "RouteSuspension", "Delivery", "PickupPlace", "Expense",

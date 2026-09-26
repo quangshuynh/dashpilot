@@ -17,8 +17,9 @@ nonisolated extension DriverSettingsError: LocalizedError {
     }
 }
 
-/// The driver's current preferences: which vehicle they are working in, and what
-/// they last said a gallon of fuel costs.
+/// The driver's current preferences: which vehicle they are working in, what
+/// they last said a gallon of fuel costs, and whether parking may also record a
+/// pickup.
 ///
 /// ## One row, and why it is in the store rather than in `UserDefaults`
 ///
@@ -30,7 +31,7 @@ nonisolated extension DriverSettingsError: LocalizedError {
 /// is a constant and is unique, so the store holds **at most one** of these by
 /// construction rather than by a rule somebody has to keep.
 ///
-/// ## Everything here is a default for the *next* shift
+/// ## The fuel figures are defaults for the *next* shift
 ///
 /// Nothing derived reads this row. Not an estimate, not a rate, not a total, not
 /// a coverage count, not an exported value, not a period figure. It is read at
@@ -41,6 +42,14 @@ nonisolated extension DriverSettingsError: LocalizedError {
 /// **changing a setting tomorrow changes nothing recorded today.** A driver who
 /// puts today's gas price in here has not restated what they paid last week, and
 /// one who switches vehicle has not changed what last Tuesday's shift consumed.
+///
+/// ## One preference is a behaviour rather than a default
+///
+/// ``recordsPickupWhenParking`` is not copied onto anything. It is read at the
+/// moment the driver presses Park, by ``ParkVehicleService`` alone, and decides
+/// whether that one press may also record a pickup. Changing it changes the next
+/// press and nothing already recorded, which is the same promise the defaults
+/// above keep by a different route.
 ///
 /// ## The selected vehicle is an identifier, not a relationship
 ///
@@ -81,14 +90,26 @@ nonisolated final class DriverSettings {
     /// `nil` when none is selected or the selected one has since been deleted.
     private(set) var selectedVehicleID: UUID?
 
+    /// Whether pressing Park may also record the pickup of the one delivery
+    /// waiting at a pickup.
+    ///
+    /// **Off unless the driver turns it on**, and the declared default is what
+    /// makes that true of a row migrated from v16: a build that could not ask the
+    /// question recorded no answer, and no answer is off. Nothing derived reads
+    /// it and nothing exports it. What it permits, and what it refuses even when
+    /// on, is ``ParkPickupSelection``'s to say.
+    private(set) var recordsPickupWhenParking: Bool = false
+
     init(
         id: UUID = DriverSettings.singletonID,
         gasPricePerGallon: Money? = nil,
-        selectedVehicleID: UUID? = nil
+        selectedVehicleID: UUID? = nil,
+        recordsPickupWhenParking: Bool = false
     ) {
         self.id = id
         self.gasPricePerGallonAmount = gasPricePerGallon?.amount
         self.selectedVehicleID = selectedVehicleID
+        self.recordsPickupWhenParking = recordsPickupWhenParking
     }
 
     /// The current gas price, in the app's money vocabulary.
@@ -114,5 +135,12 @@ nonisolated final class DriverSettings {
     /// selection when passed `nil`.
     func selectVehicle(id: UUID?) {
         selectedVehicleID = id
+    }
+
+    /// Turns the pickup-when-parking automation on or off.
+    ///
+    /// Takes effect at the next press of Park. Nothing already recorded moves.
+    func setRecordsPickupWhenParking(_ isEnabled: Bool) {
+        recordsPickupWhenParking = isEnabled
     }
 }

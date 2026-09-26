@@ -2621,11 +2621,335 @@ enum DashPilotSchemaV15: VersionedSchema {
 /// the route it recorded, keeps the mileage that route measures, keeps the gaps
 /// it already had and keeps reporting them exactly as it did.
 ///
-/// This version reuses the file-scope models rather than freezing copies,
-/// because it *is* the current shape. It gets frozen copies of its own the first
-/// time v17 moves them on, exactly as v15 did above.
+/// **Frozen** by v17, with copies of all eleven of its models below, forced the
+/// way v15's were: v17 moves the settings row, and a version whose models were
+/// the file-scope types would describe v17's shape under v16's number.
 enum DashPilotSchemaV16: VersionedSchema {
     static var versionIdentifier: Schema.Version { Schema.Version(16, 0, 0) }
+
+    static var models: [any PersistentModel.Type] {
+        [
+            Shift.self,
+            RouteSample.self,
+            RouteSuspension.self,
+            Delivery.self,
+            PickupPlace.self,
+            Expense.self,
+            ShiftPause.self,
+            Offer.self,
+            DeliveryTip.self,
+            VehicleProfile.self,
+            DriverSettings.self
+        ]
+    }
+
+    /// The v16 shift: the fuel snapshot v15 gave it, and the collection of
+    /// stretches the driver recorded the vehicle as parked.
+    ///
+    /// Unchanged by v17, which moves only the settings row. Frozen because a
+    /// later version exists and this one must keep describing its own store.
+    @Model
+    nonisolated final class Shift {
+        @Attribute(.unique) private(set) var id: UUID
+        private(set) var startedAt: Date
+        private(set) var endedAt: Date?
+
+        @Relationship(deleteRule: .cascade, inverse: \Delivery.shift)
+        private(set) var deliveries: [Delivery] = []
+
+        @Relationship(deleteRule: .cascade, inverse: \ShiftPause.shift)
+        private(set) var pauses: [ShiftPause] = []
+
+        @Relationship(deleteRule: .cascade, inverse: \Offer.shift)
+        private(set) var offers: [Offer] = []
+
+        @Relationship(deleteRule: .cascade, inverse: \RouteSuspension.shift)
+        private(set) var routeSuspensions: [RouteSuspension] = []
+
+        private(set) var grossEarningsAmount: Decimal?
+
+        private(set) var fuelMilesPerGallonValue: Decimal?
+
+        private(set) var fuelGasPricePerGallonAmount: Decimal?
+
+        private(set) var fuelVehicleName: String?
+
+        init(
+            id: UUID = UUID(),
+            startedAt: Date,
+            endedAt: Date? = nil,
+            grossEarningsAmount: Decimal? = nil,
+            fuelMilesPerGallonValue: Decimal? = nil,
+            fuelGasPricePerGallonAmount: Decimal? = nil,
+            fuelVehicleName: String? = nil
+        ) {
+            self.id = id
+            self.startedAt = startedAt
+            self.endedAt = endedAt
+            self.grossEarningsAmount = grossEarningsAmount
+            self.fuelMilesPerGallonValue = fuelMilesPerGallonValue
+            self.fuelGasPricePerGallonAmount = fuelGasPricePerGallonAmount
+            self.fuelVehicleName = fuelVehicleName
+        }
+    }
+
+    /// The v16 route sample, unchanged in shape since v3.
+    @Model
+    nonisolated final class RouteSample {
+        private(set) var timestamp: Date
+        private(set) var latitude: Double
+        private(set) var longitude: Double
+        private(set) var horizontalAccuracy: Double
+        private(set) var captureSessionID: UUID?
+        private(set) var shift: Shift?
+
+        init(
+            shift: Shift,
+            timestamp: Date,
+            latitude: Double,
+            longitude: Double,
+            horizontalAccuracy: Double,
+            captureSessionID: UUID?
+        ) {
+            self.timestamp = timestamp
+            self.latitude = latitude
+            self.longitude = longitude
+            self.horizontalAccuracy = horizontalAccuracy
+            self.captureSessionID = captureSessionID
+            self.shift = shift
+        }
+    }
+
+    /// The v16 delivery, which gained its collection of tips in v13 and
+    /// is unchanged by v14.
+    @Model
+    nonisolated final class Delivery {
+        @Attribute(.unique) private(set) var id: UUID
+        private(set) var acceptedAt: Date
+        private(set) var arrivedAtPickupAt: Date?
+        private(set) var pickedUpAt: Date?
+        private(set) var deliveredAt: Date?
+        private(set) var cancelledAt: Date?
+        private(set) var shift: Shift?
+        private(set) var offer: Offer?
+        private(set) var pickupPlace: PickupPlace?
+        private(set) var grossEarningsAmount: Decimal?
+        private(set) var expectedEarningsAmount: Decimal?
+
+        @Relationship(deleteRule: .cascade, inverse: \DeliveryTip.delivery)
+        private(set) var additionalTips: [DeliveryTip] = []
+
+        init(
+            id: UUID = UUID(),
+            shift: Shift,
+            offer: Offer? = nil,
+            acceptedAt: Date,
+            arrivedAtPickupAt: Date? = nil,
+            pickedUpAt: Date? = nil,
+            deliveredAt: Date? = nil,
+            cancelledAt: Date? = nil,
+            pickupPlace: PickupPlace? = nil,
+            grossEarningsAmount: Decimal? = nil,
+            expectedEarningsAmount: Decimal? = nil
+        ) {
+            self.id = id
+            self.acceptedAt = acceptedAt
+            self.arrivedAtPickupAt = arrivedAtPickupAt
+            self.pickedUpAt = pickedUpAt
+            self.deliveredAt = deliveredAt
+            self.cancelledAt = cancelledAt
+            self.shift = shift
+            self.offer = offer
+            self.pickupPlace = pickupPlace
+            self.grossEarningsAmount = grossEarningsAmount
+            self.expectedEarningsAmount = expectedEarningsAmount
+        }
+    }
+
+    /// The v16 delivery tip, unchanged since v13 introduced it.
+    @Model
+    nonisolated final class DeliveryTip {
+        @Attribute(.unique) private(set) var id: UUID
+        private(set) var amountValue: Decimal
+        private(set) var methodRawValue: String
+        private(set) var recordedAt: Date
+        private(set) var delivery: Delivery?
+
+        init(
+            id: UUID = UUID(),
+            delivery: Delivery,
+            amountValue: Decimal,
+            methodRawValue: String,
+            recordedAt: Date
+        ) {
+            self.id = id
+            self.amountValue = amountValue
+            self.methodRawValue = methodRawValue
+            self.recordedAt = recordedAt
+            self.delivery = delivery
+        }
+    }
+
+    /// The v16 offer, unchanged from v12.
+    @Model
+    nonisolated final class Offer {
+        @Attribute(.unique) private(set) var id: UUID
+        private(set) var acceptedAt: Date
+        private(set) var shift: Shift?
+
+        @Relationship(deleteRule: .cascade, inverse: \Delivery.offer)
+        private(set) var deliveries: [Delivery] = []
+
+        init(id: UUID = UUID(), shift: Shift, acceptedAt: Date) {
+            self.id = id
+            self.acceptedAt = acceptedAt
+            self.shift = shift
+        }
+    }
+
+    /// The v16 pickup place, unchanged from v6.
+    @Model
+    nonisolated final class PickupPlace {
+        @Attribute(.unique) private(set) var id: UUID
+        private(set) var displayName: String
+        private(set) var normalizedName: String
+        private(set) var createdAt: Date
+
+        @Relationship(deleteRule: .nullify, inverse: \Delivery.pickupPlace)
+        private(set) var deliveries: [Delivery] = []
+
+        init(id: UUID = UUID(), displayName: String, normalizedName: String, createdAt: Date) {
+            self.id = id
+            self.displayName = displayName
+            self.normalizedName = normalizedName
+            self.createdAt = createdAt
+        }
+    }
+
+    /// The v16 expense, unchanged from v8.
+    ///
+    /// Its `fuel` category is the one this version's successor has to be read
+    /// beside: a recorded fuel purchase and an estimated fuel cost are different
+    /// facts, and v14 adds the second without touching the first.
+    @Model
+    nonisolated final class Expense {
+        @Attribute(.unique) private(set) var id: UUID
+        private(set) var occurredAt: Date
+        private(set) var amountValue: Decimal
+        private(set) var categoryRawValue: String
+        private(set) var note: String?
+
+        init(
+            id: UUID = UUID(),
+            occurredAt: Date,
+            amountValue: Decimal,
+            categoryRawValue: String,
+            note: String? = nil
+        ) {
+            self.id = id
+            self.occurredAt = occurredAt
+            self.amountValue = amountValue
+            self.categoryRawValue = categoryRawValue
+            self.note = note
+        }
+    }
+
+    /// The v16 shift pause, unchanged from v9.
+    @Model
+    nonisolated final class ShiftPause {
+        @Attribute(.unique) private(set) var id: UUID
+        private(set) var startedAt: Date
+        private(set) var endedAt: Date?
+        private(set) var shift: Shift?
+
+        init(id: UUID = UUID(), shift: Shift, startedAt: Date, endedAt: Date? = nil) {
+            self.id = id
+            self.startedAt = startedAt
+            self.endedAt = endedAt
+            self.shift = shift
+        }
+    }
+
+    /// The v16 route suspension, introduced by this version. It joins the shift
+    /// and never a delivery.
+    @Model
+    nonisolated final class RouteSuspension {
+        @Attribute(.unique) private(set) var id: UUID
+        private(set) var startedAt: Date
+        private(set) var endedAt: Date?
+        private(set) var shift: Shift?
+
+        init(id: UUID = UUID(), shift: Shift, startedAt: Date, endedAt: Date? = nil) {
+            self.id = id
+            self.shift = shift
+            self.startedAt = startedAt
+            self.endedAt = endedAt
+        }
+    }
+
+    /// The v16 vehicle profile, unchanged from v15.
+    @Model
+    nonisolated final class VehicleProfile {
+        @Attribute(.unique) private(set) var id: UUID
+        private(set) var name: String
+        private(set) var milesPerGallonValue: Decimal
+        private(set) var createdAt: Date
+
+        init(id: UUID = UUID(), name: String, milesPerGallonValue: Decimal, createdAt: Date) {
+            self.id = id
+            self.name = name
+            self.milesPerGallonValue = milesPerGallonValue
+            self.createdAt = createdAt
+        }
+    }
+
+    /// The v16 driver settings, unchanged from v15, and the shape v17 moves:
+    /// it records no preference about parking.
+    @Model
+    nonisolated final class DriverSettings {
+        @Attribute(.unique) private(set) var id: UUID
+        private(set) var gasPricePerGallonAmount: Decimal?
+        private(set) var selectedVehicleID: UUID?
+
+        init(id: UUID, gasPricePerGallonAmount: Decimal? = nil, selectedVehicleID: UUID? = nil) {
+            self.id = id
+            self.gasPricePerGallonAmount = gasPricePerGallonAmount
+            self.selectedVehicleID = selectedVehicleID
+        }
+    }
+}
+
+/// Version 17 of the persisted schema: whether parking may also record a pickup.
+///
+/// One `Bool` column on `DriverSettings`, `recordsPickupWhenParking`, with a
+/// declared default of `false`. Nothing else anywhere changes shape, and not one
+/// stored value moves: every shift, route sample, suspension, offer, delivery
+/// timestamp, tip, pickup place, amount, fuel snapshot, profile, pause and
+/// expense carries over untouched.
+///
+/// ## What the version is for
+///
+/// A driver who parks at a pickup and walks in has to tell DashPilot two
+/// things: that the vehicle is parked, and that the order is picked up. This
+/// column lets them say, once and in Settings, that the first should also
+/// record the second when exactly one delivery is waiting at a pickup. It is a
+/// **preference**, not history: no shift, delivery or export reads it, and it
+/// is consulted only at the moment Park is pressed.
+///
+/// ## Why this migrates lightweight, and why it is off
+///
+/// A new column with a declared default, which SwiftData fills without being
+/// told how. **Off is the only truthful value** for a store written by a build
+/// that could not ask the question: nobody who used it chose the automation, so
+/// a migrated settings row reads `false` and parking behaves exactly as it did.
+/// A store with no settings row at all has no preference either, and reads as
+/// off without a row being created.
+///
+/// This version reuses the file-scope models rather than freezing copies,
+/// because it *is* the current shape. It gets frozen copies of its own the first
+/// time v18 moves them on, exactly as v16 did above.
+enum DashPilotSchemaV17: VersionedSchema {
+    static var versionIdentifier: Schema.Version { Schema.Version(17, 0, 0) }
 
     static var models: [any PersistentModel.Type] {
         [
@@ -2667,14 +2991,15 @@ enum DashPilotMigrationPlan: SchemaMigrationPlan {
             DashPilotSchemaV13.self,
             DashPilotSchemaV14.self,
             DashPilotSchemaV15.self,
-            DashPilotSchemaV16.self
+            DashPilotSchemaV16.self,
+            DashPilotSchemaV17.self
         ]
     }
 
     static var stages: [MigrationStage] {
         [
             v1ToV2, v2ToV3, v3ToV4, v4ToV5, v5ToV6, v6ToV7, v7ToV8, v8ToV9, v9ToV10, v10ToV11, v11ToV12,
-            v12ToV13, v13ToV14, v14ToV15, v15ToV16
+            v12ToV13, v13ToV14, v14ToV15, v15ToV16, v16ToV17
         ]
     }
 
@@ -3071,5 +3396,18 @@ enum DashPilotMigrationPlan: SchemaMigrationPlan {
     static let v15ToV16 = MigrationStage.lightweight(
         fromVersion: DashPilotSchemaV15.self,
         toVersion: DashPilotSchemaV16.self
+    )
+
+    /// V16 → V17 is lightweight.
+    ///
+    /// One `Bool` column with a declared default of `false`, and **nothing to
+    /// backfill**. The tempting stage would switch the automation on for a driver
+    /// who parks often, or who already records most pickups right after parking.
+    /// That would be DashPilot choosing, on the driver's behalf, to write
+    /// lifecycle events they never asked it to write. A migrated settings row
+    /// therefore reads `false`, and parking does exactly what it did.
+    static let v16ToV17 = MigrationStage.lightweight(
+        fromVersion: DashPilotSchemaV16.self,
+        toVersion: DashPilotSchemaV17.self
     )
 }
