@@ -229,6 +229,20 @@ nonisolated enum LaunchArgument {
     /// Debug builds only, and in memory.
     static let seededOlderWeeksOnly = "-dashpilot-seeded-older-weeks-only"
 
+    /// A throwaway store holding about two and a half years of synthetic work,
+    /// for the journeys that need History to be long.
+    ///
+    /// The older-weeks fixture above holds four shifts, which is enough to show
+    /// the scope and too few to show what a long list is like: reaching a shift
+    /// from years ago, coming back and carrying on, and a week whose fuel is
+    /// estimated for some shifts and not others. Last week holds three shifts
+    /// with measured routes, two of them recording a vehicle and fuel
+    /// assumptions (one at a recorded gas price of zero); the oldest shift
+    /// records no vehicle at all, and one recorded an economy with no name and
+    /// no price. Every time, amount and name is invented. Debug builds only,
+    /// and in memory.
+    static let seededLongHistory = "-dashpilot-seeded-long-history"
+
     /// Runs with Core Location replaced by the stub the tests and previews use,
     /// reporting When In Use with full accuracy and producing no positions.
     ///
@@ -285,7 +299,8 @@ nonisolated enum LaunchArgument {
         seededLateEndHistory,
         seededLateDeliveryHistory,
         seededOlderWeeks,
-        seededOlderWeeksOnly
+        seededOlderWeeksOnly,
+        seededLongHistory
     ]
 
     /// Whether this launch is running over synthetic, in-memory data.

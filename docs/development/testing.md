@@ -66,6 +66,9 @@ test cannot see, such as a screen that renders a sentence the model never claime
 | Shift export privacy | No coordinate in either format, the route reduced to a measurement and its coverage, no normalised pickup key, no catalogue bookkeeping and no store internals |
 | Expense record | What an expense accepts and refuses, a recorded zero distinct from none, an edit replacing every fact at once and a refused edit changing nothing, the note's trimming and length rule counted in characters, the closed category set and its stored words, no category implying a tax treatment, and an unrecognised stored word reading as `other` |
 | History weeks | The week History is scoped to, and the split that decides which screen a shift is drawn on: a week starting on Monday whatever the device's own first weekday is, Sunday closing the working week rather than opening the next one, a shift at Monday midnight in the week beginning, a week across New Year and one across a daylight-saving change, the time zone deciding which week a moment is in, older shifts grouped newest week first with two in one week under one heading and an unworked week absent rather than empty, a current week present but empty, the Monday transition moving a shift between the two sides, a shift dated after this week still listed rather than hidden, every shift claimed by exactly one side, and the wording following the Monday week rather than the device's |
+| History fetch scope | The two store reads History is drawn from, asserted against the partition they replaced: the week's own completed shifts newest first, a running shift in neither read, Monday 00:00 opening the week and Sunday 23:59:59 closing the one before, a 169-hour week across the autumn clock change, the rollover moving a shift from one read to the other, a shift dated after the week reachable under the other weeks, both reads equal to the partition's two sides row for row over nearly three years, the other weeks counted as Monday weeks, a week summarised through a context of its own equal to one summarised directly and skipping a deleted shift, and Export All History still carrying every completed shift whatever the screen reads |
+| History week summaries | What a week says above its shifts, derived twice to show it is the period calculator's own figures: the three primary figures and the secondary lines in reading order, the shift and delivery counts on one line, missing earnings and unmeasured miles never read as zero, complete fuel coverage stated, partial coverage never scaled up to the week, a partial route making the fuel a floor and the net a ceiling, a recorded zero gas price counted, the estimated net over its paired subset rather than week earnings less week fuel, recorded expenses reaching neither net so fuel is never subtracted twice, the spoken form naming its week first, and the card bounded at six lines |
+| Recorded shift vehicle | What a completed shift says it was worked in: its own name, economy and price; renaming, repricing, reselecting and deleting in Settings rewriting nothing, read back through a fresh context; a shift that recorded no vehicle staying unnamed while one is selected today; an economy typed by hand naming nothing even when a profile matches it; a recorded zero price said as zero; a missing half left out rather than zero; and wording that stays true of a name recorded after the start |
 | Period comparison | The span a period is compared against — a calendar unit back, a month keeping its own length, an equal-length range before a chosen one, whole days across a daylight saving change, and a chosen range still having no selection to step to — then the comparison itself: two period results and never an average of the periods inside them, a missing figure subtracted from nothing, the five reasons a percentage is withheld, expenses never carrying one, coverage printed for both sides, differing lengths stated rather than scaled, non-neighbouring periods refused, and the words a change may be described in |
 | Period expenses | Totals and category subtotals, missing distinct from an explicit zero, membership by the expense's own timestamp across a half-open boundary and a 23-hour day, a month totalled from its own records, a day holding costs but no shift, the net's two refusals and its negative case, the gross figures unchanged by any of it, no coverage pair invented for expenses, and the words the net may and may not use |
 | Expense persistence | The v7 to v8 migration with every earlier record intact and no expense fabricated from mileage or earnings, the plan's version and stage counts asserted here once, an expense with no relationship to a shift, a round trip through a reopened store, deleting a shift leaving expenses alone, and the service's refusals |
@@ -113,6 +116,23 @@ xcodebuild test \
   -destination 'platform=iOS Simulator,name=iPhone 17' \
   -only-testing:DashPilotTests
 ```
+
+### Measuring History against a long store
+
+`HistoryFetchScopeMeasurementTests` is off by default, like the route-capture profile, because its
+numbers depend on the machine. It seeds on-disk stores holding one week to five years of synthetic
+work and writes what History's two screens cost, before and after the week-scoped read, to a report
+file:
+
+```bash
+TEST_RUNNER_DASHPILOT_HISTORY_PROFILE=1 xcodebuild test -scheme DashPilot \
+  -destination 'platform=iOS Simulator,name=iPhone 17' -parallel-testing-enabled NO \
+  -only-testing:DashPilotTests/HistoryFetchScopeMeasurementTests
+find ~/Library/Developer/CoreSimulator/Devices -name 'dashpilot-history-fetch-profile.md'
+```
+
+The `TEST_RUNNER_` prefix has to be an environment variable of `xcodebuild`, and the run has to be
+serial, or it silently measures nothing.
 
 ## Testing seams
 
@@ -183,6 +203,7 @@ Debug builds accept fifteen arguments, all used only by UI tests and screenshots
 | `-dashpilot-seeded-late-delivery-history` | The same shift whose one delivery recorded its completion two hours after the order was handed over, which is the real recovery case: the shift end correction refuses and names it, and the same correction is accepted once the delivery is corrected |
 | `-dashpilot-seeded-older-weeks` | Opens an in-memory store holding completed shifts in three different weeks: one in the current one, one in the week before it and two in the week three back, so History's scope can be asserted end to end |
 | `-dashpilot-seeded-older-weeks-only` | The same store without its current-week shift, which is the empty-current-week state |
+| `-dashpilot-seeded-long-history` | Opens an in-memory store holding about two and a half years of completed shifts, the latest week of three with measured routes and fuel recorded for two of them (one at a gas price of zero), and the oldest shift recording no vehicle, so a long History, partial weekly fuel coverage and historical vehicle context can be reached end to end |
 | `-dashpilot-stubbed-location` | Replaces Core Location with the stub providers, reporting When In Use at full accuracy and producing no positions |
 | `-dashpilot-simulated-route` | Replaces Core Location with a synthetic vehicle driving in a straight line, so a journey can watch a live mileage figure move; it implies the permission stub above |
 

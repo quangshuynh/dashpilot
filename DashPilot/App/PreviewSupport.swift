@@ -819,6 +819,98 @@ enum PreviewSupport {
         return container
     }
 
+    /// About two and a half years of synthetic work, for the journeys that need
+    /// History to be long. See ``LaunchArgument/seededLongHistory``.
+    ///
+    /// | When | What |
+    /// | --- | --- |
+    /// | This week, Tuesday | `$70.00`, no route |
+    /// | Last week, Monday | `$80.00`, measured route, `Synthetic Hatchback` at 25 MPG and `$4.00`, 3 delivered and 1 cancelled |
+    /// | Last week, Wednesday | `$60.00`, measured route, no fuel assumptions, 2 delivered |
+    /// | Last week, Friday | `$45.00`, measured route, `Synthetic Van` at 20 MPG and a recorded `$0.00` |
+    /// | Every other week from 2 to 128 weeks ago | `$50.00` plus the week number in cents, no route |
+    /// | 4 weeks ago, instead | also 30 MPG typed by hand: no name and no price |
+    /// | 130 weeks ago | `$12.34`, the oldest, recording no vehicle |
+    ///
+    /// Every shift is two hours long. Last week's routes cover each whole shift with no gap, so the week's
+    /// fuel is estimated over two of its three shifts and no route is partial.
+    static func seededLongHistoryContainer(
+        now: Date = .now,
+        calendar: Calendar = .autoupdatingCurrent
+    ) throws -> ModelContainer {
+        let container = try ModelContainerFactory.makeInMemoryContainer()
+        let context = ModelContext(container)
+
+        let mondayFirst = HistoryWeek.mondayFirst(calendar)
+        guard let thisWeek = HistoryWeek(containing: now, calendar: calendar) else { return container }
+
+        func moment(weeksAgo: Int, day: Int, hour: Int) -> Date? {
+            guard let weekStart = mondayFirst.date(byAdding: .weekOfYear, value: -weeksAgo, to: thisWeek.start) else {
+                return nil
+            }
+            return mondayFirst.date(byAdding: DateComponents(day: day, hour: hour), to: weekStart)
+        }
+
+        @discardableResult
+        func seed(weeksAgo: Int, day: Int, hour: Int, amount: Int, routed: Bool = false) -> Shift? {
+            guard let start = moment(weeksAgo: weeksAgo, day: day, hour: hour) else { return nil }
+            let shift = shift(startingAt: start, hours: 2, in: context)
+            try? shift.setGrossEarnings(Money(minorUnits: amount))
+            if routed {
+                // One sample a minute for the whole two hours, 400 m apart: one
+                // unbroken capture session, so the route is measured and not
+                // partial.
+                let session = UUID()
+                for step in 0...120 {
+                    context.insert(
+                        RouteSample(
+                            shift: shift,
+                            timestamp: start.addingTimeInterval(Double(step) * 60),
+                            latitude: 40.0 + Double(step) * 400 / 111_320.0,
+                            longitude: -75.0,
+                            horizontalAccuracy: 8,
+                            captureSessionID: session
+                        )
+                    )
+                }
+            }
+            return shift
+        }
+
+        seed(weeksAgo: 0, day: 1, hour: 9, amount: 7_000)
+
+        if let hatchback = seed(weeksAgo: 1, day: 0, hour: 10, amount: 8_000, routed: true) {
+            try? hatchback.setFuelAssumptions(
+                milesPerGallon: 25,
+                gasPricePerGallon: Money(minorUnits: 400),
+                vehicleName: "Synthetic Hatchback"
+            )
+            seedDeliveries(in: hatchback, waitsInMinutes: [4, 6, 8], cancelling: true, context: context)
+        }
+        if let unfuelled = seed(weeksAgo: 1, day: 2, hour: 17, amount: 6_000, routed: true) {
+            seedDeliveries(in: unfuelled, waitsInMinutes: [5, 7], cancelling: false, context: context)
+        }
+        if let van = seed(weeksAgo: 1, day: 4, hour: 12, amount: 4_500, routed: true) {
+            try? van.setFuelAssumptions(
+                milesPerGallon: 20,
+                gasPricePerGallon: .zero,
+                vehicleName: "Synthetic Van"
+            )
+        }
+
+        for weeksAgo in stride(from: 2, through: 128, by: 2) {
+            let shift = seed(weeksAgo: weeksAgo, day: 3, hour: 11, amount: 5_000 + weeksAgo)
+            if weeksAgo == 4 {
+                try? shift?.setFuelAssumptions(milesPerGallon: 30, gasPricePerGallon: nil)
+            }
+        }
+
+        seed(weeksAgo: 130, day: 1, hour: 8, amount: 1_234)
+
+        try? context.save()
+        return container
+    }
+
     private static func shift(startingAt start: Date, hours: Double, in context: ModelContext) -> Shift {
         let shift = Shift(startedAt: start)
         try? shift.end(at: start.addingTimeInterval(hours * 3600))

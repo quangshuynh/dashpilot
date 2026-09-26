@@ -49,6 +49,10 @@ final class DashPilotUITests: XCTestCase {
     /// Must match `LaunchArgument.seededOlderWeeksOnly`, for the same reason.
     private static let seededOlderWeeksOnlyArgument = "-dashpilot-seeded-older-weeks-only"
 
+    /// About two and a half years of synthetic work; see
+    /// `LaunchArgument.seededLongHistory` for its shape.
+    private static let seededLongHistoryArgument = "-dashpilot-seeded-long-history"
+
     /// Must match `LaunchArgument.stubbedLocation`, for the same reason.
     private static let stubbedLocationArgument = "-dashpilot-stubbed-location"
 
@@ -786,6 +790,30 @@ final class DashPilotUITests: XCTestCase {
         return app
     }
 
+    /// Launches the long-history fixture, optionally at a given text size.
+    @MainActor
+    private func launchWithLongHistory(textSize: String? = nil) -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments.append(Self.seededLongHistoryArgument)
+        if let textSize {
+            app.launchArguments += ["-UIPreferredContentSizeCategoryName", textSize]
+        }
+        launchInPortrait(app)
+        return app
+    }
+
+    /// Opens Older Weeks from the root screen.
+    @MainActor
+    private func openOlderWeeks(in app: XCUIApplication, maxSwipes: Int = 12) {
+        let older = app.buttons["olderHistoryWeeksLink"]
+        XCTAssertTrue(scrollUntilHittable(older, in: app, maxSwipes: maxSwipes), "View Older Weeks is reachable")
+        older.tap()
+        XCTAssertTrue(
+            app.descendants(matching: .any).matching(identifier: "olderWeekSummary").firstMatch
+                .waitForExistence(timeout: 10)
+        )
+    }
+
     /// Everything on screen whose label contains `text`.
     ///
     /// Used for the negative claims below. A `List` renders only the rows near
@@ -836,8 +864,10 @@ final class DashPilotUITests: XCTestCase {
 
         // Two weeks, three shifts: the fixture's two older weeks, one holding a
         // single shift and one holding two.
+        // The week count is worked out off the main actor, so it is waited for
+        // rather than read the instant the row appears.
         XCTAssertTrue(
-            older.label.contains("2 weeks") && older.label.contains("3 shifts"),
+            waitForLabel(older, toContain: "2 weeks · 3 shifts"),
             "The control says how much is behind it: \(older.label)"
         )
     }
@@ -1021,6 +1051,267 @@ final class DashPilotUITests: XCTestCase {
 
         let row = olderWeekRows(in: app).firstMatch
         XCTAssertTrue(scrollTo(row, in: app, maxSwipes: 20), "The shifts under it are still reachable")
+    }
+
+    /// A week whose fuel is estimated for some shifts says whose, and keeps the
+    /// estimated net apart from recorded expenses.
+    @MainActor
+    func testAWeeksFuelEstimateStatesItsCoverage() throws {
+        let app = launchWithLongHistory()
+        openOlderWeeks(in: app)
+
+        // Last week: three shifts, two of which recorded fuel assumptions.
+        let lastWeek = app.descendants(matching: .any).matching(identifier: "olderWeekSummary").firstMatch
+        XCTAssertTrue(waitForLabel(lastWeek, toContain: "3 completed shifts"), "Showed: \(lastWeek.label)")
+        XCTAssertTrue(lastWeek.label.contains("Recorded gross earnings, $185.00"), "Showed: \(lastWeek.label)")
+        XCTAssertTrue(
+            lastWeek.label.contains("Estimated fuel") && lastWeek.label.contains("across 2 of 3 completed shifts"),
+            "The estimate says it covers two of the three shifts: \(lastWeek.label)"
+        )
+        XCTAssertTrue(lastWeek.label.contains("recorded miles"), "And how much of the driving: \(lastWeek.label)")
+        XCTAssertTrue(
+            lastWeek.label.contains("Estimated net after fuel") && lastWeek.label.contains("never added together"),
+            "The net carries the sentence that keeps it apart from recorded fuel: \(lastWeek.label)"
+        )
+        XCTAssertFalse(lastWeek.label.contains("Net after recorded expenses"), "Only one net is on the card")
+    }
+
+    /// A week nobody recorded fuel for carries no fuel figure, and certainly
+    /// not a zero.
+    @MainActor
+    func testAWeekWithoutFuelShowsNoFuelFigure() throws {
+        let app = launchWithOlderWeeks()
+        openOlderWeeks(in: app)
+
+        let lastWeek = app.descendants(matching: .any).matching(identifier: "olderWeekSummary").firstMatch
+        XCTAssertTrue(waitForLabel(lastWeek, toContain: "$55.00"), "Showed: \(lastWeek.label)")
+        XCTAssertFalse(lastWeek.label.contains("Estimated fuel"), "Showed: \(lastWeek.label)")
+        XCTAssertFalse(lastWeek.label.contains("$0.00"), "Missing is never a zero: \(lastWeek.label)")
+    }
+
+    /// The summary is one coherent sentence: the week, then its shifts, then
+    /// the three figures that describe it, in that order.
+    @MainActor
+    func testTheWeeklySummaryNamesItsWeekThenItsFigures() throws {
+        let app = launchWithLongHistory()
+        openOlderWeeks(in: app)
+
+        let header = app.descendants(matching: .any).matching(identifier: "olderWeekHeader").firstMatch
+        let summary = app.descendants(matching: .any).matching(identifier: "olderWeekSummary").firstMatch
+        XCTAssertTrue(waitForLabel(summary, toContain: "completed shifts"))
+        XCTAssertTrue(
+            summary.label.hasPrefix(header.label),
+            "The summary names its own week first: \(summary.label) / \(header.label)"
+        )
+
+        let label = summary.label
+        let order = ["3 completed shifts", "Recorded gross earnings", "working time", "Recorded mileage"]
+            .compactMap { label.range(of: $0)?.lowerBound }
+        XCTAssertEqual(order.count, 4, "Every figure is spoken: \(label)")
+        XCTAssertEqual(order, order.sorted(), "In the order a listener needs them: \(label)")
+    }
+
+    /// At the largest accessibility size the fuller card still says every
+    /// figure whole, and the shifts under it are still reachable.
+    @MainActor
+    func testTheFullWeeklySummarySurvivesLargeText() throws {
+        let app = launchWithLongHistory(textSize: Self.accessibilityXXXLTextSize)
+        openOlderWeeks(in: app, maxSwipes: 25)
+
+        let summary = app.descendants(matching: .any).matching(identifier: "olderWeekSummary").firstMatch
+        XCTAssertTrue(waitForLabel(summary, toContain: "$185.00"), "Showed: \(summary.label)")
+        XCTAssertTrue(summary.label.contains("Estimated fuel"))
+        XCTAssertGreaterThan(summary.frame.height, 44, "A summary is never a tiny cell")
+
+        let row = olderWeekRows(in: app).firstMatch
+        XCTAssertTrue(scrollTo(row, in: app, maxSwipes: 25), "The shifts under it are still reachable")
+    }
+
+    // MARK: Historical vehicle context
+
+    /// Opens the first shift under Older Weeks: last week's Friday, worked in
+    /// the synthetic van at a recorded gas price of zero.
+    @MainActor
+    private func openLastWeeksFridayShift(in app: XCUIApplication, maxSwipes: Int = 12) {
+        openOlderWeeks(in: app, maxSwipes: maxSwipes)
+        let row = olderWeekRows(in: app).firstMatch
+        XCTAssertTrue(scrollUntilHittable(row, in: app, maxSwipes: maxSwipes))
+        XCTAssertTrue(waitForLabel(row, toContain: "$45.00"), "Showed: \(row.label)")
+        row.tap()
+    }
+
+    /// A finished shift says which vehicle and assumptions it recorded, beside
+    /// its fuel estimate, including a price recorded as zero.
+    @MainActor
+    func testAHistoricalShiftShowsTheVehicleItRecorded() throws {
+        let app = launchWithLongHistory()
+        openLastWeeksFridayShift(in: app)
+
+        let vehicle = app.descendants(matching: .any)["shiftDetailFuelVehicle"]
+        XCTAssertTrue(scrollTo(vehicle, in: app))
+        XCTAssertTrue(
+            waitForLabel(vehicle, toContain: "Vehicle recorded with this shift: Synthetic Van"),
+            "Showed: \(vehicle.label)"
+        )
+        XCTAssertTrue(vehicle.label.contains("20 miles per gallon"), "Showed: \(vehicle.label)")
+        XCTAssertTrue(vehicle.label.contains("gas $0.00 per gallon"), "A recorded zero is said: \(vehicle.label)")
+
+        let price = app.descendants(matching: .any)["shiftDetailFuelGasPrice"]
+        XCTAssertTrue(scrollTo(price, in: app))
+        XCTAssertTrue(waitForLabel(price, toContain: "$0.00 per gallon assumed"), "Showed: \(price.label)")
+    }
+
+    /// A shift that recorded no vehicle says so, and does not borrow the one
+    /// selected in Settings today.
+    @MainActor
+    func testAShiftThatRecordedNoVehicleStaysUnnamed() throws {
+        let app = launchWithLongHistory()
+
+        openSettings(in: app)
+        addVehicle(named: "Today's Car", milesPerGallon: "31", in: app)
+        goBack(in: app)
+
+        openFirstShift(in: app)
+        let vehicle = app.descendants(matching: .any)["shiftDetailFuelVehicle"]
+        XCTAssertTrue(scrollTo(vehicle, in: app))
+        XCTAssertTrue(
+            waitForLabel(vehicle, toContain: "No vehicle recorded for this shift"),
+            "Showed: \(vehicle.label)"
+        )
+        XCTAssertFalse(vehicle.label.contains("Today's Car"), "Nothing is borrowed from Settings")
+        XCTAssertFalse(
+            app.descendants(matching: .any)["shiftDetailFuelMilesPerGallon"].exists,
+            "No economy is invented either"
+        )
+    }
+
+    /// Selecting and pricing a different vehicle today leaves last week's
+    /// recorded vehicle exactly as it was.
+    @MainActor
+    func testSettingsChangesDoNotReachAHistoricalShift() throws {
+        let app = launchWithLongHistory()
+
+        openSettings(in: app)
+        addVehicle(named: "Synthetic Van", milesPerGallon: "9", in: app)
+        setCurrentGasPrice("5.55", in: app)
+        goBack(in: app)
+
+        openLastWeeksFridayShift(in: app)
+        let vehicle = app.descendants(matching: .any)["shiftDetailFuelVehicle"]
+        XCTAssertTrue(scrollTo(vehicle, in: app))
+        XCTAssertTrue(waitForLabel(vehicle, toContain: "20 miles per gallon"), "Showed: \(vehicle.label)")
+        XCTAssertFalse(vehicle.label.contains("9 miles per gallon"), "Showed: \(vehicle.label)")
+        XCTAssertFalse(vehicle.label.contains("$5.55"), "Showed: \(vehicle.label)")
+    }
+
+    /// At the largest accessibility size the vehicle row still says the whole
+    /// name and every figure.
+    @MainActor
+    func testTheHistoricalVehicleSurvivesLargeText() throws {
+        let app = launchWithLongHistory(textSize: Self.accessibilityXXXLTextSize)
+        openLastWeeksFridayShift(in: app, maxSwipes: 25)
+
+        let vehicle = app.descendants(matching: .any)["shiftDetailFuelVehicle"]
+        XCTAssertTrue(scrollUntilHittable(vehicle, in: app, maxSwipes: 40))
+        XCTAssertTrue(waitForLabel(vehicle, toContain: "Synthetic Van"), "Showed: \(vehicle.label)")
+        XCTAssertGreaterThanOrEqual(vehicle.frame.height, 44, "The row is not squeezed to fit")
+    }
+
+    // MARK: Long histories
+
+    /// The cents of every `$50.xx` or `$51.xx` amount in the long-history
+    /// fixture's visible older rows. The fixture pays `$50.00` plus the number
+    /// of weeks ago in cents, so newest first means these only ever grow.
+    @MainActor
+    private func visibleWeeklyCents(in app: XCUIApplication) -> [Int] {
+        olderWeekRows(in: app).allElementsBoundByIndex.compactMap { row -> Int? in
+            guard let range = row.label.range(of: #"\$5[01]\.\d\d"#, options: .regularExpression) else {
+                return nil
+            }
+            let text = row.label[range].dropFirst()
+            guard let value = Double(text) else { return nil }
+            return Int((value * 100).rounded())
+        }
+    }
+
+    /// Returns from a shift's detail to Older Weeks, which is where it was
+    /// opened from; ``goBack(in:)`` expects the root screen.
+    @MainActor
+    private func goBackToOlderWeeks(in app: XCUIApplication) {
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        XCTAssertTrue(app.navigationBars["Older Weeks"].waitForExistence(timeout: 5))
+    }
+
+    /// Two and a half years of weeks, newest first all the way down, and the
+    /// oldest shift is reachable, opens, and leaves the list where it was.
+    @MainActor
+    func testALongHistoryIsNewestFirstAndItsOldestShiftIsReachable() throws {
+        let app = launchWithLongHistory()
+        openOlderWeeks(in: app)
+
+        let oldest = olderWeekRows(in: app).matching(NSPredicate(format: "label CONTAINS %@", "$12.34")).firstMatch
+        var seen: [Int] = []
+        var swipes = 0
+        while !(oldest.exists && oldest.isHittable), swipes < 160 {
+            for cents in visibleWeeklyCents(in: app) where !seen.contains(cents) {
+                seen.append(cents)
+            }
+            app.swipeUp(velocity: .fast)
+            swipes += 1
+        }
+        XCTAssertTrue(oldest.isHittable, "The oldest shift, from about two and a half years ago, is reachable")
+        XCTAssertGreaterThan(seen.count, 40, "Most of the fixture's weeks went past: \(seen.count)")
+        XCTAssertEqual(seen, seen.sorted(), "Newest week first, the whole way down: \(seen)")
+
+        // Its week is summarised like any other.
+        let summaries = app.descendants(matching: .any).matching(identifier: "olderWeekSummary")
+        let oldestWeek = summaries.matching(NSPredicate(format: "label CONTAINS %@", "$12.34")).firstMatch
+        XCTAssertTrue(oldestWeek.waitForExistence(timeout: 10), "The oldest week has its own summary")
+
+        oldest.tap()
+        let earnings = app.descendants(matching: .any)["shiftDetailEarnings"]
+        XCTAssertTrue(earnings.waitForExistence(timeout: 5))
+        XCTAssertTrue(earnings.label.contains("$12.34"), "It opens its own detail: \(earnings.label)")
+
+        goBackToOlderWeeks(in: app)
+        XCTAssertTrue(oldest.waitForExistence(timeout: 5))
+        XCTAssertTrue(oldest.isHittable, "Coming back returns to where the driver was, not to the top")
+
+        // And the list carries on from there: back up towards newer weeks.
+        app.swipeDown()
+        XCTAssertTrue(
+            olderWeekRows(in: app).firstMatch.waitForExistence(timeout: 5),
+            "The list is still a list after returning"
+        )
+    }
+
+    /// At the largest accessibility size a shift several weeks down is still
+    /// reachable and opens, and its week's summary is never a tiny cell.
+    @MainActor
+    func testALongHistoryIsNavigableAtTheLargestTextSize() throws {
+        let app = launchWithLongHistory(textSize: Self.accessibilityXXXLTextSize)
+        openOlderWeeks(in: app, maxSwipes: 25)
+
+        let target = olderWeekRows(in: app).matching(NSPredicate(format: "label CONTAINS %@", "$50.06")).firstMatch
+        XCTAssertTrue(scrollUntilHittable(target, in: app, maxSwipes: 80), "A shift a few weeks down is reachable")
+
+        let summaries = app.descendants(matching: .any).matching(identifier: "olderWeekSummary")
+        for index in 0..<min(summaries.count, 3) {
+            let summary = summaries.element(boundBy: index)
+            if summary.exists, summary.isHittable {
+                XCTAssertGreaterThan(summary.frame.height, 44, "A summary is never a tiny cell")
+            }
+        }
+
+        target.tap()
+        // At this size the earnings section is below the fold of the detail
+        // screen, so it is scrolled to rather than expected on arrival.
+        XCTAssertTrue(app.navigationBars.buttons.element(boundBy: 0).waitForExistence(timeout: 5))
+        let earnings = app.descendants(matching: .any)["shiftDetailEarnings"]
+        XCTAssertTrue(scrollTo(earnings, in: app, maxSwipes: 20), "The tapped shift's detail opens")
+        XCTAssertTrue(earnings.label.contains("$50.06"), "Showed: \(earnings.label)")
+        goBackToOlderWeeks(in: app)
+        XCTAssertTrue(target.waitForExistence(timeout: 5), "Returning keeps the place in the list")
     }
 
     /// A week the driver has not worked yet says so, and does not quietly fill
@@ -7751,6 +8042,21 @@ final class DashPilotUITests: XCTestCase {
         let name = exportFileName(in: app)
         XCTAssertTrue(name.contains("DashPilot-History-"), "\(name)")
         XCTAssertTrue(name.contains("2 shifts"), "The seeded history holds two completed shifts: \(name)")
+    }
+
+    /// History's root lists one week and reads only that week from the store,
+    /// and exporting all history still means every completed shift there is.
+    @MainActor
+    func testExportAllHistoryIsNotScopedToTheWeekOnScreen() throws {
+        let app = launchWithOlderWeeks()
+        XCTAssertTrue(waitForCount(rows(in: app), toEqual: 1), "The root lists this week's one shift")
+
+        openExport("exportAllHistoryButton", in: app)
+        let name = exportFileName(in: app)
+        XCTAssertTrue(
+            name.contains("4 shifts"),
+            "The file holds this week's shift and the three before it: \(name)"
+        )
     }
 
     /// A running shift offers no export anywhere: not on the shift panel, and
