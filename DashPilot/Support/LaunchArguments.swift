@@ -237,7 +237,9 @@ nonisolated enum LaunchArgument {
     /// from years ago, coming back and carrying on, and a week whose fuel is
     /// estimated for some shifts and not others. Last week holds three shifts
     /// with measured routes, two of them recording a vehicle and fuel
-    /// assumptions (one at a recorded gas price of zero); the oldest shift
+    /// assumptions (one at a recorded gas price of zero); three weeks ago holds
+    /// one shift whose fuel is estimated in full, so a week with complete
+    /// coverage is reachable too; the oldest shift
     /// records no vehicle at all, and one recorded an economy with no name and
     /// no price. Every time, amount and name is invented. Debug builds only,
     /// and in memory.

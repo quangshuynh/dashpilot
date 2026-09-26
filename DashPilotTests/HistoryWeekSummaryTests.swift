@@ -467,6 +467,58 @@ struct HistoryWeekSummaryTests {
         #expect(activity.spoken.hasPrefix("2 completed shifts."))
     }
 
+    @Test("The shifts and their deliveries read as one line under the figures")
+    func activityReadsAsOneLine() throws {
+        let one = HistoryWeekSummary(
+            week: try fixtureWeek,
+            records: [record(startedAt: at(day: 0, hour: 9), delivered: 1)]
+        )
+        #expect(one.activityStatement == "1 shift · 1 delivery completed")
+
+        let several = HistoryWeekSummary(
+            week: try fixtureWeek,
+            records: [
+                record(startedAt: at(day: 0, hour: 9), delivered: 5, cancelled: 1),
+                record(startedAt: at(day: 2, hour: 9), delivered: 7)
+            ]
+        )
+        #expect(several.activityStatement == "2 shifts · 12 deliveries completed · 1 cancelled")
+
+        let quiet = HistoryWeekSummary(
+            week: try fixtureWeek,
+            records: [record(startedAt: at(day: 0, hour: 9))]
+        )
+        #expect(quiet.activityStatement == "1 shift · No deliveries recorded")
+    }
+
+    @Test("A figure that was never recorded is marked as words, so it is never drawn as a number")
+    func missingFiguresAreMarkedAsWords() throws {
+        let unrecorded = HistoryWeekSummary(
+            week: try fixtureWeek,
+            records: [record(startedAt: at(day: 0, hour: 9))]
+        )
+        #expect(try line(.earnings, in: unrecorded).isFigure == false)
+        #expect(try line(.earnings, in: unrecorded).value == "Not recorded")
+        #expect(try line(.mileage, in: unrecorded).isFigure == false)
+
+        let recorded = HistoryWeekSummary(
+            week: try fixtureWeek,
+            records: [
+                record(
+                    startedAt: at(day: 0, hour: 9),
+                    working: 3_600,
+                    earnings: try money("0.00"),
+                    route: route(miles: 10)
+                )
+            ]
+        )
+        // A recorded zero is a figure, exactly like any other amount.
+        #expect(try line(.earnings, in: recorded).isFigure)
+        #expect(try line(.earnings, in: recorded).value == "$0.00")
+        #expect(try line(.working, in: recorded).isFigure)
+        #expect(try line(.mileage, in: recorded).isFigure)
+    }
+
     @Test("Complete fuel coverage is stated rather than left as the case with no caveat")
     func completeFuelCoverageIsStated() throws {
         let summary = HistoryWeekSummary(
