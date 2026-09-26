@@ -325,7 +325,7 @@ struct HistoryWeekSummaryTests {
         )
 
         let lines = summary.lines(locale: Locale(identifier: "en_US"))
-        #expect(lines.map(\.id) == [.earnings, .working, .mileage, .activity])
+        #expect(lines.map(\.id) == [.earnings, .working, .mileage, .perWorkingHour, .perRecordedMile, .activity])
         #expect(lines.filter { $0.prominence == .primary }.map(\.id) == [.earnings, .working, .mileage])
 
         let spoken = summary.spokenSummary(locale: Locale(identifier: "en_US"))
@@ -670,7 +670,7 @@ struct HistoryWeekSummaryTests {
         #expect(working.lowerBound < mileage.lowerBound)
     }
 
-    @Test("The card never grows past six lines, three of them primary")
+    @Test("The card never grows past eight lines, three of them primary")
     func theCardIsBounded() throws {
         let summary = HistoryWeekSummary(
             week: try fixtureWeek,
@@ -680,7 +680,85 @@ struct HistoryWeekSummaryTests {
         )
 
         let lines = summary.lines(locale: Locale(identifier: "en_US"))
-        #expect(lines.count == 6)
+        #expect(lines.count == 8)
         #expect(lines.filter { $0.prominence == .primary }.count == 3)
+    }
+
+    // MARK: Rates, and recorded kept apart from estimated
+
+    @Test("Each rate is the period's own, over its own paired subset, and never one line over another")
+    func ratesAreThePeriodsOwn() throws {
+        let records = [
+            // Both halves of both rates.
+            record(startedAt: at(day: 0, hour: 9), working: 4 * 3_600, earnings: try money("120.00"), route: route(miles: 40)),
+            // Earnings and time, no route: in the hourly subset only.
+            record(startedAt: at(day: 2, hour: 9), working: 2 * 3_600, earnings: try money("60.00")),
+            // Time and a route, no amount: in neither subset.
+            record(startedAt: at(day: 4, hour: 9), working: 3 * 3_600, route: route(miles: 30))
+        ]
+        let summary = HistoryWeekSummary(week: try fixtureWeek, records: records)
+        let direct = calculator.metrics(of: records, in: try fixtureWeek.period)
+
+        let hourly = try line(.perWorkingHour, in: summary)
+        // $180.00 over the six hours of the two shifts that recorded an amount,
+        // not over the nine hours the week was worked.
+        #expect(hourly.value == "$30.00")
+        #expect(hourly.value == direct.grossPerWorkingHour.amount?.formatted(locale: Locale(identifier: "en_US")))
+        #expect(hourly.detail == "Based on 2 of 3 shifts with both earnings and working time")
+        #expect(hourly.id.basis == .recorded)
+
+        let perMile = try line(.perRecordedMile, in: summary)
+        // $120.00 over the 40 miles of the one shift with both halves. The
+        // headline over every recorded mile, $180.00 over 70, would be $2.57.
+        #expect(perMile.value == "$3.00")
+        #expect(perMile.value != "$2.57")
+        #expect(perMile.detail == "Based on 1 of 3 shifts with both earnings and a measurable route")
+        #expect(perMile.spoken.contains("gross earnings per recorded mile"), "Showed: \(perMile.spoken)")
+    }
+
+    @Test("A rate every shift contributes to says so, and one nobody can is absent rather than zero")
+    func rateCoverageAndAbsence() throws {
+        let complete = HistoryWeekSummary(
+            week: try fixtureWeek,
+            records: [record(startedAt: at(day: 1, hour: 9), working: 4 * 3_600, earnings: try money("100.00"))]
+        )
+        #expect(try line(.perWorkingHour, in: complete).detail == "Every shift this week")
+        #expect(
+            !complete.lines(locale: Locale(identifier: "en_US")).map(\.id).contains(.perRecordedMile),
+            "No route measured, so no per-mile line"
+        )
+
+        let unpaid = HistoryWeekSummary(
+            week: try fixtureWeek,
+            records: [record(startedAt: at(day: 1, hour: 9), working: 4 * 3_600, route: route(miles: 20))]
+        )
+        let ids = unpaid.lines(locale: Locale(identifier: "en_US")).map(\.id)
+        #expect(!ids.contains(.perWorkingHour))
+        #expect(!ids.contains(.perRecordedMile))
+        for line in unpaid.lines(locale: Locale(identifier: "en_US")) {
+            #expect(!line.value.contains("$0.00"), "Missing is never a zero: \(line.id)")
+        }
+    }
+
+    @Test("Only the fuel lines are estimates, and no rate reads from them")
+    func recordedAndEstimatedStayApart() throws {
+        let summary = HistoryWeekSummary(
+            week: try fixtureWeek,
+            records: [
+                try fuelled(record(startedAt: at(day: 0, hour: 9), earnings: try money("100.00"), route: route(miles: 50))),
+                record(startedAt: at(day: 2, hour: 9), earnings: try money("80.00"), route: route(miles: 30))
+            ]
+        )
+        let lines = summary.lines(locale: Locale(identifier: "en_US"))
+        #expect(lines.filter { $0.id.basis == .estimated }.map(\.id) == [.estimatedFuel, .estimatedNet])
+
+        // $180.00 over the week's 6 hours and 80 miles: the rates are gross, and
+        // nothing estimated was taken off either numerator.
+        #expect(try line(.perWorkingHour, in: summary).value == "$30.00")
+        #expect(try line(.perRecordedMile, in: summary).value == "$2.25")
+        // The estimate covers the one fuelled shift and is not scaled to the week:
+        // 50 miles at 25 MPG and $4.00 is $8.00, never $12.80 over 80 miles.
+        #expect(try line(.estimatedFuel, in: summary).value == "$8.00")
+        #expect(try #require(try line(.estimatedFuel, in: summary).detail).contains("1 of 2 shifts"))
     }
 }
