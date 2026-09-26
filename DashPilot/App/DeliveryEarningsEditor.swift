@@ -72,6 +72,7 @@ struct DeliveryEarningsEditor: View {
                         .accessibilityIdentifier("deliveryEarningsExpectedAmount")
 
                         Button("Remove Expected Pay", role: .destructive, action: removeExpected)
+                            .dashFont(.body)
                             .accessibilityIdentifier("removeDeliveryExpectedEarningsButton")
                             .accessibilityLabel(numbered.spokenRemoveExpectedEarningsLabel)
                     } header: {
@@ -94,7 +95,7 @@ struct DeliveryEarningsEditor: View {
                     TextField(placeholder, text: $text)
                         .keyboardType(.decimalPad)
                         .focused($isAmountFocused)
-                        .font(.title2)
+                        .dashFont(.metric)
                         .monospacedDigit()
                         .accessibilityIdentifier("deliveryEarningsAmountField")
                         .accessibilityLabel("Gross earnings for \(numbered.title)")
@@ -105,11 +106,7 @@ struct DeliveryEarningsEditor: View {
                         }
 
                     if let message {
-                        Label(message, systemImage: "exclamationmark.triangle.fill")
-                            .font(.subheadline)
-                            .foregroundStyle(.red)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .accessibilityIdentifier("deliveryEarningsValidationMessage")
+                        DashValidationMessage(message: message, identifier: "deliveryEarningsValidationMessage")
                     }
                 } header: {
                     Text("Gross Earnings")
@@ -151,6 +148,7 @@ struct DeliveryEarningsEditor: View {
                 if hasRecordedEarnings {
                     Section {
                         Button("Remove Earnings", role: .destructive, action: remove)
+                            .dashFont(.body)
                             .frame(maxWidth: .infinity)
                             .accessibilityIdentifier("removeDeliveryEarningsButton")
                             .accessibilityLabel(numbered.spokenRemoveEarningsLabel)

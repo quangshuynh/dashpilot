@@ -39,10 +39,13 @@ a face that fails to load falls back to the system font in the same style and we
 | `supporting` | Caption, Regular | A quieter line under another |
 
 Tabular figures are asked for on the two metric roles only, so a changing value keeps its width
-while ordinary text stays proportional. Roles are applied screen by screen as each is redesigned:
-the shift panel, the delivery card, History, Older Weeks, the completed-shift detail, Settings and
-the vehicle editor use them today. The Live Activity keeps the system face, because the widget
-extension bundles no font. See [The typeface and its license](building.md#the-typeface-and-its-license).
+while ordinary text stays proportional. Every screen the app draws uses the roles: the shift panel
+and delivery card, History and Older Weeks, the completed-shift detail, Period Summaries, Expenses,
+Pickup Places, Export, Settings, and every correction sheet and secondary form. Two surfaces keep
+the system face on purpose: the store-failure screen, which is the system's own unavailable view,
+and the license text in Acknowledgements, which is set monospaced as published. The Live Activity
+keeps the system face too, because the widget extension bundles no font. See
+[The typeface and its license](building.md#the-typeface-and-its-license).
 
 ## Components
 
@@ -60,10 +63,11 @@ extension bundles no font. See [The typeface and its license](building.md#the-ty
 - **`DashNotice`**: every empty, missing and unavailable state: a short title, an explanation, an
   optional symbol, and nothing decorative. An action, where one is useful, is the caller's own
   control after it. One accessibility element.
-- **`DashValidationMessage`**: why something typed could not be saved, as a sentence beside a
-  warning symbol. The symbol is hidden from assistive technologies and the identifier is on the
-  sentence alone, so a UI test's `validationMessage(_:in:)` and a VoiceOver user both meet the
-  sentence and never a glyph called "Warning".
+- **`DashValidationMessage`**: why something typed could not be saved, or why a correction or an
+  export was refused, as a sentence beside a warning symbol. The symbol is hidden from assistive
+  technologies and the identifier is on the sentence alone, so a UI test's `validationMessage(_:in:)`
+  and a VoiceOver user both meet the sentence and never a glyph called "Warning". Every refusal in
+  the app uses it; a bare `Label` with a warning symbol mirrors its identifier onto the glyph.
 
 ## Rules every screen keeps
 
@@ -75,6 +79,11 @@ extension bundles no font. See [The typeface and its license](building.md#the-ty
   signal.
 - **Figures speak their units.** A metric is one accessibility element whose label says the unit
   and the coverage in full, because a listener has no caption in view.
+- **Estimates are set apart from recorded figures.** In words first (a heading or title that says
+  *estimated*), then by place: a section of their own on Period Summaries, an inset surface on a
+  week's card. Never by tint alone.
+- **Explanations are readable.** A sentence that explains a figure or a consequence is set in the
+  body role; the supporting role is for short qualifiers such as coverage.
 - **Corrections are quieter than data.** Controls that rewrite a recorded fact sit below or apart
   from the figures they change, and destructive ones stand in a section of their own.
 - **Growing content goes last.** Lists that grow with a record (deliveries, pauses) come after the

@@ -75,16 +75,21 @@ struct RouteCaptureStatusView: View {
             """
         case .pausedInBackground:
             "Recording starts when DashPilot is open. Open the app to record the rest of this shift."
+        // The paused and parked details say only what the panel above them does
+        // not. The shift's status row already says it is paused, and the parked
+        // notice already says the route stopped and the shift is still running,
+        // so repeating either here gave a driver in a cradle the same fact twice
+        // before the one thing this line adds: what resuming does to the
+        // distance.
         case .shiftPaused:
             """
-            The shift is paused, so nothing is being recorded. Resuming starts a new recording, and \
-            the distance between where you paused and where you resume is not counted.
+            Resuming starts a new recording. The distance between where you paused and where you \
+            resume is not counted.
             """
         case .routeSuspended:
             """
-            You recorded the vehicle as parked, so nothing is being recorded while you are away from \
-            it. Your shift is still running. Resuming starts a new recording, and the distance between \
-            where you parked and where you drive off from is not counted.
+            Resume Driving starts a new recording. The distance between where you parked and where \
+            you drive off from is not counted.
             """
         case .unavailable(.permissionRequired), .unavailable(.permissionDenied):
             "Turn on location access for DashPilot to record this shift's route."

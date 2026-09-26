@@ -85,26 +85,55 @@ struct HistoryWeekSummaryView: View {
                     }
                 }
 
+                // What the recorded facts above come to per hour and per mile,
+                // quieter than the facts themselves. Each line is a period rate
+                // over its own paired subset, never one line divided by another.
+                let rates = lines.filter { $0.id == .perWorkingHour || $0.id == .perRecordedMile }
+                if !rates.isEmpty {
+                    VStack(alignment: .leading, spacing: DashSpacing.md) {
+                        ForEach(rates) { line in
+                            DashValueRow(title: line.title, value: line.value, detail: line.detail)
+                        }
+                    }
+                }
+
                 Divider()
 
-                // Context under the figures, quieter: the work itself, then the
-                // estimates only where the week has them. Each estimate keeps its
-                // coverage under it, because a partial figure without the count
-                // behind it reads as a claim about the whole week.
-                VStack(alignment: .leading, spacing: DashSpacing.md) {
-                    Text(summary.activityStatement)
-                        .dashFont(.body)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+                // The work itself: the shifts, and what their deliveries came
+                // to, each outcome named rather than summed.
+                Text(summary.activityStatement)
+                    .dashFont(.body)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
 
-                    ForEach(lines.filter { $0.id == .estimatedFuel || $0.id == .estimatedNet }) { line in
-                        DashValueRow(
-                            title: line.title,
-                            value: line.value,
-                            detail: line.detail,
-                            isFigure: line.isFigure
-                        )
+                // The estimates, only where the week has them, set apart from
+                // every recorded figure above: in a surface of their own, under
+                // a heading that says what they are, so the difference never
+                // rests on position or tint alone. Each keeps its coverage under
+                // it, because a partial figure without the count behind it
+                // reads as a claim about the whole week.
+                let estimates = lines.filter { $0.id.basis == .estimated }
+                if !estimates.isEmpty {
+                    VStack(alignment: .leading, spacing: DashSpacing.md) {
+                        Label {
+                            Text("Estimated from fuel assumptions")
+                                .fixedSize(horizontal: false, vertical: true)
+                        } icon: {
+                            Image(systemName: "fuelpump")
+                        }
+                        .dashFont(.metricLabel)
+                        .foregroundStyle(.secondary)
+
+                        ForEach(estimates) { line in
+                            DashValueRow(
+                                title: line.title,
+                                value: line.value,
+                                detail: line.detail,
+                                isFigure: line.isFigure
+                            )
+                        }
                     }
+                    .dashInsetSurface()
                 }
             } else {
                 Text("Working out this week…")

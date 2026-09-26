@@ -77,7 +77,7 @@ struct RootView: View {
                         // so the section does not silently vanish.
                         if activeShift.isPaused {
                             Text("Deliveries are not recorded while the shift is paused. Resume the shift to start one.")
-                                .font(.subheadline)
+                                .dashFont(.body)
                                 .foregroundStyle(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
                                 .accessibilityIdentifier("pausedDeliveryNotice")

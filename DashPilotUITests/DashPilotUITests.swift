@@ -1436,6 +1436,39 @@ final class DashPilotUITests: XCTestCase {
         )
     }
 
+    /// Editing a shift of the current week updates the week's figures on the
+    /// root screen when the driver comes back from the shift's detail. The root
+    /// screen is popped back to, never relaunched or rebuilt, so this is the
+    /// summary following the store rather than a fresh screen reading it.
+    @MainActor
+    func testEditingACurrentWeekShiftRefreshesTheWeek() throws {
+        let app = launchWithOlderWeeks()
+
+        let summary = currentWeekSummary(in: app)
+        XCTAssertTrue(scrollTo(summary, in: app, maxSwipes: 12))
+        XCTAssertTrue(waitForLabel(summary, toContain: "Recorded gross earnings, $70.00"), "Showed: \(summary.label)")
+
+        openFirstShift(in: app)
+        let edit = app.buttons["editShiftEarningsButton"]
+        XCTAssertTrue(scrollTo(edit, in: app))
+        edit.tap()
+        let field = app.textFields["earningsAmountField"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        clear(field, in: app)
+        type("90", into: app)
+        app.buttons["saveEarningsButton"].tap()
+        let earnings = app.descendants(matching: .any)["shiftDetailEarnings"]
+        XCTAssertTrue(waitForLabel(earnings, toContain: "$90.00"), "Showed: \(earnings.label)")
+
+        goBack(in: app)
+        XCTAssertTrue(scrollTo(summary, in: app, maxSwipes: 12))
+        XCTAssertTrue(
+            waitForLabel(summary, toContain: "Recorded gross earnings, $90.00"),
+            "The week is worked out again from what the store now says: \(summary.label)"
+        )
+        XCTAssertFalse(summary.label.contains("$70.00"), "The previous figure is gone: \(summary.label)")
+    }
+
     /// A week of recorded work leads with what it paid, then how long and how
     /// far, then its shifts and deliveries, and the shifts still open.
     @MainActor
@@ -2333,6 +2366,13 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertTrue(
             waitForLabel(status, toContain: "Route recording stopped while parked"),
             "Capture status: \(status.label)"
+        )
+        // It adds what the notice above it does not, what driving again does to
+        // the distance, and does not repeat what the notice already says.
+        XCTAssertTrue(status.label.contains("is not counted"), "Capture status: \(status.label)")
+        XCTAssertFalse(
+            status.label.contains("still running"),
+            "The parked notice says the shift is running; the capture line does not repeat it: \(status.label)"
         )
 
         // And the panel says it again where the driver is looking, with the
@@ -6635,6 +6675,34 @@ final class DashPilotUITests: XCTestCase {
         )
     }
 
+    /// At the largest accessibility text size the period's figures stack
+    /// rather than truncate: the headline, a rate, and the estimated fuel are
+    /// each reachable whole, and each still says what it is.
+    @MainActor
+    func testThePeriodSummarySurvivesTheLargestTextSize() throws {
+        let app = launchWithPeriodSummary(atTextSize: Self.accessibilityXXXLTextSize)
+        // At this size the link sits below the running panel, so it is scrolled
+        // to rather than assumed to be on screen.
+        let link = app.buttons["periodSummaryLink"]
+        XCTAssertTrue(scrollUntilHittable(link, in: app, maxSwipes: 25), "History offers a way into the summaries")
+        link.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["periodTitle"].waitForExistence(timeout: 10))
+
+        let earnings = app.descendants(matching: .any)["periodEarnings"]
+        XCTAssertTrue(scrollUntilHittable(earnings, in: app, maxSwipes: 25), "The headline is reachable")
+        XCTAssertTrue(waitForLabel(earnings, toContain: "Recorded gross earnings"), "Showed: \(earnings.label)")
+        XCTAssertGreaterThan(earnings.frame.height, 44, "The headline is never a clipped single line")
+        attachScreenshot("period-summary-xxxl")
+
+        let rate = app.descendants(matching: .any)["periodWorkingHourRate"]
+        XCTAssertTrue(scrollUntilHittable(rate, in: app, maxSwipes: 25), "A rate is reachable")
+        XCTAssertTrue(rate.label.contains("gross earnings per working hour"), "Showed: \(rate.label)")
+
+        let fuel = app.descendants(matching: .any)["periodEstimatedFuel"]
+        XCTAssertTrue(scrollUntilHittable(fuel, in: app, maxSwipes: 40), "The estimate is reachable")
+        XCTAssertTrue(fuel.label.contains("1 of 2 completed shifts"), "Its coverage survives: \(fuel.label)")
+    }
+
     /// The estimated net is worked out over the shifts that record both halves,
     /// says so, and is kept apart from the net after recorded expenses.
     @MainActor
@@ -8261,9 +8329,12 @@ final class DashPilotUITests: XCTestCase {
     /// - **earlier this week**: a five-hour shift paying `$120.00` with a
     ///   partial route and two more deliveries, waiting 8 and 20 minutes.
     @MainActor
-    private func launchWithPeriodSummary() -> XCUIApplication {
+    private func launchWithPeriodSummary(atTextSize category: String? = nil) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments.append(Self.seededPeriodSummaryArgument)
+        if let category {
+            app.launchArguments += ["-UIPreferredContentSizeCategoryName", category]
+        }
         launchInPortrait(app)
         return app
     }
@@ -8701,9 +8772,11 @@ final class DashPilotUITests: XCTestCase {
 
         app.buttons["dismissExportButton"].tap()
         // The export control is at the bottom of the list, so dismissing leaves
-        // the screen scrolled past the picker at the top of it.
+        // the screen scrolled past the picker at the top of it. The summary is
+        // longer than six swipes since its figures moved to the design system's
+        // larger roles, so this journey asks for more of them.
         let picker = app.segmentedControls["periodUnitPicker"]
-        XCTAssertTrue(scrollToTop(reaching: picker, in: app), "The summary is back")
+        XCTAssertTrue(scrollToTop(reaching: picker, in: app, swipes: 12), "The summary is back")
 
         selectPeriod("Week", in: app)
         openExport("exportPeriodButton", in: app)

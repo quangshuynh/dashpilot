@@ -62,6 +62,7 @@ struct PickupPlaceRenameView: View {
     private var nameSection: some View {
         Section {
             TextField("Pickup place name", text: $text)
+                .dashFont(.body)
                 .focused($isNameFocused)
                 .textInputAutocapitalization(.words)
                 .autocorrectionDisabled()
@@ -80,11 +81,7 @@ struct PickupPlaceRenameView: View {
                 }
 
             if let message {
-                Label(message, systemImage: "exclamationmark.triangle.fill")
-                    .font(.subheadline)
-                    .foregroundStyle(.red)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityIdentifier("pickupPlaceRenameMessage")
+                DashValidationMessage(message: message, identifier: "pickupPlaceRenameMessage")
             }
         } header: {
             Text("Name")

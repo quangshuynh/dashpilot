@@ -82,6 +82,7 @@ describing route capture:
 | --- | --- |
 | Location tracking active | Positions are being recorded, and go on being recorded in another app or behind a locked screen |
 | Route recording stopped | The driver paused the shift, so nothing is being recorded until they resume |
+| Route recording stopped while parked | The driver recorded the vehicle as parked; the shift is still running |
 | Route recording paused | The shift began with DashPilot off screen, so there is nothing recording yet |
 | Permission required | Location permission has not been granted, so nothing is being recorded |
 | Unavailable | Location Services is off, access is restricted, or the store refused a write |
@@ -89,6 +90,11 @@ describing route capture:
 The active line carries a sentence of its own rather than a green label and silence. Recording
 continuing off screen is the useful half; that iOS can still stop it, and that it does not restart
 on its own once DashPilot is closed, is the half a driver has to know before trusting the total.
+
+While paused or parked, the line under the state says only what the rest of the panel does not:
+that resuming starts a new recording, and that the distance across the break is not counted. The
+shift's status row already says it is paused, and the parked notice already says the route stopped
+while the shift keeps running, so neither is repeated there.
 
 Losing location never ends a shift. Capture becomes unavailable, the shift keeps running, and the
 driver decides when it ends.
@@ -517,6 +523,10 @@ Recorded earnings
 21 hr, 34 min        286.4 mi
 Working time         Recorded miles
 6 of 6 shifts        6 of 6 shifts measured
+Per working hour                    $22.37
+Every shift this week
+Per recorded mile                    $1.68
+Every shift this week
 ------------------------------------------
 6 shifts · 31 deliveries completed · 2 cancelled
 
@@ -581,8 +591,10 @@ absent rather than shown empty.
 Each week on that screen opens with a summary of every shift in it, above the shifts themselves, so
 that the question a driver scrolls back with, *what did this week look like?*, is answered before
 they start opening rows. The week's recorded earnings lead, working time and recorded miles share a
-row under them (a column where the row cannot hold them, and always at accessibility sizes), and the
-rest sit under a divider, quieter:
+row under them (a column where the row cannot hold them, and always at accessibility sizes), the two
+rates follow, quieter, and the rest sit under a divider. The estimates are last, in a surface of
+their own under the heading `Estimated from fuel assumptions`, so they never read as recorded
+figures on position or tint alone:
 
 ```text
 Sep 14 - 20, 2026
@@ -594,12 +606,18 @@ Recorded earnings
 6 hr                 89.4 mi
 Working time         Recorded miles
 3 of 3 shifts        3 of 3 shifts measured
+Per working hour                    $30.83
+Every shift this week
+Per recorded mile                    $2.07
+Every shift this week
 -------------------------------------------
 3 shifts · 5 deliveries completed · 1 cancelled
-Estimated fuel                        $4.77
-2 of 3 shifts · 59.6 of 89.4 recorded miles
-Estimated net after fuel            $120.23
-2 of 3 shifts · before recorded expenses
+┌ Estimated from fuel assumptions ─────────┐
+│ Estimated fuel                     $4.77 │
+│ 2 of 3 shifts · 59.6 of 89.4 recorded mi │
+│ Estimated net after fuel         $120.23 │
+│ 2 of 3 shifts · before recorded expenses │
+└──────────────────────────────────────────┘
 ```
 
 The heading of each week is drawn in the primary colour and a heavier weight than an ordinary
@@ -617,6 +635,15 @@ routes measured. None of those is necessarily every shift, so each line that can
 sources says how many shifts are behind it. `4 of 5 shifts` under a subtotal is the difference
 between a subtotal and a claim about the week.
 
+**The rates are the period's own.** Per working hour and per recorded mile are the period summary's
+gross rates over the week: the amounts of the shifts carrying **both** halves of a rate, divided by
+those same shifts' working time or recorded miles. Neither is the headline earnings divided by the
+headline hours or miles, because those can come from different shifts. Each says `Every shift this
+week` when every shift contributed, and otherwise the subset it was worked out over (`Based on 2 of
+3 shifts with both earnings and a measurable route`). A rate no shift could contribute to is absent
+rather than `$0.00`, because the lines above already say which half is missing. Both are gross:
+nothing estimated is subtracted from either numerator.
+
 **Fuel is estimated only over the shifts that recorded enough to say**, and says so in two units:
 how many of the week's shifts, and how many of its recorded miles. It is never scaled up to the whole
 week, and each shift is estimated under the economy and price **it** recorded, never today's. The
@@ -631,8 +658,9 @@ past; the shift's own detail screen is where an absent estimate is explained.
 after recorded expenses (an expense belongs to a date rather than to a shift, and one net on a small
 card cannot be mistaken for the other), and any vehicle. A week can hold shifts worked in different
 vehicles, and a vehicle's name is a label a shift recorded rather than an identity, so the card does
-not count or merge names. Each shift's detail says what that shift recorded. The rates, delivery
-active time and pickup waits are on the period summary, one tap from the root screen.
+not count or merge names. Each shift's detail says what that shift recorded. Delivery active time and
+its rate, pickup waits and the comparison with the week before are on the period summary, one tap
+from the root screen.
 
 **Missing is never a zero.** A week where nobody recorded an amount says `Not recorded`, not `$0.00`;
 a week whose routes measured nothing says `Not measured`, not `0.0 mi`. A recorded gas price of zero

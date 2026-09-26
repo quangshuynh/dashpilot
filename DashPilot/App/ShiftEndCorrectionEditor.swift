@@ -149,24 +149,14 @@ struct ShiftEndCorrectionEditor: View {
             if let refusal {
                 let sentence = ShiftEndCorrectionError.invalidCorrection(refusal).errorDescription
                     ?? "That time cannot be recorded as this shift's end."
-                Label(sentence, systemImage: "exclamationmark.triangle.fill")
-                    .font(.subheadline)
-                    .foregroundStyle(.red)
-                    .fixedSize(horizontal: false, vertical: true)
-                    // One element carrying the sentence, rather than a glyph
-                    // called "Warning" beside it: the icon is decoration, the
-                    // refusal is the whole of what has to be read out, and the
-                    // colour is never the only thing carrying it.
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel(sentence)
-                    .accessibilityIdentifier("shiftEndCorrectionRefusal")
+                DashValidationMessage(message: sentence, identifier: "shiftEndCorrectionRefusal")
             } else {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(durationStatement)
-                        .font(.headline)
+                        .dashFont(.emphasis)
                         .monospacedDigit()
                     Text(metricsStatement)
-                        .font(.caption)
+                        .dashFont(.supporting)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -178,13 +168,7 @@ struct ShiftEndCorrectionEditor: View {
             }
 
             if let saveError {
-                Label(saveError, systemImage: "exclamationmark.triangle.fill")
-                    .font(.footnote)
-                    .foregroundStyle(.red)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel(saveError)
-                    .accessibilityIdentifier("shiftEndCorrectionSaveError")
+                DashValidationMessage(message: saveError, identifier: "shiftEndCorrectionSaveError")
             }
         } header: {
             Text("Corrected Shift")
@@ -210,7 +194,7 @@ struct ShiftEndCorrectionEditor: View {
     private var routeStatement: some View {
         if let sentence = routeSentence {
             Label(sentence, systemImage: departingPositionCount > 0 ? "exclamationmark.triangle.fill" : "info.circle")
-                .font(.footnote)
+                .dashFont(.body)
                 .foregroundStyle(departingPositionCount > 0 ? .red : .secondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityElement(children: .ignore)

@@ -35,6 +35,8 @@ struct ExpenseListView: View {
                     editing = .new
                 } label: {
                     Label("Add Expense", systemImage: "plus")
+                        .dashFont(.emphasis)
+                        .frame(minHeight: 44)
                 }
                 .accessibilityLabel("Add an expense")
                 .accessibilityIdentifier("addExpenseButton")
@@ -50,9 +52,12 @@ struct ExpenseListView: View {
 
             if expenses.isEmpty {
                 Section {
-                    Text("No expenses recorded yet.")
-                        .foregroundStyle(.secondary)
-                        .accessibilityIdentifier("expensesEmptyState")
+                    DashNotice(
+                        title: "No expenses recorded yet",
+                        message: "A cost you add appears here, newest first.",
+                        symbol: "creditcard"
+                    )
+                    .accessibilityIdentifier("expensesEmptyState")
                 }
             } else {
                 Section {
@@ -158,19 +163,19 @@ private struct ExpenseRow: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: DashSpacing.sm) {
             heading
             Text(expense.occurredAt, format: .dateTime.weekday(.abbreviated).month().day().hour().minute())
-                .font(.subheadline)
+                .dashFont(.body)
                 .foregroundStyle(.secondary)
             if let note = expense.note {
                 Text(note)
-                    .font(.caption)
+                    .dashFont(.supporting)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, DashSpacing.sm)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityLabel)
     }
@@ -181,9 +186,9 @@ private struct ExpenseRow: View {
     @ViewBuilder
     private var heading: some View {
         let category = Label(expense.category.title, systemImage: expense.category.systemImage)
-            .font(.headline)
+            .dashFont(.emphasis)
         let amount = Text(expense.amount.formatted(locale: locale))
-            .font(.headline)
+            .dashFont(.emphasis)
             .monospacedDigit()
 
         if dynamicTypeSize.isAccessibilitySize {
@@ -192,7 +197,7 @@ private struct ExpenseRow: View {
         } else {
             HStack(alignment: .firstTextBaseline) {
                 category
-                Spacer(minLength: 8)
+                Spacer(minLength: DashSpacing.md)
                 amount
             }
         }

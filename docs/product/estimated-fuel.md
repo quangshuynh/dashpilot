@@ -341,8 +341,10 @@ more profitable than another.
 
 ### In History
 
-Each week under **View Older Weeks** carries the same two figures above its shifts, with the same
-coverage, and only when the week has them. The fuel line states both coverages (`2 of 3 shifts ·
+Each week in History carries the same two figures above its shifts, with the same coverage, and
+only when the week has them. They sit last on the card, in a surface of their own headed `Estimated
+from fuel assumptions`, below every recorded figure and both gross rates, and no rate on the card
+reads from them. The fuel line states both coverages (`2 of 3 shifts ·
 59.6 of 89.4 recorded miles`) and the net line is labelled as coming before recorded expenses; a
 partial route in the week makes the fuel a floor and the net a ceiling, and the card says so. Each
 shift is estimated under the assumptions **it** recorded, so a week is never restated by today's gas

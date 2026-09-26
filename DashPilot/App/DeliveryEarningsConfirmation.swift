@@ -93,7 +93,7 @@ struct DeliveryEarningsConfirmation: View {
                     TextField(placeholder, text: $text)
                         .keyboardType(.decimalPad)
                         .focused($isAmountFocused)
-                        .font(.title2)
+                        .dashFont(.metric)
                         .monospacedDigit()
                         .accessibilityIdentifier("confirmEarningsAmountField")
                         .accessibilityLabel("Gross earnings for \(numbered.title)")
@@ -102,11 +102,7 @@ struct DeliveryEarningsConfirmation: View {
                         }
 
                     if let message {
-                        Label(message, systemImage: "exclamationmark.triangle.fill")
-                            .font(.subheadline)
-                            .foregroundStyle(.red)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .accessibilityIdentifier("confirmEarningsValidationMessage")
+                        DashValidationMessage(message: message, identifier: "confirmEarningsValidationMessage")
                     }
 
                     Button(action: record) {

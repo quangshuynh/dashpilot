@@ -127,9 +127,9 @@ struct CustomRangeSheet: View {
             if let draftPeriod {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(draftPeriod.title(asOf: latestSelectableDay, calendar: calendar, locale: locale))
-                        .font(.headline)
+                        .dashFont(.emphasis)
                     Text(draftPeriod.rangeStatement(calendar: calendar, locale: locale))
-                        .font(.caption)
+                        .dashFont(.supporting)
                         .foregroundStyle(.secondary)
                 }
                 .accessibilityElement(children: .combine)
@@ -138,14 +138,10 @@ struct CustomRangeSheet: View {
                 )
                 .accessibilityIdentifier("customRangeSummary")
             } else {
-                Label(
-                    "The end date is before the start date. Choose an end date on or after the start date.",
-                    systemImage: "exclamationmark.triangle.fill"
+                DashValidationMessage(
+                    message: "The end date is before the start date. Choose an end date on or after the start date.",
+                    identifier: "customRangeInvalid"
                 )
-                .font(.subheadline)
-                .foregroundStyle(.red)
-                .fixedSize(horizontal: false, vertical: true)
-                .accessibilityIdentifier("customRangeInvalid")
             }
         } header: {
             Text("Selection")
