@@ -1436,6 +1436,39 @@ final class DashPilotUITests: XCTestCase {
         )
     }
 
+    /// Editing a shift of the current week updates the week's figures on the
+    /// root screen when the driver comes back from the shift's detail. The root
+    /// screen is popped back to, never relaunched or rebuilt, so this is the
+    /// summary following the store rather than a fresh screen reading it.
+    @MainActor
+    func testEditingACurrentWeekShiftRefreshesTheWeek() throws {
+        let app = launchWithOlderWeeks()
+
+        let summary = currentWeekSummary(in: app)
+        XCTAssertTrue(scrollTo(summary, in: app, maxSwipes: 12))
+        XCTAssertTrue(waitForLabel(summary, toContain: "Recorded gross earnings, $70.00"), "Showed: \(summary.label)")
+
+        openFirstShift(in: app)
+        let edit = app.buttons["editShiftEarningsButton"]
+        XCTAssertTrue(scrollTo(edit, in: app))
+        edit.tap()
+        let field = app.textFields["earningsAmountField"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        clear(field, in: app)
+        type("90", into: app)
+        app.buttons["saveEarningsButton"].tap()
+        let earnings = app.descendants(matching: .any)["shiftDetailEarnings"]
+        XCTAssertTrue(waitForLabel(earnings, toContain: "$90.00"), "Showed: \(earnings.label)")
+
+        goBack(in: app)
+        XCTAssertTrue(scrollTo(summary, in: app, maxSwipes: 12))
+        XCTAssertTrue(
+            waitForLabel(summary, toContain: "Recorded gross earnings, $90.00"),
+            "The week is worked out again from what the store now says: \(summary.label)"
+        )
+        XCTAssertFalse(summary.label.contains("$70.00"), "The previous figure is gone: \(summary.label)")
+    }
+
     /// A week of recorded work leads with what it paid, then how long and how
     /// far, then its shifts and deliveries, and the shifts still open.
     @MainActor
