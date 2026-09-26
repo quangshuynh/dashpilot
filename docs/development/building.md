@@ -58,6 +58,35 @@ xcrun simctl list devices available
 Adding `clean` before the action (`xcodebuild clean test ...`) is what the project treats as the
 release-gate build, because it catches the integration failures an incremental build hides.
 
+## The typeface and its license
+
+The app bundles one custom typeface, **Manrope**, in four weights (Regular, Medium, SemiBold and
+Bold), in `DashPilot/Resources/Fonts`. That folder belongs to the app target only; the
+`DashPilotWidgets` extension bundles no font, so the Live Activity uses the system face. The files
+are declared in the app's `Info.plist` under `UIAppFonts` and registered at launch, and every text
+role falls back to the system font in the same style and weight if a face fails to load. Nothing is
+downloaded.
+
+Two licenses apply, and they are different:
+
+| What | License | Where |
+| --- | --- | --- |
+| DashPilot's own source code | MIT | [`LICENSE`](https://github.com/quangshuynh/dashpilot/blob/main/LICENSE) |
+| The Manrope font files | SIL Open Font License 1.1 | `DashPilot/Resources/Fonts/OFL.txt`, beside the fonts |
+
+`OFL.txt` is the license text Google Fonts publishes for Manrope, committed unchanged. It sits in the
+fonts folder, so it is copied into the app bundle with them, and Settings → About → Acknowledgements
+shows it in full. The fonts are bundled unmodified and are not sold on their own.
+`LICENSE-Manrope.md` in the same folder records where the files and the license text came from.
+When the fonts are updated, bring the matching `OFL.txt` in beside them unchanged.
+
+`FontBundleInvariantTests` pins what a font change must not disturb: only Manrope is bundled, every
+`UIAppFonts` entry ends in `.ttf`, the license is in the bundle, the widget extension is still
+embedded and carries no font, and `NSSupportsLiveActivities`, the location background mode and the
+When In Use usage description are all still declared. `ProjectFileInvariantTests` reads the project
+file for two things the bundle cannot show: no file reference is an absolute path on one machine,
+and no font folder is a member of the widget target.
+
 ## Signing
 
 The app target carries a development team for local device runs. Simulator builds do not need it,
