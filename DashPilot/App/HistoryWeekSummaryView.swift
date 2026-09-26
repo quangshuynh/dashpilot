@@ -63,7 +63,11 @@ struct HistoryWeekSummaryView: View {
             }
         }
         .padding(.vertical, 4)
-        .task(id: week.id) { await derive() }
+        // Keyed on the week **and** what its shifts record, so editing one of
+        // them works this week out again and nothing else. Reading the
+        // revision here is also what makes this body observe those facts. The
+        // previous figures stay on screen until the new ones arrive.
+        .task(id: SummaryKey(week: week.id, revision: HistoryWeekRevision(shifts))) { await derive() }
         // One element, so a listener hears the week as a week rather than as a
         // dozen unrelated fragments, and hears each unit and each coverage said
         // in full.
@@ -151,4 +155,11 @@ struct HistoryWeekSummaryView: View {
         guard !Task.isCancelled else { return }
         summary = derived
     }
+}
+
+/// What a week's summary is worked out for: which week, and the revision of
+/// the facts its shifts record.
+private struct SummaryKey: Equatable {
+    let week: Date
+    let revision: HistoryWeekRevision
 }
