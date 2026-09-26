@@ -29,7 +29,8 @@
 	<!--
 	  UIAppFonts: Manrope, the one typeface DashPilot's text roles are set in,
 	  bundled with the app and registered at launch; nothing is downloaded.
-	  SIL Open Font License 1.1, see Resources/Fonts/LICENSE-Manrope.md.
+	  SIL Open Font License 1.1: Resources/Fonts/OFL.txt, bundled beside the
+	  fonts, with its provenance in Resources/Fonts/LICENSE-Manrope.md.
 	  DashTypography falls back to the system font if a face fails to load.
 	-->
 	<key>UIAppFonts</key>

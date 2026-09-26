@@ -7727,6 +7727,31 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertTrue(scrollTo(row, in: app, maxSwipes: 20), "And in the list below it")
     }
 
+    /// Settings says which licenses DashPilot ships under, and shows the
+    /// typeface's license in full from the copy bundled beside the fonts.
+    @MainActor
+    func testAcknowledgementsNameBothLicensesAndShowTheFontLicense() throws {
+        let app = launchWithEmptyStore()
+        openSettings(in: app)
+
+        let link = app.buttons["acknowledgementsLink"]
+        XCTAssertTrue(scrollUntilHittable(link, in: app), "About is at the foot of Settings")
+        link.tap()
+        XCTAssertTrue(app.navigationBars["Acknowledgements"].waitForExistence(timeout: 5))
+
+        XCTAssertTrue(
+            elements(containing: "MIT License", in: app).firstMatch.waitForExistence(timeout: 5),
+            "DashPilot's own code is MIT"
+        )
+        let manrope = app.descendants(matching: .any)["manropeAcknowledgement"]
+        XCTAssertTrue(manrope.exists)
+        XCTAssertTrue(manrope.label.contains("SIL Open Font License"), "Showed: \(manrope.label)")
+
+        let license = app.descendants(matching: .any)["manropeLicenseText"]
+        XCTAssertTrue(scrollTo(license, in: app), "The full license text is shown, read from the bundle")
+        XCTAssertTrue(license.label.contains("SIL OPEN FONT LICENSE Version 1.1"), "Showed the license text")
+    }
+
     // MARK: Settings helpers
 
     @MainActor
