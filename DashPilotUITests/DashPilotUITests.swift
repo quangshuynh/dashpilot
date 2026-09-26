@@ -1450,6 +1450,9 @@ final class DashPilotUITests: XCTestCase {
                 "The week is one spoken sentence and says \(expected): \(summary.label)"
             )
         }
+        // One more swipe so the review screenshot shows the whole card and the
+        // rows under it, rather than the moment the card became hittable.
+        app.swipeUp()
         attachScreenshot("history-current-week")
 
         openFirstShift(in: app)
