@@ -529,7 +529,7 @@ struct WorkingTimeLabel: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(duration.formatted(.time(pattern: .hourMinuteSecond)))
-                .font(.system(.largeTitle, design: .rounded, weight: .semibold))
+                .font(DashTypography.metricHero)
                 .monospacedDigit()
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
