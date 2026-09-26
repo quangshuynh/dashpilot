@@ -75,5 +75,66 @@ struct DashStatusLabel: View {
                 .accessibilityHidden(true)
         }
         .dashFont(.status)
+        // One element: a listener hears the state once, and nothing can
+        // address the symbol apart from the words it belongs to.
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// One figure and what it is: the value above, its name under it, and an
+/// optional qualifier under that.
+///
+/// The value is never a placeholder. Where a figure does not exist the caller
+/// passes the sentence that says so, which is drawn in the quieter body role
+/// rather than the metric one, so an absence never reads with the weight of a
+/// number.
+struct DashMetric: View {
+    let value: String
+    let label: String
+    var detail: String?
+    /// `false` where ``value`` is a sentence standing in for a missing figure.
+    var isFigure = true
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: DashSpacing.xs) {
+            Text(value)
+                .dashFont(isFigure ? .metric : .body)
+                .foregroundStyle(isFigure ? .primary : .secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Text(label)
+                .dashFont(.metricLabel)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            if let detail {
+                Text(detail)
+                    .dashFont(.supporting)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// A row of figures that becomes a column when it cannot hold them.
+///
+/// At accessibility sizes it is always a column, because three figures at the
+/// largest sizes truncate each other (`$2 7....` was the measured result). At
+/// ordinary sizes it is a row where the row fits and a column where it does
+/// not, so a long localized figure never squeezes its neighbours.
+struct DashMetricRow<Content: View>: View {
+    @ViewBuilder let content: Content
+
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    var body: some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: DashSpacing.lg) { content }
+        } else {
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .top, spacing: DashSpacing.lg) { content }
+                VStack(alignment: .leading, spacing: DashSpacing.lg) { content }
+            }
+        }
     }
 }

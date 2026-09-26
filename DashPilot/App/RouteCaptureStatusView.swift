@@ -21,12 +21,12 @@ struct RouteCaptureStatusView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             Label(title, systemImage: symbol)
-                .font(.subheadline.weight(.medium))
+                .dashFont(.status)
                 .foregroundStyle(tint)
 
             if let detail {
                 Text(detail)
-                    .font(.caption)
+                    .dashFont(.supporting)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
