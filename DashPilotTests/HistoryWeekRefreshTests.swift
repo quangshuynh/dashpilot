@@ -140,6 +140,60 @@ struct HistoryWeekRefreshTests {
         #expect(after.metrics.recordedGrossEarnings == Money(minorUnits: 8_000))
     }
 
+    @Test("Correcting a completion to a cancellation moves the week's delivery outcomes")
+    func completionCorrectedToCancellation() throws {
+        // Built through the shipping services rather than by hand, so the
+        // correction is applied to a store the app really produces.
+        let shifts = ShiftService(context: context)
+        let deliveries = DeliveryService(context: context)
+        let worked = try shifts.startShift(at: at(day: 2, hour: 10))
+        let offer = try deliveries.startOffer(deliveryCount: 2, at: at(day: 2, hour: 10.1))
+        for (index, delivery) in offer.deliveriesInOrder.enumerated() {
+            let step = Double(index) * 0.05
+            try deliveries.markArrivedAtPickup(delivery, at: at(day: 2, hour: 10.2 + step))
+            try deliveries.markPickedUp(delivery, at: at(day: 2, hour: 10.4 + step))
+            try deliveries.markDelivered(delivery, at: at(day: 2, hour: 10.8 + step))
+        }
+        try shifts.endActiveShift(at: at(day: 2, hour: 12))
+
+        let beforeSummary = try summary(of: [worked]).metrics.deliverySummary
+        #expect(beforeSummary.completed == 2)
+        #expect(beforeSummary.cancelled == 0)
+        let before = HistoryWeekRevision([worked])
+
+        try deliveries.correctCompletionToCancellation(try #require(offer.deliveriesInOrder.last))
+
+        #expect(HistoryWeekRevision([worked]) != before)
+        let after = try summary(of: [worked])
+        #expect(after.metrics.deliverySummary.completed == 1)
+        #expect(after.metrics.deliverySummary.cancelled == 1)
+        #expect(after.activityStatement.contains("1 cancelled"), "Showed: \(after.activityStatement)")
+    }
+
+    @Test("A running shift's route batch moves no completed week's revision")
+    func runningRouteBatchIsNotAnEdit() throws {
+        let completed = try shift(day: 0, amount: 8_000)
+        let before = HistoryWeekRevision([completed])
+
+        // What a save during a running shift looks like: positions added to a
+        // shift that is not in any completed week's list.
+        let running = try ShiftService(context: context).startShift(at: at(day: 1, hour: 9))
+        let session = UUID()
+        for step in 0..<30 {
+            context.insert(RouteSample(
+                shift: running,
+                timestamp: at(day: 1, hour: 9).addingTimeInterval(Double(step) * 5),
+                latitude: 40 + Double(step) * 50 / 111_320,
+                longitude: -75,
+                horizontalAccuracy: 8,
+                captureSessionID: session
+            ))
+        }
+        try context.save()
+
+        #expect(HistoryWeekRevision([completed]) == before)
+    }
+
     @Test("An edit to a shift in another week leaves this week's revision alone")
     func unrelatedWeekIsUntouched() throws {
         let thisWeek = try shift(day: 1, amount: 8_000)
