@@ -361,13 +361,14 @@ private struct StartShiftPanel: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("No Shift in Progress")
-                .font(.headline)
-            Text("Start a shift when you begin driving. DashPilot records its start and end times on this device.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-            nextVehicleRow
+        VStack(alignment: .leading, spacing: DashSpacing.xl) {
+            // The state, said once and quietly: there is nothing running.
+            DashStatusLabel(title: "No shift in progress", symbol: "circle.dashed", tint: .secondary)
+
+            // What starting now would record, as the block the button sits
+            // under rather than a caption beside it.
+            nextVehicleBlock
+
             Button(action: start) {
                 Text("Start Shift")
                     .frame(maxWidth: .infinity)
@@ -375,25 +376,39 @@ private struct StartShiftPanel: View {
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
             .accessibilityIdentifier("startShiftButton")
+
+            Text("DashPilot records a shift's start and end times on this device.")
+                .dashFont(.supporting)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(.vertical, 8)
+        .padding(.vertical, DashSpacing.md)
     }
 
-    /// The vehicle the shift about to be started will record, in the running
-    /// shift's own visual language so the two read as the same fact before and
-    /// after the tap. A separate element from the button, so `Start Shift`
-    /// stays the plain action it was.
-    private var nextVehicleRow: some View {
+    /// The vehicle the shift about to be started will record.
+    ///
+    /// Titled for what it is, `Next shift records`, so the name under it reads
+    /// as the assumption about to be copied rather than as a setting. With
+    /// nothing selected it says so in the quieter role and blocks nothing: a
+    /// shift started with nothing to copy records no assumptions, as it always
+    /// has. A separate element from the button, so `Start Shift` stays the
+    /// plain action it was.
+    private var nextVehicleBlock: some View {
         let vehicle = nextVehicle
 
-        return HStack(alignment: .firstTextBaseline, spacing: 8) {
+        return HStack(alignment: .firstTextBaseline, spacing: DashSpacing.md) {
             Image(systemName: "car.fill")
-                .font(.caption)
+                .font(.subheadline)
                 .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: DashSpacing.xs) {
+                Text("Next shift records")
+                    .dashFont(.metricLabel)
+                    .foregroundStyle(.secondary)
+
                 Text(vehicle.title)
-                    .font(.subheadline)
+                    .dashFont(vehicle.hasVehicle ? .title : .body)
                     // Secondary where none is selected, because an absence
                     // should not read with the weight of a fact.
                     .foregroundStyle(vehicle.hasVehicle ? .primary : .secondary)
@@ -401,7 +416,7 @@ private struct StartShiftPanel: View {
 
                 if let detail = vehicle.detail(locale: locale) {
                     Text(detail)
-                        .font(.caption)
+                        .dashFont(.supporting)
                         .monospacedDigit()
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)

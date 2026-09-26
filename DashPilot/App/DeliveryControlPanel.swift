@@ -280,7 +280,7 @@ struct DeliveryControlPanel: View {
             HStack(alignment: .firstTextBaseline, spacing: 12) {
                 // A symbol and a sentence, never a tint alone.
                 Label(recent.numbered.deliveredStatement, systemImage: DeliveryState.delivered.symbolName)
-                    .font(.subheadline)
+                    .dashFont(.body)
                     .accessibilityIdentifier("undoDeliveredBanner")
 
                 Spacer(minLength: 0)
@@ -290,8 +290,7 @@ struct DeliveryControlPanel: View {
                     .accessibilityLabel(recent.numbered.spokenUndoDeliveredLabel(restoredTo: recent.restored))
                     .accessibilityIdentifier("undoDeliveredButton")
             }
-            .padding(10)
-            .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 10))
+            .dashInsetSurface()
         }
     }
 
@@ -331,11 +330,11 @@ struct DeliveryControlPanel: View {
             // A symbol and a phrase, never colour alone: the state has to be
             // readable in bright sun and to someone who does not see the tint.
             Label(summary.inProgressStatement, systemImage: activeDeliveries.isEmpty ? "pause.circle" : "shippingbox.fill")
-                .font(.headline)
+                .dashFont(.status)
 
             if !summary.isEmpty {
                 Text(summary.statement)
-                    .font(.subheadline)
+                    .dashFont(.body)
                     .foregroundStyle(.secondary)
             }
         }
@@ -379,7 +378,7 @@ struct DeliveryControlPanel: View {
             isStartingGroupedOffer = true
         } label: {
             Label("Offer With Several Deliveries", systemImage: "square.stack.3d.up")
-                .font(.subheadline)
+                .dashFont(.body)
         }
         .buttonStyle(.borderless)
         .accessibilityLabel("Start an offer containing several deliveries")
@@ -406,7 +405,7 @@ struct DeliveryControlPanel: View {
                 isCorrectingOffers = true
             } label: {
                 Label("Correct Grouping", systemImage: "arrow.triangle.branch")
-                    .font(.subheadline)
+                    .dashFont(.body)
             }
             .buttonStyle(.borderless)
             .accessibilityLabel("Correct which deliveries were accepted together")
@@ -432,7 +431,7 @@ struct DeliveryControlPanel: View {
                 isReopeningDelivery = true
             } label: {
                 Label("Reopen a Delivered Delivery", systemImage: "arrow.uturn.backward.circle")
-                    .font(.subheadline)
+                    .dashFont(.body)
             }
             .buttonStyle(.borderless)
             .accessibilityLabel("Reopen a delivery you marked delivered by mistake")
@@ -678,16 +677,16 @@ private struct DeliveryProgressSuggestionCard: View {
                 // be readable in bright sun and to a driver who does not see
                 // the colour.
                 Label(suggestion.question, systemImage: "questionmark.circle")
-                    .font(.subheadline.weight(.semibold))
+                    .dashFont(.status)
 
                 Text("\(suggestion.title) · \(suggestion.evidenceStatement)")
-                    .font(.caption)
+                    .dashFont(.supporting)
                     .foregroundStyle(.secondary)
 
                 // Never abbreviated away and never behind a disclosure. It is
                 // the sentence that keeps the card a question.
                 Text(DeliveryProgressSuggestion.uncertaintyStatement)
-                    .font(.caption2)
+                    .dashFont(.supporting)
                     .foregroundStyle(.secondary)
             }
             .accessibilityElement(children: .combine)
@@ -696,9 +695,7 @@ private struct DeliveryProgressSuggestionCard: View {
 
             controls
         }
-        .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
+        .dashInsetSurface()
     }
 
     /// Side by side at ordinary text sizes and stacked at accessibility ones,
@@ -760,13 +757,13 @@ private struct OfferGroupHeader: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             Label("\(offer.title) · \(offer.groupStatement)", systemImage: "square.stack.3d.up.fill")
-                .font(.subheadline.weight(.semibold))
+                .dashFont(.status)
 
             // Only once some of the offer's deliveries have finished. While they
             // are all running it would repeat the line above it.
             if let remaining = offer.remainingStatement {
                 Text(remaining)
-                    .font(.caption)
+                    .dashFont(.supporting)
                     .foregroundStyle(.secondary)
             }
         }
@@ -812,103 +809,135 @@ private struct ActiveDeliveryCard: View {
 
     private var delivery: Delivery { numbered.delivery }
 
+    /// How often the time-in-state line is redrawn. It is written to the
+    /// minute, so a redraw every quarter of a minute keeps it on time without
+    /// a per-second tick on a screen that already has one.
+    private static let clockCadence: TimeInterval = 15
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            VStack(alignment: .leading, spacing: 2) {
-                Label(numbered.statusTitle, systemImage: delivery.state.symbolName)
-                    .font(.headline)
-
-                // The offer's name alone, because the heading directly above
-                // has already said how many deliveries it held and repeating
-                // that on every card is noise. It is on the card at all so that
-                // a driver scrolled past the heading can still tell which cards
-                // belong together. What VoiceOver hears is the fuller sentence
-                // below, since a listener has no heading in view to refer back
-                // to.
-                if let offer {
-                    Text(offer.title)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
-                // What this delivery is waiting for, on the card rather than
-                // only on the button below it. With two or three cards on
-                // screen, the buttons are the same shape and the same size and
-                // are told apart only by their words; a state line that says
-                // what comes next lets the eye sort the cards without landing
-                // on a control to find out.
-                if let next = delivery.state.nextAction {
-                    Text(next.nextStepStatement)
-                        .font(.subheadline.weight(.medium))
-                }
-
-                if let place = delivery.pickupPlace {
-                    Label(place.displayName, systemImage: "bag")
-                        .font(.subheadline)
-                        .lineLimit(1)
-                }
-
-                LabeledContent("Accepted") {
-                    Text(delivery.acceptedAt, format: .dateTime.hour().minute())
-                        .monospacedDigit()
-                }
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-
-                // Named "Expected pay" wherever it is printed, so it is never
-                // one word away from the "Gross earnings" row a finished
-                // delivery shows. Absent when none was recorded, like the
-                // pickup place above it.
-                if let expected = delivery.expectedEarnings {
-                    LabeledContent("Expected pay") {
-                        Text(expected.formatted(locale: locale))
-                            .monospacedDigit()
-                    }
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                }
+        VStack(alignment: .leading, spacing: DashSpacing.lg) {
+            TimelineView(.periodic(from: .now, by: Self.clockCadence)) { context in
+                identity(asOf: context.date)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(spokenStatus(asOf: context.date))
+                    .accessibilityIdentifier("activeDeliveryStatus")
             }
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel(spokenStatus)
-            .accessibilityIdentifier("activeDeliveryStatus")
 
-            // Secondary in every way that matters: small, plain, and above the
-            // lifecycle button rather than in its place. Naming a pickup is
-            // optional and this delivery advances identically without it.
-            pickupPlaceControl
-
-            // The same shape, for the same reason, and deliberately beside it
-            // rather than anywhere nearer the lifecycle button: an amount is
-            // optional, is skippable on every delivery, and the one moment it
-            // is easy to enter is while the driver is standing still waiting
-            // for a bag.
-            expectedEarningsControl
-
-            // Only the one step this delivery can actually take. A card for a
-            // finished delivery does not exist, so the absence is defensive.
+            // The one step this delivery can take, dominant on the card. A card
+            // for a finished delivery does not exist, so the absence is
+            // defensive.
             if let action = delivery.state.nextAction {
-                Button(action: advance) {
-                    Text(action.title)
-                        .frame(maxWidth: .infinity)
+                VStack(alignment: .leading, spacing: DashSpacing.sm) {
+                    Text("Next")
+                        .dashFont(.metricLabel)
+                        .foregroundStyle(.secondary)
+                        .accessibilityHidden(true)
+
+                    Button(action: advance) {
+                        Text(action.title)
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    .accessibilityLabel(numbered.spokenLabel(for: action))
+                    .accessibilityIdentifier("deliveryActionButton")
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
-                .accessibilityLabel(numbered.spokenLabel(for: action))
-                .accessibilityIdentifier("deliveryActionButton")
             }
 
-            Button("Cancel \(numbered.title)", role: .destructive, action: cancel)
-                .buttonStyle(.bordered)
-                .controlSize(.large)
-                .frame(maxWidth: .infinity)
-                .accessibilityLabel(numbered.spokenCancelLabel)
-                .accessibilityIdentifier("cancelDeliveryButton")
+            // Everything else a driver may do to this delivery, quiet and
+            // below the step: optional details, and cancelling. None of them is
+            // prominent, so none of them competes with the step at a kerb.
+            secondaryControls
         }
+        .padding(.vertical, DashSpacing.sm)
         .sheet(isPresented: $isEditingPickupPlace) {
             PickupPlaceEditor(numbered: numbered)
         }
         .sheet(isPresented: $isEditingExpectedEarnings) {
             DeliveryExpectedEarningsEditor(numbered: numbered)
+        }
+    }
+
+    /// Which delivery this is, what state it is in and for how long, and what
+    /// is known about it. Only facts it records: a place and an expected
+    /// amount appear where they were entered and are absent otherwise.
+    @ViewBuilder
+    private func identity(asOf now: Date) -> some View {
+        VStack(alignment: .leading, spacing: DashSpacing.sm) {
+            HStack(alignment: .firstTextBaseline, spacing: DashSpacing.md) {
+                Text(numbered.title)
+                    .dashFont(.title)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                // The offer's name alone, because the heading above has already
+                // said how many deliveries it held. It is here so a driver
+                // scrolled past the heading can still tell which cards belong
+                // together.
+                if let offer {
+                    Text(offer.title)
+                        .dashFont(.supporting)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            // The state in a symbol and words, and how long it has been the
+            // state, from the delivery's own recorded instant.
+            DashStatusLabel(
+                title: stateLine(asOf: now),
+                symbol: delivery.state.symbolName,
+                tint: .accentColor
+            )
+
+            if let place = delivery.pickupPlace {
+                Label(place.displayName, systemImage: "bag")
+                    .dashFont(.body)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            // Named "Expected pay" wherever it is printed, so it is never one
+            // word away from the "Gross earnings" a finished delivery shows.
+            if let expected = delivery.expectedEarnings {
+                LabeledContent("Expected pay") {
+                    Text(expected.formatted(locale: locale)).monospacedDigit()
+                }
+                .dashFont(.body)
+                .foregroundStyle(.secondary)
+            }
+
+            Text("Accepted \(delivery.acceptedAt.formatted(date: .omitted, time: .shortened))")
+                .dashFont(.supporting)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    /// `Waiting at the pickup · 7 min`, or the state alone where there is no
+    /// instant to measure from.
+    private func stateLine(asOf now: Date) -> String {
+        let description = delivery.state.statusDescription
+        guard let elapsed = DeliveryLifecycleRecord(delivery).timeInCurrentState(asOf: now) else {
+            return description
+        }
+        return "\(description) · \(DurationText.short(elapsed))"
+    }
+
+    /// Details and cancelling, below the step and quieter than it.
+    ///
+    /// One control to a line, always. Side by side, two half-width titles came
+    /// out a word to a line at the default size, which is the defect the
+    /// completed delivery's grid was built to fix. Cancelling is a plain
+    /// destructive control that names its delivery and asks for confirmation,
+    /// so it cannot be mistaken for the step above it.
+    private var secondaryControls: some View {
+        VStack(alignment: .leading, spacing: DashSpacing.xs) {
+            pickupPlaceControl
+            expectedEarningsControl
+            Button("Cancel \(numbered.title)", role: .destructive, action: cancel)
+                .dashFont(.body)
+                .buttonStyle(.borderless)
+                .frame(minHeight: 44)
+                .contentShape(Rectangle())
+                .accessibilityLabel(numbered.spokenCancelLabel)
+                .accessibilityIdentifier("cancelDeliveryButton")
         }
     }
 
@@ -927,9 +956,11 @@ private struct ActiveDeliveryCard: View {
                 numbered.expectedEarningsActionTitle(hasExpected: delivery.expectedEarnings != nil),
                 systemImage: delivery.expectedEarnings == nil ? "plus.circle" : "pencil"
             )
-            .font(.subheadline)
+            .dashFont(.body)
         }
         .buttonStyle(.borderless)
+        .frame(minHeight: 44)
+        .contentShape(Rectangle())
         .accessibilityLabel(
             numbered.spokenExpectedEarningsLabel(hasExpected: delivery.expectedEarnings != nil)
         )
@@ -951,9 +982,11 @@ private struct ActiveDeliveryCard: View {
                 numbered.pickupPlaceActionTitle(hasPlace: delivery.pickupPlace != nil),
                 systemImage: delivery.pickupPlace == nil ? "plus.circle" : "pencil"
             )
-            .font(.subheadline)
+            .dashFont(.body)
         }
         .buttonStyle(.borderless)
+        .frame(minHeight: 44)
+        .contentShape(Rectangle())
         .accessibilityLabel(numbered.spokenPickupPlaceLabel(hasPlace: delivery.pickupPlace != nil))
         .accessibilityIdentifier("pickupPlaceButton")
     }
@@ -967,7 +1000,7 @@ private struct ActiveDeliveryCard: View {
     /// another comma-separated clause, because it is the one part of this label
     /// that has to say what it is not: a figure heard in a run-on list beside a
     /// time and a place is heard as this delivery's earnings.
-    private var spokenStatus: String {
+    private func spokenStatus(asOf now: Date) -> String {
         let accepted = delivery.acceptedAt.formatted(date: .omitted, time: .shortened)
         var parts = [numbered.spokenStatus]
         if let place = delivery.pickupPlace {
@@ -992,6 +1025,11 @@ private struct ActiveDeliveryCard: View {
         }
         if let expected = delivery.expectedEarnings {
             spoken += ". \(numbered.spokenExpectedEarnings(expected.formatted(locale: locale)))"
+        }
+        // Last, so every existing sentence keeps its place. From the
+        // delivery's own recorded instant, never from anything observed.
+        if let elapsed = DeliveryLifecycleRecord(delivery).timeInCurrentState(asOf: now) {
+            spoken += ". In this state for \(DurationText.spoken(elapsed))"
         }
         return spoken
     }

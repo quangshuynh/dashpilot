@@ -164,3 +164,56 @@ nonisolated struct HistoryOtherWeeksSummary: Equatable, Sendable {
         return "\(weekText) · \(shiftText)"
     }
 }
+
+/// A cheap fingerprint of the recorded facts one week's summary is worked out
+/// from, so the summary is worked out again exactly when one of them changes.
+///
+/// ## Why this exists
+///
+/// A week's summary is derived off the main actor and was keyed on the week
+/// alone. Edits made from a shift's detail screen happened to refresh it
+/// anyway, because returning makes the section reappear and SwiftUI restarts
+/// its task; a change while the section stayed on screen would not have. So
+/// the key now names the facts the figures are worked out from, and the
+/// summary follows them rather than the navigation.
+///
+/// ## Cheap, and only this week's
+///
+/// It reads the stored columns and the small relationships a shift's summary
+/// record is built from, and never a route: recorded mileage only moves when
+/// the end moves (an earlier end trims the route in the same save), so the end
+/// stands in for it. Built from **this week's** shifts only, so an edit to a
+/// shift in another week leaves it, and that week's summary, untouched.
+///
+/// A shift deleted while its section is on screen is skipped rather than read:
+/// a deleted model's attributes are not something to touch.
+nonisolated struct HistoryWeekRevision: Hashable, Sendable {
+    let value: Int
+
+    init(_ shifts: [Shift]) {
+        var hasher = Hasher()
+        for shift in shifts where !shift.isDeleted && shift.modelContext != nil {
+            hasher.combine(shift.id)
+            hasher.combine(shift.startedAt)
+            hasher.combine(shift.endedAt)
+            hasher.combine(shift.grossEarnings?.amount)
+            let fuel = shift.fuelAssumptions
+            hasher.combine(fuel.milesPerGallon)
+            hasher.combine(fuel.gasPricePerGallon?.amount)
+            for pause in shift.pausesInOrder {
+                hasher.combine(pause.startedAt)
+                hasher.combine(pause.endedAt)
+            }
+            for delivery in shift.deliveriesInOrder where !delivery.isDeleted {
+                hasher.combine(delivery.id)
+                let record = DeliveryLifecycleRecord(delivery)
+                for event in record.recordedEvents {
+                    hasher.combine(event.event)
+                    hasher.combine(event.occurredAt)
+                }
+                hasher.combine(delivery.grossEarnings?.amount)
+            }
+        }
+        value = hasher.finalize()
+    }
+}
