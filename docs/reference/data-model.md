@@ -1,7 +1,7 @@
 # Data model
 
 Eleven persisted entities, and a small set of value types derived from them. Current schema
-version: **v16**.
+version: **v17**.
 
 ## `Shift`
 
@@ -154,7 +154,9 @@ written into a coordinate history, and driving again mints a new capture session
 the context insert to the caller like `beginPause(at:)`. `endOpenRouteSuspension(at:)` is allowed on
 an ended or paused shift, unlike opening one, because both of those close an open row as part of
 their own write. `ShiftService.parkActiveShift(at:)` and `resumeDrivingOnActiveShift(at:)` are the
-only callers, and nothing anywhere ends a row because a speed changed or a delivery advanced.
+only callers, and nothing anywhere ends a row because a speed changed or a delivery advanced. The
+pickup-when-parking setting adds no relationship: parking may be followed by a delivery's own
+`Picked Up` write, and the suspension still joins only the shift.
 
 ## `RouteSample`
 
@@ -407,9 +409,12 @@ preferences.
 | `id` | `UUID` | Unique, and always `DriverSettings.singletonID` |
 | `gasPricePerGallonAmount` | `Decimal?` | What the driver says a gallon currently costs. `nil` means none recorded; `0` means the fuel is recorded as costing nothing |
 | `selectedVehicleID` | `UUID?` | The `VehicleProfile.id` new shifts are recorded under, or `nil` when none is selected |
+| `recordsPickupWhenParking` | `Bool` | Whether pressing Park may also record the pickup of the one delivery at its pickup. Declared `false`; off unless the driver turns it on |
 
-**Nothing derived reads this row.** It is read at exactly one moment, when a shift starts, and copied
-onto that shift. Changing a setting tomorrow changes nothing recorded today.
+**Nothing derived reads this row.** The fuel figures are read at exactly one moment, when a shift
+starts, and copied onto that shift. The pickup preference is read at exactly one other moment, when
+Park is pressed, and decides only whether that press may also record a pickup through the delivery's
+ordinary lifecycle operation. Changing a setting tomorrow changes nothing recorded today.
 
 The selected vehicle is an **identifier rather than a relationship**, so a deleted profile leaves a
 selection that resolves to nothing, which reads as *no vehicle selected*. The service clears it in
@@ -437,6 +442,7 @@ The row is created the first time the driver opens Settings. A migration never c
 | 14.0.0 | Adds `Shift.fuelMilesPerGallonValue` and `Shift.fuelGasPricePerGallonAmount`. Lightweight, and nothing is backfilled: a shift recording no assumptions reports which half is missing rather than an estimate of `$0.00` |
 | 15.0.0 | Adds `VehicleProfile`, `DriverSettings` and `Shift.fuelVehicleName`. Lightweight, and nothing is backfilled: a v14 store holds no evidence of which vehicle any shift was worked in, so no profile is invented, no settings row is created and no shift is given a name |
 | 16.0.0 | Adds `RouteSuspension` and a cascading `Shift.routeSuspensions`. Lightweight, and nothing is backfilled: a gap in a v15 route is left by a pause, a lost permission or a terminated process just as readily as by a driver walking into a shop, and the route holds no evidence of which |
+| 17.0.0 | Adds `DriverSettings.recordsPickupWhenParking`, declared `false`. Lightweight, and nothing is backfilled: no build that wrote a v16 store could ask the question, so every migrated row reads off |
 
 Every step but 12.0.0 is a lightweight stage, and none but that one writes a value. See
 [Migrations](../architecture/migrations.md).

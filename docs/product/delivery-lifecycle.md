@@ -64,6 +64,14 @@ timestamps exist, so there is exactly one authoritative answer to what a deliver
 is the same data that forms the historical record. A stored state could drift out of step with the
 events it claims to summarise; a derived one cannot.
 
+## One tap that records a pickup as well as parking
+
+With [Pick up order when parking](settings.md#pick-up-order-when-parking) turned on, pressing Park
+can also record `Picked Up` for the one delivery at `Arrived at Pickup`. It is not a second way to
+change state: it calls the same operation the card's `Picked Up` button does, with the same
+validation and the same instant rule, and it never records an arrival, never chooses between two
+deliveries at a pickup and never moves a delivery already picked up or finished.
+
 ## Cancellation is history, not deletion
 
 Real delivery work ends without a delivery: an order is cancelled, unassigned or returned.

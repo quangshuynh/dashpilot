@@ -24,13 +24,18 @@ rather than a store reset.
 | 14.0.0 | Adds `Shift.fuelMilesPerGallonValue` and `Shift.fuelGasPricePerGallonAmount`, two optional `Decimal` columns holding the assumptions a shift's fuel estimate is worked out under. Backfills nothing |
 | 15.0.0 | Adds the `VehicleProfile` and `DriverSettings` entities and an optional `Shift.fuelVehicleName` column. Backfills nothing |
 | 16.0.0 | Adds the `RouteSuspension` entity and a cascading `Shift.routeSuspensions` relationship, holding the stretches the driver recorded the vehicle as parked. Backfills nothing |
+| 17.0.0 | Adds `DriverSettings.recordsPickupWhenParking`, a `Bool` declared `false`, holding whether pressing Park may also record a pickup. Backfills nothing; every migrated row reads off |
 
-The current version is **v16**. Field-level detail is on [Data model](../reference/data-model.md).
+The current version is **v17**. Field-level detail is on [Data model](../reference/data-model.md).
 
-`DashPilotSchemaV1` through `DashPilotSchemaV15` hold frozen copies of their models rather than
+`DashPilotSchemaV1` through `DashPilotSchemaV16` hold frozen copies of their models rather than
 reusing the file-scope types, which have moved on. The plan then describes where a store is coming
 from as truthfully as where it is going, and the copies are never used at runtime outside
 migration.
+
+`DashPilotSchemaV16` was frozen in the interval that added v17, with copies of all eleven of its
+models. v17 moves only the settings row, and reusing the file-scope types under v16 would describe
+every v16 store as one that could already record a preference no build that wrote it could ask.
 
 `DashPilotSchemaV15` was frozen in the interval that added v16, and the freeze was forced the same
 way every one before it was: v16 gives `Shift` a cascading collection of the stretches it was parked
@@ -323,6 +328,22 @@ no relationship to `Delivery`, because whether the vehicle is moving is a fact a
 their vehicle rather than about any one order, and a driver shopping for one delivery while carrying
 another has one vehicle and it is parked. See
 [Parking for a pickup](../product/shift-workflow.md#parking-for-a-pickup).
+
+### v16 to v17
+
+One `Bool` column on `DriverSettings`, declared `false`, applied lightweight.
+
+**Off is not a fabricated default here; it is the only answer the store holds.** A v16 store was
+written by a build that could not ask whether parking should record a pickup, so no driver chose the
+automation, and a row that never recorded a choice is a row that never turned it on. The tempting
+version of a backfill would switch the automation on for a driver who parks often, or whose pickups
+usually follow a park within a minute. That would be DashPilot choosing to write lifecycle events on
+the driver's behalf. A migrated settings row therefore reads off, and a store with no settings row
+at all reads off too, without one being created by the read.
+
+No shift, delivery, suspension or export field moves. The preference is current configuration and is
+read only at the moment Park is pressed. See
+[Pick up order when parking](../product/settings.md#pick-up-order-when-parking).
 
 ## Proving a migration rather than assuming it
 
