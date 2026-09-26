@@ -2427,6 +2427,144 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertTrue(app.buttons["parkShiftButton"].exists, "Parking is offered again")
     }
 
+    // MARK: Pick up order when parking
+
+    /// The pickup-when-parking switch on the Settings screen.
+    @MainActor
+    private func pickupWhenParkingToggle(in app: XCUIApplication) -> XCUIElement {
+        app.switches["pickupWhenParkingToggle"]
+    }
+
+    /// Opens Settings, sets the pickup-when-parking switch, and comes back.
+    ///
+    /// Waits on the switch's own value rather than on the tap, so a tap that
+    /// landed on the row's title and did nothing fails here and not in the
+    /// parking assertions after it.
+    @MainActor
+    private func setPickupWhenParking(_ isOn: Bool, in app: XCUIApplication) {
+        openSettings(in: app)
+        let toggle = pickupWhenParkingToggle(in: app)
+        XCTAssertTrue(scrollTo(toggle, in: app), "The setting is on the Settings screen")
+        XCTAssertTrue(scrollUntilHittable(toggle, in: app))
+        let wanted = isOn ? "1" : "0"
+        if (toggle.value as? String) != wanted {
+            // The switch itself, at the row's trailing edge: a tap on the title
+            // of a SwiftUI toggle row does not always reach the switch.
+            toggle.switches.firstMatch.exists ? toggle.switches.firstMatch.tap() : toggle.tap()
+        }
+        XCTAssertTrue(
+            XCTWaiter().wait(
+                for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", wanted), object: toggle)],
+                timeout: 5
+            ) == .completed,
+            "The switch reads \(wanted): \(String(describing: toggle.value))"
+        )
+        goBack(in: app)
+    }
+
+    /// Presses Park on the running shift's panel.
+    @MainActor
+    private func pressPark(in app: XCUIApplication) {
+        let park = app.buttons["parkShiftButton"]
+        XCTAssertTrue(scrollTo(park, in: app), "Parking is offered on a running shift")
+        XCTAssertTrue(scrollUntilHittable(park, in: app))
+        park.tap()
+        XCTAssertTrue(
+            app.buttons["resumeDrivingButton"].waitForExistence(timeout: 5),
+            "The vehicle is parked whatever the pickup setting decides"
+        )
+    }
+
+    /// Off unless the driver turns it on, and it says what it does to a listener.
+    @MainActor
+    func testPickupWhenParkingDefaultsOffAndTurnsOnAndOff() throws {
+        let app = launchWithEmptyStore()
+        openSettings(in: app)
+
+        let toggle = pickupWhenParkingToggle(in: app)
+        XCTAssertTrue(scrollTo(toggle, in: app))
+        XCTAssertEqual(toggle.value as? String, "0", "A driver who never chose it has it off")
+        XCTAssertTrue(toggle.label.contains("Pick up order when parking"), toggle.label)
+        goBack(in: app)
+
+        setPickupWhenParking(true, in: app)
+        openSettings(in: app)
+        XCTAssertTrue(scrollTo(toggle, in: app))
+        XCTAssertEqual(toggle.value as? String, "1", "The choice is kept")
+        goBack(in: app)
+
+        setPickupWhenParking(false, in: app)
+    }
+
+    /// With the setting off, parking beside a delivery at its pickup parks and
+    /// does nothing else, exactly as it did before the setting existed.
+    @MainActor
+    func testParkingWithPickupSettingOffLeavesDeliveriesAlone() throws {
+        let app = launchWithStackedOffer()
+        XCTAssertTrue(deliveryStatusCard(named: "Delivery 1", in: app).waitForExistence(timeout: 10))
+
+        pressPark(in: app)
+
+        XCTAssertTrue(app.descendants(matching: .any)["parkedShiftNotice"].waitForExistence(timeout: 5))
+        XCTAssertFalse(
+            app.descendants(matching: .any)["parkPickupNotice"].exists,
+            "Nothing is added to ordinary parking"
+        )
+        let first = deliveryStatusCard(named: "Delivery 1", in: app)
+        XCTAssertTrue(scrollTo(first, in: app))
+        XCTAssertTrue(first.label.contains("waiting at the pickup"), first.label)
+    }
+
+    /// With the setting on and one delivery at its pickup among others that
+    /// are not, parking records that one's pickup and names it.
+    @MainActor
+    func testParkingWithPickupSettingOnPicksUpTheOneAtItsPickup() throws {
+        let app = launchWithStackedOffer()
+        XCTAssertTrue(deliveryStatusCard(named: "Delivery 1", in: app).waitForExistence(timeout: 10))
+        setPickupWhenParking(true, in: app)
+
+        pressPark(in: app)
+
+        let pickup = app.descendants(matching: .any)["parkPickupNotice"]
+        XCTAssertTrue(pickup.waitForExistence(timeout: 5), "Both facts are on screen: parked, and the pickup")
+        XCTAssertTrue(pickup.label.contains("Delivery 1 marked Picked Up"), pickup.label)
+        XCTAssertTrue(
+            pickup.label.contains("Pick up order when parking"),
+            "A listener is told it was their setting, not a detection: \(pickup.label)"
+        )
+        XCTAssertTrue(app.descendants(matching: .any)["parkedShiftNotice"].exists)
+
+        let first = deliveryStatusCard(named: "Delivery 1", in: app)
+        XCTAssertTrue(scrollTo(first, in: app))
+        XCTAssertTrue(first.label.contains("heading to the customer"), first.label)
+        let second = deliveryStatusCard(named: "Delivery 2", in: app)
+        XCTAssertTrue(scrollTo(second, in: app))
+        XCTAssertTrue(second.label.contains("heading to the pickup"), "Delivery 2 is untouched: \(second.label)")
+    }
+
+    /// Two deliveries at a pickup: the vehicle parks, neither moves, and the
+    /// driver is told why without being stopped.
+    @MainActor
+    func testParkingWithTwoDeliveriesAtAPickupRecordsNeither() throws {
+        let app = launchWithExpectedPay()
+        XCTAssertTrue(deliveryStatusCard(named: "Delivery 1", in: app).waitForExistence(timeout: 10))
+        setPickupWhenParking(true, in: app)
+
+        pressPark(in: app)
+
+        let pickup = app.descendants(matching: .any)["parkPickupNotice"]
+        XCTAssertTrue(pickup.waitForExistence(timeout: 5))
+        XCTAssertTrue(pickup.label.contains("Pickup not recorded"), pickup.label)
+        XCTAssertTrue(pickup.label.contains("2 deliveries"), pickup.label)
+        XCTAssertFalse(app.alerts.firstMatch.exists, "No alert stands between the driver and the door")
+
+        for name in ["Delivery 1", "Delivery 2"] {
+            let card = deliveryStatusCard(named: name, in: app)
+            XCTAssertTrue(scrollTo(card, in: app))
+            XCTAssertTrue(card.label.contains("waiting at the pickup"), "\(name) did not move: \(card.label)")
+        }
+    }
+
     /// A completed shift that was parked says how much of its short route the
     /// driver asked for, and reports every minute of it as worked.
     @MainActor
