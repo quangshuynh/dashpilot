@@ -341,4 +341,8 @@ The short version, with the full list in [`docs/reference/limitations.md`](docs/
 
 ## License
 
-[MIT](LICENSE).
+DashPilot's source code is licensed under the [MIT License](LICENSE).
+
+The app bundles the Manrope typeface, which is licensed separately under the
+[SIL Open Font License 1.1](DashPilot/Resources/Fonts/OFL.txt). See
+[The typeface and its license](docs/development/building.md#the-typeface-and-its-license).

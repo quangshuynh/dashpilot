@@ -33,14 +33,15 @@ struct CompletedShiftRow: View {
     @Environment(\.locale) private var locale
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: DashSpacing.sm) {
             heading
             Text(schedule)
-                .font(.subheadline)
+                .dashFont(.body)
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             if let summary {
                 Text(summary)
-                    .font(.caption)
+                    .dashFont(.supporting)
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
                     // Wrap rather than truncate. The first thing a truncation
@@ -49,7 +50,7 @@ struct CompletedShiftRow: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, DashSpacing.sm)
         .task(id: shift.id) { recordedDistance = shift.recordedDistance() }
         // One element so VoiceOver reads the shift as a shift rather than three
         // unrelated fragments, with an explicit label because the abbreviations
@@ -65,7 +66,7 @@ struct CompletedShiftRow: View {
     @ViewBuilder
     private var heading: some View {
         let date = Text(shift.startedAt, format: .dateTime.weekday(.abbreviated).month().day())
-            .font(.headline)
+            .dashFont(.emphasis)
 
         if dynamicTypeSize.isAccessibilitySize {
             date
@@ -73,7 +74,7 @@ struct CompletedShiftRow: View {
         } else {
             HStack(alignment: .firstTextBaseline) {
                 date
-                Spacer(minLength: 8)
+                Spacer(minLength: DashSpacing.md)
                 recordedEarnings
             }
         }
@@ -86,7 +87,7 @@ struct CompletedShiftRow: View {
     private var recordedEarnings: some View {
         if let earnings = shift.grossEarnings {
             Text(earnings.formatted(locale: locale))
-                .font(.headline)
+                .dashFont(.emphasis)
                 .monospacedDigit()
         }
     }

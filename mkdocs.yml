@@ -125,6 +125,7 @@ nav:
       - Building: development/building.md
       - Testing: development/testing.md
       - Project structure: development/project-structure.md
+      - Design system: development/design-system.md
   - Reference:
       - Data model: reference/data-model.md
       - Limitations: reference/limitations.md

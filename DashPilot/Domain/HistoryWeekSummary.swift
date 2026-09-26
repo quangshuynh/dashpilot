@@ -105,7 +105,8 @@ nonisolated extension HistoryWeekSummary {
                 detail: metrics.recordedGrossEarnings == nil
                     ? nil
                     : metrics.earningsCoverageStatement,
-                spoken: metrics.spokenEarningsStatement(locale: locale)
+                spoken: metrics.spokenEarningsStatement(locale: locale),
+                isFigure: metrics.recordedGrossEarnings != nil
             )
         )
 
@@ -116,7 +117,8 @@ nonisolated extension HistoryWeekSummary {
                 title: "Working time",
                 value: metrics.workingDuration.map(DurationText.short) ?? "Not available",
                 detail: metrics.workingDuration == nil ? nil : metrics.workingCoverage.statement(),
-                spoken: spokenWorking
+                spoken: spokenWorking,
+                isFigure: metrics.workingDuration != nil
             )
         )
 
@@ -129,7 +131,8 @@ nonisolated extension HistoryWeekSummary {
                     ? metrics.recordedDistance.formattedMiles(locale: locale)
                     : "Not measured",
                 detail: metrics.recordedDistance.isMeasured ? metrics.mileageCoverageStatement : nil,
-                spoken: metrics.spokenMileageStatement(locale: locale)
+                spoken: metrics.spokenMileageStatement(locale: locale),
+                isFigure: metrics.recordedDistance.isMeasured
             )
         )
 
@@ -162,7 +165,8 @@ nonisolated extension HistoryWeekSummary {
                     title: "Estimated fuel",
                     value: metrics.fuel.estimatedCost?.formatted(locale: locale) ?? "Not available",
                     detail: fuelCoverageDetail(locale: locale),
-                    spoken: metrics.fuel.spokenStatement(locale: locale)
+                    spoken: metrics.fuel.spokenStatement(locale: locale),
+                    isFigure: metrics.fuel.estimatedCost != nil
                 )
             )
         }
@@ -175,12 +179,28 @@ nonisolated extension HistoryWeekSummary {
                     title: "Estimated net after fuel",
                     value: metrics.estimatedNetAfterFuel.amount?.formatted(locale: locale) ?? "Not available",
                     detail: netCoverageDetail,
-                    spoken: metrics.estimatedNetAfterFuel.spokenStatement(locale: locale)
+                    spoken: metrics.estimatedNetAfterFuel.spokenStatement(locale: locale),
+                    isFigure: metrics.estimatedNetAfterFuel.amount != nil
                 )
             )
         }
 
         return lines
+    }
+
+    /// The shifts and what their deliveries came to, as the one line that sits
+    /// under the three figures: `6 shifts · 31 deliveries completed · 2
+    /// cancelled`.
+    ///
+    /// It is the ``HistoryWeekSummaryLine/Kind/activity`` line read as a
+    /// sentence rather than as a title beside a count, because a count on its
+    /// own ("Shifts 6") is the one figure on the card with no unit, and the
+    /// deliveries' outcomes belong beside it. Each outcome is still named rather
+    /// than summed.
+    var activityStatement: String {
+        let count = metrics.completedShiftCount
+        let shifts = count == 1 ? "1 shift" : "\(count) shifts"
+        return "\(shifts) · \(metrics.deliverySummary.statement)"
     }
 
     /// Both coverages, because either alone can mislead: the shift count says
@@ -283,4 +303,9 @@ nonisolated struct HistoryWeekSummaryLine: Equatable, Sendable, Identifiable {
     /// The whole line as one sentence, with every unit and every coverage said
     /// in full. A listener has no caption in view to read afterwards.
     let spoken: String
+
+    /// Whether ``value`` is a figure, or the words standing in for one that was
+    /// never recorded. A view draws the second in a quieter style, so an
+    /// absence never carries the weight of a number.
+    var isFigure = true
 }

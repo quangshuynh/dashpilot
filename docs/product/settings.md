@@ -4,29 +4,46 @@ DashPilot keeps a small set of reusable preferences so that figures a driver
 would otherwise retype on every shift are typed once. It is reached from the gear
 in the top left of the main screen.
 
-There are two things in it: the **vehicles** the driver works in, and the **gas
-price** they last paid.
+It opens with the **default vehicle** the next shift will record, then the
+**vehicles** the driver works in, the **gas price** they last paid, and an
+**About** section:
 
 ```
 Settings
 
+Default Vehicle
+  2020 Honda Civic
+  34 MPG
+  Used for your next shift
+
 Vehicles
-  ✓ 2020 Honda Civic
-    34 MPG
+  2020 Honda Civic
+  34 MPG
+  ✓ Default                                   ✎
 
   2012 Toyota Camry
-    28 MPG
+  28 MPG                                      ✎
 
   Add Vehicle
 
-Fuel
-  Current gas price          $3.19 / gallon
+Fuel Defaults
+  Current gas price               $3.19 / gallon
+  Recorded on your next shift
+
+About
+  Acknowledgements
 ```
+
+With nothing selected the first section says `No vehicle selected` and that the
+next shift records no miles per gallon, rather than drawing an empty card.
+Starting a shift is never refused over it. The screen says nothing about a shift
+already running, because nothing on it reaches one.
 
 ## Everything here is a default for the next shift
 
-This is the one sentence the screen exists to get across, and both of its footers
-say it in as many words.
+This is the one sentence the screen exists to get across: the default vehicle
+says `Used for your next shift`, the gas price says `Recorded on your next shift`,
+and both footers say it in as many words.
 
 Nothing derived reads these preferences. Not an estimated fuel cost, not a rate,
 not a total, not a coverage count, not a period figure and not an exported value.
@@ -83,8 +100,8 @@ hold the number a fuel estimate divides by.
 
 - **Several vehicles are supported**, listed in the order they were added so the
   list does not reorder under a rename.
-- **One is selected**, marked with a check, and is the one new shifts are
-  recorded under. The first vehicle added is selected automatically, because a
+- **One is the default**, marked `Default` with a check beside the word, and is
+  the one new shifts are recorded under. The first vehicle added is selected automatically, because a
   driver who has entered exactly one vehicle has said which one they work in.
   Tapping the selected vehicle again clears the selection, which is the way back
   to recording no economy at all.
@@ -136,14 +153,28 @@ it only ever happens because the driver saved. See
 
 ## Accessibility
 
+- The default vehicle is one element: "Default vehicle: 2020 Honda Civic, 34
+  miles per gallon. Used for your next shift."
 - A vehicle row is one element that speaks its name, its economy with the unit
-  spelled out — "34 miles per gallon", not "34 MPG" — and whether it is selected,
-  because a check mark is not a statement to a listener.
+  spelled out ("34 miles per gallon", not "34 MPG") and whether it is the
+  default, because a check mark is not a statement to a listener. The edit
+  control beside it names the vehicle and keeps a 44-point target.
+- In the vehicle editor each label sits above its field, so a long name and the
+  largest text sizes get the whole width of the row. A refusal is a sentence
+  beside a warning symbol, and the symbol is hidden from VoiceOver so the
+  sentence is what is heard.
 - The gas price row states its figure as a value with the unit spoken in full,
   and its hint says that changing it affects the next shift rather than a
   recorded one.
 - Both footers carry the historical-stability sentence, so the rule is readable
   rather than something a driver has to infer from behaviour.
+
+## Acknowledgements
+
+`About` → `Acknowledgements` states the two licenses DashPilot ships under: its
+own source code is MIT, and the one typeface it bundles, Manrope, is under the
+SIL Open Font License 1.1, whose full text is bundled beside the font files and
+shown there. See [Building](../development/building.md#the-typeface-and-its-license).
 
 ## Privacy
 

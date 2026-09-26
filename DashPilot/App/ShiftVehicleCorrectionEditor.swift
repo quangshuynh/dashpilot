@@ -140,11 +140,7 @@ struct ShiftVehicleCorrectionEditor: View {
 
                 if let message {
                     Section {
-                        Label(message, systemImage: "exclamationmark.triangle.fill")
-                            .font(.subheadline)
-                            .foregroundStyle(.red)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .accessibilityIdentifier("shiftVehicleValidationMessage")
+                        DashValidationMessage(message: message, identifier: "shiftVehicleValidationMessage")
                     }
                 }
             }
