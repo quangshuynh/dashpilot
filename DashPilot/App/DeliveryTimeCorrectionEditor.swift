@@ -148,27 +148,17 @@ struct DeliveryTimeCorrectionEditor: View {
             if let refusal {
                 let sentence = DeliveryLifecycleError.invalidTimeCorrection(refusal).errorDescription
                     ?? "Those times cannot be recorded for this delivery."
-                Label(sentence, systemImage: "exclamationmark.triangle.fill")
-                    .font(.subheadline)
-                    .foregroundStyle(.red)
-                    .fixedSize(horizontal: false, vertical: true)
-                    // One element carrying the sentence rather than a glyph
-                    // called "Warning" beside it: the icon is decoration, the
-                    // refusal is the whole of what has to be read out, and the
-                    // colour is never the only thing carrying it.
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel(sentence)
-                    .accessibilityIdentifier("deliveryTimeCorrectionRefusal")
+                DashValidationMessage(message: sentence, identifier: "deliveryTimeCorrectionRefusal")
             } else {
                 VStack(alignment: .leading, spacing: 4) {
                     ForEach(derivedFigures) { figure in
                         LabeledContent(figure.label) {
                             Text(figure.value).monospacedDigit()
                         }
-                        .font(.subheadline)
+                        .dashFont(.body)
                     }
                     Text(DeliveryTimeCorrectionStatement.derivedFiguresMove)
-                        .font(.caption)
+                        .dashFont(.supporting)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -179,7 +169,7 @@ struct DeliveryTimeCorrectionEditor: View {
                 // The one consequence a driver cannot see anywhere else on this
                 // sheet, and the one they are most likely to assume wrongly.
                 Label(DeliveryTimeCorrectionStatement.routeIsNotChanged, systemImage: "info.circle")
-                    .font(.footnote)
+                    .dashFont(.body)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityElement(children: .ignore)
@@ -188,13 +178,7 @@ struct DeliveryTimeCorrectionEditor: View {
             }
 
             if let saveError {
-                Label(saveError, systemImage: "exclamationmark.triangle.fill")
-                    .font(.footnote)
-                    .foregroundStyle(.red)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel(saveError)
-                    .accessibilityIdentifier("deliveryTimeCorrectionSaveError")
+                DashValidationMessage(message: saveError, identifier: "deliveryTimeCorrectionSaveError")
             }
         } header: {
             Text("Corrected \(numbered.title)")

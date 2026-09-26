@@ -104,7 +104,8 @@ struct PickupPlaceMergeView: View {
                     pendingDestination = destination
                 } label: {
                     Label(destination.displayName, systemImage: "bag")
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .dashFont(.body)
+                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                 }
                 // The direction, in full, in the label of the control that
                 // performs it. "Nowhere Noodles" alone would be a name read out
@@ -132,8 +133,7 @@ struct PickupPlaceMergeView: View {
     /// nothing has been told the feature is broken.
     private var noDestinationsSection: some View {
         Section {
-            Text("No other pickup place to merge into")
-                .foregroundStyle(.secondary)
+            DashNotice(title: "No other pickup place to merge into", symbol: "arrow.triangle.merge")
                 .accessibilityIdentifier("pickupPlaceMergeUnavailable")
         } footer: {
             Text(
@@ -148,11 +148,7 @@ struct PickupPlaceMergeView: View {
 
     private func failureSection(_ message: String) -> some View {
         Section {
-            Label(message, systemImage: "exclamationmark.triangle.fill")
-                .font(.subheadline)
-                .foregroundStyle(.red)
-                .fixedSize(horizontal: false, vertical: true)
-                .accessibilityIdentifier("pickupPlaceMergeMessage")
+            DashValidationMessage(message: message, identifier: "pickupPlaceMergeMessage")
         }
     }
 

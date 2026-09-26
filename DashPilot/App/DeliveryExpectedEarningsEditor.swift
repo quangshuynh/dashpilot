@@ -56,7 +56,7 @@ struct DeliveryExpectedEarningsEditor: View {
                     TextField(placeholder, text: $text)
                         .keyboardType(.decimalPad)
                         .focused($isAmountFocused)
-                        .font(.title2)
+                        .dashFont(.metric)
                         .monospacedDigit()
                         .accessibilityIdentifier("deliveryExpectedEarningsAmountField")
                         .accessibilityLabel("Expected pay for \(numbered.title)")
@@ -65,11 +65,7 @@ struct DeliveryExpectedEarningsEditor: View {
                         }
 
                     if let message {
-                        Label(message, systemImage: "exclamationmark.triangle.fill")
-                            .font(.subheadline)
-                            .foregroundStyle(.red)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .accessibilityIdentifier("deliveryExpectedEarningsValidationMessage")
+                        DashValidationMessage(message: message, identifier: "deliveryExpectedEarningsValidationMessage")
                     }
                 } header: {
                     Text("Expected Pay")
@@ -87,6 +83,7 @@ struct DeliveryExpectedEarningsEditor: View {
                 if hasExpectedEarnings {
                     Section {
                         Button("Remove Expected Pay", role: .destructive, action: remove)
+                            .dashFont(.body)
                             .frame(maxWidth: .infinity)
                             .accessibilityIdentifier("removeDeliveryExpectedEarningsButton")
                             .accessibilityLabel(numbered.spokenRemoveExpectedEarningsLabel)

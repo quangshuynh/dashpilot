@@ -122,7 +122,7 @@ struct OfferCorrectionView: View {
             // a row a driver can see is a row they can merge something into.
             if offer.deliveryCount == 0 {
                 Text("Nothing is recorded under this offer. Combining it into another offer removes it.")
-                    .font(.footnote)
+                    .dashFont(.body)
                     .foregroundStyle(.secondary)
                     .accessibilityIdentifier("offerCorrectionEmptyOffer")
             }
@@ -162,11 +162,12 @@ struct OfferCorrectionView: View {
     }
 
     private func deliveryRow(_ numbered: NumberedDelivery) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: DashSpacing.xs) {
             Text(numbered.statusTitle)
+                .dashFont(.body)
             if let place = numbered.delivery.pickupPlace {
                 Text(place.displayName)
-                    .font(.caption)
+                    .dashFont(.supporting)
                     .foregroundStyle(.secondary)
             }
         }
@@ -184,7 +185,7 @@ struct OfferCorrectionView: View {
                 numbers may change after a correction.
                 """
             )
-            .font(.footnote)
+            .dashFont(.body)
             .foregroundStyle(.secondary)
             .accessibilityIdentifier("offerCorrectionExplanation")
         }
@@ -194,7 +195,9 @@ struct OfferCorrectionView: View {
     private var emptySection: some View {
         Section {
             Text("No deliveries recorded in this shift")
+                .dashFont(.emphasis)
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("offerCorrectionUnavailable")
         } footer: {
             Text("Grouping describes which deliveries you accepted together, so there is nothing to correct yet.")
@@ -203,11 +206,7 @@ struct OfferCorrectionView: View {
 
     private func failureSection(_ message: String) -> some View {
         Section {
-            Label(message, systemImage: "exclamationmark.triangle.fill")
-                .font(.subheadline)
-                .foregroundStyle(.red)
-                .fixedSize(horizontal: false, vertical: true)
-                .accessibilityIdentifier("offerCorrectionMessage")
+            DashValidationMessage(message: message, identifier: "offerCorrectionMessage")
         }
     }
 
@@ -253,7 +252,9 @@ struct OfferCorrectionView: View {
             if destinations.isEmpty {
                 Section {
                     Text("No other offer this delivery could have arrived in")
+                        .dashFont(.emphasis)
                         .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                         .accessibilityIdentifier("offerCorrectionNoDestinations")
                 }
             } else {

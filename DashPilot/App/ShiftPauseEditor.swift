@@ -143,24 +143,14 @@ struct ShiftPauseEditor: View {
             if let refusal {
                 let sentence = ShiftPauseCorrectionError.invalidCorrection(refusal).errorDescription
                     ?? "Those times cannot be recorded as a pause."
-                Label(sentence, systemImage: "exclamationmark.triangle.fill")
-                    .font(.subheadline)
-                    .foregroundStyle(.red)
-                    .fixedSize(horizontal: false, vertical: true)
-                    // One element carrying the sentence, rather than a glyph
-                    // called "Warning" beside it: the icon is decoration, the
-                    // refusal is the whole of what has to be read out, and the
-                    // colour is never the only thing carrying it.
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel(sentence)
-                    .accessibilityIdentifier("shiftPauseEditorRefusal")
+                DashValidationMessage(message: sentence, identifier: "shiftPauseEditorRefusal")
             } else {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(durationStatement)
-                        .font(.headline)
+                        .dashFont(.emphasis)
                         .monospacedDigit()
                     Text(workingTimeStatement)
-                        .font(.caption)
+                        .dashFont(.supporting)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -170,13 +160,7 @@ struct ShiftPauseEditor: View {
             }
 
             if let saveError {
-                Label(saveError, systemImage: "exclamationmark.triangle.fill")
-                    .font(.footnote)
-                    .foregroundStyle(.red)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel(saveError)
-                    .accessibilityIdentifier("shiftPauseEditorSaveError")
+                DashValidationMessage(message: saveError, identifier: "shiftPauseEditorSaveError")
             }
         } header: {
             Text(pause == nil ? "Pause To Add" : "Corrected Pause")

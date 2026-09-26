@@ -54,7 +54,7 @@ struct NewOfferSheet: View {
                         LabeledContent("Deliveries") {
                             Text(deliveryCount, format: .number)
                                 .monospacedDigit()
-                                .font(.title2)
+                                .dashFont(.metric)
                         }
                     }
                     .accessibilityIdentifier("offerDeliveryCountStepper")

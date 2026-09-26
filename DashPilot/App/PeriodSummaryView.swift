@@ -124,9 +124,12 @@ struct PeriodSummaryView: View {
                 // at all. Said plainly rather than left as a spinner that never
                 // resolves, and it names the one control that can fix it.
                 Section {
-                    Text("This selection cannot be summarised. Choose different dates.")
-                        .foregroundStyle(.secondary)
-                        .accessibilityIdentifier("periodUnavailable")
+                    DashNotice(
+                        title: "This selection cannot be summarised",
+                        message: "Choose different dates.",
+                        symbol: "calendar.badge.exclamationmark"
+                    )
+                    .accessibilityIdentifier("periodUnavailable")
                 }
             } else if let metrics {
                 if metrics.isEmpty {
@@ -167,6 +170,7 @@ struct PeriodSummaryView: View {
             } else {
                 Section {
                     Text("Working out this period…")
+                        .dashFont(.body)
                         .foregroundStyle(.secondary)
                 }
             }
@@ -205,7 +209,7 @@ struct PeriodSummaryView: View {
     // MARK: Period selection
 
     private var periodSelector: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: DashSpacing.lg) {
             // Four short words still fit one segmented row on the narrowest
             // iPhone, and keeping them in one row is what stops Month and
             // Custom looking like a different kind of choice from Day and Week.
@@ -224,7 +228,7 @@ struct PeriodSummaryView: View {
                 chosenRangeHeader
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, DashSpacing.sm)
     }
 
     /// A calendar period: its name, with a step to either neighbour.
@@ -237,11 +241,11 @@ struct PeriodSummaryView: View {
                 destination: period?.previous(using: calendar)
             )
 
-            Spacer(minLength: 8)
+            Spacer(minLength: DashSpacing.md)
 
             periodTitleLabel
 
-            Spacer(minLength: 8)
+            Spacer(minLength: DashSpacing.md)
 
             stepButton(
                 systemImage: "chevron.right",
@@ -262,13 +266,14 @@ struct PeriodSummaryView: View {
     /// *Sep 1–7* is not a thing the driver asked for — and offering one would
     /// invent a period nobody selected.
     private var chosenRangeHeader: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: DashSpacing.lg) {
             periodTitleLabel
 
             Button {
                 isChoosingRange = true
             } label: {
                 Label("Choose Dates", systemImage: "calendar")
+                    .dashFont(.emphasis)
                     .frame(maxWidth: .infinity, minHeight: 44)
             }
             .buttonStyle(.bordered)
@@ -278,14 +283,17 @@ struct PeriodSummaryView: View {
     }
 
     private var periodTitleLabel: some View {
-        VStack(spacing: 2) {
+        VStack(spacing: DashSpacing.xs) {
             Text(title)
-                .font(.headline)
+                .dashFont(.title)
                 .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
             if let period {
                 Text(period.rangeStatement(calendar: calendar, locale: locale))
-                    .font(.caption)
+                    .dashFont(.supporting)
                     .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .frame(maxWidth: .infinity)
@@ -321,18 +329,15 @@ struct PeriodSummaryView: View {
         Section {
             // Deliberately not a grid of zeroes. A week nobody drove is a week
             // with no records, not a week of no earnings and no miles.
-            Text(metrics.emptyStatement)
-                .foregroundStyle(.secondary)
+            DashNotice(title: metrics.emptyStatement, symbol: "calendar")
                 .accessibilityIdentifier("periodEmptyState")
         }
     }
 
     private func summarySection(_ metrics: PeriodMetrics) -> some View {
         Section {
-            LabeledContent("Completed shifts") {
-                Text("\(metrics.completedShiftCount)").monospacedDigit()
-            }
-            .accessibilityElement(children: .combine)
+            DashValueRow(title: "Completed shifts", value: "\(metrics.completedShiftCount)")
+            .accessibilityElement(children: .ignore)
             .accessibilityLabel(metrics.shiftCountStatement)
             .accessibilityIdentifier("periodShiftCount")
 
@@ -375,24 +380,24 @@ struct PeriodSummaryView: View {
 
     private func earningsSection(_ metrics: PeriodMetrics) -> some View {
         Section {
-            if let statement = metrics.earningsStatement(locale: locale) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(statement)
-                        .font(.headline)
-                        .monospacedDigit()
-                    Text(metrics.earningsCoverageStatement)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+            // The headline of the screen: the one figure the period leads
+            // with, and the shifts behind it directly under it.
+            Group {
+                if let earnings = metrics.recordedGrossEarnings {
+                    DashMetric(
+                        value: earnings.formatted(locale: locale),
+                        label: "Recorded gross earnings",
+                        detail: metrics.earningsCoverageStatement,
+                        emphasis: .hero
+                    )
+                } else {
+                    DashMetric(value: "No amount recorded", label: "Recorded gross earnings", isFigure: false)
                 }
-                .accessibilityElement(children: .combine)
-                .accessibilityLabel(metrics.spokenEarningsStatement(locale: locale))
-                .accessibilityIdentifier("periodEarnings")
-            } else {
-                Text("No amount recorded")
-                    .foregroundStyle(.secondary)
-                    .accessibilityLabel(metrics.spokenEarningsStatement(locale: locale))
-                    .accessibilityIdentifier("periodEarnings")
             }
+            .padding(.vertical, DashSpacing.xs)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(metrics.spokenEarningsStatement(locale: locale))
+            .accessibilityIdentifier("periodEarnings")
 
             rateRow(metrics, .perWorkingHour, identifier: "periodWorkingHourRate")
             rateRow(metrics, .perDeliveryActiveHour, identifier: "periodActiveHourRate")
@@ -412,32 +417,26 @@ struct PeriodSummaryView: View {
     /// the absence of a net figure has a reason on screen beside it.
     private func expensesSection(_ metrics: PeriodMetrics) -> some View {
         Section {
-            if let statement = metrics.expenseStatement(locale: locale) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(statement)
-                        .font(.headline)
-                        .monospacedDigit()
-                    Text(metrics.expenseBasisStatement)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+            Group {
+                if let total = metrics.expenses.recordedTotal {
+                    DashMetric(
+                        value: total.formatted(locale: locale),
+                        label: "Recorded expenses",
+                        detail: metrics.expenseBasisStatement
+                    )
+                } else {
+                    DashMetric(value: "No expenses recorded", label: "Recorded expenses", isFigure: false)
                 }
-                .accessibilityElement(children: .combine)
-                .accessibilityLabel(metrics.spokenExpenseStatement(locale: locale))
-                .accessibilityIdentifier("periodExpenses")
-            } else {
-                Text("No expenses recorded")
-                    .foregroundStyle(.secondary)
-                    .accessibilityLabel(metrics.spokenExpenseStatement(locale: locale))
-                    .accessibilityIdentifier("periodExpenses")
             }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(metrics.spokenExpenseStatement(locale: locale))
+            .accessibilityIdentifier("periodExpenses")
 
             // Only the categories with a record in them. A category listed at
             // $0.00 would say the driver recorded that it cost nothing.
             ForEach(metrics.expenses.categoryTotals) { total in
-                LabeledContent(total.category.title) {
-                    Text(total.total.formatted(locale: locale)).monospacedDigit()
-                }
-                .accessibilityElement(children: .combine)
+                DashValueRow(title: total.category.title, value: total.total.formatted(locale: locale))
+                .accessibilityElement(children: .ignore)
                 .accessibilityLabel(metrics.categoryStatement(total, locale: locale))
                 .accessibilityIdentifier("periodExpenseCategory")
             }
@@ -465,24 +464,16 @@ struct PeriodSummaryView: View {
     /// subtotals of what the driver entered, so the difference is an upper bound
     /// on what they actually netted, and the figure is meaningless without that.
     private func netRow(_ metrics: PeriodMetrics) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            LabeledContent(metrics.netTitle) {
-                if let statement = metrics.netStatement(locale: locale) {
-                    Text(statement).monospacedDigit()
-                } else {
-                    Text("Not available").foregroundStyle(.secondary)
-                }
-            }
-            Text(
-                metrics.netAfterRecordedExpenses.isAvailable
-                    ? "\(metrics.netBasisStatement). \(metrics.netCautionStatement)"
-                    : metrics.netUnavailableExplanation
-            )
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            .fixedSize(horizontal: false, vertical: true)
-        }
-        .accessibilityElement(children: .combine)
+        DashValueRow(
+            title: metrics.netTitle,
+            value: metrics.netStatement(locale: locale) ?? "Not available",
+            detail: metrics.netAfterRecordedExpenses.isAvailable
+                ? "\(metrics.netBasisStatement). \(metrics.netCautionStatement)"
+                : metrics.netUnavailableExplanation,
+            isFigure: metrics.netAfterRecordedExpenses.isAvailable,
+            isProminent: true
+        )
+        .accessibilityElement(children: .ignore)
         .accessibilityLabel(metrics.spokenNetStatement(locale: locale))
         .accessibilityIdentifier("periodNetAfterExpenses")
     }
@@ -512,7 +503,10 @@ struct PeriodSummaryView: View {
             estimatedFuelRow(metrics.fuel)
             estimatedNetRow(metrics.estimatedNetAfterFuel)
         } header: {
-            Text("Estimated Fuel")
+            // Worded as an estimate in the heading itself, and marked with a
+            // symbol, so the section never reads as one of the recorded ones
+            // above it on position alone.
+            Label("Estimated Fuel", systemImage: "fuelpump")
         } footer: {
             Text(
                 """
@@ -529,36 +523,26 @@ struct PeriodSummaryView: View {
 
     /// The period's estimated fuel, with both coverages under it.
     private func estimatedFuelRow(_ fuel: PeriodFuelEstimate) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            LabeledContent("Estimated fuel") {
-                if let cost = fuel.estimatedCost {
-                    Text(cost.formatted(locale: locale)).monospacedDigit()
-                } else {
-                    Text("Not available").foregroundStyle(.secondary)
-                }
-            }
-
-            if fuel.isAvailable {
-                Text(fuelCoverageStatement(fuel))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                if fuel.isAnyRoutePartial {
-                    Text(PeriodFuelEstimate.partialStatement)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            } else if let explanation = fuel.unavailableExplanation {
-                Text(explanation)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-        .accessibilityElement(children: .combine)
+        DashValueRow(
+            title: "Estimated fuel",
+            value: fuel.estimatedCost?.formatted(locale: locale) ?? "Not available",
+            detail: fuelDetail(fuel),
+            isFigure: fuel.isAvailable
+        )
+        .accessibilityElement(children: .ignore)
         .accessibilityLabel(fuel.spokenStatement(locale: locale))
         .accessibilityIdentifier("periodEstimatedFuel")
+    }
+
+    /// What sits under the estimated fuel: both coverages and, over partial
+    /// routes, the sentence that makes it a floor; or why there is none.
+    private func fuelDetail(_ fuel: PeriodFuelEstimate) -> String? {
+        guard fuel.isAvailable else { return fuel.unavailableExplanation }
+        var lines = [fuelCoverageStatement(fuel)]
+        if fuel.isAnyRoutePartial {
+            lines.append(PeriodFuelEstimate.partialStatement)
+        }
+        return lines.joined(separator: "\n")
     }
 
     /// Coverage in both units.
@@ -585,72 +569,53 @@ struct PeriodSummaryView: View {
     /// The estimated net, the two figures it was worked out from, and the
     /// sentence that keeps a subset from reading as the period.
     private func estimatedNetRow(_ net: PeriodEstimatedNet) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            LabeledContent("Estimated net after fuel") {
-                if let amount = net.amount {
-                    Text(amount.formatted(locale: locale)).monospacedDigit()
-                } else {
-                    Text("Not available").foregroundStyle(.secondary)
-                }
-            }
-
-            if net.isAvailable {
-                // The two halves, so a reader can see the figures the
-                // subtraction was performed on rather than trusting that they
-                // were the right ones. Neither is the period's headline
-                // earnings unless the coverage says the subset is the period.
-                if let earnings = net.recordedEarnings, let fuel = net.estimatedFuel {
-                    Text(
-                        """
-                        \(earnings.formatted(locale: locale)) recorded less \
-                        \(fuel.formatted(locale: locale)) estimated fuel
-                        """
-                    )
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
-                    .fixedSize(horizontal: false, vertical: true)
-                }
-                Text(net.subsetCautionStatement ?? "Across every completed shift in this period.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                if net.isAnyRoutePartial {
-                    Text("Some of these routes are partial, so the fuel is a floor and this net is a ceiling.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            } else if let explanation = net.unavailability?.explanation {
-                Text(explanation)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-        .accessibilityElement(children: .combine)
+        DashValueRow(
+            title: "Estimated net after fuel",
+            value: net.amount?.formatted(locale: locale) ?? "Not available",
+            detail: estimatedNetDetail(net),
+            isFigure: net.isAvailable,
+            isProminent: net.isAvailable
+        )
+        .accessibilityElement(children: .ignore)
         .accessibilityLabel(net.spokenStatement(locale: locale))
         .accessibilityIdentifier("periodEstimatedNetAfterFuel")
     }
 
+    /// What sits under the estimated net: the two halves it was worked out
+    /// from, so a reader can see what was subtracted from what, the sentence
+    /// that keeps a subset from reading as the period, and the ceiling over
+    /// partial routes; or why there is none. Neither half is the period's
+    /// headline earnings unless the coverage says the subset is the period.
+    private func estimatedNetDetail(_ net: PeriodEstimatedNet) -> String? {
+        guard net.isAvailable else { return net.unavailability?.explanation }
+        var lines: [String] = []
+        if let earnings = net.recordedEarnings, let fuel = net.estimatedFuel {
+            lines.append("\(earnings.formatted(locale: locale)) recorded less \(fuel.formatted(locale: locale)) estimated fuel")
+        }
+        lines.append(net.subsetCautionStatement ?? "Across every completed shift in this period.")
+        if net.isAnyRoutePartial {
+            lines.append("Some of these routes are partial, so the fuel is a floor and this net is a ceiling.")
+        }
+        return lines.joined(separator: "\n")
+    }
+
     private func drivingSection(_ metrics: PeriodMetrics) -> some View {
         Section {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(metrics.mileageStatement(locale: locale))
-                    .font(.headline)
-                    .monospacedDigit()
-                Text(metrics.mileageCoverageStatement)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .accessibilityElement(children: .combine)
+            DashMetric(
+                value: metrics.recordedDistance.isMeasured
+                    ? metrics.recordedDistance.formattedMiles(locale: locale)
+                    : "No route measured",
+                label: "Recorded miles",
+                detail: metrics.mileageCoverageStatement,
+                isFigure: metrics.recordedDistance.isMeasured
+            )
+            .accessibilityElement(children: .ignore)
             .accessibilityLabel(metrics.spokenMileageStatement(locale: locale))
             .accessibilityIdentifier("periodMileage")
 
             if let explanation = metrics.mileagePartialExplanation {
                 Text(explanation)
-                    .font(.footnote)
+                    .dashFont(.body)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("periodMileagePartial")
@@ -673,54 +638,48 @@ struct PeriodSummaryView: View {
 
     private func deliveriesSection(_ metrics: PeriodMetrics) -> some View {
         Section {
-            LabeledContent("Delivered") {
-                Text("\(metrics.deliverySummary.completed)").monospacedDigit()
+            // Two outcomes side by side, each its own figure, and never added
+            // into one.
+            DashMetricRow {
+                DashMetric(value: "\(metrics.deliverySummary.completed)", label: "Delivered")
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("\(metrics.deliverySummary.completed) delivered")
+                    .accessibilityIdentifier("periodDeliveredCount")
+                DashMetric(value: "\(metrics.deliverySummary.cancelled)", label: "Cancelled")
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("\(metrics.deliverySummary.cancelled) cancelled")
+                    .accessibilityIdentifier("periodCancelledCount")
             }
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel("\(metrics.deliverySummary.completed) delivered")
-            .accessibilityIdentifier("periodDeliveredCount")
 
-            LabeledContent("Cancelled") {
-                Text("\(metrics.deliverySummary.cancelled)").monospacedDigit()
-            }
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel("\(metrics.deliverySummary.cancelled) cancelled")
-            .accessibilityIdentifier("periodCancelledCount")
-
-            VStack(alignment: .leading, spacing: 4) {
-                LabeledContent("Median recorded pickup wait") {
-                    if let wait = metrics.pickupWaitStatement {
-                        Text(wait).monospacedDigit()
-                    } else {
-                        Text("Not available").foregroundStyle(.secondary)
-                    }
-                }
-                Text(metrics.pickupWaitBasisStatement)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            .accessibilityElement(children: .combine)
+            DashValueRow(
+                title: "Median recorded pickup wait",
+                value: metrics.pickupWaitStatement ?? "Not available",
+                detail: metrics.pickupWaitBasisStatement,
+                isFigure: metrics.pickupWaitStatement != nil
+            )
+            .accessibilityElement(children: .ignore)
             .accessibilityLabel(metrics.spokenPickupWaitStatement)
             .accessibilityIdentifier("periodPickupWait")
 
             if let places = metrics.pickupPlaceStatement {
                 Text(places)
-                    .font(.footnote)
+                    .dashFont(.body)
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("periodPickupPlaces")
             }
 
             if let subtotal = metrics.deliveryEarningsStatement(locale: locale) {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: DashSpacing.xs) {
                     Text("Recorded on deliveries")
-                        .font(.subheadline)
+                        .dashFont(.body)
                     Text(subtotal)
-                        .font(.caption)
+                        .dashFont(.supporting)
                         .foregroundStyle(.secondary)
                         .monospacedDigit()
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                .accessibilityElement(children: .combine)
+                .accessibilityElement(children: .ignore)
                 .accessibilityLabel(metrics.spokenDeliveryEarningsStatement(locale: locale) ?? subtotal)
                 .accessibilityIdentifier("periodDeliveryEarnings")
             }
@@ -755,17 +714,18 @@ struct PeriodSummaryView: View {
     /// which is the decision most easily lost in a view body.
     private func comparisonSection(_ comparison: PeriodComparison) -> some View {
         Section {
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: DashSpacing.xs) {
                 Text(comparison.previousPeriodStatement(asOf: now, calendar: calendar, locale: locale))
-                    .font(.subheadline)
+                    .dashFont(.emphasis)
+                    .fixedSize(horizontal: false, vertical: true)
                 if let statement = comparison.previousEmptyStatement {
                     Text(statement)
-                        .font(.caption)
+                        .dashFont(.supporting)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            .accessibilityElement(children: .combine)
+            .accessibilityElement(children: .ignore)
             .accessibilityLabel(
                 [
                     comparison.spokenPreviousPeriodStatement(asOf: now, calendar: calendar, locale: locale),
@@ -783,7 +743,7 @@ struct PeriodSummaryView: View {
             // explanation lives.
             if let notes = comparisonNotes(comparison) {
                 Text(notes)
-                    .font(.footnote)
+                    .dashFont(.body)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("periodComparisonNotes")
@@ -806,16 +766,18 @@ struct PeriodSummaryView: View {
     /// able to see what is being subtracted from what, and a lone `−$25.50`
     /// cannot be checked against anything they remember.
     private func comparisonRow(_ entry: PeriodComparisonEntry, noun: String) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: DashSpacing.xs) {
             Text(entry.metric.title)
-                .font(.subheadline)
+                .dashFont(.metricLabel)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             Text(entry.valuesStatement(locale: locale))
-                .font(.headline)
+                .dashFont(.emphasis)
                 .monospacedDigit()
                 .fixedSize(horizontal: false, vertical: true)
             if let change = comparisonChangeStatement(entry, noun: noun) {
                 Text(change)
-                    .font(.caption)
+                    .dashFont(.body)
                     .fixedSize(horizontal: false, vertical: true)
             }
             // The coverage of both sides, printed whether or not they agree. A
@@ -824,12 +786,13 @@ struct PeriodSummaryView: View {
             // for.
             if let basis = entry.basisStatement {
                 Text(basis)
-                    .font(.caption)
+                    .dashFont(.supporting)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .accessibilityElement(children: .combine)
+        .padding(.vertical, DashSpacing.xs)
+        .accessibilityElement(children: .ignore)
         .accessibilityLabel(entry.spokenStatement(noun: noun, locale: locale))
         .accessibilityIdentifier("periodComparison.\(entry.metric.id)")
     }
@@ -875,6 +838,7 @@ struct PeriodSummaryView: View {
                     isExporting = true
                 } label: {
                     Label(scope.actionTitle, systemImage: "square.and.arrow.up")
+                        .dashFont(.body)
                 }
                 .accessibilityLabel(scope.spokenActionLabel)
                 .accessibilityIdentifier("exportPeriodButton")
@@ -910,21 +874,13 @@ struct PeriodSummaryView: View {
         coverage: MetricCoverage,
         identifier: String
     ) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            LabeledContent(title) {
-                if let duration {
-                    Text(DurationText.short(duration)).monospacedDigit()
-                } else {
-                    Text("Not available").foregroundStyle(.secondary)
-                }
-            }
-            if duration != nil, !coverage.isComplete {
-                Text(coverage.statement())
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .accessibilityElement(children: .combine)
+        DashValueRow(
+            title: title,
+            value: duration.map(DurationText.short) ?? "Not available",
+            detail: duration != nil && !coverage.isComplete ? coverage.statement() : nil,
+            isFigure: duration != nil
+        )
+        .accessibilityElement(children: .ignore)
         .accessibilityLabel(durationLabel(spokenTitle: spokenTitle, duration: duration, coverage: coverage))
         .accessibilityIdentifier(identifier)
     }
@@ -942,24 +898,13 @@ struct PeriodSummaryView: View {
     /// same figure over all six are different statements, and the difference has
     /// to be on screen rather than in this file.
     private func rateRow(_ metrics: PeriodMetrics, _ kind: PeriodRateKind, identifier: String) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            LabeledContent(kind.title) {
-                if let statement = metrics.rateStatement(kind, locale: locale) {
-                    Text(statement).monospacedDigit()
-                } else {
-                    Text("Not available").foregroundStyle(.secondary)
-                }
-            }
-            Text(
-                metrics.rate(kind).isAvailable
-                    ? metrics.rateBasisStatement(kind)
-                    : kind.unavailableExplanation
-            )
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            .fixedSize(horizontal: false, vertical: true)
-        }
-        .accessibilityElement(children: .combine)
+        DashValueRow(
+            title: kind.title,
+            value: metrics.rateStatement(kind, locale: locale) ?? "Not available",
+            detail: metrics.rate(kind).isAvailable ? metrics.rateBasisStatement(kind) : kind.unavailableExplanation,
+            isFigure: metrics.rate(kind).isAvailable
+        )
+        .accessibilityElement(children: .ignore)
         .accessibilityLabel(metrics.spokenRateStatement(kind, locale: locale))
         .accessibilityIdentifier(identifier)
     }
