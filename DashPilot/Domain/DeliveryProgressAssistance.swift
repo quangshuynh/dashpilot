@@ -290,16 +290,12 @@ nonisolated struct DeliveryProgressAssistance: Equatable, Sendable {
         guard record.isChronological, !record.recordsPickupWithoutArrival else { return nil }
 
         let state = record.state
-        let since: Date
         let threshold: TimeInterval
 
         switch state {
         case .accepted:
-            since = record.acceptedAt
             threshold = minimumTimeSinceAcceptance
         case .arrivedAtPickup:
-            guard let arrivedAtPickupAt = record.arrivedAtPickupAt else { return nil }
-            since = arrivedAtPickupAt
             threshold = minimumTimeSinceArrival
         // Deliberately silent. See the type's own documentation: elapsed time
         // says least about a delivery that is already in the car.
@@ -307,6 +303,8 @@ nonisolated struct DeliveryProgressAssistance: Equatable, Sendable {
         case .delivered, .cancelled: return nil
         }
 
+        // The card's clock and this evidence are one definition.
+        guard let since = record.currentStateStartedAt else { return nil }
         let elapsed = now.timeIntervalSince(since)
         guard elapsed >= threshold else { return nil }
 

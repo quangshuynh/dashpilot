@@ -95,41 +95,32 @@ struct ActiveShiftPanel: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Label(
-                isPaused ? ShiftLifecycleState.paused.title : ShiftLifecycleState.running.title,
-                systemImage: isPaused ? "pause.circle.fill" : "record.circle"
-            )
-            .font(.headline)
-            .foregroundStyle(isPaused ? .orange : .red)
-            .accessibilityIdentifier(isPaused ? "pausedShiftStatus" : "activeShiftStatus")
+        VStack(alignment: .leading, spacing: DashSpacing.xl) {
+            // What state the shift is in, first, because it changes what every
+            // figure below means.
+            VStack(alignment: .leading, spacing: DashSpacing.md) {
+                statusRow
+                parkedNotice
+            }
 
+            // The one figure that exists and moves while a shift runs. Earnings
+            // cannot lead here: a running shift may not record an amount, so a
+            // headline of earnings would be a permanent absence.
             workingTime
 
-            LabeledContent("Started") {
-                Text(shift.startedAt, format: .dateTime.hour().minute())
-            }
-            .font(.subheadline)
-
-            if let pausedAt = shift.openPause?.startedAt {
-                LabeledContent("Paused") {
-                    Text(pausedAt, format: .dateTime.hour().minute())
-                }
-                .font(.subheadline)
-                .accessibilityIdentifier("pausedAtTime")
-            }
-
-            parkedNotice
-
             if let metrics {
-                recordedMileage(metrics)
-                deliveries(metrics)
+                DashMetricRow {
+                    recordedMileage(metrics)
+                    deliveries(metrics)
+                }
                 earnings(metrics)
             }
 
-            vehicleContext(measuring: metrics?.recordedDistance)
-
-            RouteCaptureStatusView(state: captureState)
+            // Context rather than figures: quieter, and below them.
+            VStack(alignment: .leading, spacing: DashSpacing.md) {
+                vehicleContext(measuring: metrics?.recordedDistance)
+                RouteCaptureStatusView(state: captureState)
+            }
 
             controls
         }
@@ -157,6 +148,34 @@ struct ActiveShiftPanel: View {
         .onChange(of: shift.lifecycleState) { _, _ in measureRoute() }
         .sheet(isPresented: $isCorrectingVehicle) {
             ShiftVehicleCorrectionEditor(shift: shift)
+        }
+    }
+
+    /// Which state the shift is in, when it started, and, while paused, when
+    /// the pause began.
+    ///
+    /// Running and paused each have their own symbol, word and tint; the tint
+    /// is the third signal, never the only one. Parked is **not** a third
+    /// value here, because a parked shift is still running and still counting
+    /// working time: it is the notice under this row, about the route.
+    private var statusRow: some View {
+        VStack(alignment: .leading, spacing: DashSpacing.xs) {
+            DashStatusLabel(
+                title: isPaused ? ShiftLifecycleState.paused.title : ShiftLifecycleState.running.title,
+                symbol: isPaused ? "pause.circle.fill" : "record.circle",
+                tint: isPaused ? .orange : .red
+            )
+            .accessibilityIdentifier(isPaused ? "pausedShiftStatus" : "activeShiftStatus")
+
+            HStack(spacing: DashSpacing.md) {
+                Text("Started \(shift.startedAt.formatted(date: .omitted, time: .shortened))")
+                if let pausedAt = shift.openPause?.startedAt {
+                    Text("Paused \(pausedAt.formatted(date: .omitted, time: .shortened))")
+                        .accessibilityIdentifier("pausedAtTime")
+                }
+            }
+            .dashFont(.supporting)
+            .foregroundStyle(.secondary)
         }
     }
 
@@ -209,19 +228,18 @@ struct ActiveShiftPanel: View {
     /// sentence that does explain it is on the shift's own screen, and a driver
     /// in a cradle is not the audience for a paragraph.
     private func recordedMileage(_ metrics: ActiveShiftMetrics) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(metrics.mileageLine(locale: locale))
-                .font(.subheadline.weight(.medium))
-                .monospacedDigit()
-                .fixedSize(horizontal: false, vertical: true)
+        let distance = metrics.recordedDistance
+        let detail = [metrics.partialMarker, metrics.captureStatement].compactMap { $0 }
 
-            if let capture = metrics.captureStatement {
-                Text(capture)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .accessibilityElement(children: .combine)
+        return DashMetric(
+            value: distance.isMeasured
+                ? distance.formattedMiles(locale: locale)
+                : metrics.mileageStatement(locale: locale),
+            label: "Recorded miles",
+            detail: detail.isEmpty ? nil : detail.joined(separator: " · "),
+            isFigure: distance.isMeasured
+        )
+        .accessibilityElement(children: .ignore)
         .accessibilityLabel("Recorded mileage")
         // The spoken form folds the partial-route claim into a sentence: the
         // two-word marker is legible beside the figure and unintelligible heard
@@ -235,13 +253,24 @@ struct ActiveShiftPanel: View {
     }
 
     /// How many deliveries are open, and how many the shift has finished.
+    ///
+    /// Two figures, finished and in progress, read as one element with the
+    /// sentence the shift has always spoken.
     private func deliveries(_ metrics: ActiveShiftMetrics) -> some View {
-        Text(metrics.deliveryStatement)
-            .font(.subheadline)
-            .fixedSize(horizontal: false, vertical: true)
-            .accessibilityLabel("Deliveries")
-            .accessibilityValue(metrics.spokenDeliveryStatement)
-            .accessibilityIdentifier("liveDeliveryCounts")
+        let summary = metrics.deliverySummary
+
+        return HStack(alignment: .top, spacing: DashSpacing.lg) {
+            DashMetric(
+                value: "\(summary.completed)",
+                label: "Delivered",
+                detail: summary.cancelled > 0 ? "\(summary.cancelled) cancelled" : nil
+            )
+            DashMetric(value: "\(summary.inProgress)", label: "In progress")
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Deliveries")
+        .accessibilityValue(metrics.spokenDeliveryStatement)
+        .accessibilityIdentifier("liveDeliveryCounts")
     }
 
     /// The amount recorded for the shift and the rates derived from it, or the
@@ -261,7 +290,7 @@ struct ActiveShiftPanel: View {
             LabeledContent("Recorded") {
                 Text(gross.formatted(locale: locale)).monospacedDigit()
             }
-            .font(.subheadline)
+            .dashFont(.body)
             .accessibilityLabel("Recorded gross earnings")
             .accessibilityIdentifier("liveRecordedGross")
         }
@@ -280,7 +309,7 @@ struct ActiveShiftPanel: View {
 
         if let notice = metrics.rateNotice {
             Text(notice)
-                .font(.caption)
+                .dashFont(.supporting)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("liveRateNotice")
@@ -298,7 +327,7 @@ struct ActiveShiftPanel: View {
             LabeledContent(title) {
                 Text(amount.formatted(locale: locale)).monospacedDigit()
             }
-            .font(.subheadline)
+            .dashFont(.body)
             .accessibilityLabel(spokenTitle)
         }
     }
@@ -337,10 +366,11 @@ struct ActiveShiftPanel: View {
             Image(systemName: "car.fill")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(context.title)
-                    .font(.subheadline)
+                    .dashFont(.body)
                     // Secondary where nothing was recorded, because an absence
                     // should not read with the weight of a fact.
                     .foregroundStyle(context.isRecorded ? .primary : .secondary)
@@ -348,7 +378,7 @@ struct ActiveShiftPanel: View {
 
                 if let economy = context.economyStatement(locale: locale) {
                     Text(economy)
-                        .font(.caption)
+                        .dashFont(.supporting)
                         .monospacedDigit()
                         .foregroundStyle(.secondary)
                 }
@@ -380,7 +410,9 @@ struct ActiveShiftPanel: View {
     /// deliberately.
     private var changeVehicleButton: some View {
         Button("Change") { isCorrectingVehicle = true }
-            .font(.caption)
+            .dashFont(.supporting)
+            .frame(minHeight: 44)
+            .contentShape(Rectangle())
             .buttonStyle(.borderless)
             .accessibilityLabel("Change this shift's vehicle")
             .accessibilityHint("Only before DashPilot has recorded any driving on this shift")
@@ -416,15 +448,19 @@ struct ActiveShiftPanel: View {
     @ViewBuilder
     private var parkedNotice: some View {
         if isRouteSuspended, let parkedAt = shift.openRouteSuspension?.startedAt {
-            VStack(alignment: .leading, spacing: 2) {
-                // A symbol and a sentence, never a tint alone.
-                Label("Parked · route not recording", systemImage: "parkingsign.circle.fill")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.orange)
+            VStack(alignment: .leading, spacing: DashSpacing.xs) {
+                // A symbol, a word and a tint of its own: parked is not
+                // paused, and must never look like it.
+                DashStatusLabel(
+                    title: "Parked · route not recording",
+                    symbol: "parkingsign.circle.fill",
+                    tint: .teal
+                )
 
                 Text("Since \(parkedAt.formatted(date: .omitted, time: .shortened)). Your shift is still running.")
-                    .font(.caption)
+                    .dashFont(.supporting)
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             .accessibilityElement(children: .combine)
             .accessibilityLabel(
@@ -479,33 +515,41 @@ struct ActiveShiftPanel: View {
             .accessibilityIdentifier("parkShiftButton")
         }
 
-        if isPaused {
-            Button(action: resume) {
-                Text("Resume Shift")
-                    .frame(maxWidth: .infinity)
+        pauseAndEnd
+    }
+
+    /// Pause (or Resume) and End, side by side where they fit and stacked at
+    /// accessibility sizes, so neither title is ever shortened.
+    ///
+    /// End is bordered and red rather than prominent: the prominent control
+    /// during a shift is the delivery action below, which is tapped many times
+    /// a shift, while this one is tapped once. It stays available while paused:
+    /// a driver who has finished has finished, and making them resume a shift
+    /// they are not working in order to end it would record work that did not
+    /// happen.
+    @ViewBuilder
+    private var pauseAndEnd: some View {
+        let pauseOrResume = Group {
+            if isPaused {
+                Button(action: resume) {
+                    Text("Resume Shift")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .accessibilityIdentifier("resumeShiftButton")
+            } else {
+                Button(action: pause) {
+                    Text("Pause Shift")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
+                .accessibilityIdentifier("pauseShiftButton")
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-            .accessibilityIdentifier("resumeShiftButton")
-        } else {
-            Button(action: pause) {
-                Text("Pause Shift")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.large)
-            .accessibilityIdentifier("pauseShiftButton")
         }
 
-        // Bordered rather than prominent: the prominent control during a
-        // shift is the delivery action just below, which is tapped many
-        // times a shift, while this one is tapped once. Emphasising the
-        // rarer, harder-to-undo button over the frequent one is how a
-        // driver ends a shift by mistake. It stays available while paused:
-        // a driver who has finished has finished, and making them resume a
-        // shift they are not working in order to end it would record work
-        // that did not happen.
-        Button(action: end) {
+        let endButton = Button(action: end) {
             Text("End Shift")
                 .frame(maxWidth: .infinity)
         }
@@ -513,6 +557,17 @@ struct ActiveShiftPanel: View {
         .controlSize(.large)
         .tint(.red)
         .accessibilityIdentifier("endShiftButton")
+
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: DashSpacing.lg) {
+                pauseOrResume
+                endButton
+            }
+            VStack(spacing: DashSpacing.lg) {
+                pauseOrResume
+                endButton
+            }
+        }
     }
 }
 
@@ -528,15 +583,16 @@ struct WorkingTimeLabel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
+            // Never scaled down to fit: at the largest sizes the figure is
+            // allowed its full height, and tabular figures keep it from moving
+            // sideways as it ticks.
             Text(duration.formatted(.time(pattern: .hourMinuteSecond)))
-                .font(.system(.largeTitle, design: .rounded, weight: .semibold))
-                .monospacedDigit()
-                .lineLimit(1)
-                .minimumScaleFactor(0.6)
+                .dashFont(.metricHero)
                 .foregroundStyle(isPaused ? .secondary : .primary)
+                .fixedSize(horizontal: false, vertical: true)
 
             Text(isPaused ? "Worked so far · paused" : "Worked so far")
-                .font(.caption)
+                .dashFont(.metricLabel)
                 .foregroundStyle(.secondary)
         }
         .accessibilityElement(children: .combine)
