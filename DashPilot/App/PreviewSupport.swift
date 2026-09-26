@@ -828,6 +828,7 @@ enum PreviewSupport {
     /// | Last week, Monday | `$80.00`, measured route, `Synthetic Hatchback` at 25 MPG and `$4.00`, 3 delivered and 1 cancelled |
     /// | Last week, Wednesday | `$60.00`, measured route, no fuel assumptions, 2 delivered |
     /// | Last week, Friday | `$45.00`, measured route, `Synthetic Van` at 20 MPG and a recorded `$0.00` |
+    /// | 3 weeks ago, Tuesday | `$50.03`, measured route, `Synthetic Hatchback` at 25 MPG and `$4.00`: the one older week whose fuel is estimated over every shift |
     /// | Every other week from 2 to 128 weeks ago | `$50.00` plus the week number in cents, no route |
     /// | 4 weeks ago, instead | also 30 MPG typed by hand: no name and no price |
     /// | 130 weeks ago | `$12.34`, the oldest, recording no vehicle |
@@ -895,6 +896,18 @@ enum PreviewSupport {
                 milesPerGallon: 20,
                 gasPricePerGallon: .zero,
                 vehicleName: "Synthetic Van"
+            )
+        }
+
+        // A week whose fuel covers every shift, so complete coverage is stated
+        // on a card rather than only ever the partial kind. Its amount follows
+        // the fixture's `$50.00` plus weeks-ago rule, so newest first still means
+        // the cents only grow.
+        if let covered = seed(weeksAgo: 3, day: 1, hour: 9, amount: 5_003, routed: true) {
+            try? covered.setFuelAssumptions(
+                milesPerGallon: 25,
+                gasPricePerGallon: Money(minorUnits: 400),
+                vehicleName: "Synthetic Hatchback"
             )
         }
 

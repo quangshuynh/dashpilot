@@ -76,9 +76,12 @@ private struct OlderHistoryWeeksList: View {
         List {
             if weeks.isEmpty {
                 Section {
-                    Text("Every completed shift is in the week you are in.")
-                        .foregroundStyle(.secondary)
-                        .accessibilityIdentifier("olderHistoryWeeksEmptyNotice")
+                    DashNotice(
+                        title: "No older weeks",
+                        message: "Every completed shift is in the week you are in.",
+                        symbol: "calendar"
+                    )
+                    .accessibilityIdentifier("olderHistoryWeeksEmptyNotice")
                 }
             }
 
@@ -116,12 +119,18 @@ private struct OlderHistoryWeeksList: View {
                     // read than it needs to be. A driver scrolling this screen
                     // is looking for a week, so the dates are the heading rather
                     // than a caption under one.
+                    // In the emphasis role and the primary colour, so where
+                    // one week ends and the next begins is the most obvious
+                    // thing on a screen of weeks.
                     Text(heading(for: group.week))
+                        .dashFont(.emphasis)
+                        .foregroundStyle(.primary)
                         .textCase(nil)
                         .accessibilityLabel(spokenHeading(for: group.week))
                         .accessibilityIdentifier("olderWeekHeader")
                 } footer: {
                     Text(shiftCount(group.elements.count))
+                        .dashFont(.supporting)
                 }
             }
         }

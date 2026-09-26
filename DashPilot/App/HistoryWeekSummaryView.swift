@@ -23,6 +23,31 @@ import SwiftUI
 /// route and the recorded facts each time the section is built, exactly as
 /// ``CompletedShiftRow`` derives its own.
 struct HistoryWeekSummaryView: View {
+    /// Where the summary sits, which decides only how loud its headline is.
+    enum Placement {
+        /// Above the week the driver is in, on the root screen: the headline
+        /// is the largest figure in History.
+        case currentWeek
+        /// Above one week of many on Older Weeks: the same hierarchy, one step
+        /// quieter, so a screen of weeks reads as a list rather than a wall of
+        /// headlines.
+        case olderWeek
+
+        var headline: DashMetric.Emphasis {
+            switch self {
+            case .currentWeek: .hero
+            case .olderWeek: .standard
+            }
+        }
+
+        var identifier: String {
+            switch self {
+            case .currentWeek: "currentWeekSummary"
+            case .olderWeek: "olderWeekSummary"
+            }
+        }
+    }
+
     let week: HistoryWeek
     let shifts: [Shift]
 
@@ -31,8 +56,9 @@ struct HistoryWeekSummaryView: View {
     /// been heard first.
     let spokenWeekTitle: String
 
+    var placement: Placement = .olderWeek
+
     @Environment(\.modelContext) private var modelContext
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.locale) private var locale
 
     /// Derived when the section appears. `nil` while the routes are still being
@@ -41,28 +67,52 @@ struct HistoryWeekSummaryView: View {
     @State private var summary: HistoryWeekSummary?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: DashSpacing.lg) {
             if let summary {
                 let lines = summary.lines(locale: locale)
-                let primary = lines.filter { $0.prominence == .primary }
-                let secondary = lines.filter { $0.prominence == .secondary }
 
-                VStack(alignment: .leading, spacing: 6) {
-                    ForEach(primary) { row($0) }
+                // The three figures that answer "what did this week look like",
+                // in the order a driver asks it: what it paid, then how long and
+                // how far. Earnings lead on their own line and the two
+                // quantities share a row, which becomes a column where it
+                // cannot hold them.
+                if let earnings = lines.first(where: { $0.id == .earnings }) {
+                    metric(earnings, emphasis: placement.headline)
                 }
-                if !secondary.isEmpty {
-                    Divider()
-                    VStack(alignment: .leading, spacing: 4) {
-                        ForEach(secondary) { row($0) }
+                DashMetricRow {
+                    ForEach(lines.filter { $0.id == .working || $0.id == .mileage }) { line in
+                        metric(line, emphasis: .standard)
+                    }
+                }
+
+                Divider()
+
+                // Context under the figures, quieter: the work itself, then the
+                // estimates only where the week has them. Each estimate keeps its
+                // coverage under it, because a partial figure without the count
+                // behind it reads as a claim about the whole week.
+                VStack(alignment: .leading, spacing: DashSpacing.md) {
+                    Text(summary.activityStatement)
+                        .dashFont(.body)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    ForEach(lines.filter { $0.id == .estimatedFuel || $0.id == .estimatedNet }) { line in
+                        DashValueRow(
+                            title: line.title,
+                            value: line.value,
+                            detail: line.detail,
+                            isFigure: line.isFigure
+                        )
                     }
                 }
             } else {
                 Text("Working out this week…")
-                    .font(.subheadline)
+                    .dashFont(.body)
                     .foregroundStyle(.secondary)
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, DashSpacing.sm)
         // Keyed on the week **and** what its shifts record, so editing one of
         // them works this week out again and nothing else. Reading the
         // revision here is also what makes this body observe those facts. The
@@ -73,57 +123,20 @@ struct HistoryWeekSummaryView: View {
         // in full.
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(spokenLabel)
-        .accessibilityIdentifier("olderWeekSummary")
+        .accessibilityIdentifier(placement.identifier)
     }
 
-    /// One figure: what it is, what it says, and what is behind it.
-    ///
-    /// Primary figures are drawn larger and heavier than the rest; the order
-    /// and the divider say the same thing, so the difference never rests on
-    /// weight alone. Two columns at ordinary text sizes and one at
-    /// accessibility sizes, for the reason ``CompletedShiftRow``'s heading
-    /// stacks: a shortened label beside a shortened figure is worse than a
-    /// second line, and the first thing a truncation takes is the word that
-    /// makes a figure honest. Nothing here shrinks text to make it fit.
-    @ViewBuilder
-    private func row(_ line: HistoryWeekSummaryLine) -> some View {
-        let isPrimary = line.prominence == .primary
-        let titleFont: Font = isPrimary ? .subheadline : .footnote
-        let valueFont: Font = isPrimary ? .headline : .footnote.weight(.medium)
-
-        VStack(alignment: .leading, spacing: 1) {
-            if dynamicTypeSize.isAccessibilitySize {
-                Text(line.title)
-                    .font(titleFont)
-                    .foregroundStyle(.secondary)
-                Text(line.value)
-                    .font(valueFont)
-                    .monospacedDigit()
-                    .fixedSize(horizontal: false, vertical: true)
-            } else {
-                HStack(alignment: .firstTextBaseline) {
-                    Text(line.title)
-                        .font(titleFont)
-                        .foregroundStyle(.secondary)
-                    Spacer(minLength: 8)
-                    Text(line.value)
-                        .font(valueFont)
-                        .monospacedDigit()
-                        .multilineTextAlignment(.trailing)
-                        .layoutPriority(1)
-                }
-            }
-
-            if let detail = line.detail {
-                Text(detail)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    // Wrap rather than truncate: a coverage statement cut in
-                    // half reads as a claim about the whole week.
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-        .accessibilityIdentifier("olderWeekSummaryLine.\(line.id.rawValue)")
+    /// One of the three headline figures: the value, what it is, and the
+    /// coverage behind it. A figure that was never recorded is drawn as the
+    /// words that say so, in the quieter role, never as a zero.
+    private func metric(_ line: HistoryWeekSummaryLine, emphasis: DashMetric.Emphasis) -> some View {
+        DashMetric(
+            value: line.value,
+            label: line.title,
+            detail: line.detail,
+            isFigure: line.isFigure,
+            emphasis: emphasis
+        )
     }
 
     private var spokenLabel: String {

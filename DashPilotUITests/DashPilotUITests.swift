@@ -435,7 +435,7 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertTrue(startButton.waitForExistence(timeout: 5))
         XCTAssertFalse(endButton.exists)
         XCTAssertTrue(
-            rows(in: app).firstMatch.waitForExistence(timeout: 5),
+            scrollUntilHittable(rows(in: app).firstMatch, in: app),
             "The finished shift should appear in history"
         )
     }
@@ -775,7 +775,7 @@ final class DashPilotUITests: XCTestCase {
 
         XCTAssertTrue(startButton.waitForExistence(timeout: 5))
         XCTAssertTrue(
-            rows(in: app).firstMatch.waitForExistence(timeout: 5),
+            scrollUntilHittable(rows(in: app).firstMatch, in: app),
             "The shift that was paused still finishes as one shift in history"
         )
     }
@@ -1097,7 +1097,7 @@ final class DashPilotUITests: XCTestCase {
         let app = launchWithOlderWeeks()
 
         let history = rows(in: app)
-        XCTAssertTrue(history.firstMatch.waitForExistence(timeout: 10))
+        XCTAssertTrue(scrollUntilHittable(history.firstMatch, in: app), "This week's shift is listed")
         XCTAssertTrue(
             waitForCount(history, toEqual: 1),
             "Only the current week's shift is listed, not the fixture's four"
@@ -1144,7 +1144,6 @@ final class DashPilotUITests: XCTestCase {
 
         let rows = olderWeekRows(in: app)
         XCTAssertTrue(rows.firstMatch.waitForExistence(timeout: 10))
-        XCTAssertTrue(waitForCount(rows, toEqual: 3), "Every shift outside this week is here")
 
         // Newest week first, so last week's shift leads.
         XCTAssertTrue(
@@ -1152,9 +1151,21 @@ final class DashPilotUITests: XCTestCase {
             "The newest older week is first: \(rows.element(boundBy: 0).label)"
         )
 
+        // Every shift outside this week is here. Each week opens with its own
+        // summary, so the three rows do not all fit one screen: each is scrolled
+        // to in the order the list holds them, newest first, and the headings
+        // passed on the way are collected rather than counted on one screen.
         let headings = app.descendants(matching: .any).matching(identifier: "olderWeekHeader")
-        XCTAssertEqual(headings.count, 2, "Two weeks hold shifts, and the empty weeks between them do not")
-        XCTAssertFalse(headings.element(boundBy: 0).label.isEmpty, "A week names the days it covers")
+        var headingLabels = Set<String>()
+        for amount in ["$55.00", "$33.00", "$41.00"] {
+            let row = rows.matching(NSPredicate(format: "label CONTAINS %@", amount)).firstMatch
+            XCTAssertTrue(scrollUntilHittable(row, in: app), "The \(amount) shift is listed")
+            for heading in headings.allElementsBoundByIndex where heading.exists {
+                headingLabels.insert(heading.label)
+            }
+        }
+        XCTAssertEqual(headingLabels.count, 2, "Two weeks hold shifts, and the empty weeks between them do not")
+        XCTAssertFalse(headingLabels.contains(""), "A week names the days it covers")
 
         // This week's shift stayed on the screen it belongs to.
         XCTAssertEqual(elements(containing: "$70.00", in: app).count, 0)
@@ -1335,6 +1346,7 @@ final class DashPilotUITests: XCTestCase {
             "The net carries the sentence that keeps it apart from recorded fuel: \(lastWeek.label)"
         )
         XCTAssertFalse(lastWeek.label.contains("Net after recorded expenses"), "Only one net is on the card")
+        attachScreenshot("older-week-partial-fuel")
     }
 
     /// A week nobody recorded fuel for carries no fuel figure, and certainly
@@ -1386,6 +1398,114 @@ final class DashPilotUITests: XCTestCase {
 
         let row = olderWeekRows(in: app).firstMatch
         XCTAssertTrue(scrollTo(row, in: app, maxSwipes: 25), "The shifts under it are still reachable")
+    }
+
+    // MARK: The current week's own figures
+
+    @MainActor
+    private func currentWeekSummary(in app: XCUIApplication) -> XCUIElement {
+        app.descendants(matching: .any).matching(identifier: "currentWeekSummary").firstMatch
+    }
+
+    /// The week the driver is in opens with its own figures, above the shifts
+    /// that make it up, and they are this week's figures and nobody else's.
+    @MainActor
+    func testTheCurrentWeekOpensWithItsOwnFigures() throws {
+        let app = launchWithOlderWeeks()
+
+        let summary = currentWeekSummary(in: app)
+        XCTAssertTrue(scrollTo(summary, in: app, maxSwipes: 12), "The week says how it is going")
+        XCTAssertTrue(
+            waitForLabel(summary, toContain: "Recorded gross earnings, $70.00"),
+            "Using this week's recorded amount: \(summary.label)"
+        )
+        XCTAssertTrue(summary.label.contains("1 completed shift"), "Showed: \(summary.label)")
+        XCTAssertFalse(summary.label.contains("$55.00"), "Last week is not in this week's figures")
+        XCTAssertTrue(
+            summary.label.contains("No recorded mileage"),
+            "A week whose routes measured nothing says so: \(summary.label)"
+        )
+        XCTAssertFalse(summary.label.contains("0.0 mi"), "Missing is never a zero")
+
+        let firstRow = rows(in: app).firstMatch
+        XCTAssertTrue(scrollUntilHittable(firstRow, in: app), "The shifts are under it")
+        XCTAssertLessThan(
+            summary.frame.minY,
+            firstRow.frame.minY,
+            "The week's own figures come before the shifts they summarise"
+        )
+    }
+
+    /// A week of recorded work leads with what it paid, then how long and how
+    /// far, then its shifts and deliveries, and the shifts still open.
+    @MainActor
+    func testTheCurrentWeekSummaryStatesItsWork() throws {
+        let app = launchWithSeededHistory()
+
+        let summary = currentWeekSummary(in: app)
+        XCTAssertTrue(scrollUntilHittable(summary, in: app, maxSwipes: 12))
+        for expected in ["completed shifts", "Recorded gross earnings", "working time", "Recorded mileage"] {
+            XCTAssertTrue(
+                waitForLabel(summary, toContain: expected),
+                "The week is one spoken sentence and says \(expected): \(summary.label)"
+            )
+        }
+        attachScreenshot("history-current-week")
+
+        openFirstShift(in: app)
+        XCTAssertTrue(
+            app.descendants(matching: .any)["shiftDetailEarnings"].waitForExistence(timeout: 5),
+            "A shift under the summary still opens its own detail"
+        )
+    }
+
+    /// At the largest accessibility text size the week's figures stack whole,
+    /// and the shifts under them are still reachable.
+    @MainActor
+    func testTheCurrentWeekSurvivesTheLargestTextSize() throws {
+        let app = launchWithSeededHistory(atTextSize: Self.accessibilityXXXLTextSize)
+
+        let summary = currentWeekSummary(in: app)
+        XCTAssertTrue(scrollUntilHittable(summary, in: app, maxSwipes: 25), "The summary is reachable")
+        XCTAssertTrue(waitForLabel(summary, toContain: "Recorded gross earnings"), "Showed: \(summary.label)")
+        XCTAssertGreaterThan(summary.frame.height, 44, "A summary is never a tiny cell")
+        attachScreenshot("history-xxxl")
+
+        XCTAssertTrue(
+            scrollUntilHittable(rows(in: app).firstMatch, in: app, maxSwipes: 25),
+            "The shifts under it are still reachable"
+        )
+    }
+
+    /// A driver with no history is told where it will come from, and no summary
+    /// of nothing is drawn.
+    @MainActor
+    func testAnEmptyHistorySaysWhereShiftsWillAppear() throws {
+        let app = launchWithEmptyStore()
+
+        let notice = app.descendants(matching: .any)["emptyHistoryNotice"]
+        XCTAssertTrue(scrollUntilHittable(notice, in: app, maxSwipes: 8), "The empty history states itself")
+        XCTAssertTrue(notice.label.contains("No completed shifts yet"), "Showed: \(notice.label)")
+        XCTAssertFalse(currentWeekSummary(in: app).exists, "No summary is drawn over no shifts")
+        XCTAssertFalse(app.buttons["exportAllHistoryButton"].exists, "Nothing to export is not offered")
+    }
+
+    /// A week whose fuel is estimated over every shift says so, rather than
+    /// leaving complete coverage as the case with no caveat.
+    @MainActor
+    func testAnOlderWeekWithCompleteFuelCoverageSaysSo() throws {
+        let app = launchWithLongHistory()
+        openOlderWeeks(in: app)
+
+        let summary = app.descendants(matching: .any).matching(identifier: "olderWeekSummary")
+            .matching(NSPredicate(format: "label CONTAINS %@", "$50.03")).firstMatch
+        XCTAssertTrue(scrollUntilHittable(summary, in: app, maxSwipes: 16), "Three weeks ago is reachable")
+        XCTAssertTrue(
+            summary.label.contains("Estimated fuel") && summary.label.contains("across every completed shift"),
+            "Complete coverage is stated: \(summary.label)"
+        )
+        XCTAssertTrue(summary.label.contains("recorded miles"), "And how much of the driving: \(summary.label)")
+        attachScreenshot("older-week-full-fuel")
     }
 
     // MARK: Historical vehicle context
@@ -1647,11 +1767,18 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertEqual(rows(in: app).count, 0, "Nothing older was pulled forward to fill the list")
         XCTAssertEqual(elements(containing: "$55.00", in: app).count, 0)
 
+        // The notice is a row of the section and the link is the row after it,
+        // so the link is scrolled to rather than assumed to be on screen.
         let older = app.buttons["olderHistoryWeeksLink"]
-        XCTAssertTrue(older.exists, "The work that does exist is still one tap away")
+        XCTAssertTrue(scrollUntilHittable(older, in: app), "The work that does exist is still one tap away")
         older.tap()
 
-        XCTAssertTrue(waitForCount(olderWeekRows(in: app), toEqual: 3), "All three older shifts are there")
+        // Each week opens with its own summary, so the three rows are reached
+        // by scrolling, newest first, rather than counted on one screen.
+        for amount in ["$55.00", "$33.00", "$41.00"] {
+            let row = olderWeekRows(in: app).matching(NSPredicate(format: "label CONTAINS %@", amount)).firstMatch
+            XCTAssertTrue(scrollUntilHittable(row, in: app), "All three older shifts are there: \(amount)")
+        }
     }
 
     // MARK: Detail
@@ -1823,7 +1950,7 @@ final class DashPilotUITests: XCTestCase {
         let app = launchWithSeededHistory()
 
         let row = rows(in: app).firstMatch
-        XCTAssertTrue(row.waitForExistence(timeout: 10))
+        XCTAssertTrue(scrollUntilHittable(row, in: app))
         XCTAssertTrue(
             row.label.contains("more miles were driven than were recorded"),
             "The row still says the route is partial: \(row.label)"
@@ -1862,8 +1989,10 @@ final class DashPilotUITests: XCTestCase {
 
         history.element(boundBy: 1).tap()
 
+        // Driving sits under the summary and the performance figures, so it is
+        // scrolled to rather than expected on arrival.
         let mileage = app.descendants(matching: .any)["shiftDetailRecordedMileage"]
-        XCTAssertTrue(mileage.waitForExistence(timeout: 5))
+        XCTAssertTrue(scrollTo(mileage, in: app))
         XCTAssertTrue(mileage.label.contains("No route recorded"))
         XCTAssertFalse(mileage.label.contains("0.0"), "An unmeasurable route is not a distance of zero")
         XCTAssertFalse(app.descendants(matching: .any)["shiftDetailCaptureSegments"].exists)
@@ -3237,7 +3366,10 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertTrue(waitForCount(app.buttons.matching(identifier: "deliveryActionButton"), toEqual: 0))
         XCTAssertTrue(scrollToTop(reaching: app.buttons["endShiftButton"], in: app))
         app.buttons["endShiftButton"].tap()
-        XCTAssertTrue(rows(in: app).firstMatch.waitForExistence(timeout: 5), "The shift ends once nothing is running")
+        XCTAssertTrue(
+            scrollUntilHittable(rows(in: app).firstMatch, in: app),
+            "The shift ends once nothing is running"
+        )
     }
 
     /// Cancelling names the delivery it will cancel, keeps it as history, and
@@ -5886,10 +6018,7 @@ final class DashPilotUITests: XCTestCase {
     @MainActor
     func testCancellingDeletionKeepsTheShift() throws {
         let app = launchWithSeededHistory()
-        let history = rows(in: app)
-        XCTAssertTrue(history.firstMatch.waitForExistence(timeout: 10))
-
-        history.element(boundBy: 0).tap()
+        openFirstShift(in: app)
         let deleteButton = app.buttons["deleteShiftButton"]
         XCTAssertTrue(scrollTo(deleteButton, in: app))
         deleteButton.tap()
@@ -7512,7 +7641,7 @@ final class DashPilotUITests: XCTestCase {
     @MainActor
     private func revealHistoryRows(_ count: Int, in app: XCUIApplication) -> XCUIElementQuery {
         let history = rows(in: app)
-        XCTAssertTrue(history.firstMatch.waitForExistence(timeout: 10))
+        XCTAssertTrue(scrollUntilHittable(history.firstMatch, in: app), "History lists a completed shift")
         XCTAssertTrue(
             scrollUntilHittable(history.element(boundBy: count - 1), in: app),
             "History should reveal \(count) completed shifts"
@@ -7538,7 +7667,23 @@ final class DashPilotUITests: XCTestCase {
         )
         endButton.tap()
 
-        XCTAssertTrue(rows(in: app).firstMatch.waitForExistence(timeout: 5))
+        assertTheShiftReachedHistory(in: app)
+    }
+
+    /// Confirms a shift just ended is listed in History, then returns to the top
+    /// of the screen where the shift controls are.
+    ///
+    /// History opens with the week's own summary above its rows, so on a phone
+    /// the first row is below the fold and a `List` has not rendered it: it is
+    /// scrolled to rather than waited for. The screen is brought back to the top
+    /// afterwards so a journey that starts the next shift finds its control
+    /// where an ending leaves it.
+    @MainActor
+    private func assertTheShiftReachedHistory(in app: XCUIApplication) {
+        let start = app.buttons["startShiftButton"]
+        XCTAssertTrue(start.waitForExistence(timeout: 5), "The shift has ended")
+        XCTAssertTrue(scrollUntilHittable(rows(in: app).firstMatch, in: app), "and is listed in History")
+        XCTAssertTrue(scrollToTop(reaching: start, in: app))
     }
 
     /// Brings an element into the accessibility hierarchy before asserting on it.
@@ -7692,9 +7837,12 @@ final class DashPilotUITests: XCTestCase {
     }
 
     @MainActor
+    /// Opens History's first shift, scrolling down to it first: the week's
+    /// summary sits above the rows, so on a phone the first row is below the
+    /// fold and a `List` has not rendered it until it is scrolled to.
     private func openFirstShift(in app: XCUIApplication) {
         let row = rows(in: app).firstMatch
-        XCTAssertTrue(row.waitForExistence(timeout: 10))
+        XCTAssertTrue(scrollUntilHittable(row, in: app, maxSwipes: 12), "History lists a completed shift")
         row.tap()
     }
 
@@ -7735,7 +7883,7 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertFalse(app.buttons["shiftDetailDeliveryTipsButton"].exists)
         endButton.tap()
 
-        XCTAssertTrue(rows(in: app).firstMatch.waitForExistence(timeout: 5))
+        assertTheShiftReachedHistory(in: app)
     }
 
     /// Records an amount against the first finished delivery on screen.
@@ -8375,8 +8523,12 @@ final class DashPilotUITests: XCTestCase {
     @MainActor
     func testExportAllHistoryIsNotScopedToTheWeekOnScreen() throws {
         let app = launchWithOlderWeeks()
+        XCTAssertTrue(scrollUntilHittable(rows(in: app).firstMatch, in: app))
         XCTAssertTrue(waitForCount(rows(in: app), toEqual: 1), "The root lists this week's one shift")
 
+        // The export control sits above History, and the scroll helpers only
+        // walk down, so the screen goes back to the top first.
+        XCTAssertTrue(scrollToTop(reaching: app.buttons["exportAllHistoryButton"], in: app))
         openExport("exportAllHistoryButton", in: app)
         let name = exportFileName(in: app)
         XCTAssertTrue(
