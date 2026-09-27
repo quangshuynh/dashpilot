@@ -2,8 +2,8 @@ import SwiftData
 import SwiftUI
 
 /// The driver's reusable preferences: the vehicles they work in, which one they
-/// are working in now, what a gallon currently costs, and whether parking may
-/// also record a pickup.
+/// are working in now, what a gallon currently costs, and whether Park and
+/// Resume Driving may also record a delivery's pickup.
 ///
 /// ## What this screen is, and the one sentence it has to get across
 ///
@@ -201,53 +201,86 @@ struct SettingsView: View {
         }
     }
 
-    /// Whether pressing Park may also record the pickup.
+    /// Whether Park and Resume Driving may also record a pickup, and whether
+    /// they may with stacked orders.
     ///
-    /// Off until the driver turns it on, including for a driver who has never
-    /// opened this screen and has no settings row at all. The footer says the
-    /// three things a driver needs before trusting it: it only ever moves a
-    /// delivery already at its pickup, it refuses to choose between two, and the
-    /// pickup is recorded at the moment of parking, which is what that
-    /// delivery's recorded pickup wait will then end at, and why that wait is
-    /// left out of typical pickup waits.
+    /// Both off until the driver turns them on, including for a driver who has
+    /// never opened this screen and has no settings row at all. The second is
+    /// drawn under the first and disabled while the first is off, keeping its
+    /// own answer, so it can never cause anything by itself. The footer says
+    /// what a driver needs before trusting it: which two events are recorded
+    /// and when, that DashPilot is following their setting rather than
+    /// detecting a restaurant or an order, what happens with more than one
+    /// order, and that Undo takes back only the delivery step.
     private var pickupWorkflowSection: some View {
         Section {
-            Toggle(isOn: recordsPickupWhenParking) {
-                Text("Pick up order when parking")
+            Toggle(isOn: usesParkAndResumeForPickups) {
+                Text(PickupWorkflowNotice.settingName)
                     .dashFont(.body)
             }
-            .accessibilityLabel("Pick up order when parking")
             .accessibilityHint(
                 """
-                When on, Park Vehicle also marks Picked Up for the one delivery waiting at a pickup. \
-                Nothing is recorded when two or more are waiting.
+                When on, Park Vehicle marks the delivery you are picking up Arrived at Pickup, and Resume \
+                Driving marks it Picked Up.
                 """
             )
-            .accessibilityIdentifier("pickupWhenParkingToggle")
+            .accessibilityIdentifier("pickupWorkflowToggle")
+
+            Toggle(isOn: handlesStackedOrdersInOrder) {
+                Text("Handle stacked orders in order")
+                    .dashFont(.body)
+            }
+            .disabled(!(settings?.usesParkAndResumeForPickups ?? false))
+            .accessibilityHint(
+                """
+                When on, with more than one delivery in progress, Park works on the lowest-numbered \
+                delivery still waiting for its pickup. Available when Pick up orders with Park and \
+                Resume is on.
+                """
+            )
+            .accessibilityIdentifier("stackedOrdersInOrderToggle")
         } header: {
             Text("Pickup Workflow")
         } footer: {
             Text(
                 """
-                When on, parking also records Picked Up for a delivery that has Arrived at Pickup \
-                recorded, if it is the only one. With two or more waiting, or none, only the \
-                vehicle is parked. The pickup is recorded at the moment you park, from your tap, \
-                not from anything DashPilot detects, so its wait is left out of typical pickup waits.
+                When on, Park marks Arrived at Pickup and Resume Driving marks the same delivery \
+                Picked Up. DashPilot is following this setting and your taps; it does not know which \
+                restaurant you are at. Without stacked orders on, it only acts while one delivery is \
+                in progress; with it on, it takes them in delivery-number order. Undo, shown for a few \
+                seconds, takes back only that delivery step and leaves the vehicle parked or driving. \
+                Pickups recorded this way are left out of typical pickup waits.
                 """
             )
         }
     }
 
-    /// The setting, read from the row and written through the service.
-    private var recordsPickupWhenParking: Binding<Bool> {
+    /// The workflow switch, read from the row and written through the service.
+    private var usesParkAndResumeForPickups: Binding<Bool> {
         Binding(
-            get: { settings?.recordsPickupWhenParking ?? false },
+            get: { settings?.usesParkAndResumeForPickups ?? false },
             set: { isEnabled in
                 do {
-                    try SettingsService(context: modelContext).setRecordsPickupWhenParking(isEnabled)
+                    try SettingsService(context: modelContext).setUsesParkAndResumeForPickups(isEnabled)
                 } catch {
                     failure = (error as? any LocalizedError)?.errorDescription
-                        ?? "The pickup setting could not be changed."
+                        ?? "The pickup workflow setting could not be changed."
+                }
+            }
+        )
+    }
+
+    /// The stacked-order switch, read from the row and written through the
+    /// service.
+    private var handlesStackedOrdersInOrder: Binding<Bool> {
+        Binding(
+            get: { settings?.handlesStackedOrdersInOrder ?? false },
+            set: { isEnabled in
+                do {
+                    try SettingsService(context: modelContext).setHandlesStackedOrdersInOrder(isEnabled)
+                } catch {
+                    failure = (error as? any LocalizedError)?.errorDescription
+                        ?? "The stacked orders setting could not be changed."
                 }
             }
         )

@@ -242,6 +242,10 @@ nonisolated struct PeriodMetrics: Equatable, Sendable {
     /// applied by the same calculator a place's history uses.
     let parkRecordedPickupCount: Int
 
+    /// How many were left out because Resume Driving recorded their pickup,
+    /// by the same rule.
+    var resumeRecordedPickupCount: Int = 0
+
     // MARK: Delivery earnings coverage
 
     /// What individual deliveries in the period actually paid, added up, or
@@ -707,7 +711,7 @@ nonisolated extension PeriodMetrics {
     }
 
     var spokenPickupWaitStatement: String {
-        let exclusion = parkRecordedPickupStatement.map { " " + $0 } ?? ""
+        let exclusion = automatedPickupStatement.map { " " + $0 } ?? ""
         guard let median = medianPickupWait else {
             return "No recorded pickup waits in this period." + exclusion
         }
@@ -718,8 +722,11 @@ nonisolated extension PeriodMetrics {
 
     /// Which waits the median leaves out, or `nil` when it leaves none out.
     /// The place screen's sentence, so the two surfaces say it alike.
-    var parkRecordedPickupStatement: String? {
-        PickupWaitMetrics.parkRecordedStatement(count: parkRecordedPickupCount)
+    var automatedPickupStatement: String? {
+        PickupWaitMetrics.automatedPickupStatement(
+            parkRecorded: parkRecordedPickupCount,
+            resumeRecorded: resumeRecordedPickupCount
+        )
     }
 
     /// The distinct places named, as a count and nothing else:

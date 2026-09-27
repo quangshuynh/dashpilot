@@ -98,7 +98,7 @@ The full list, including the parts that are simply not built yet, is on
 
 !!! note "Documentation status"
 
-    This site documents schema v18 and export format version 5: the shift, route, parked, pause,
+    This site documents schema v19 and export format version 6: the shift, route, parked, pause,
     delivery lifecycle, offer grouping, correction, pickup identity, pickup wait, earnings, tips,
     expected pay, settings and vehicle, weekly History, period summary, period comparison, history
     export, recorded expense, estimated fuel and net, voice action and Live Activity work completed so

@@ -30,25 +30,32 @@ struct PickupProvenancePersistenceTests {
 
     // MARK: Schema
 
-    /// The plan's own shape, asserted here because v18 is the current version.
+    /// Version 18's own identifier and delivery, which stay here now that it
+    /// is frozen.
     ///
-    /// The count of versions and stages lives in the suite belonging to
-    /// whichever version is current. It moved here from
-    /// `ParkPickupPersistenceTests`, which owned it while v17 was current.
-    @Test("Version 18 is the current version, and it adds no entity")
+    /// The **plan's** version and stage counts moved to
+    /// `PickupWorkflowPersistenceTests` when v19 became current, by the
+    /// convention that they live in the current version's suite.
+    @Test("Version 18 is the version that added provenance, and it is now frozen")
     func schemaVersion() throws {
         #expect(DashPilotSchemaV18.versionIdentifier == Schema.Version(18, 0, 0))
-        #expect(DashPilotMigrationPlan.schemas.count == 18)
-        #expect(DashPilotMigrationPlan.stages.count == 17)
-        #expect(DashPilotMigrationPlan.schemas.last is DashPilotSchemaV18.Type)
+        #expect(DashPilotMigrationPlan.schemas.contains { $0 is DashPilotSchemaV18.Type })
 
-        let entities = Set(ModelContainerFactory.currentSchema.entities.map(\.name))
+        let schema = Schema(versionedSchema: DashPilotSchemaV18.self)
+        let entities = Set(schema.entities.map(\.name))
         #expect(
             entities == [
                 "Shift", "RouteSample", "RouteSuspension", "Delivery", "PickupPlace", "Expense",
                 "ShiftPause", "Offer", "DeliveryTip", "VehicleProfile", "DriverSettings"
             ],
-            "v18 moves one column and no entity"
+            "v18 moved one column and no entity"
+        )
+        let delivery = try #require(schema.entities.first { $0.name == "Delivery" })
+        #expect(delivery.properties.map(\.name).contains("pickupProvenanceRawValue"))
+        let suspension = try #require(schema.entities.first { $0.name == "RouteSuspension" })
+        #expect(
+            !suspension.properties.map(\.name).contains("pickupWorkflowDeliveryID"),
+            "The frozen v18 suspension names no delivery; v19 adds that"
         )
     }
 
@@ -79,6 +86,7 @@ struct PickupProvenancePersistenceTests {
 
         var manualID: UUID?
         var parkedID: UUID?
+        var resumedID: UUID?
         var waitingID: UUID?
         do {
             let context = ModelContext(try ModelContainerFactory.makeContainer(at: storeURL))
@@ -91,13 +99,23 @@ struct PickupProvenancePersistenceTests {
             try deliveries.markPickedUp(manual, at: at(8))
             manualID = manual.id
 
+            // The retired Park-when-parking value, which nothing records any
+            // more but stores written while that setting existed still hold.
             let parked = try deliveries.startDelivery(at: at(9))
             try deliveries.markArrivedAtPickup(parked, at: at(10))
-            try SettingsService(context: context).setRecordsPickupWhenParking(true)
-            try ParkVehicleService(context: context).park(at: at(11))
+            try deliveries.markPickedUp(parked, at: at(11), recordedBy: .parkAutomation)
             parkedID = parked.id
 
-            let waiting = try deliveries.startDelivery(at: at(12))
+            // Park and Resume Driving under the workflow. The two above are still
+            // in progress (picked up, not delivered), so stacked orders are on.
+            try SettingsService(context: context).setUsesParkAndResumeForPickups(true)
+            try SettingsService(context: context).setHandlesStackedOrdersInOrder(true)
+            let resumed = try deliveries.startDelivery(at: at(12))
+            try ParkVehicleService(context: context).park(at: at(13))
+            try ParkVehicleService(context: context).resumeDriving(at: at(20))
+            resumedID = resumed.id
+
+            let waiting = try deliveries.startDelivery(at: at(21))
             waitingID = waiting.id
         }
 
@@ -105,6 +123,7 @@ struct PickupProvenancePersistenceTests {
         let stored = try context.fetch(FetchDescriptor<Delivery>())
         #expect(stored.first { $0.id == manualID }?.pickupProvenance == .manual)
         #expect(stored.first { $0.id == parkedID }?.pickupProvenance == .parkAutomation)
+        #expect(stored.first { $0.id == resumedID }?.pickupProvenance == .resumeAutomation)
         let waiting = try #require(stored.first { $0.id == waitingID })
         #expect(waiting.pickedUpAt == nil)
         #expect(waiting.pickupProvenance == nil)
@@ -179,7 +198,10 @@ struct PickupProvenancePersistenceTests {
         #expect(waiting.pickedUpAt == nil)
         #expect(waiting.pickupProvenance == nil)
 
-        #expect(SettingsService(context: context).recordsPickupWhenParking(), "The preference itself carries over")
+        #expect(
+            SettingsService(context: context).pickupWorkflowPreferences() == .off,
+            "v19 does not carry the retired preference into the workflow that replaced it"
+        )
         let shift = try #require(try context.fetch(FetchDescriptor<Shift>()).first)
         #expect(shift.id == shiftID)
         #expect(shift.routeSuspensions.count == 1)

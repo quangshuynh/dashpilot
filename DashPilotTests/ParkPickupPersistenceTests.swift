@@ -3,7 +3,11 @@ import SwiftData
 import Testing
 @testable import DashPilot
 
-/// Schema v17: one preference column, and a migration that turns nothing on.
+/// Schema v17: one preference column, and a migration that turned nothing on.
+///
+/// v19 retired the column; the preference that replaced it, and its own
+/// migration, are pinned in `PickupWorkflowPersistenceTests`. What stays here
+/// is v17's frozen shape and that no migration from before it turns anything on.
 ///
 /// **The migration's whole claim is an absence, again.** A v16 store was
 /// written by a build that could not ask whether parking should record a
@@ -52,38 +56,6 @@ struct ParkPickupPersistenceTests {
             !delivery.properties.map(\.name).contains("pickupProvenanceRawValue"),
             "The frozen v17 delivery records no provenance; v18 adds it"
         )
-    }
-
-    @Test("The preference is a column on the settings row and joins nothing")
-    func thePreferenceIsASettingsColumn() throws {
-        let schema = ModelContainerFactory.currentSchema
-
-        let settings = try #require(schema.entities.first { $0.name == "DriverSettings" })
-        #expect(settings.properties.map(\.name).contains("recordsPickupWhenParking"))
-        #expect(settings.relationships.isEmpty, "A preference points at no shift and no delivery")
-
-        for name in ["Shift", "Delivery", "RouteSuspension", "Offer"] {
-            let entity = try #require(schema.entities.first { $0.name == name })
-            #expect(
-                !entity.properties.map(\.name).contains("recordsPickupWhenParking"),
-                "The preference is current configuration, not history on \(name)"
-            )
-        }
-    }
-
-    /// Pinned again here because this feature is the one most tempted to break
-    /// it: parking now may write a delivery event, and that must not become a
-    /// relationship between the two.
-    @Test("A suspension still belongs to the shift, and no delivery joins it")
-    func theSuspensionStaysShiftOwned() throws {
-        let schema = ModelContainerFactory.currentSchema
-
-        let suspension = try #require(schema.entities.first { $0.name == "RouteSuspension" })
-        #expect(Set(suspension.properties.map(\.name)) == ["id", "startedAt", "endedAt", "shift"])
-        #expect(suspension.relationships.map(\.destination) == ["Shift"])
-
-        let delivery = try #require(schema.entities.first { $0.name == "Delivery" })
-        #expect(delivery.relationships.allSatisfy { $0.destination != "RouteSuspension" })
     }
 
     @Test("The frozen version 16 still describes settings with no pickup preference")
@@ -149,8 +121,12 @@ struct ParkPickupPersistenceTests {
         let context = ModelContext(try ModelContainerFactory.makeContainer(at: storeURL))
         let settings = try #require(try SettingsService(context: context).existingSettings())
 
-        #expect(settings.recordsPickupWhenParking == false, "Nobody using a v16 build chose the automation")
-        #expect(SettingsService(context: context).recordsPickupWhenParking() == false)
+        // Opened at the current version, so this row went through v17's `false`
+        // and then v19, which carries nothing of it into the workflow.
+        #expect(
+            SettingsService(context: context).pickupWorkflowPreferences() == .off,
+            "Nobody using a v16 build chose any automation"
+        )
         #expect(settings.gasPricePerGallon == Money(minorUnits: 349), "The v15 guarantees still hold")
         #expect(settings.selectedVehicleID == vehicleID)
 
@@ -177,37 +153,7 @@ struct ParkPickupPersistenceTests {
         }
 
         let context = ModelContext(try ModelContainerFactory.makeContainer(at: storeURL))
-        #expect(SettingsService(context: context).recordsPickupWhenParking() == false)
+        #expect(SettingsService(context: context).pickupWorkflowPreferences() == .off)
         #expect(try context.fetch(FetchDescriptor<DriverSettings>()).isEmpty, "Reading a preference writes nothing")
-    }
-
-    @Test("A new settings row starts with the automation off")
-    func aNewRowStartsOff() throws {
-        #expect(DriverSettings().recordsPickupWhenParking == false)
-
-        let context = ModelContext(try ModelContainerFactory.makeInMemoryContainer())
-        let created = try SettingsService(context: context).settings()
-        #expect(created.recordsPickupWhenParking == false)
-    }
-
-    @Test("The preference survives closing and reopening the store")
-    func thePreferencePersists() throws {
-        let (storeURL, cleanUp) = try makeStoreURL()
-        defer { cleanUp() }
-
-        do {
-            let context = ModelContext(try ModelContainerFactory.makeContainer(at: storeURL))
-            try SettingsService(context: context).setRecordsPickupWhenParking(true)
-        }
-
-        do {
-            let context = ModelContext(try ModelContainerFactory.makeContainer(at: storeURL))
-            #expect(SettingsService(context: context).recordsPickupWhenParking())
-            try SettingsService(context: context).setRecordsPickupWhenParking(false)
-        }
-
-        let context = ModelContext(try ModelContainerFactory.makeContainer(at: storeURL))
-        #expect(SettingsService(context: context).recordsPickupWhenParking() == false)
-        #expect(try context.fetch(FetchDescriptor<DriverSettings>()).count == 1, "Still one row")
     }
 }

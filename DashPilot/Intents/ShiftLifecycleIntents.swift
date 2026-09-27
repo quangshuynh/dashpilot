@@ -153,7 +153,8 @@ struct ParkVehicleIntent: AppIntent {
         """
         Records that you have parked and are away from the vehicle. Route recording stops until you \
         resume driving, and the distance across the stretch is not counted. Your shift keeps running \
-        and its working time keeps counting.
+        and its working time keeps counting. With Pick up orders with Park & Resume on in Settings, it \
+        also marks the delivery you are picking up as Arrived at Pickup.
         """,
         categoryName: "Shift",
         searchKeywords: ["park", "parked", "vehicle", "pickup"]
@@ -186,7 +187,8 @@ struct ResumeDrivingIntent: AppIntent {
         """
         Records that you are driving again after parking. Route recording begins again when you open \
         DashPilot, as a new recording: the distance between where you parked and where you drove off \
-        is not counted.
+        is not counted. With Pick up orders with Park & Resume on in Settings, it also marks the \
+        delivery Park marked Arrived at Pickup as Picked Up.
         """,
         categoryName: "Shift",
         searchKeywords: ["driving", "resume", "unpark", "vehicle"]

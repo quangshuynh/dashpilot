@@ -328,8 +328,8 @@ Based on 12 recorded pickups
 
 It is not an average of each place's median: that would weight a place visited
 once the same as one visited twenty times, and would be the middle of nothing the
-driver experienced. Waits whose pickup Park recorded are
-[left out, and said beside the figure](pickup-wait.md#pickups-recorded-by-park), by the same rule a
+driver experienced. Waits whose pickup was recorded automatically are
+[left out, and said beside the figure](pickup-wait.md#pickups-recorded-automatically), by the same rule a
 place's history uses. Which place a wait happened at stops mattering once the
 sample qualifies.
 

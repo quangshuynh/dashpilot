@@ -24,15 +24,20 @@ nonisolated struct PickupWaitCalculator: Equatable, Sendable {
     /// store hands relationships back in cannot change a figure.
     ///
     /// Only waits that ``PickupWaitSample/countsTowardTypicalWait`` enter the
-    /// figures. Waits whose pickup Park recorded are **counted apart** in
-    /// ``PickupWaitMetrics/parkRecordedPickupCount`` rather than dropped, and
+    /// figures. Waits whose pickup was recorded automatically are **counted
+    /// apart**, by which control recorded them, in
+    /// ``PickupWaitMetrics/parkRecordedPickupCount`` and
+    /// ``PickupWaitMetrics/resumeRecordedPickupCount`` rather than dropped, and
     /// nothing about them is scaled, corrected or estimated.
     func metrics(of samples: some Sequence<PickupWaitSample>) -> PickupWaitMetrics {
         let all = Array(samples)
         let counted = all.filter(\.countsTowardTypicalWait)
-        let parkRecordedCount = all.count - counted.count
+        let parkRecordedCount = all.count { $0.provenance == .parkAutomation }
+        let resumeRecordedCount = all.count { $0.provenance == .resumeAutomation }
         let durations = counted.map(\.duration).sorted()
-        guard !durations.isEmpty else { return .onlyParkRecorded(parkRecordedCount) }
+        guard !durations.isEmpty else {
+            return .onlyAutomated(parkRecorded: parkRecordedCount, resumeRecorded: resumeRecordedCount)
+        }
 
         return PickupWaitMetrics(
             sampleCount: durations.count,
@@ -40,7 +45,8 @@ nonisolated struct PickupWaitCalculator: Equatable, Sendable {
             shortestDuration: durations.first,
             longestDuration: durations.last,
             mostRecentSampleAt: counted.map(\.pickedUpAt).max(),
-            parkRecordedPickupCount: parkRecordedCount
+            parkRecordedPickupCount: parkRecordedCount,
+            resumeRecordedPickupCount: resumeRecordedCount
         )
     }
 
@@ -84,7 +90,7 @@ extension PickupPlace {
     }
 
     /// The waits a typical wait here is taken over, oldest first: every
-    /// recorded wait except those whose pickup Park recorded.
+    /// recorded wait except those whose pickup was recorded automatically.
     var countedPickupWaitSamples: [PickupWaitSample] {
         pickupWaitSamples.filter(\.countsTowardTypicalWait)
     }

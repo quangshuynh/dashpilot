@@ -129,10 +129,12 @@ Pause and End is about time nobody worked rather than about a vehicle nobody mov
 offers neither, because a paused shift is never parked. See
 [Parked for a pickup](recorded-mileage.md#parked-for-a-pickup).
 
-`Park Vehicle` here runs the same operation as the app's button and the spoken action, so with
-[Pick up order when parking](settings.md#pick-up-order-when-parking) on, it also records the pickup
-of the one delivery at its pickup. The card has no sentence to say it in; the delivery's own row
-moving from `At pickup` to `To customer` is the report.
+`Park Vehicle` and `Resume Driving` here run the same operations as the app's buttons and the spoken
+actions, so with [Pick up orders with Park & Resume](settings.md#pick-up-orders-with-park-resume) on, Park also records `Arrived at Pickup`
+and Resume Driving records `Picked Up` for the delivery Park chose, including when the app was closed
+in between. The card has no sentence to say it in and no Undo; the delivery's own row moving from
+`To pickup` to `At pickup`, and then to `To customer`, is the report. No business rule runs in the
+widget extension: the control asks the app to perform the action.
 
 ### Starting a delivery
 

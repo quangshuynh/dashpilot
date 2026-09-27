@@ -77,8 +77,11 @@ struct VehicleSettingsPersistenceTests {
         )
         #expect(
             Set(settings.properties.map(\.name))
-                == ["id", "gasPricePerGallonAmount", "selectedVehicleID", "recordsPickupWhenParking"],
-            "v17 adds the one preference that is a behaviour rather than a default"
+                == [
+                    "id", "gasPricePerGallonAmount", "selectedVehicleID",
+                    "usesParkAndResumeForPickups", "handlesStackedOrdersInOrder"
+                ],
+            "v19's two pickup workflow answers are the preferences that are a behaviour rather than a default"
         )
     }
 
@@ -323,6 +326,6 @@ struct VehicleSettingsPersistenceTests {
 
     @Test("The export format version is unchanged: a new field is additive")
     func theExportVersionDoesNotMove() {
-        #expect(ExportFormat.version == 5)
+        #expect(ExportFormat.version == 6)
     }
 }

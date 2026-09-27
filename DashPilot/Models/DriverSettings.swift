@@ -18,8 +18,8 @@ nonisolated extension DriverSettingsError: LocalizedError {
 }
 
 /// The driver's current preferences: which vehicle they are working in, what
-/// they last said a gallon of fuel costs, and whether parking may also record a
-/// pickup.
+/// they last said a gallon of fuel costs, and whether Park and Resume Driving
+/// may also record a delivery's pickup.
 ///
 /// ## One row, and why it is in the store rather than in `UserDefaults`
 ///
@@ -43,13 +43,14 @@ nonisolated extension DriverSettingsError: LocalizedError {
 /// puts today's gas price in here has not restated what they paid last week, and
 /// one who switches vehicle has not changed what last Tuesday's shift consumed.
 ///
-/// ## One preference is a behaviour rather than a default
+/// ## Two preferences are a behaviour rather than a default
 ///
-/// ``recordsPickupWhenParking`` is not copied onto anything. It is read at the
-/// moment the driver presses Park, by ``ParkVehicleService`` alone, and decides
-/// whether that one press may also record a pickup. Changing it changes the next
-/// press and nothing already recorded, which is the same promise the defaults
-/// above keep by a different route.
+/// ``usesParkAndResumeForPickups`` and ``handlesStackedOrdersInOrder`` are not
+/// copied onto anything. They are read at the moment the driver presses Park or
+/// Resume Driving, by ``ParkVehicleService`` alone, and decide whether that one
+/// press may also record a lifecycle event. Changing them changes the next press
+/// and nothing already recorded, which is the same promise the defaults above
+/// keep by a different route.
 ///
 /// ## The selected vehicle is an identifier, not a relationship
 ///
@@ -90,26 +91,41 @@ nonisolated final class DriverSettings {
     /// `nil` when none is selected or the selected one has since been deleted.
     private(set) var selectedVehicleID: UUID?
 
-    /// Whether pressing Park may also record the pickup of the one delivery
-    /// waiting at a pickup.
+    /// Whether Park may record **Arrived at Pickup** and Resume Driving may then
+    /// record **Picked Up**, for the delivery the workflow names.
     ///
     /// **Off unless the driver turns it on**, and the declared default is what
-    /// makes that true of a row migrated from v16: a build that could not ask the
-    /// question recorded no answer, and no answer is off. Nothing derived reads
-    /// it and nothing exports it. What it permits, and what it refuses even when
-    /// on, is ``ParkPickupSelection``'s to say.
-    private(set) var recordsPickupWhenParking: Bool = false
+    /// makes that true of a row migrated from v18. v17's `recordsPickupWhenParking`
+    /// let Park record Picked Up instead; this is a different automation, and
+    /// agreeing to that one was not agreeing to this, so v19 dropped the old
+    /// column rather than carrying its value here. Nothing derived reads it and
+    /// nothing exports it. What it permits is ``ParkPickupSelection``'s to say.
+    private(set) var usesParkAndResumeForPickups: Bool = false
+
+    /// Whether, with ``usesParkAndResumeForPickups`` on and more than one
+    /// delivery in progress, Park may work on the first of them still waiting
+    /// for its pickup, in the order the deliveries are numbered.
+    ///
+    /// **Off unless the driver turns it on, and inert while the workflow is
+    /// off.** With it off the workflow acts only when exactly one delivery is in
+    /// progress. It is its own opt-in because with two or more orders the one
+    /// Park acts on is chosen by a rule rather than being the only one there is,
+    /// and a driver parking to hand over the first order would see the second
+    /// marked Arrived at Pickup; that is a risk a driver takes on knowingly.
+    private(set) var handlesStackedOrdersInOrder: Bool = false
 
     init(
         id: UUID = DriverSettings.singletonID,
         gasPricePerGallon: Money? = nil,
         selectedVehicleID: UUID? = nil,
-        recordsPickupWhenParking: Bool = false
+        usesParkAndResumeForPickups: Bool = false,
+        handlesStackedOrdersInOrder: Bool = false
     ) {
         self.id = id
         self.gasPricePerGallonAmount = gasPricePerGallon?.amount
         self.selectedVehicleID = selectedVehicleID
-        self.recordsPickupWhenParking = recordsPickupWhenParking
+        self.usesParkAndResumeForPickups = usesParkAndResumeForPickups
+        self.handlesStackedOrdersInOrder = handlesStackedOrdersInOrder
     }
 
     /// The current gas price, in the app's money vocabulary.
@@ -137,10 +153,24 @@ nonisolated final class DriverSettings {
         selectedVehicleID = id
     }
 
-    /// Turns the pickup-when-parking automation on or off.
+    /// Turns the Park and Resume pickup workflow on or off.
     ///
-    /// Takes effect at the next press of Park. Nothing already recorded moves.
-    func setRecordsPickupWhenParking(_ isEnabled: Bool) {
-        recordsPickupWhenParking = isEnabled
+    /// Takes effect at the next press of Park or Resume Driving. Nothing already
+    /// recorded moves, and the stacked-order choice is kept as it was.
+    func setUsesParkAndResumeForPickups(_ isEnabled: Bool) {
+        usesParkAndResumeForPickups = isEnabled
+    }
+
+    /// Turns handling stacked orders in order on or off.
+    func setHandlesStackedOrdersInOrder(_ isEnabled: Bool) {
+        handlesStackedOrdersInOrder = isEnabled
+    }
+
+    /// The two answers together, as the workflow reads them.
+    var pickupWorkflowPreferences: PickupWorkflowPreferences {
+        PickupWorkflowPreferences(
+            usesParkAndResume: usesParkAndResumeForPickups,
+            handlesStackedOrdersInOrder: handlesStackedOrdersInOrder
+        )
     }
 }

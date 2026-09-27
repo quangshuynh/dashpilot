@@ -323,33 +323,46 @@ struct SettingsService {
         AppLog.settings.info("Current gas price removed")
     }
 
-    // MARK: Parking
+    // MARK: Pickup workflow
 
-    /// Whether pressing Park may also record a pickup.
+    /// The driver's answers about the Park and Resume pickup workflow.
     ///
     /// **Off when no settings row exists and off when the store cannot be read**,
-    /// and never creates a row: parking is a driving-surface action that must
-    /// never fail, or write a preference, because of this read. A read failure
-    /// falling back to off leaves the driver with exactly the parking they had
-    /// before the setting existed, which is the safe direction to be wrong in.
+    /// and never creates a row: Park and Resume Driving are driving-surface
+    /// actions that must never fail, or write a preference, because of this
+    /// read. A read failure falling back to off leaves the driver with exactly
+    /// the parking they had before the workflow existed, which is the safe
+    /// direction to be wrong in.
     ///
     /// This is the **second** read of a preference that reaches a recorded fact,
-    /// beside ``currentFuelDefaults()``, and it has exactly one call site:
-    /// ``ParkVehicleService/park(at:)``.
-    func recordsPickupWhenParking() -> Bool {
-        ((try? existingSettings()) ?? nil)?.recordsPickupWhenParking ?? false
+    /// beside ``currentFuelDefaults()``, and its only callers are
+    /// ``ParkVehicleService/park(at:)`` and
+    /// ``ParkVehicleService/resumeDriving(at:)``.
+    func pickupWorkflowPreferences() -> PickupWorkflowPreferences {
+        ((try? existingSettings()) ?? nil)?.pickupWorkflowPreferences ?? .off
     }
 
-    /// Turns the pickup-when-parking automation on or off.
+    /// Turns the Park and Resume pickup workflow on or off.
     ///
-    /// **Nothing recorded moves.** It changes what the next press of Park may
-    /// write, and no delivery, suspension or shift already in the store.
+    /// **Nothing recorded moves.** It changes what the next press of Park or
+    /// Resume Driving may write, and no delivery, suspension or shift already in
+    /// the store. The stacked-order answer is kept as it is either way, and
+    /// means nothing while this is off.
     ///
     /// - Throws: ``SettingsError/storeUnavailable(underlying:)``.
-    func setRecordsPickupWhenParking(_ isEnabled: Bool) throws {
-        try settings().setRecordsPickupWhenParking(isEnabled)
-        try save(describing: "change the pickup-when-parking setting")
-        AppLog.settings.info("Pickup when parking \(isEnabled ? "enabled" : "disabled", privacy: .public)")
+    func setUsesParkAndResumeForPickups(_ isEnabled: Bool) throws {
+        try settings().setUsesParkAndResumeForPickups(isEnabled)
+        try save(describing: "change the pickup workflow setting")
+        AppLog.settings.info("Park and Resume pickup workflow \(isEnabled ? "enabled" : "disabled", privacy: .public)")
+    }
+
+    /// Turns handling stacked orders in order on or off.
+    ///
+    /// - Throws: ``SettingsError/storeUnavailable(underlying:)``.
+    func setHandlesStackedOrdersInOrder(_ isEnabled: Bool) throws {
+        try settings().setHandlesStackedOrdersInOrder(isEnabled)
+        try save(describing: "change the stacked orders setting")
+        AppLog.settings.info("Stacked orders in order \(isEnabled ? "enabled" : "disabled", privacy: .public)")
     }
 
     // MARK: Saving

@@ -643,7 +643,7 @@ struct PeriodSummaryView: View {
                 value: metrics.pickupWaitStatement ?? "Not available",
                 // The waits left out are said beside the figure they are left
                 // out of, never only in the footer.
-                detail: [metrics.pickupWaitBasisStatement, metrics.parkRecordedPickupStatement]
+                detail: [metrics.pickupWaitBasisStatement, metrics.automatedPickupStatement]
                     .compactMap { $0 }
                     .joined(separator: "\n"),
                 isFigure: metrics.pickupWaitStatement != nil

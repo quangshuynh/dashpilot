@@ -101,6 +101,13 @@ the log records the transition and the rule that refused one. The count and the 
 shift states are derived from the rows every time they are read, and reach no log at all; the export
 carries them because the driver asked for the file.
 
+**The Park and Resume pickup workflow logs which rule it applied and nothing about which delivery.**
+A line says that an arrival or a pickup was recorded automatically, that one was not, or that two
+deliveries were in progress with stacked orders off, and taking a step back logs only the state the
+delivery returned to. Never a delivery's number or identifier, never the delivery a parked stretch
+was for, never an instant and never how long the driver was inside. The stored association is not
+exported.
+
 **A deletion records nothing about the shift.** Not when it ran, not what it earned, not how far it
 went. A deletion is the last moment to start writing a driver's history into a log.
 

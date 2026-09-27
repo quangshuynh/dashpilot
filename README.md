@@ -40,7 +40,8 @@ measure.
   captured continuously.
 - **Pause and Park.** *Pause* stops the clock and the route. *Park* stops only the route, for the
   walk around a shop, so it never inflates recorded mileage and never subtracts working time. An
-  optional setting, off by default, lets Park also mark Picked Up for the one delivery at its pickup.
+  optional setting, off by default, lets Park mark Arrived at Pickup and Resume Driving mark Picked
+  Up, with a short Undo for the delivery step.
 - **Earnings and additional tips.** Optional gross earnings per shift and per delivery, kept as
   independent facts, plus tips received outside the platform's amount, each with its method.
 - **Fuel estimates and vehicle profiles.** Save your vehicles and a gas price. Each shift copies
