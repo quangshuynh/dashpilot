@@ -65,11 +65,25 @@ nonisolated struct ShiftActivityDeliveryTimer: Codable, Hashable, Sendable {
     /// The delivery's own `acceptedAt`.
     let startedAt: Date
 
-    init(title: String, stateLabel: String? = nil, startedAt: Date) {
+    /// How many deliveries this row speaks for, or `nil` for one.
+    ///
+    /// More than one only for deliveries the driver recorded as sharing a
+    /// pickup or a drop-off, accepted in the same instant and in the same state,
+    /// which the app draws as one row (`Deliveries 3 and 4`) because one clock
+    /// is then true of each of them. It exists so the row is spoken with the
+    /// right grammar. Optional so a snapshot persisted before it existed still
+    /// decodes.
+    let deliveryCount: Int?
+
+    init(title: String, stateLabel: String? = nil, startedAt: Date, deliveryCount: Int? = nil) {
         self.title = title
         self.stateLabel = stateLabel
         self.startedAt = startedAt
+        self.deliveryCount = deliveryCount
     }
+
+    /// Whether this row speaks for more than one delivery.
+    var isShared: Bool { (deliveryCount ?? 1) > 1 }
 }
 
 nonisolated extension ShiftActivityDeliveryTimer {
@@ -92,8 +106,8 @@ nonisolated extension ShiftActivityDeliveryTimer {
     /// rather than beside it: a listener hears which delivery, what it is doing,
     /// and then the live figure, in the order a reader's eye takes them.
     var spokenLabel: String {
-        guard let stateLabel else { return "How long \(title) has been active" }
-        return "\(title), \(stateLabel.lowercased()). How long it has been active"
+        guard let stateLabel else { return "How long \(title) \(isShared ? "have" : "has") been active" }
+        return "\(title), \(stateLabel.lowercased()). How long \(isShared ? "they have" : "it has") been active"
     }
 
     /// How long the delivery had been active when the snapshot was built.

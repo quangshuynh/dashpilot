@@ -260,6 +260,19 @@ nonisolated enum LaunchArgument {
     /// from a journey rather than a unit test. Debug builds only.
     static let stubbedLocation = "-dashpilot-stubbed-location"
 
+    /// Draws the running shift's Live Activity card on the main screen, above
+    /// the shift, clipped to the height the Lock Screen gives it.
+    ///
+    /// XCUITest cannot reach a Lock Screen, so without this no journey can see
+    /// the card at all. It is the extension's own view, fed by the snapshot the
+    /// app would hand ActivityKit (``ShiftLiveActivityService/content(for:recordedDistance:asOf:locale:context:)``),
+    /// so a journey reads the real controls in the real order and can check
+    /// that each is inside the 160 points a Lock Screen shows. It is **not** the
+    /// system's rendering of the card, and a journey passing here says nothing
+    /// about what a device draws around it. Used beside a throwaway store, and
+    /// changes nothing else. Debug builds only.
+    static let liveActivityPreview = "-dashpilot-live-activity-preview"
+
     /// Runs with Core Location replaced by a synthetic vehicle driving in a
     /// straight line, so a journey can watch a live figure move.
     ///
