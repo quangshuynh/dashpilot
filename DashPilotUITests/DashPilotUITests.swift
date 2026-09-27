@@ -7499,7 +7499,13 @@ final class DashPilotUITests: XCTestCase {
             .firstMatch
         XCTAssertTrue(van.waitForExistence(timeout: 5))
         van.tap()
-        app.buttons["saveShiftVehicleButton"].tap()
+        // Save is disabled until a choice has landed, so a tap that arrives
+        // first does nothing. Wait for the choice, as the correction journey
+        // above does; this one failed a CI run (36293895027) without it.
+        XCTAssertTrue(waitForLabel(van, toContain: "Chosen"), "The choice is said: \(van.label)")
+        let save = app.buttons["saveShiftVehicleButton"]
+        XCTAssertTrue(waitForEnabled(save, true), "and Save can now write it")
+        save.tap()
 
         let filled = app.descendants(matching: .any)["activeShiftVehicle"]
         XCTAssertTrue(scrollTo(filled, in: app))
