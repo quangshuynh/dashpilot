@@ -207,7 +207,7 @@ struct DeliveryOfferExportTests {
         // The format is at 4 now, moved by additional tips. Offer grouping is
         // still not what moved it: an added field and an appended column are
         // not a bump, which is the claim this suite has always made.
-        #expect(ExportFormat.version == 4)
+        #expect(ExportFormat.version == 5)
         #expect(ExportFileFormat.csv.explanation.lowercased().contains("offer"))
     }
 }
