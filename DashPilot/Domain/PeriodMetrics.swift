@@ -537,9 +537,8 @@ nonisolated extension PeriodMetrics {
         guard routeCoverage.partialShiftCount > 0 else { return nil }
         let noun = routeCoverage.partialShiftCount == 1 ? "shift" : "shifts"
         return """
-            \(routeCoverage.partialShiftCount) \(noun) recorded only part of the route. \
-            DashPilot leaves the distance across a gap out rather than guessing at it, \
-            so more miles were driven in this period than were recorded.
+            \(routeCoverage.partialShiftCount) \(noun) recorded only part of the route, so more miles \
+            were driven in this period than were recorded.
             """
     }
 
@@ -668,8 +667,8 @@ nonisolated extension PeriodMetrics {
     /// figure from profit.
     var netCautionStatement: String {
         """
-        Both halves are what you recorded: shifts with no amount are not counted, and costs you did \
-        not enter are not subtracted. This is not profit, and it is not a tax figure.
+        Shifts with no amount are not counted, and costs you did not enter are not subtracted. This \
+        is not profit, and not a tax figure.
         """
     }
 
