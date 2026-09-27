@@ -654,7 +654,11 @@ struct PeriodSummaryView: View {
             DashValueRow(
                 title: "Median recorded pickup wait",
                 value: metrics.pickupWaitStatement ?? "Not available",
-                detail: metrics.pickupWaitBasisStatement,
+                // The waits left out are said beside the figure they are left
+                // out of, never only in the footer.
+                detail: [metrics.pickupWaitBasisStatement, metrics.parkRecordedPickupStatement]
+                    .compactMap { $0 }
+                    .joined(separator: "\n"),
                 isFigure: metrics.pickupWaitStatement != nil
             )
             .accessibilityElement(children: .ignore)
