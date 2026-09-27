@@ -19,9 +19,9 @@ struct PickupWorkflowFeedback: Equatable, Identifiable {
     let id = UUID()
     let moment: Moment
     var notice: PickupWorkflowNotice
-    /// The event that can still be taken back, or `nil` once it has been, once
-    /// the window has passed, or when nothing was recorded.
-    var undoableStep: AutomatedPickupStep?
+    /// The events that can still be taken back, together, or `nil` once they
+    /// have been, once the window has passed, or when nothing was recorded.
+    var undoableAction: AutomatedPickupAction?
 
     /// Whether it still describes `shift`'s vehicle state.
     ///

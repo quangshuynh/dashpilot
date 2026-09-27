@@ -87,7 +87,7 @@ struct ParkResumePickupWorkflowTests {
         let parked = try store.parking.park(at: at(10))
         #expect(parked.pickup == .notEnabled)
         #expect(parked.pickup.notice == nil, "Nothing is added to what the driver is told")
-        #expect(parked.automatedStep == nil)
+        #expect(parked.automatedSteps.isEmpty)
         #expect(parked.shift.isRouteSuspended)
         #expect(parked.shift.openRouteSuspension?.pickupWorkflowDeliveryID == nil)
 
@@ -127,8 +127,8 @@ struct ParkResumePickupWorkflowTests {
         #expect(delivery.pickedUpAt == nil, "Park never records Picked Up")
         #expect(parked.shift.openRouteSuspension?.pickupWorkflowDeliveryID == delivery.id)
         #expect(
-            parked.automatedStep
-                == AutomatedPickupStep(kind: .arrivedWhenParked, deliveryID: delivery.id, deliveryNumber: 1, recordedAt: at(10))
+            parked.automatedSteps
+                == [AutomatedPickupStep(kind: .arrivedWhenParked, deliveryID: delivery.id, deliveryNumber: 1, recordedAt: at(10))]
         )
 
         let resumed = try store.parking.resumeDriving(at: at(17))
@@ -140,8 +140,8 @@ struct ParkResumePickupWorkflowTests {
         #expect(delivery.arrivedAtPickupAt == at(10), "The arrival is untouched")
         #expect(delivery.pickupWait == 420, "Parked to driving, exactly as recorded")
         #expect(
-            resumed.automatedStep
-                == AutomatedPickupStep(kind: .pickedUpWhenResumed, deliveryID: delivery.id, deliveryNumber: 1, recordedAt: at(17))
+            resumed.automatedSteps
+                == [AutomatedPickupStep(kind: .pickedUpWhenResumed, deliveryID: delivery.id, deliveryNumber: 1, recordedAt: at(17))]
         )
     }
 
@@ -153,7 +153,7 @@ struct ParkResumePickupWorkflowTests {
 
         let parked = try store.parking.park(at: at(10))
         #expect(parked.pickup == .alreadyArrived(deliveryNumber: 1))
-        #expect(parked.automatedStep == nil, "Nothing was recorded, so there is nothing to undo")
+        #expect(parked.automatedSteps.isEmpty, "Nothing was recorded, so there is nothing to undo")
         #expect(delivery.arrivedAtPickupAt == arrivedAt, "No duplicate event")
         #expect(parked.shift.openRouteSuspension?.pickupWorkflowDeliveryID == delivery.id)
 
@@ -276,7 +276,7 @@ struct ParkResumePickupWorkflowTests {
 
         let resumed = try store.parking.resumeDriving(at: at(15))
         #expect(resumed.pickup == .noLongerInProgress(deliveryNumber: 1))
-        #expect(resumed.automatedStep == nil)
+        #expect(resumed.automatedSteps.isEmpty)
         #expect(!resumed.shift.isRouteSuspended, "Driving is recorded regardless")
         #expect(fourth.state == .arrivedAtPickup, "The other order is never picked up in its place")
         #expect(fourth.pickedUpAt == nil)
@@ -301,7 +301,7 @@ struct ParkResumePickupWorkflowTests {
         let store = try makeStore(workflow: true)
         let delivery = try delivery(in: store, acceptedAt: 1, advancedTo: .accepted)
         let parked = try store.parking.park(at: at(10))
-        let step = try #require(parked.automatedStep)
+        let step = try #require(parked.automatedSteps.first)
         try store.deliveries.undoAutomatedStep(step)
 
         let resumed = try store.parking.resumeDriving(at: at(15))
@@ -359,7 +359,7 @@ struct ParkResumePickupWorkflowTests {
         let parked = try ParkVehicleService(context: store.context, deliveryCommit: { _ in throw Refused() }).park(at: at(10))
 
         #expect(parked.pickup == .arrivalNotRecorded(deliveryNumber: 1))
-        #expect(parked.automatedStep == nil)
+        #expect(parked.automatedSteps.isEmpty)
         #expect(parked.pickup.notice?.title == "Delivery 1's arrival was not recorded")
         #expect(!store.context.hasChanges, "The rollback left nothing pending")
 
@@ -400,7 +400,7 @@ struct ParkResumePickupWorkflowTests {
             .resumeDriving(at: at(15))
 
         #expect(resumed.pickup == .pickupNotRecorded(deliveryNumber: 1))
-        #expect(resumed.automatedStep == nil)
+        #expect(resumed.automatedSteps.isEmpty)
         let fresh = store.fresh()
         let stretch = try #require(try suspension(in: fresh))
         #expect(!stretch.isOpen, "Driving was saved first and stands")

@@ -64,11 +64,33 @@ nonisolated struct PickupWorkflowPreferences: Equatable, Sendable {
 /// Two deliveries both at Arrived at Pickup are ordered the same way: the lower
 /// number is chosen and the other waits for the next Park.
 ///
+/// ## A pickup the driver said is shared
+///
+/// The one exception to "one delivery per Park", and it is the driver's own
+/// statement rather than anything inferred. When the chosen delivery was
+/// recorded as collected at the **same pickup** as others in its offer
+/// (``SharedStopKind/pickup``), every one of those still waiting for its pickup
+/// is chosen with it, lowest number first, because the driver said they are one
+/// counter and one handover. Nothing else joins them: not a delivery going to
+/// the same drop-off (one customer can order from two restaurants), not one
+/// accepted in the same offer, not one naming the same pickup place.
+///
+/// The same statement answers the stacked-orders question. With stacked orders
+/// off, the workflow acts only when there is no choice to make, and deliveries
+/// the driver said share one pickup are one stop: if **every** delivery in
+/// progress shares the chosen delivery's pickup, Park acts on them without
+/// the stacked-order rule. Any unrelated order in progress beside them is
+/// still a choice the driver has not agreed to, and nothing is chosen.
+///
 /// Generic over the element, like ``UnambiguousDelivery``: the service resolves
 /// a `Delivery`, and the tests resolve plain values.
 nonisolated enum ParkPickupSelection<Element> {
     /// The delivery this Park works on.
     case target(Element)
+    /// Two or more deliveries the driver recorded as sharing one pickup, all
+    /// still waiting for it, lowest number first. The first is the one the
+    /// ordinary rule chose.
+    case sharedPickup([Element])
     /// More than one delivery is in progress and the driver has not asked for
     /// stacked orders to be handled, so none is chosen. Carries how many are in
     /// progress.
@@ -84,11 +106,15 @@ nonisolated enum ParkPickupSelection<Element> {
     ///   - handlesStackedOrdersInOrder: the driver's stacked-order answer.
     ///   - number: each delivery's number in its shift.
     ///   - state: each delivery's state.
+    ///   - sharedPickup: each delivery's shared-pickup identity, which the
+    ///     driver recorded or did not. Nothing else about a delivery can join
+    ///     two of them.
     static func select(
         among active: [Element],
         handlesStackedOrdersInOrder: Bool,
         number: (Element) -> Int,
-        state: (Element) -> DeliveryState
+        state: (Element) -> DeliveryState,
+        sharedPickup: (Element) -> UUID? = { _ in nil }
     ) -> Self {
         let inProgress = active.filter { state($0).isActive }
         let awaitingPickup = inProgress
@@ -96,10 +122,19 @@ nonisolated enum ParkPickupSelection<Element> {
             .sorted { number($0) < number($1) }
 
         guard let first = awaitingPickup.first else { return .noneAwaitingPickup }
-        guard handlesStackedOrdersInOrder || inProgress.count == 1 else {
+
+        let pickup = sharedPickup(first)
+        // One stop in progress, as far as the driver has said: a single
+        // delivery, or deliveries that all share the chosen one's pickup.
+        let oneStopInProgress = inProgress.count == 1
+            || (pickup != nil && inProgress.allSatisfy { sharedPickup($0) == pickup })
+        guard handlesStackedOrdersInOrder || oneStopInProgress else {
             return .stackedNotHandled(inProgress: inProgress.count)
         }
-        return .target(first)
+
+        guard let pickup else { return .target(first) }
+        let together = awaitingPickup.filter { sharedPickup($0) == pickup }
+        return together.count > 1 ? .sharedPickup(together) : .target(first)
     }
 }
 
@@ -128,6 +163,13 @@ nonisolated struct PickupWorkflowNotice: Equatable, Sendable {
     fileprivate static func name(_ number: Int?) -> String {
         guard let number else { return "Delivery" }
         return NumberedDelivery.title(number: number)
+    }
+
+    /// `Delivery 3`, `Deliveries 3 and 4`, `Deliveries 3, 4 and 5`.
+    static func names(_ numbers: [Int]) -> String {
+        let sorted = numbers.sorted()
+        guard sorted.count > 1 else { return sorted.first.map(NumberedDelivery.title(number:)) ?? "No delivery" }
+        return "Deliveries \(SharedStopDescription.list(sorted.map(String.init)))"
     }
 
     fileprivate static func possessive(_ number: Int?) -> String {
@@ -184,6 +226,14 @@ nonisolated enum ParkPickupOutcome: Equatable, Sendable {
     /// The deliveries in progress could not be read, so none was chosen. The
     /// vehicle is still parked.
     case deliveriesUnreadable
+    /// Deliveries the driver recorded as sharing one pickup were all chosen:
+    /// the ones still at Accepted were recorded as Arrived at Pickup together,
+    /// in one write, and the rest already had it.
+    case sharedPickupArrived(SharedPickupArrival)
+    /// Deliveries sharing one pickup were chosen and their arrival was refused
+    /// or failed to save, **for all of them**: none was recorded. The vehicle is
+    /// still parked.
+    case sharedPickupArrivalNotRecorded(deliveryNumbers: [Int])
 
     /// The line under the parked notice, or `nil` when there is nothing to add
     /// to ordinary parking.
@@ -224,7 +274,68 @@ nonisolated enum ParkPickupOutcome: Equatable, Sendable {
                 title: "No delivery step recorded",
                 detail: "DashPilot could not read the deliveries in progress. The vehicle is parked."
             )
+        case let .sharedPickupArrived(arrival) where arrival.recorded.isEmpty:
+            .informational(
+                title: "\(PickupWorkflowNotice.names(arrival.alreadyArrived)) are at Arrived at Pickup",
+                detail: "Resume Driving will mark them Picked Up."
+            )
+        case let .sharedPickupArrived(arrival):
+            .recorded(
+                title: "\(PickupWorkflowNotice.names(arrival.recorded)) marked Arrived at Pickup",
+                detail: arrival.alreadyArrived.isEmpty
+                    ? "Recorded automatically when you parked, for the deliveries you marked Same pickup."
+                    : """
+                    Recorded automatically when you parked, for the deliveries you marked Same pickup. \
+                    \(PickupWorkflowNotice.names(arrival.alreadyArrived)) already had it.
+                    """,
+                stage: .arrivedAtPickup
+            )
+        case let .sharedPickupArrivalNotRecorded(numbers):
+            .informational(
+                title: "No arrival recorded for \(PickupWorkflowNotice.names(numbers))",
+                detail: "Record it on each delivery's card. The vehicle is parked."
+            )
         }
+    }
+}
+
+/// What a shared-pickup Park recorded, by delivery number.
+nonisolated struct SharedPickupArrival: Equatable, Sendable {
+    /// Recorded as Arrived at Pickup by this press, together.
+    let recorded: [Int]
+    /// Chosen with them and already at Arrived at Pickup, so nothing was
+    /// written; Resume Driving will record their pickup too.
+    let alreadyArrived: [Int]
+}
+
+/// What a shared-pickup Resume Driving recorded, and why any delivery Park
+/// chose was left alone, by delivery number.
+nonisolated struct SharedPickupResume: Equatable, Sendable {
+    /// Recorded as Picked Up by this press, together.
+    let recorded: [Int]
+    /// The driver had already recorded their pickup.
+    let alreadyPickedUp: [Int]
+    /// No longer at Arrived at Pickup, for example because the automated
+    /// arrival was undone.
+    let notAtPickup: [Int]
+    /// Delivered or cancelled since Park, or no longer found.
+    let noLongerInProgress: [Int]
+
+    /// The sentences saying why the rest were left alone, in the order a driver
+    /// would ask about them.
+    var skippedSentences: [String] {
+        var sentences: [String] = []
+        if !alreadyPickedUp.isEmpty {
+            sentences.append("\(PickupWorkflowNotice.names(alreadyPickedUp)) already had Picked Up recorded.")
+        }
+        if !notAtPickup.isEmpty {
+            sentences.append("\(PickupWorkflowNotice.names(notAtPickup)) had no Arrived at Pickup recorded.")
+        }
+        if !noLongerInProgress.isEmpty {
+            let verb = noLongerInProgress.count == 1 ? "is" : "are"
+            sentences.append("\(PickupWorkflowNotice.names(noLongerInProgress)) \(verb) no longer in progress.")
+        }
+        return sentences
     }
 }
 
@@ -251,6 +362,13 @@ nonisolated enum ResumePickupOutcome: Equatable, Sendable {
     case noLongerInProgress(deliveryNumber: Int?)
     /// The pickup was refused or failed to save. The vehicle is driving again.
     case pickupNotRecorded(deliveryNumber: Int?)
+    /// Park chose deliveries the driver recorded as sharing one pickup. Those
+    /// still at Arrived at Pickup were recorded as Picked Up together, in one
+    /// write, and the rest are named with the reason they were left alone.
+    case sharedPickupPickedUp(SharedPickupResume)
+    /// Their pickup was refused or failed to save, **for all of them**: none
+    /// was recorded. The vehicle is driving again.
+    case sharedPickupNotRecorded(deliveryNumbers: [Int])
 
     /// The line shown after resuming, or `nil` when there is nothing to add.
     var notice: PickupWorkflowNotice? {
@@ -278,6 +396,27 @@ nonisolated enum ResumePickupOutcome: Equatable, Sendable {
             .informational(
                 title: "\(PickupWorkflowNotice.possessive(number)) pickup was not recorded",
                 detail: "Record it on the delivery's card. Route recording has resumed."
+            )
+        case let .sharedPickupPickedUp(resume) where resume.recorded.isEmpty:
+            .informational(
+                title: "No pickup recorded",
+                detail: resume.skippedSentences.isEmpty
+                    ? "The deliveries you parked for are no longer in progress."
+                    : resume.skippedSentences.joined(separator: " ")
+            )
+        case let .sharedPickupPickedUp(resume):
+            .recorded(
+                title: "\(PickupWorkflowNotice.names(resume.recorded)) marked Picked Up",
+                detail: (
+                    ["Recorded automatically when you resumed driving, for the deliveries you marked Same pickup."]
+                        + resume.skippedSentences
+                ).joined(separator: " "),
+                stage: .pickedUp
+            )
+        case let .sharedPickupNotRecorded(numbers):
+            .informational(
+                title: "No pickup recorded for \(PickupWorkflowNotice.names(numbers))",
+                detail: "Record it on each delivery's card. Route recording has resumed."
             )
         }
     }
