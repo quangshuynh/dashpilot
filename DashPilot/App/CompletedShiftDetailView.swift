@@ -1568,6 +1568,13 @@ private struct DeliveryHistoryRow: View {
                         .foregroundStyle(.secondary)
                 }
 
+                // Which of those the driver recorded as sharing a stop with it.
+                if let shared = offer?.sharedStops(of: numbered).caption {
+                    Label(shared, systemImage: "link")
+                        .dashFont(.supporting)
+                        .foregroundStyle(.secondary)
+                }
+
                 // The place supplements the local number rather than replacing
                 // it: `Delivery 2` is what this delivery was called all shift.
                 // Absent when none was recorded — a "no pickup place" line on
@@ -2004,6 +2011,9 @@ private struct DeliveryHistoryRow: View {
         // its own figures.
         if let grouping = offer?.spokenGrouping(of: numbered) {
             sentences.append(grouping)
+        }
+        if let shared = offer?.sharedStops(of: numbered).spokenCaption {
+            sentences.append(shared)
         }
         // The place is spoken as it is written. The key it is matched by is
         // never exposed anywhere, aloud or otherwise.
