@@ -33,7 +33,9 @@ struct ParkVehicleResult {
 ///    ``DeliveryService/markPickedUp(_:at:)``, the same operation the Picked Up
 ///    button on a delivery's card calls, for the one delivery
 ///    ``ParkPickupSelection`` names. Same validation, same clamping to the
-///    delivery's own last event, same save and rollback.
+///    delivery's own last event, same save and rollback. The one difference is
+///    that it records the pickup as ``PickupProvenance/parkAutomation``, so the
+///    wait it closes can be told apart from one the driver closed themselves.
 ///
 /// ## Two saves, in that order, on purpose
 ///
@@ -105,7 +107,7 @@ struct ParkVehicleService {
         case let .one(delivery):
             let number = shift.numberedDeliveries.first { $0.id == delivery.id }?.number
             do {
-                try deliveries.markPickedUp(delivery, at: date)
+                try deliveries.markPickedUp(delivery, at: date, recordedBy: .parkAutomation)
             } catch {
                 // The service has already rolled back its own pending
                 // timestamp. The suspension was saved before this was tried, so

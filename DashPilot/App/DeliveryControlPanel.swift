@@ -468,7 +468,7 @@ struct DeliveryControlPanel: View {
                 // that same delivery, so a card can only ever advance itself.
                 switch numbered.delivery.state.nextAction {
                 case .arriveAtPickup: try service.markArrivedAtPickup(numbered.delivery)
-                case .pickUp: try service.markPickedUp(numbered.delivery)
+                case .pickUp: try service.markPickedUp(numbered.delivery, recordedBy: .manual)
                 case .complete:
                     // Read before the write, because the card disappears with
                     // it. Nothing is offered unless an expectation is the only
