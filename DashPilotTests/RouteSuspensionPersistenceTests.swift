@@ -58,10 +58,11 @@ struct RouteSuspensionPersistenceTests {
         let schema = ModelContainerFactory.currentSchema
 
         let suspension = try #require(schema.entities.first { $0.name == "RouteSuspension" })
-        // v19 adds the delivery a stretch was for, by identifier: no relationship.
+        // v19 adds the delivery a stretch was for, and v20 the others sharing
+        // its pickup, all by identifier: no relationship.
         #expect(
             Set(suspension.properties.map(\.name))
-                == ["id", "startedAt", "endedAt", "shift", "pickupWorkflowDeliveryID"]
+                == ["id", "startedAt", "endedAt", "shift", "pickupWorkflowDeliveryID", "pickupWorkflowSharedPickupDeliveryIDs"]
         )
         #expect(
             suspension.relationships.map(\.destination) == ["Shift"],

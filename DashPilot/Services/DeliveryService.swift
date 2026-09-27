@@ -249,6 +249,8 @@ nonisolated extension DeliveryLifecycleError: LocalizedError {
             "That tip is not recorded against a delivery, so it cannot be changed."
         case .invalidOffer(.deliveryCountNotPositive):
             "An offer has to contain at least one delivery."
+        case .invalidOffer(.sharedStopNeedsSeveralDeliveries):
+            "A shared pickup or drop-off needs at least two deliveries in the offer."
         case .invalidOffer(.shiftAlreadyEnded):
             "That shift has already ended, so no offer can be recorded against it."
         case .invalidOffer(.acceptedBeforeShiftStart):
@@ -482,12 +484,25 @@ struct DeliveryService {
     /// can be added later from a card, and asking for any of them at the kerb
     /// is the interaction this project designs away.
     ///
+    /// ## Shared stops are the driver's statement
+    ///
+    /// `sharing` records that every delivery of the offer is collected at the
+    /// same pickup, taken to the same drop-off, or both, when the driver chose
+    /// that on the sheet. It is written in the same save as the deliveries, and
+    /// it defaults to nothing: two deliveries of one offer are independent
+    /// unless the driver says otherwise. See ``SharedStopKind``.
+    ///
     /// - Throws: ``DeliveryLifecycleError/noActiveShift``,
     ///   ``DeliveryLifecycleError/shiftPaused``,
-    ///   ``DeliveryLifecycleError/invalidOffer(_:)`` for a count below one, or
+    ///   ``DeliveryLifecycleError/invalidOffer(_:)`` for a count below one or a
+    ///   shared stop on an offer of one, or
     ///   ``DeliveryLifecycleError/storeUnavailable(underlying:)``.
     @discardableResult
-    func startOffer(deliveryCount: Int, at date: Date = .now) throws -> Offer {
+    func startOffer(
+        deliveryCount: Int,
+        sharing: Set<SharedStopKind> = [],
+        at date: Date = .now
+    ) throws -> Offer {
         guard let shift = try activeShift() else {
             AppLog.delivery.notice("Refused to start a delivery: no shift is running")
             throw DeliveryLifecycleError.noActiveShift
@@ -508,7 +523,7 @@ struct DeliveryService {
 
         let recorded: (offer: Offer, deliveries: [Delivery])
         do {
-            recorded = try shift.beginOffer(deliveryCount: deliveryCount, at: acceptedAt)
+            recorded = try shift.beginOffer(deliveryCount: deliveryCount, sharing: sharing, at: acceptedAt)
         } catch let error as OfferError {
             AppLog.delivery.notice("Shift rejected an offer: \(String(describing: error), privacy: .public)")
             throw DeliveryLifecycleError.invalidOffer(error)
@@ -529,11 +544,14 @@ struct DeliveryService {
             throw DeliveryLifecycleError.storeUnavailable(underlying: error)
         }
 
-        // Counts, which are structural. Not when it started, and not which one.
+        // Counts and kinds, which are structural. Not when it started, not
+        // which one, and nothing about where either stop is.
         AppLog.delivery.info(
             """
             Offer started with \(recorded.deliveries.count, privacy: .public) deliveries; \
-            \(shift.activeDeliveries.count, privacy: .public) now active on this shift
+            \(shift.activeDeliveries.count, privacy: .public) now active on this shift; \
+            shared pickup \(sharing.contains(.pickup), privacy: .public), \
+            shared drop-off \(sharing.contains(.dropOff), privacy: .public)
             """
         )
         return recorded.offer

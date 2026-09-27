@@ -166,14 +166,14 @@ enum PreviewSupport {
     /// Every fixture below goes through it rather than building a `Delivery`
     /// directly, so a seeded store has the shape a real one has: no delivery in
     /// it is left holding no offer. It records through
-    /// ``Shift/beginOffer(deliveryCount:at:)``, the app's own creation path, so
+    /// ``Shift/beginOffer(deliveryCount:sharing:at:)``, the app's own creation path, so
     /// a fixture cannot drift into a grouping the app could not produce.
     ///
     /// The offer is inserted here and the delivery is returned for the caller to
     /// insert, which is the shape every fixture already reads in.
     ///
     /// The pair is built directly rather than through
-    /// ``Shift/beginOffer(deliveryCount:at:)`` because many of the fixtures
+    /// ``Shift/beginOffer(deliveryCount:sharing:at:)`` because many of the fixtures
     /// below assemble a shift that has **already ended**, which that method
     /// rightly refuses: they describe the stored state of work that happened
     /// rather than replaying it. What the method guarantees is kept here by
