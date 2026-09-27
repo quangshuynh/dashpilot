@@ -44,9 +44,12 @@ struct ActiveShiftPanel: View {
     let park: () -> Void
     /// Records that the driver is driving again.
     let resumeDriving: () -> Void
-    /// What the press of Park that began this parked stretch did about a pickup,
-    /// when this screen made it. `nil` for a stretch parked elsewhere.
-    var parkPickup: ParkPickupOutcome?
+    /// What the pickup workflow did at the Park or Resume Driving this screen
+    /// last pressed, while it still describes the vehicle's current state.
+    /// `nil` for a stretch parked or resumed from another surface.
+    var pickupWorkflow: PickupWorkflowFeedback?
+    /// Takes back the one delivery event the workflow just recorded.
+    var undoPickupWorkflowStep: () -> Void = {}
 
     /// How often the stored route is read again while the shift is running.
     ///
@@ -104,6 +107,7 @@ struct ActiveShiftPanel: View {
             VStack(alignment: .leading, spacing: DashSpacing.md) {
                 statusRow
                 parkedNotice
+                pickupWorkflowNotice
             }
 
             // The one figure that exists and moves while a shift runs. Earnings
@@ -474,37 +478,60 @@ struct ActiveShiftPanel: View {
                 """
             )
             .accessibilityIdentifier("parkedShiftNotice")
-
-            parkPickupNotice
         }
     }
 
-    /// What the driver's pickup-when-parking setting did, under the parked
-    /// notice it belongs to.
+    /// What the driver's pickup workflow just recorded, or declined to, under
+    /// the state it belongs to: below the parked notice after Park, below the
+    /// shift's status after Resume Driving.
     ///
-    /// A line and not an alert: parking is the tap before a driver walks into a
-    /// shop, and nothing here should stand between them and the door. A symbol
-    /// and words carry the result, never the tint alone, and the spoken form
-    /// names the setting so a listener knows the event came from their
-    /// automation rather than from anything DashPilot observed.
+    /// A line and not an alert: Park is the tap before a driver walks into a
+    /// shop and Resume the tap before they pull away, and nothing here should
+    /// stand between them and either. A symbol and words carry the result, never
+    /// the tint alone. It names the delivery, because with stacked orders "an
+    /// order" would leave the driver to work out which, and it says the event
+    /// was recorded **automatically when you parked** rather than detected,
+    /// because DashPilot saw nothing: the driver's setting and their tap did it.
+    ///
+    /// Undo is offered beside a recorded event for the same short window the
+    /// app's immediate undo of a Delivered uses, and takes back that delivery
+    /// event alone. It is its own control with its own spoken label, which
+    /// names what goes back and says the vehicle stays as it is.
     @ViewBuilder
-    private var parkPickupNotice: some View {
-        if let parkPickup, let statement = parkPickup.statement {
-            Label {
-                // Body, not the supporting caption the line above it uses: this
-                // says a lifecycle event was written, or asks the driver to
-                // record one, and is not a detail of the parked state.
-                Text(statement)
-                    .dashFont(.body)
+    private var pickupWorkflowNotice: some View {
+        if let pickupWorkflow {
+            let notice = pickupWorkflow.notice
+            VStack(alignment: .leading, spacing: DashSpacing.md) {
+                Label {
+                    VStack(alignment: .leading, spacing: DashSpacing.xs) {
+                        // Body, not a caption: this says a lifecycle event was
+                        // written, or asks the driver to record one.
+                        Text(notice.title)
+                            .dashFont(.emphasis)
+                        Text(notice.detail)
+                            .dashFont(.body)
+                            .foregroundStyle(.secondary)
+                    }
                     .fixedSize(horizontal: false, vertical: true)
-            } icon: {
-                Image(systemName: parkPickup.symbolName)
-                    .foregroundStyle(parkPickup.recordedPickup ? Color.teal : Color.secondary)
+                } icon: {
+                    Image(systemName: notice.symbolName)
+                        .foregroundStyle(notice.recordedAnEvent ? Color.teal : Color.secondary)
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(notice.spokenLabel)
+                .accessibilityIdentifier("pickupWorkflowNotice")
+
+                if let step = pickupWorkflow.undoableStep {
+                    Button(action: undoPickupWorkflowStep) {
+                        Label("Undo", systemImage: "arrow.uturn.backward")
+                            .frame(minHeight: 44)
+                    }
+                    .buttonStyle(.bordered)
+                    .accessibilityLabel(step.spokenUndoLabel)
+                    .accessibilityIdentifier("undoPickupWorkflowStepButton")
+                }
             }
-            .foregroundStyle(parkPickup.recordedPickup ? .primary : .secondary)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(parkPickup.spokenStatement ?? statement)
-            .accessibilityIdentifier("parkPickupNotice")
+            .dashInsetSurface()
         }
     }
 

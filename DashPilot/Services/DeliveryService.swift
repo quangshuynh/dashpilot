@@ -64,6 +64,8 @@ nonisolated enum DeliveryLifecycleError: Error {
     case deliveryNotOnAShift
     /// The delivery model refused to reopen the delivery.
     case invalidRecovery(DeliveryRecoveryRefusal)
+    /// Taking back an event the pickup workflow recorded was refused.
+    case invalidAutomatedUndo(AutomatedStepUndoRefusal)
     /// A historical correction was refused by the delivery's own timestamps.
     case invalidCancellation(HistoricalCancellationRefusal)
     /// The domain refused a correction to a completed delivery's recorded
@@ -103,6 +105,7 @@ nonisolated extension DeliveryLifecycleError: Equatable {
         case (.cannotCorrectOnRunningShift, .cannotCorrectOnRunningShift): true
         case (.deliveryNotOnAShift, .deliveryNotOnAShift): true
         case let (.invalidRecovery(lhsError), .invalidRecovery(rhsError)): lhsError == rhsError
+        case let (.invalidAutomatedUndo(lhsError), .invalidAutomatedUndo(rhsError)): lhsError == rhsError
         case let (.invalidCancellation(lhsError), .invalidCancellation(rhsError)): lhsError == rhsError
         case let (.invalidTimeCorrection(lhsError), .invalidTimeCorrection(rhsError)): lhsError == rhsError
         case let (.invalidTip(lhsError), .invalidTip(rhsError)): lhsError == rhsError
@@ -190,6 +193,17 @@ nonisolated extension DeliveryLifecycleError: LocalizedError {
             That delivery's recorded times run backwards, so DashPilot will not rewrite how it \
             ended. Nothing was changed.
             """
+        case .invalidAutomatedUndo(.differentDelivery):
+            "That undo belongs to a different delivery, so nothing was changed."
+        case .invalidAutomatedUndo(.stepNoLongerRecorded):
+            "That step is no longer recorded as it was, so there is nothing to undo."
+        case .invalidAutomatedUndo(.laterEventRecorded):
+            """
+            Something was recorded for this delivery after that step, so it cannot be undone \
+            here. Nothing was changed.
+            """
+        case .invalidAutomatedUndo(.notRecordedAutomatically):
+            "That pickup was not recorded automatically, so it cannot be undone here."
         case .invalidRecovery(.notDelivered):
             "That delivery is not recorded as delivered, so there is nothing to reopen."
         case .invalidRecovery(.cancelled):
@@ -381,6 +395,24 @@ struct DeliveryService {
         return ordered
     }
 
+    /// The delivery with this identifier, or `nil` when the store holds none.
+    ///
+    /// Used where a delivery is named by identity rather than held: the parked
+    /// stretch's pickup workflow association, and an automated step offered for
+    /// undo. A delivery that has been deleted since resolves to nothing.
+    ///
+    /// - Throws: ``DeliveryLifecycleError/storeUnavailable(underlying:)`` if the store cannot be read.
+    func delivery(withID id: UUID) throws -> Delivery? {
+        var descriptor = FetchDescriptor<Delivery>(predicate: #Predicate { $0.id == id })
+        descriptor.fetchLimit = 1
+        do {
+            return try context.fetch(descriptor).first
+        } catch {
+            AppLog.delivery.error("Failed to read a delivery by identity: \(error)")
+            throw DeliveryLifecycleError.storeUnavailable(underlying: error)
+        }
+    }
+
     /// The deliveries `shift` still has running, in the same deterministic order.
     ///
     /// This is the query the running-shift interface and relaunch recovery are
@@ -518,9 +550,10 @@ struct DeliveryService {
     /// Records that `delivery`'s order is in the car, and how that was recorded.
     ///
     /// - Parameter provenance: ``PickupProvenance/manual`` for the driver's own
-    ///   Picked Up step on any surface, which is every caller except Park.
-    ///   ``ParkVehicleService`` passes ``PickupProvenance/parkAutomation``. The
-    ///   two are written together with the instant, and rolled back together.
+    ///   Picked Up step on any surface, which is every caller except Resume
+    ///   Driving under the pickup workflow: ``ParkVehicleService`` passes
+    ///   ``PickupProvenance/resumeAutomation``. The two are written together
+    ///   with the instant, and rolled back together.
     @discardableResult
     func markPickedUp(
         _ delivery: Delivery,
@@ -660,6 +693,73 @@ struct DeliveryService {
             A delivery recorded as delivered was reopened to \(restored.rawValue, privacy: .public); \
             \(shift.activeDeliveries.count, privacy: .public) now active on this shift
             """
+        )
+        return restored
+    }
+
+    // MARK: Taking back an automated pickup step
+
+    /// Takes back the one event the Park and Resume pickup workflow just
+    /// recorded, and leaves the vehicle exactly as it is.
+    ///
+    /// ## What it reverses
+    ///
+    /// Park's Arrived at Pickup goes back to Accepted, or Resume Driving's Picked
+    /// Up goes back to Arrived at Pickup, for the one delivery the step names,
+    /// through ``Delivery/undoAutomatedStep(_:)``. **No suspension is read or
+    /// written here**: the vehicle stays parked after taking back an arrival and
+    /// stays driving after taking back a pickup, because both are things the
+    /// driver actually did. Route capture has nothing to reconcile.
+    ///
+    /// ## What it refuses
+    ///
+    /// Everything ``AutomatedPickupStepUndo`` refuses: an event that is no longer
+    /// recorded as it was, one with anything recorded after it, and a pickup the
+    /// workflow did not record. It never cascades. A delivery that no longer
+    /// exists is refused as ``AutomatedStepUndoRefusal/stepNoLongerRecorded``,
+    /// and one on a shift that has ended by the shift rule every transition
+    /// already applies.
+    ///
+    /// ## One write
+    ///
+    /// One save with the rollback every mutation here uses: a refused save
+    /// leaves the store holding the event exactly as it had it.
+    ///
+    /// - Returns: the state the delivery is now in.
+    /// - Throws: ``DeliveryLifecycleError/invalidAutomatedUndo(_:)``,
+    ///   ``DeliveryLifecycleError/deliveryNotOnARunningShift`` or
+    ///   ``DeliveryLifecycleError/storeUnavailable(underlying:)``.
+    @discardableResult
+    func undoAutomatedStep(_ step: AutomatedPickupStep) throws -> DeliveryState {
+        guard let delivery = try delivery(withID: step.deliveryID) else {
+            AppLog.delivery.notice("Refused to undo an automated step: the delivery no longer exists")
+            throw DeliveryLifecycleError.invalidAutomatedUndo(.stepNoLongerRecorded)
+        }
+        try validateShift(of: delivery)
+
+        let restored: DeliveryState
+        do {
+            restored = try delivery.undoAutomatedStep(step)
+        } catch let error as AutomatedStepUndoRefusal {
+            // Nothing has been mutated: the model derives before it clears.
+            AppLog.delivery.notice(
+                "Refused to undo an automated step: \(String(describing: error), privacy: .public)"
+            )
+            throw DeliveryLifecycleError.invalidAutomatedUndo(error)
+        }
+
+        do {
+            try commit(context)
+        } catch {
+            context.rollback()
+            AppLog.delivery.error("Failed to persist undoing an automated step: \(error)")
+            throw DeliveryLifecycleError.storeUnavailable(underlying: error)
+        }
+
+        // Structural only: which state it went back to. Never which delivery,
+        // never when.
+        AppLog.delivery.info(
+            "An automated pickup workflow step was undone to \(restored.rawValue, privacy: .public)"
         )
         return restored
     }

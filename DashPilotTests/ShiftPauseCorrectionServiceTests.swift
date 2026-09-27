@@ -916,8 +916,8 @@ struct ShiftPauseCorrectionServiceTests {
 
         // `pausedSeconds`, `workingSeconds` and `pauseCount` already carried
         // exactly this. Nothing was added, removed, renamed or redefined.
-        #expect(object["formatVersion"] as? Int == 5)
-        #expect(ExportFormat.version == 5)
+        #expect(object["formatVersion"] as? Int == 6)
+        #expect(ExportFormat.version == 6)
     }
 
     @Test("CSV says the same thing through the columns it already has")

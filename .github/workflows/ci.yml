@@ -22,16 +22,16 @@ jobs:
     name: Build and test on iOS Simulator
     runs-on: macos-26
     # The budget covers a whole run of both suites on a virtualised runner, and
-    # it is measured rather than guessed. Run 35553963157 was cancelled by the
-    # previous 60-minute budget with the UI journeys still executing: 3m25s of
-    # build-for-testing, 5m43s of domain tests and 50m37s of UI journeys, in
-    # which 87 of the 151 journeys had passed and none had failed. Finishing the
-    # remaining journeys at that rate projects an 88-minute UI step and a job of
-    # roughly 100 minutes, so 180 leaves most of a second run's worth of headroom
-    # for a slow runner without approaching the 6-hour cap a GitHub-hosted job
-    # has. It is a ceiling for a hung run, not a target: a healthy run finishes
-    # well inside it, and the upload step below still runs when it is reached,
-    # which that cancelled run demonstrated.
+    # it is measured rather than guessed. With 223 to 227 journeys, runs
+    # 36254461072, 36254469520, 36285003728 and 36285009328 took 2h15m to 2h31m
+    # end to end: about 3 minutes of build-for-testing, 5 to 7 minutes of domain
+    # tests and 2h04m to 2h21m of UI journeys (about 35 seconds a journey on the
+    # runner, against about 27 on a local host). 180 minutes leaves about half an
+    # hour over the slowest of them, without approaching the 6-hour cap a
+    # GitHub-hosted job has. It is a
+    # ceiling for a hung run, not a target, and it has to be measured again as
+    # journeys are added. The upload step below still runs when it is reached,
+    # which an earlier cancelled run (35553963157) demonstrated.
     timeout-minutes: 180
     env:
       XCODE_PROJECT: DashPilot.xcodeproj

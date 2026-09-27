@@ -129,13 +129,17 @@ outright and commits once per correction.
 | `startedAt` | `Date` | When the driver recorded parking |
 | `endedAt` | `Date?` | `nil` while the driver has not recorded driving again. An open row is what "parked" means |
 | `shift` | `Shift?` | The shift this belongs to, and **never a delivery**. Optional only because SwiftData models the inverse of a to-many that way |
+| `pickupWorkflowDeliveryID` | `UUID?` | Added by v19. The `Delivery.id` this stretch was taken to be the pickup of, under `Pick up orders with Park & Resume`, written in the same save that opens the row and read only by Resume Driving. An identifier, not a relationship. `nil` with the workflow off, with no delivery waiting for its pickup, and for every stretch recorded before v19 |
 
 A row rather than a flag, for the reason `ShiftPause` is one: a boolean could say the vehicle is
 parked now and not for how long, how many times or when, and a route's coverage has to be able to say
 all three. It also means a shift left parked when the app is terminated comes back parked with no
 recovery code, because the row is the only place the state lives.
 
-**It joins the shift and nothing else, at any version.** Whether the vehicle is moving is a fact
+**It joins the shift and nothing else, at any version.** v19's `pickupWorkflowDeliveryID` names a
+delivery by identifier and joins none: it exists so that Resume Driving records the pickup of the
+delivery Park chose, in whichever process Resume is pressed, and a delivery that no longer resolves
+reads as nothing to pick up. Whether the vehicle is moving is a fact
 about the driver and their vehicle: a driver shopping for one order while carrying another has one
 vehicle and it is parked. So there is at most one open row however many deliveries are in progress,
 and no delivery owns, starts or ends one.
@@ -155,8 +159,9 @@ the context insert to the caller like `beginPause(at:)`. `endOpenRouteSuspension
 an ended or paused shift, unlike opening one, because both of those close an open row as part of
 their own write. `ShiftService.parkActiveShift(at:)` and `resumeDrivingOnActiveShift(at:)` are the
 only callers, and nothing anywhere ends a row because a speed changed or a delivery advanced. The
-pickup-when-parking setting adds no relationship: parking may be followed by a delivery's own
-`Picked Up` write, and the suspension still joins only the shift.
+pickup workflow adds no relationship: parking may be followed by a delivery's own `Arrived at
+Pickup` write and driving again by its `Picked Up` write, and the suspension still joins only the
+shift.
 
 ## `RouteSample`
 
@@ -181,7 +186,7 @@ none are kept, because nothing implemented reads them.
 | `acceptedAt` | `Date` | Acceptance is the delivery's creation, not an optional event |
 | `arrivedAtPickupAt` | `Date?` | `nil` until the driver records reaching the pickup |
 | `pickedUpAt` | `Date?` | `nil` until the driver records collecting the order |
-| `pickupProvenanceRawValue` | `String?` | Private. How `pickedUpAt` was recorded: `manual` (the driver's own step, on any surface) or `parkAutomation` (Park, under the setting). Written with `pickedUpAt` by `markPickedUp(at:recordedBy:)` and nowhere else, and never cleared, because nothing clears a pickup. `nil` beside a pickup means **unknown**: recorded before v18, and never inferred |
+| `pickupProvenanceRawValue` | `String?` | Private. How `pickedUpAt` was recorded: `manual` (the driver's own step, on any surface), `resumeAutomation` (Resume Driving, under `Pick up orders with Park & Resume`) or `parkAutomation` (Park, under the retired `Pick up order when parking`; read, never written now). Written with `pickedUpAt` by `markPickedUp(at:recordedBy:)` and nowhere else, and cleared only with it, by `undoAutomatedStep(_:)`. `nil` beside a pickup means **unknown**: recorded before v18, and never inferred |
 | `deliveredAt` | `Date?` | Terminal. Cleared by exactly two corrections: reopening a delivery on a running shift, and correcting a historical completion to a cancellation |
 | `cancelledAt` | `Date?` | Terminal. Set without erasing the events that preceded it. A historical correction sets it to the delivery's own former `deliveredAt` rather than to a new instant |
 | `offer` | `Offer?` | The accepted offer this delivery arrived in. Optional because SwiftData models a reference that way, and because a pre-v12 store had none until the migration gave each delivery its own. It groups and does not govern: no timestamp, figure, fetch or delete rule reads it |
@@ -411,12 +416,16 @@ preferences.
 | `id` | `UUID` | Unique, and always `DriverSettings.singletonID` |
 | `gasPricePerGallonAmount` | `Decimal?` | What the driver says a gallon currently costs. `nil` means none recorded; `0` means the fuel is recorded as costing nothing |
 | `selectedVehicleID` | `UUID?` | The `VehicleProfile.id` new shifts are recorded under, or `nil` when none is selected |
-| `recordsPickupWhenParking` | `Bool` | Whether pressing Park may also record the pickup of the one delivery at its pickup. Declared `false`; off unless the driver turns it on |
+| `usesParkAndResumeForPickups` | `Bool` | Added by v19. Whether Park may record `Arrived at Pickup` and Resume Driving `Picked Up`. Declared `false`; off unless the driver turns it on |
+| `handlesStackedOrdersInOrder` | `Bool` | Added by v19. With the workflow on and more than one delivery in progress, whether Park may work on the lowest-numbered one still waiting for its pickup. Declared `false`, and inert while the workflow is off |
+
+v19 removed v17's `recordsPickupWhenParking`, which let Park record `Picked Up`; its value was not
+carried into the workflow that replaced it.
 
 **Nothing derived reads this row.** The fuel figures are read at exactly one moment, when a shift
-starts, and copied onto that shift. The pickup preference is read at exactly one other moment, when
-Park is pressed, and decides only whether that press may also record a pickup through the delivery's
-ordinary lifecycle operation. Changing a setting tomorrow changes nothing recorded today.
+starts, and copied onto that shift. The pickup workflow preferences are read at exactly one other
+moment, when Park or Resume Driving is pressed, and decide only whether that press may also record a
+lifecycle event through the delivery's ordinary operation. Changing a setting tomorrow changes nothing recorded today.
 
 The selected vehicle is an **identifier rather than a relationship**, so a deleted profile leaves a
 selection that resolves to nothing, which reads as *no vehicle selected*. The service clears it in
@@ -446,6 +455,7 @@ The row is created the first time the driver opens Settings. A migration never c
 | 16.0.0 | Adds `RouteSuspension` and a cascading `Shift.routeSuspensions`. Lightweight, and nothing is backfilled: a gap in a v15 route is left by a pause, a lost permission or a terminated process just as readily as by a driver walking into a shop, and the route holds no evidence of which |
 | 17.0.0 | Adds `DriverSettings.recordsPickupWhenParking`, declared `false`. Lightweight, and nothing is backfilled: no build that wrote a v16 store could ask the question, so every migrated row reads off |
 | 18.0.0 | Adds `Delivery.pickupProvenanceRawValue`. Lightweight, and nothing is backfilled: a v17 store could already hold pickups recorded by Park and holds no trace of which, so every migrated pickup reads as unknown rather than manual |
+| 19.0.0 | Adds `RouteSuspension.pickupWorkflowDeliveryID`, `DriverSettings.usesParkAndResumeForPickups` and `DriverSettings.handlesStackedOrdersInOrder`; removes `DriverSettings.recordsPickupWhenParking`. Lightweight, and nothing is backfilled: no stretch is associated with a delivery by its instants, and the workflow reads off whatever the old switch said |
 
 Every step but 12.0.0 is a lightweight stage, and none but that one writes a value. See
 [Migrations](../architecture/migrations.md).

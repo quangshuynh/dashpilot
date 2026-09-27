@@ -25,14 +25,12 @@ struct RootView: View {
 
     @State private var lifecycleError: ShiftLifecycleError?
 
-    /// What the last press of Park in this screen did about a pickup, and the
-    /// instant that parking began.
-    ///
-    /// Screen state rather than a stored fact: the delivery's own timestamp is
-    /// the record, and this is only the sentence saying the tap wrote it. Keyed
-    /// to the suspension's start so the line is shown only for the stretch it
-    /// describes, and never under a later one parked from the Lock Screen.
-    @State private var parkPickup: (parkedAt: Date, outcome: ParkPickupOutcome)?
+    /// What the pickup workflow did at the last Park or Resume Driving pressed
+    /// in this screen. See ``PickupWorkflowFeedback``.
+    @State private var pickupWorkflow: PickupWorkflowFeedback?
+
+    /// Why taking back an automated step was refused, while that is on screen.
+    @State private var undoError: DeliveryLifecycleError?
 
     /// Exporting every completed shift.
     @State private var isExportingHistory = false
@@ -71,7 +69,8 @@ struct RootView: View {
                             end: endShift,
                             park: park,
                             resumeDriving: resumeDriving,
-                            parkPickup: parkPickupOutcome(for: activeShift)
+                            pickupWorkflow: pickupWorkflow.flatMap { $0.describes(activeShift) ? $0 : nil },
+                            undoPickupWorkflowStep: undoPickupWorkflowStep
                         )
                     } else {
                         StartShiftPanel(start: startShift)
@@ -115,6 +114,34 @@ struct RootView: View {
                 CurrentWeekHistorySection(week: currentWeek, now: now) {
                     isExportingHistory = true
                 }
+            }
+            // The window an automated step can be taken back in, which is the
+            // one the app's immediate undo of a Delivered already keeps, counted
+            // in one-second ticks for the reason that one is. Restarted by each
+            // press. When it passes, a Park line stays for as long as the
+            // vehicle is parked, without its Undo, and a Resume line goes: a
+            // sentence about a pickup has nothing left to say to a driver who
+            // is already driving.
+            .task(id: pickupWorkflow?.id) {
+                guard pickupWorkflow != nil else { return }
+                for _ in 0..<DeliveryControlPanel.undoSeconds {
+                    try? await Task.sleep(for: .seconds(1))
+                    guard !Task.isCancelled else { return }
+                }
+                guard let feedback = pickupWorkflow else { return }
+                switch feedback.moment {
+                case .parked: pickupWorkflow?.undoableStep = nil
+                case .resumed: pickupWorkflow = nil
+                }
+            }
+            .alert(
+                "Step Not Undone",
+                isPresented: isShowingUndoError,
+                presenting: undoError
+            ) { _ in
+                Button("OK", role: .cancel) { undoError = nil }
+            } message: { error in
+                Text(error.errorDescription ?? "The step could not be undone.")
             }
             .navigationTitle("DashPilot")
             .toolbar {
@@ -267,6 +294,13 @@ struct RootView: View {
         now = .now
     }
 
+    private var isShowingUndoError: Binding<Bool> {
+        Binding(
+            get: { undoError != nil },
+            set: { isShowing in if !isShowing { undoError = nil } }
+        )
+    }
+
     private var isShowingLifecycleError: Binding<Bool> {
         Binding(
             get: { lifecycleError != nil },
@@ -304,29 +338,60 @@ struct RootView: View {
         // did not go through.
         routeCapture.prepareForRouteSuspension()
         // The operation the intents and the Lock Screen run too, so the pickup
-        // setting behaves the same from every surface.
+        // workflow behaves the same from every surface.
         var result: ParkVehicleResult?
         perform { result = try ParkVehicleService(context: modelContext).park() }
-        parkPickup = result.flatMap { result in
-            result.shift.openRouteSuspension.map { (parkedAt: $0.startedAt, outcome: result.pickup) }
+        pickupWorkflow = result.flatMap { result in
+            guard let parkedAt = result.shift.openRouteSuspension?.startedAt,
+                  let notice = result.pickup.notice else { return nil }
+            return PickupWorkflowFeedback(
+                moment: .parked(at: parkedAt),
+                notice: notice,
+                undoableStep: result.automatedStep
+            )
         }
         routeCapture.synchronize()
         liveActivity.reconcile()
-    }
-
-    /// The pickup line for the stretch the shift is parked in now, or `nil`.
-    private func parkPickupOutcome(for shift: Shift) -> ParkPickupOutcome? {
-        guard let parkPickup, shift.openRouteSuspension?.startedAt == parkPickup.parkedAt else { return nil }
-        return parkPickup.outcome
     }
 
     private func resumeDriving() {
         // After, not before: capture starts only once the store holds a shift
         // that is driving again, so a refused or failed write cannot leave it
         // recording a walk.
-        perform { try ShiftService(context: modelContext).resumeDrivingOnActiveShift() }
-        parkPickup = nil
+        var result: ResumeDrivingResult?
+        perform { result = try ParkVehicleService(context: modelContext).resumeDriving() }
+        pickupWorkflow = result.flatMap { result in
+            guard let resumedAt = result.shift.routeSuspensionsInOrder.last?.endedAt,
+                  let notice = result.pickup.notice else { return nil }
+            return PickupWorkflowFeedback(
+                moment: .resumed(at: resumedAt),
+                notice: notice,
+                undoableStep: result.automatedStep
+            )
+        }
         routeCapture.synchronize()
+        liveActivity.reconcile()
+    }
+
+    /// Takes back the one delivery event the workflow just recorded.
+    ///
+    /// **The vehicle is not touched**: no suspension is opened or closed and
+    /// capture is not reconciled, because the driver did park and is driving.
+    /// The offer goes whatever happens next, so a refusal cannot invite a second
+    /// press; the line then says what was undone, or the alert says why not.
+    private func undoPickupWorkflowStep() {
+        guard var feedback = pickupWorkflow, let step = feedback.undoableStep else { return }
+        feedback.undoableStep = nil
+        do {
+            try DeliveryService(context: modelContext).undoAutomatedStep(step)
+            feedback.notice = step.undoneNotice
+        } catch let error as DeliveryLifecycleError {
+            undoError = error
+        } catch {
+            undoError = .storeUnavailable(underlying: error)
+        }
+        pickupWorkflow = feedback
+        // A delivery's state moved, which is what the Lock Screen card shows.
         liveActivity.reconcile()
     }
 

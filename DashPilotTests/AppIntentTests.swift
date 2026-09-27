@@ -556,7 +556,8 @@ struct AppIntentTests {
         #expect(parked.contains("shift is still running"))
         #expect(!parked.contains("pause"), "Parking is not a pause and must never be said as one")
 
-        let driving = IntentLifecycleOutcome.drivingResumed(parkedDuration: 1_500).confirmation.lowercased()
+        let driving = IntentLifecycleOutcome.drivingResumed(parkedDuration: 1_500, pickup: .notEnabled)
+            .confirmation.lowercased()
         #expect(driving.contains("driving again"))
         #expect(driving.contains("open dashpilot"))
     }
@@ -745,135 +746,6 @@ struct AppIntentTests {
         }
     }
 
-    // MARK: Parking with the pickup setting
-
-    /// A delivery started through the service and recorded at its pickup, on
-    /// the shift an intent already started.
-    private func deliveryAtPickup(in context: ModelContext) throws -> Delivery {
-        let deliveries = DeliveryService(context: context)
-        let delivery = try deliveries.startDelivery()
-        try deliveries.markArrivedAtPickup(delivery)
-        return delivery
-    }
-
-    /// Voice reaches the app button's own operation, so the setting cannot
-    /// behave differently depending on which surface was used.
-    @Test("Parking by voice with the setting on picks up the one delivery at its pickup")
-    func parkIntentAppliesThePickupSetting() async throws {
-        try await withStore { context in
-            _ = try await StartShiftIntent().perform()
-            try SettingsService(context: context).setRecordsPickupWhenParking(true)
-            let waiting = try deliveryAtPickup(in: context)
-
-            _ = try await ParkVehicleIntent().perform()
-
-            let shift = try #require(try context.fetch(FetchDescriptor<Shift>()).first)
-            #expect(shift.isRouteSuspended)
-            #expect(waiting.state == .pickedUp)
-            #expect(waiting.pickedUpAt == shift.openRouteSuspension?.startedAt, "One tap, one instant")
-        }
-    }
-
-    @Test("Parking by voice with the setting off parks only")
-    func parkIntentWithTheSettingOffParksOnly() async throws {
-        try await withStore { context in
-            _ = try await StartShiftIntent().perform()
-            let waiting = try deliveryAtPickup(in: context)
-
-            _ = try await ParkVehicleIntent().perform()
-
-            let shift = try #require(try context.fetch(FetchDescriptor<Shift>()).first)
-            #expect(shift.isRouteSuspended)
-            #expect(waiting.state == .arrivedAtPickup)
-        }
-    }
-
-    @Test("Parking by voice with two deliveries at a pickup parks and advances neither")
-    func parkIntentRefusesToChooseBetweenTwo() async throws {
-        try await withStore { context in
-            _ = try await StartShiftIntent().perform()
-            try SettingsService(context: context).setRecordsPickupWhenParking(true)
-            let first = try deliveryAtPickup(in: context)
-            let second = try deliveryAtPickup(in: context)
-
-            let outcome = try IntentLifecycleService.forIntent().parkVehicle()
-
-            #expect(outcome == .vehicleParked(pickup: .severalAtPickup(count: 2)))
-            #expect(first.state == .arrivedAtPickup)
-            #expect(second.state == .arrivedAtPickup)
-            let shift = try #require(try context.fetch(FetchDescriptor<Shift>()).first)
-            #expect(shift.isRouteSuspended, "Parking stands whatever the automation decided")
-            #expect(outcome.confirmation.contains("Vehicle parked."))
-            #expect(outcome.confirmation.contains("Pickup not recorded"))
-        }
-    }
-
-    @Test("The spoken confirmation says both halves, then names the delivery the setting moved")
-    func parkIntentConfirmationNamesThePickup() async throws {
-        try await withStore { context in
-            _ = try await StartShiftIntent().perform()
-            try SettingsService(context: context).setRecordsPickupWhenParking(true)
-            _ = try deliveryAtPickup(in: context)
-
-            let outcome = try IntentLifecycleService.forIntent().parkVehicle()
-
-            #expect(outcome == .vehicleParked(pickup: .recorded(deliveryNumber: 1)))
-            let sentence = outcome.confirmation
-            #expect(sentence.contains("Route recording is stopped"))
-            #expect(sentence.contains("shift is still running"))
-            #expect(sentence.hasSuffix("Delivery 1 marked Picked Up when you parked."))
-            #expect(!sentence.lowercased().contains("pause"))
-        }
-    }
-
-    @Test("Parking from the Live Activity with the setting on picks up the one delivery at its pickup")
-    func activityParkAppliesThePickupSetting() async throws {
-        try await withStore { context in
-            _ = try await StartShiftIntent().perform()
-            try SettingsService(context: context).setRecordsPickupWhenParking(true)
-            let waiting = try deliveryAtPickup(in: context)
-
-            _ = try await ParkVehicleFromActivityIntent().perform()
-
-            let shift = try #require(try context.fetch(FetchDescriptor<Shift>()).first)
-            #expect(shift.isRouteSuspended)
-            #expect(waiting.state == .pickedUp)
-        }
-    }
-
-    @Test("Parking from the Live Activity, stacked: only the delivery at its pickup moves")
-    func activityParkAdvancesOnlyTheEligible() async throws {
-        try await withStore { context in
-            _ = try await StartShiftIntent().perform()
-            try SettingsService(context: context).setRecordsPickupWhenParking(true)
-            let deliveries = DeliveryService(context: context)
-            let carrying = try deliveryAtPickup(in: context)
-            try deliveries.markPickedUp(carrying)
-            let carryingPickup = carrying.pickedUpAt
-            let waiting = try deliveryAtPickup(in: context)
-
-            _ = try await ParkVehicleFromActivityIntent().perform()
-
-            #expect(waiting.state == .pickedUp)
-            #expect(carrying.pickedUpAt == carryingPickup, "The order already in the car is untouched")
-            #expect(carrying.deliveredAt == nil)
-        }
-    }
-
-    @Test("Parking from the Live Activity with the setting off parks only")
-    func activityParkWithTheSettingOffParksOnly() async throws {
-        try await withStore { context in
-            _ = try await StartShiftIntent().perform()
-            let waiting = try deliveryAtPickup(in: context)
-
-            _ = try await ParkVehicleFromActivityIntent().perform()
-
-            let shift = try #require(try context.fetch(FetchDescriptor<Shift>()).first)
-            #expect(shift.isRouteSuspended)
-            #expect(waiting.state == .arrivedAtPickup)
-        }
-    }
-
     // MARK: Starting a delivery from the Live Activity
 
     @Test("Starting a delivery from the Live Activity records exactly one")
@@ -1009,48 +881,168 @@ struct AppIntentTests {
         }
     }
 
-    // MARK: How a pickup was recorded
+    // MARK: The Park and Resume pickup workflow, from every surface
 
-    /// A delivery at its pickup, reached through the intents themselves, with
-    /// the pickup-when-parking setting on.
-    private func deliveryAtPickupWithParkPickupOn(in context: ModelContext) async throws -> Delivery {
-        _ = try await StartShiftIntent().perform()
-        _ = try await StartDeliveryIntent().perform()
-        _ = try await RecordDeliveryProgressIntent().perform()
-        try SettingsService(context: context).setRecordsPickupWhenParking(true)
-        let delivery = try #require(try context.fetch(FetchDescriptor<Delivery>()).first)
-        #expect(delivery.state == .arrivedAtPickup)
-        return delivery
+    /// A delivery started through the service on the shift an intent already
+    /// started, with the workflow turned on as asked.
+    private func acceptedDelivery(in context: ModelContext, stacked: Bool = false) throws -> Delivery {
+        let settings = SettingsService(context: context)
+        try settings.setUsesParkAndResumeForPickups(true)
+        try settings.setHandlesStackedOrdersInOrder(stacked)
+        return try DeliveryService(context: context).startDelivery()
     }
 
-    @Test("Parking by voice records the pickup as Park's, exactly as the button does")
-    func parkIntentRecordsParkProvenance() async throws {
+    /// The two system surfaces, each able to perform either half of the
+    /// workflow. The app's own buttons call the same service directly and are
+    /// covered by `ParkResumePickupWorkflowTests`.
+    enum Surface: CaseIterable, Sendable {
+        case voice, liveActivity
+
+        @MainActor
+        func park() async throws {
+            switch self {
+            case .voice: _ = try await ParkVehicleIntent().perform()
+            case .liveActivity: _ = try await ParkVehicleFromActivityIntent().perform()
+            }
+        }
+
+        @MainActor
+        func resume() async throws {
+            switch self {
+            case .voice: _ = try await ResumeDrivingIntent().perform()
+            case .liveActivity: _ = try await ResumeDrivingFromActivityIntent().perform()
+            }
+        }
+    }
+
+    /// Every combination of surfaces for the two halves reaches the same
+    /// operation the app's buttons run, so the result is the same: Arrived at
+    /// Pickup at the instant of parking, Picked Up at the instant of driving,
+    /// the pickup recorded as Resume Driving's.
+    @Test("Park by voice or Lock Screen marks Arrived, Resume by either marks Picked Up", arguments: [
+        (Surface.voice, Surface.voice), (.voice, .liveActivity), (.liveActivity, .voice), (.liveActivity, .liveActivity)
+    ])
+    func everySurfaceRunsTheWorkflow(parkOn: Surface, resumeOn: Surface) async throws {
         try await withStore { context in
-            let delivery = try await deliveryAtPickupWithParkPickupOn(in: context)
+            _ = try await StartShiftIntent().perform()
+            let delivery = try acceptedDelivery(in: context)
+
+            try await parkOn.park()
+            let shift = try #require(try context.fetch(FetchDescriptor<Shift>()).first)
+            let parkedAt = try #require(shift.openRouteSuspension?.startedAt)
+            #expect(delivery.state == .arrivedAtPickup)
+            #expect(delivery.arrivedAtPickupAt == parkedAt, "One tap, one instant")
+
+            try await resumeOn.resume()
+            let resumedAt = try #require(shift.routeSuspensionsInOrder.last?.endedAt)
+            #expect(!shift.isRouteSuspended)
+            #expect(delivery.state == .pickedUp)
+            #expect(delivery.pickedUpAt == resumedAt)
+            #expect(delivery.pickupProvenance == .resumeAutomation)
+        }
+    }
+
+    @Test("With the workflow off, Park and Resume from every surface record only the vehicle")
+    func everySurfaceWithTheWorkflowOffRecordsOnlyTheVehicle() async throws {
+        for surface in Surface.allCases {
+            try await withStore { context in
+                _ = try await StartShiftIntent().perform()
+                let delivery = try DeliveryService(context: context).startDelivery()
+
+                try await surface.park()
+                try await surface.resume()
+
+                let shift = try #require(try context.fetch(FetchDescriptor<Shift>()).first)
+                #expect(shift.routeSuspensions.count == 1)
+                #expect(delivery.state == .accepted, "\(surface): nothing but the vehicle moved")
+                #expect(shift.routeSuspensions.first?.pickupWorkflowDeliveryID == nil)
+            }
+        }
+    }
+
+    /// Resume from the Lock Screen is the case the stored association exists
+    /// for: the process that parked may be gone, and choosing again would pick
+    /// up the next stacked order.
+    @Test("Resume from the Lock Screen picks up the delivery Park chose, not the next one")
+    func lockScreenResumeActsOnTheParkedDelivery() async throws {
+        try await withStore { context in
+            _ = try await StartShiftIntent().perform()
+            let third = try acceptedDelivery(in: context, stacked: true)
+            let fourth = try DeliveryService(context: context).startDelivery()
+            try DeliveryService(context: context).markArrivedAtPickup(fourth)
+
             _ = try await ParkVehicleIntent().perform()
+            #expect(third.state == .arrivedAtPickup, "The lower number is taken first")
 
-            #expect(delivery.state == .pickedUp)
-            #expect(delivery.pickupProvenance == .parkAutomation)
+            // The driver cancels the first order inside the shop.
+            try DeliveryService(context: context).cancelDelivery(third)
+
+            // A fresh context stands in for a process that did not park.
+            let other = ModelContext(context.container)
+            IntentLifecycleService.testContext = other
+            _ = try await ResumeDrivingFromActivityIntent().perform()
+            IntentLifecycleService.testContext = context
+
+            let storedFourth = try #require(
+                try other.fetch(FetchDescriptor<Delivery>()).first { $0.id == fourth.id }
+            )
+            #expect(storedFourth.state == .arrivedAtPickup, "A different stacked order is never picked up")
+            #expect(storedFourth.pickedUpAt == nil)
         }
     }
 
-    @Test("Parking from the Live Activity records the pickup as Park's too")
-    func activityParkIntentRecordsParkProvenance() async throws {
+    @Test("The spoken confirmations name the delivery and say the step was recorded automatically")
+    func workflowConfirmationsNameTheDelivery() async throws {
         try await withStore { context in
-            let delivery = try await deliveryAtPickupWithParkPickupOn(in: context)
-            _ = try await ParkVehicleFromActivityIntent().perform()
+            _ = try await StartShiftIntent().perform()
+            _ = try acceptedDelivery(in: context)
 
-            #expect(delivery.state == .pickedUp)
-            #expect(delivery.pickupProvenance == .parkAutomation)
+            let parked = try IntentLifecycleService.forIntent().parkVehicle()
+            #expect(parked == .vehicleParked(pickup: .markedArrived(deliveryNumber: 1)))
+            #expect(parked.confirmation.contains("Route recording is stopped"))
+            #expect(parked.confirmation.contains("Delivery 1 marked Arrived at Pickup."))
+            #expect(parked.confirmation.hasSuffix("Recorded automatically when you parked."))
+
+            let resumed = try IntentLifecycleService.forIntent().resumeDriving()
+            guard case let .drivingResumed(_, pickup) = resumed else {
+                Issue.record("Resume Driving confirms driving")
+                return
+            }
+            #expect(pickup == .markedPickedUp(deliveryNumber: 1))
+            #expect(resumed.confirmation.contains("Open DashPilot to start recording your route again."))
+            #expect(resumed.confirmation.hasSuffix("Delivery 1 marked Picked Up. Recorded automatically when you resumed driving."))
+            for sentence in [parked.confirmation, resumed.confirmation] {
+                #expect(!sentence.lowercased().contains("detect"))
+                #expect(!sentence.lowercased().contains("pause"))
+            }
         }
     }
 
-    @Test("The next-step control records a manual pickup by voice and from the Live Activity, setting or not")
+    @Test("Two deliveries with stacked orders off: the vehicle parks, nothing else moves, and it says why")
+    func stackedOffBySpeechParksOnly() async throws {
+        try await withStore { context in
+            _ = try await StartShiftIntent().perform()
+            let first = try acceptedDelivery(in: context)
+            let second = try DeliveryService(context: context).startDelivery()
+
+            let outcome = try IntentLifecycleService.forIntent().parkVehicle()
+
+            #expect(outcome == .vehicleParked(pickup: .stackedNotHandled(inProgress: 2)))
+            #expect(first.state == .accepted && second.state == .accepted)
+            #expect(outcome.confirmation.contains("Handle stacked orders in order is off"))
+        }
+    }
+
+    @Test("The next-step control records a manual pickup by voice and from the Live Activity, workflow or not")
     func stepIntentsRecordManualProvenance() async throws {
         try await withStore { context in
-            let spoken = try await deliveryAtPickupWithParkPickupOn(in: context)
+            _ = try await StartShiftIntent().perform()
+            _ = try await StartDeliveryIntent().perform()
+            try SettingsService(context: context).setUsesParkAndResumeForPickups(true)
             _ = try await RecordDeliveryProgressIntent().perform()
-            #expect(spoken.pickupProvenance == .manual, "The setting governs Park, not the Picked Up step")
+            _ = try await RecordDeliveryProgressIntent().perform()
+            let spoken = try #require(try context.fetch(FetchDescriptor<Delivery>()).first)
+            #expect(spoken.pickupProvenance == .manual, "The workflow governs Park and Resume, not the step")
 
             _ = try await RecordDeliveryProgressIntent().perform()
             _ = try await StartDeliveryIntent().perform()

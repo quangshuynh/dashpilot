@@ -221,8 +221,8 @@ struct PickupPlaceHistoryView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
-                if let parkRecorded = metrics.parkRecordedStatement {
-                    Text(parkRecorded)
+                if let automated = metrics.automatedPickupStatement {
+                    Text(automated)
                         .dashFont(.body)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -272,16 +272,16 @@ struct PickupPlaceHistoryView: View {
                 Self.listedWaitsExplanation(
                     of: metrics.sampleCount,
                     listed: recentSamples.count,
-                    leavesParkRecordedOut: metrics.parkRecordedPickupCount > 0
+                    leavesAutomatedOut: metrics.automatedPickupCount > 0
                 )
             )
         }
     }
 
-    /// Says "counted" rather than "recorded" when waits Park recorded are left
-    /// out, because then the list is not every recorded wait.
-    private static func listedWaitsExplanation(of total: Int, listed: Int, leavesParkRecordedOut: Bool) -> String {
-        let noun = leavesParkRecordedOut ? "counted" : "recorded"
+    /// Says "counted" rather than "recorded" when waits recorded automatically
+    /// are left out, because then the list is not every recorded wait.
+    private static func listedWaitsExplanation(of total: Int, listed: Int, leavesAutomatedOut: Bool) -> String {
+        let noun = leavesAutomatedOut ? "counted" : "recorded"
         return listed < total
             ? "The \(listed) most recent of \(total) \(noun) waits, newest first."
             : "Every \(noun) wait at this place, newest first."

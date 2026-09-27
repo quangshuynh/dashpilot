@@ -165,10 +165,12 @@ same sentence they would read, and adds exactly one rule of its own.
 
 That rule is which delivery a spoken step meant. It is about deliveries alone: the two parked actions
 are shift operations and are refused by no number of deliveries, because one driver has one vehicle
-however many orders are in the car. Park runs `ParkVehicleService`, which the app's button runs too:
-it saves the suspension through `ShiftService`, and only then, if the driver turned on `Pick up order
-when parking` and exactly one delivery is at its pickup, calls `DeliveryService.markPickedUp` for it.
-A refused pickup never undoes the parking, and the suspension never joins a delivery. On screen the question does not arise: with three
+however many orders are in the car. Park and Resume Driving run `ParkVehicleService`, which the
+app's buttons run too: it saves the vehicle state through `ShiftService` first, and only then, if the
+driver turned on `Pick up orders with Park & Resume`, calls `DeliveryService.markArrivedAtPickup` (on
+Park) or `markPickedUp` (on Resume, for the delivery the parked stretch stores) for the one delivery
+the rule names. A refused delivery step never undoes the vehicle state, and the suspension names its
+delivery by identifier and joins none. On screen the question does not arise: with three
 deliveries running there are three cards, each with its own button. A sentence has no card, so a step
 is recorded only while **exactly one** delivery is in progress; with more, nothing is recorded and the
 refusal names the count. That is `DeliveryService`'s own principle, where every mutation takes its
