@@ -37,6 +37,12 @@ A delivery contributes exactly one recorded wait when **all** of these hold:
 
 Everything else contributes nothing. Not a zero, not an estimate, not a partial figure — nothing.
 
+A pickup recorded by [Pick up order when parking](settings.md#pick-up-order-when-parking) is an
+ordinary `pickedUpAt`, taken at the moment the driver pressed Park. That delivery's wait therefore
+runs from its arrival to the moment of parking, which is usually before the order was handed over,
+and it is counted like any other. The setting never records an arrival, so it never adds a wait of
+zero.
+
 ### Cancelled deliveries
 
 The rule above already decides them, and it decides them deliberately:

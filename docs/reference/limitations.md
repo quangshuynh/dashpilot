@@ -66,6 +66,26 @@ and one they cannot.
 - **No widget, control, watch app or notification.** The intents and the shift's Live Activity are
   the whole off-screen surface.
 
+## Pick up order when parking
+
+- **A recorded pickup is an assumption the driver configured, not an observation.** With the setting
+  on, pressing Park records `Picked Up` for the one delivery at its pickup at the moment of parking.
+  DashPilot does not know whether the order was handed over, or when.
+- **That delivery's recorded pickup wait ends when the driver parked**, which is usually earlier than
+  the handover, so a place's median can read shorter for drivers who use the setting.
+- **A pickup recorded by mistake cannot be taken back on a running shift.** There is no undo for
+  `Picked Up` while the shift runs, the same as for the card's own button; the finished shift's
+  delivery-time correction can move the instant afterwards.
+- **Two deliveries at a pickup record neither**, even when the driver knows which one they are
+  collecting. The panel says so and the card records it.
+- **A delivery still `Accepted` is never advanced**, so a driver who did not record the arrival gets
+  parking only.
+- **The line saying what Park recorded is shown only in the app that pressed it.** Voice speaks it;
+  the Lock Screen shows only the delivery's new state; a stretch parked from elsewhere shows no line
+  in the app.
+- **Nothing records that the setting, rather than the card, wrote the pickup**, in the app or in an
+  export.
+
 ## Shift end-time correction
 
 - **Only the end, and only on a finished shift.** A shift's start is not correctable anywhere, and a

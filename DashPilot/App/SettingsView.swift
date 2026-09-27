@@ -2,7 +2,8 @@ import SwiftData
 import SwiftUI
 
 /// The driver's reusable preferences: the vehicles they work in, which one they
-/// are working in now, and what a gallon currently costs.
+/// are working in now, what a gallon currently costs, and whether parking may
+/// also record a pickup.
 ///
 /// ## What this screen is, and the one sentence it has to get across
 ///
@@ -60,6 +61,7 @@ struct SettingsView: View {
             defaultVehicleSection
             vehiclesSection
             fuelSection
+            pickupWorkflowSection
             aboutSection
         }
         .navigationTitle("Settings")
@@ -197,6 +199,57 @@ struct SettingsView: View {
                 """
             )
         }
+    }
+
+    /// Whether pressing Park may also record the pickup.
+    ///
+    /// Off until the driver turns it on, including for a driver who has never
+    /// opened this screen and has no settings row at all. The footer says the
+    /// three things a driver needs before trusting it: it only ever moves a
+    /// delivery already at its pickup, it refuses to choose between two, and the
+    /// pickup is recorded at the moment of parking, which is what that
+    /// delivery's recorded pickup wait will then end at.
+    private var pickupWorkflowSection: some View {
+        Section {
+            Toggle(isOn: recordsPickupWhenParking) {
+                Text("Pick up order when parking")
+                    .dashFont(.body)
+            }
+            .accessibilityLabel("Pick up order when parking")
+            .accessibilityHint(
+                """
+                When on, Park Vehicle also marks Picked Up for the one delivery waiting at a pickup. \
+                Nothing is recorded when two or more are waiting.
+                """
+            )
+            .accessibilityIdentifier("pickupWhenParkingToggle")
+        } header: {
+            Text("Pickup Workflow")
+        } footer: {
+            Text(
+                """
+                When on, parking also records Picked Up for a delivery that has Arrived at Pickup \
+                recorded, if it is the only one. With two or more waiting, or none, only the \
+                vehicle is parked. The pickup is recorded at the moment you park, from your tap, \
+                not from anything DashPilot detects.
+                """
+            )
+        }
+    }
+
+    /// The setting, read from the row and written through the service.
+    private var recordsPickupWhenParking: Binding<Bool> {
+        Binding(
+            get: { settings?.recordsPickupWhenParking ?? false },
+            set: { isEnabled in
+                do {
+                    try SettingsService(context: modelContext).setRecordsPickupWhenParking(isEnabled)
+                } catch {
+                    failure = (error as? any LocalizedError)?.errorDescription
+                        ?? "The pickup setting could not be changed."
+                }
+            }
+        )
     }
 
     /// Where DashPilot's parts come from, and the licenses they are under.

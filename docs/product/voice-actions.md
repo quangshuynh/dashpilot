@@ -56,7 +56,10 @@ step reaches the one that is left.
 vehicle is moving is a fact about the driver and their vehicle rather than about any one order. One
 driver has one vehicle however many orders are in the car, so neither asks for a delivery, neither is
 refused by how many are open, and DashPilot does not infer **why** the driver parked. See
-[Parked for a pickup](recorded-mileage.md#parked-for-a-pickup).
+[Parked for a pickup](recorded-mileage.md#parked-for-a-pickup). The one exception is opt-in: with
+[Pick up order when parking](settings.md#pick-up-order-when-parking) on, `Park Vehicle` looks for the
+one delivery at its pickup **after** parking has been recorded, and applies the same exactly-one rule
+to that subset. Parking itself is still never refused over a delivery.
 
 `Start Delivery` is not affected, because it names no existing delivery: it creates one, in an offer
 of one. Two deliveries that share an **offer** are still two deliveries, so a spoken step is refused
@@ -93,6 +96,12 @@ go on using.
 route has stopped, which is what parking is for; the shift has not, which is what parking is not. A
 driver who heard only the first half could reasonably believe they had recorded a break. The word
 *pause* appears in neither parked sentence, and a test sweeps for it.
+
+With [Pick up order when parking](settings.md#pick-up-order-when-parking) on, the parked confirmation
+gains one sentence saying what that setting did: "Delivery 1 marked Picked Up when you parked.", or
+that the pickup was not recorded because two or more deliveries are at a pickup, or none has an
+arrival recorded. With it off, the confirmation is exactly the one above. `Park Vehicle` runs the
+same operation as the app's button, so the setting cannot behave differently by voice.
 
 The event named is read back from the delivery after the write, so a confirmation cannot describe an
 event the store did not record. A fact DashPilot does not have is left out rather than filled in: a
