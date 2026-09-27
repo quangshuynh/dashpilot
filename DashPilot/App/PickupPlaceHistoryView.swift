@@ -268,14 +268,23 @@ struct PickupPlaceHistoryView: View {
         } header: {
             Text("Recorded waits")
         } footer: {
-            Text(Self.listedWaitsExplanation(of: metrics.sampleCount, listed: recentSamples.count))
+            Text(
+                Self.listedWaitsExplanation(
+                    of: metrics.sampleCount,
+                    listed: recentSamples.count,
+                    leavesParkRecordedOut: metrics.parkRecordedPickupCount > 0
+                )
+            )
         }
     }
 
-    private static func listedWaitsExplanation(of total: Int, listed: Int) -> String {
-        listed < total
-            ? "The \(listed) most recent of \(total) recorded waits, newest first."
-            : "Every recorded wait at this place, newest first."
+    /// Says "counted" rather than "recorded" when waits Park recorded are left
+    /// out, because then the list is not every recorded wait.
+    private static func listedWaitsExplanation(of total: Int, listed: Int, leavesParkRecordedOut: Bool) -> String {
+        let noun = leavesParkRecordedOut ? "counted" : "recorded"
+        return listed < total
+            ? "The \(listed) most recent of \(total) \(noun) waits, newest first."
+            : "Every \(noun) wait at this place, newest first."
     }
 
     // MARK: What this is

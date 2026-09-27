@@ -41,6 +41,7 @@ struct PeriodSummaryView: View {
     @Environment(\.calendar) private var calendar
     @Environment(\.locale) private var locale
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     /// Every completed shift. The period's own shifts are selected from these by
     /// ``ReportingPeriod/contains(_:)``, which is also the rule the calculator
@@ -232,32 +233,51 @@ struct PeriodSummaryView: View {
     }
 
     /// A calendar period: its name, with a step to either neighbour.
+    ///
+    /// At the accessibility text sizes the name takes a row of its own, with
+    /// the two steps beneath it. Squeezed between them, `Today` broke in the
+    /// middle of the word at the largest size.
+    @ViewBuilder
     private var steppingHeader: some View {
-        HStack {
-            stepButton(
-                systemImage: "chevron.left",
-                label: "Previous \(unit.stepNoun)",
-                identifier: "periodPreviousButton",
-                destination: period?.previous(using: calendar)
-            )
-
-            Spacer(minLength: DashSpacing.md)
-
-            periodTitleLabel
-
-            Spacer(minLength: DashSpacing.md)
-
-            stepButton(
-                systemImage: "chevron.right",
-                label: "Next \(unit.stepNoun)",
-                identifier: "periodNextButton",
-                // Nothing is offered beyond the period the driver is in.
-                // A future week or month holds no records, and an empty state
-                // for one is a screen that looks broken rather than
-                // informative.
-                destination: isCurrent ? nil : period?.next(using: calendar)
-            )
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(spacing: DashSpacing.md) {
+                periodTitleLabel
+                HStack {
+                    previousStepButton
+                    Spacer(minLength: DashSpacing.md)
+                    nextStepButton
+                }
+            }
+        } else {
+            HStack {
+                previousStepButton
+                Spacer(minLength: DashSpacing.md)
+                periodTitleLabel
+                Spacer(minLength: DashSpacing.md)
+                nextStepButton
+            }
         }
+    }
+
+    private var previousStepButton: some View {
+        stepButton(
+            systemImage: "chevron.left",
+            label: "Previous \(unit.stepNoun)",
+            identifier: "periodPreviousButton",
+            destination: period?.previous(using: calendar)
+        )
+    }
+
+    private var nextStepButton: some View {
+        stepButton(
+            systemImage: "chevron.right",
+            label: "Next \(unit.stepNoun)",
+            identifier: "periodNextButton",
+            // Nothing is offered beyond the period the driver is in. A future
+            // week or month holds no records, and an empty state for one is a
+            // screen that looks broken rather than informative.
+            destination: isCurrent ? nil : period?.next(using: calendar)
+        )
     }
 
     /// A range the driver chose: its dates, and the way back to the picker.
