@@ -72,6 +72,17 @@ change state: it calls the same operation the card's `Picked Up` button does, wi
 validation and the same instant rule, and it never records an arrival, never chooses between two
 deliveries at a pickup and never moves a delivery already picked up or finished.
 
+The one thing it records differently is **how**: every `Picked Up` is stored with whether the
+driver's own step or Park wrote it, and a finished delivery's history calls a pickup Park recorded
+`Picked up (recorded by Park)`. Correcting the pickup's time keeps that, reopening and cancelling
+keep it because they keep the pickup, and a pickup recorded before DashPilot kept this reads as
+unknown. See [Pickups recorded by Park](pickup-wait.md#pickups-recorded-by-park).
+
+**Recovering from a Park pickup recorded too early** needs nothing new. The delivery still offers
+`Delivered` and `Cancel`; its wait is already out of every typical figure; and once the shift has
+ended, [correcting its recorded times](#correcting-the-times-a-delivery-recorded) moves the pickup to the real handover
+without creating or removing an event.
+
 ## Cancellation is history, not deletion
 
 Real delivery work ends without a delivery: an order is cancelled, unassigned or returned.
