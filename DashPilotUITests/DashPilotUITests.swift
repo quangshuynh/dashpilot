@@ -6814,8 +6814,14 @@ final class DashPilotUITests: XCTestCase {
     }
 
     /// At the largest accessibility text size the period's figures stack
-    /// rather than truncate: the headline, a rate, and the estimated fuel are
-    /// each reachable whole, and each still says what it is.
+    /// rather than truncate, each is reachable whole, and each still carries
+    /// the qualification that keeps it honest.
+    ///
+    /// The figures are walked to in screen order, one swipe at a time from the
+    /// top, stopping at each as soon as it is hittable, so no fixed number of
+    /// swipes is part of the claim. How many it took is recorded as an activity
+    /// on the result, which is how the section footers' cost was measured
+    /// before and after they were shortened.
     @MainActor
     func testThePeriodSummarySurvivesTheLargestTextSize() throws {
         let app = launchWithPeriodSummary(atTextSize: Self.accessibilityXXXLTextSize)
@@ -6826,19 +6832,37 @@ final class DashPilotUITests: XCTestCase {
         link.tap()
         XCTAssertTrue(app.descendants(matching: .any)["periodTitle"].waitForExistence(timeout: 10))
 
-        let earnings = app.descendants(matching: .any)["periodEarnings"]
-        XCTAssertTrue(scrollUntilHittable(earnings, in: app, maxSwipes: 25), "The headline is reachable")
+        var swipes = 0
+        func reach(_ identifier: String) -> XCUIElement {
+            let element = app.descendants(matching: .any)[identifier]
+            while !element.isHittable, swipes < 60 {
+                app.swipeUp()
+                swipes += 1
+            }
+            XCTContext.runActivity(named: "\(identifier) reached after \(swipes) swipes") { _ in }
+            XCTAssertTrue(element.isHittable, "\(identifier) is reachable")
+            return element
+        }
+
+        let earnings = reach("periodEarnings")
         XCTAssertTrue(waitForLabel(earnings, toContain: "Recorded gross earnings"), "Showed: \(earnings.label)")
+        XCTAssertTrue(earnings.label.contains("1 of 2"), "Partial coverage is spoken with the figure: \(earnings.label)")
         XCTAssertGreaterThan(earnings.frame.height, 44, "The headline is never a clipped single line")
         attachScreenshot("period-summary-xxxl")
 
-        let rate = app.descendants(matching: .any)["periodWorkingHourRate"]
-        XCTAssertTrue(scrollUntilHittable(rate, in: app, maxSwipes: 25), "A rate is reachable")
+        let rate = reach("periodWorkingHourRate")
         XCTAssertTrue(rate.label.contains("gross earnings per working hour"), "Showed: \(rate.label)")
 
-        let fuel = app.descendants(matching: .any)["periodEstimatedFuel"]
-        XCTAssertTrue(scrollUntilHittable(fuel, in: app, maxSwipes: 40), "The estimate is reachable")
+        let mileage = reach("periodMileage")
+        XCTAssertTrue(mileage.label.hasPrefix("Recorded mileage"), "Recorded, never driven: \(mileage.label)")
+        XCTAssertTrue(mileage.label.contains("partial"), "Partial capture is spoken with it: \(mileage.label)")
+
+        let wait = reach("periodPickupWait")
+        XCTAssertTrue(wait.label.contains("Median recorded pickup wait"), "Showed: \(wait.label)")
+
+        let fuel = reach("periodEstimatedFuel")
         XCTAssertTrue(fuel.label.contains("1 of 2 completed shifts"), "Its coverage survives: \(fuel.label)")
+        XCTAssertTrue(fuel.label.localizedCaseInsensitiveContains("estimate"), "And it is an estimate: \(fuel.label)")
     }
 
     /// The estimated net is worked out over the shifts that record both halves,

@@ -137,11 +137,17 @@ nonisolated struct ExportDocumentEncoder: Equatable, Sendable {
 
         for shift in document.shifts {
             guard !shift.deliveries.isEmpty else {
-                writer.appendRow(Self.shiftFields(shift) + Self.emptyDeliveryFields + Self.trailingShiftFields(shift))
+                writer.appendRow(
+                    Self.shiftFields(shift) + Self.emptyDeliveryFields + Self.trailingShiftFields(shift)
+                        + Self.emptyTrailingDeliveryFields
+                )
                 continue
             }
             for delivery in shift.deliveries {
-                writer.appendRow(Self.shiftFields(shift) + Self.deliveryFields(delivery) + Self.trailingShiftFields(shift))
+                writer.appendRow(
+                    Self.shiftFields(shift) + Self.deliveryFields(delivery) + Self.trailingShiftFields(shift)
+                        + Self.trailingDeliveryFields(delivery)
+                )
             }
         }
 
@@ -231,7 +237,15 @@ nonisolated struct ExportDocumentEncoder: Equatable, Sendable {
         // `shiftRouteSuspendedSeconds` is **never** subtracted from
         // `shiftWorkingSeconds`. A driver inside a shop is working.
         "shiftRouteSuspensionCount",
-        "shiftRouteSuspendedSeconds"
+        "shiftRouteSuspendedSeconds",
+        // Appended by format version 5, after the shift columns above rather
+        // than beside `deliveryPickupWaitSeconds`, for the reason every column
+        // since version 3 has been appended. It is in the CSV because it
+        // changes how that column should be read: a wait whose pickup Park
+        // recorded ends when the driver parked, and a spreadsheet taking a
+        // median of waits needs to be able to filter those out, as the app
+        // does. `manual`, `parkAutomation` or `unknown`; empty with no pickup.
+        "deliveryPickupRecordedBy"
     ]
 
     /// An absent value.
@@ -243,6 +257,14 @@ nonisolated struct ExportDocumentEncoder: Equatable, Sendable {
     private static let empty = ""
 
     private static let emptyDeliveryFields = Array(repeating: empty, count: 16)
+
+    private static let emptyTrailingDeliveryFields = [empty]
+
+    /// The delivery column that sits after the trailing shift columns, appended
+    /// by format version 5 for the reason those were appended.
+    private static func trailingDeliveryFields(_ delivery: DeliveryExportRecord) -> [String] {
+        [delivery.pickupRecordedBy?.rawValue ?? empty]
+    }
 
     private static func shiftFields(_ shift: ShiftExportRecord) -> [String] {
         [

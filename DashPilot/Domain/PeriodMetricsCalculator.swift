@@ -249,6 +249,7 @@ nonisolated struct PeriodMetricsCalculator: Equatable, Sendable {
             pickupPlaceCount: shifts.reduce(into: Set<UUID>()) { $0.formUnion($1.pickupPlaceIDs) }.count,
             medianPickupWait: waitMetrics.medianDuration,
             pickupWaitSampleCount: waitMetrics.sampleCount,
+            parkRecordedPickupCount: waitMetrics.parkRecordedPickupCount,
             recordedDeliveryEarnings: deliveryEarnings.isEmpty ? nil : deliveryEarnings.reduce(Money.zero, +),
             deliveryEarningsCoverage: MetricCoverage(
                 contributingCount: deliveryEarnings.count,

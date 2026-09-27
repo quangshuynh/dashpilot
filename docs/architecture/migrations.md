@@ -25,13 +25,18 @@ rather than a store reset.
 | 15.0.0 | Adds the `VehicleProfile` and `DriverSettings` entities and an optional `Shift.fuelVehicleName` column. Backfills nothing |
 | 16.0.0 | Adds the `RouteSuspension` entity and a cascading `Shift.routeSuspensions` relationship, holding the stretches the driver recorded the vehicle as parked. Backfills nothing |
 | 17.0.0 | Adds `DriverSettings.recordsPickupWhenParking`, a `Bool` declared `false`, holding whether pressing Park may also record a pickup. Backfills nothing; every migrated row reads off |
+| 18.0.0 | Adds `Delivery.pickupProvenanceRawValue`, an optional `String` holding how a pickup was recorded. Backfills nothing; every migrated pickup reads as unknown |
 
-The current version is **v17**. Field-level detail is on [Data model](../reference/data-model.md).
+The current version is **v18**. Field-level detail is on [Data model](../reference/data-model.md).
 
-`DashPilotSchemaV1` through `DashPilotSchemaV16` hold frozen copies of their models rather than
+`DashPilotSchemaV1` through `DashPilotSchemaV17` hold frozen copies of their models rather than
 reusing the file-scope types, which have moved on. The plan then describes where a store is coming
 from as truthfully as where it is going, and the copies are never used at runtime outside
 migration.
+
+`DashPilotSchemaV17` was frozen in the interval that added v18, with copies of all eleven of its
+models. v18 moves the delivery, and reusing the file-scope types under v17 would describe every v17
+store as one that already said how each pickup was recorded, which is the one thing it cannot say.
 
 `DashPilotSchemaV16` was frozen in the interval that added v17, with copies of all eleven of its
 models. v17 moves only the settings row, and reusing the file-scope types under v16 would describe
@@ -344,6 +349,21 @@ at all reads off too, without one being created by the read.
 No shift, delivery, suspension or export field moves. The preference is current configuration and is
 read only at the moment Park is pressed. See
 [Pick up order when parking](../product/settings.md#pick-up-order-when-parking).
+
+### v17 to v18
+
+One optional `String` column on `Delivery`, applied lightweight, and **nothing written**.
+
+The tempting backfill writes `manual` into every recorded pickup, because nearly all of them were.
+But a v17 build could already record a pickup by parking, and a v17 store holds no trace of which
+pickups it recorded that way. Writing `manual` would state something the store never knew. The
+other tempting backfill matches a pickup instant to the start of a parked stretch, which is
+inference from a coincidence: a driver who parks and then taps `Picked Up` a second later produces
+the same two rows. So every migrated pickup reads as **unknown**, a delivery with no pickup stays
+without one, and nothing later infers the kind from timestamps, suspensions or the setting.
+
+Unknown pickups keep counting toward typical and median waits, as they always did. See
+[Pickups recorded by Park](../product/pickup-wait.md#pickups-recorded-by-park).
 
 ## Proving a migration rather than assuming it
 

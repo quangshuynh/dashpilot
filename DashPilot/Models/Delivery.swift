@@ -120,6 +120,20 @@ nonisolated final class Delivery {
 
     private(set) var pickedUpAt: Date?
 
+    /// How ``pickedUpAt`` was recorded, as a ``PickupProvenance`` raw value, or
+    /// `nil` when it is not known.
+    ///
+    /// **Written in the same statement as ``pickedUpAt`` and nowhere else**, by
+    /// ``markPickedUp(at:recordedBy:)``, so a pickup the app records always says
+    /// how, and a delivery with no pickup never claims one. Nothing clears
+    /// ``pickedUpAt`` afterwards: reopening, cancelling and correcting a
+    /// completion keep it, and correcting its time moves only the instant. So
+    /// this is never cleared either.
+    ///
+    /// `nil` beside a recorded pickup means **unknown**: a pickup recorded before
+    /// v18, which migration deliberately did not label. See ``pickupProvenance``.
+    private var pickupProvenanceRawValue: String?
+
     /// Set once the delivery is completed. Terminal, and mutually exclusive with
     /// ``cancelledAt`` because the transitions refuse a second terminal event.
     private(set) var deliveredAt: Date?
@@ -316,16 +330,32 @@ nonisolated final class Delivery {
         arrivedAtPickupAt = date
     }
 
-    /// Records that the order is in the car.
+    /// Records that the order is in the car, and how that was recorded.
     ///
+    /// - Parameter provenance: which control wrote the event. ``PickupProvenance/manual``
+    ///   is the driver's own Picked Up step on any surface, and is the default
+    ///   because that is what this event has always meant; Park passes
+    ///   ``PickupProvenance/parkAutomation`` explicitly.
     /// - Throws: ``DeliveryError`` if the delivery has finished, the event is
     ///   already recorded, the arrival was never recorded, or `date` precedes
     ///   the last recorded event.
-    func markPickedUp(at date: Date) throws {
+    func markPickedUp(at date: Date, recordedBy provenance: PickupProvenance = .manual) throws {
         try validateTransition(at: date)
         guard pickedUpAt == nil else { throw DeliveryError.alreadyRecorded(.pickedUp) }
         guard arrivedAtPickupAt != nil else { throw DeliveryError.outOfOrder(missing: .arrivedAtPickup) }
         pickedUpAt = date
+        pickupProvenanceRawValue = provenance.rawValue
+    }
+
+    /// How the recorded pickup was written, or `nil` when there is no pickup or
+    /// when it was recorded before DashPilot kept this.
+    ///
+    /// The two `nil`s are told apart by ``pickedUpAt``: a delivery with a pickup
+    /// and no provenance is **unknown**, never manual. A provenance beside no
+    /// pickup is a store the app cannot write, and reads as no provenance.
+    var pickupProvenance: PickupProvenance? {
+        guard pickedUpAt != nil else { return nil }
+        return PickupProvenance.stored(pickupProvenanceRawValue)
     }
 
     /// Records that the delivery was completed.

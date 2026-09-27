@@ -328,7 +328,9 @@ Based on 12 recorded pickups
 
 It is not an average of each place's median: that would weight a place visited
 once the same as one visited twenty times, and would be the middle of nothing the
-driver experienced. Which place a wait happened at stops mattering once the
+driver experienced. Waits whose pickup Park recorded are
+[left out, and said beside the figure](pickup-wait.md#pickups-recorded-by-park), by the same rule a
+place's history uses. Which place a wait happened at stops mattering once the
 sample qualifies.
 
 Nothing is trimmed, and nothing is predicted. The word *typical* is deliberately
@@ -507,14 +509,21 @@ leaving VoiceOver to infer it from a caption nearby:
   on 1 of 2 shifts, compared with 1 of 1 shift. This day is still in progress, so a percentage
   against a complete day would compare different amounts of time."*
 - *"37 dollars and 65 cents net after recorded expenses. Recorded gross earnings
-  across 1 of 2 shifts, less 2 recorded expenses. Both halves are what you
-  recorded … This is not profit, and it is not a tax figure."*
+  across 1 of 2 shifts, less 2 recorded expenses. Shifts with no amount are not
+  counted … This is not profit, and not a tax figure."*
 
 The period controls name what they do rather than leaving a chevron to be guessed
 at — *"Previous month"*, *"Next month"*, *"Choose custom date range"* — and a
 chosen range is spoken as what it is rather than as a bare pair of dates:
 
 - *"Custom reporting range, Sep 1 – 7, 2026, 7 selected days."*
+
+At the largest text sizes the figures come first and the explanations are short. A qualification a
+figure would mislead without (partial coverage, a rate's paired subset, a partial route, the net's
+caution, an estimate being an estimate, pickups left out) sits in that figure's own row and spoken
+label. Each section's footer keeps only what its figures are not, in a sentence or three, and the
+methodology is here. The period's name takes a row of its own above the two steps at those sizes,
+so it never breaks inside a word.
 
 Every figure keeps the coverage claim it had at a shorter period length. Reading a
 month's earnings must not require inferring from elsewhere on the screen that the

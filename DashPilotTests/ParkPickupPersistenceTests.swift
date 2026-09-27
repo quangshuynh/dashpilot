@@ -25,26 +25,32 @@ struct ParkPickupPersistenceTests {
 
     // MARK: Schema
 
-    /// The plan's own shape, asserted here because v17 is the current version.
+    /// Version 17's own identifier and entities, which stay here now that it is
+    /// frozen.
     ///
-    /// The repository's convention is that the count of versions and stages
-    /// lives in the suite belonging to whichever version is current. It moved
-    /// here from `RouteSuspensionPersistenceTests`, which owned it while v16 was
-    /// current.
-    @Test("Version 17 is the current version, and it adds no entity")
+    /// The **plan's** version and stage counts moved to
+    /// `PickupProvenancePersistenceTests` when v18 became current, by the
+    /// convention that they live in the current version's suite.
+    @Test("Version 17 is the version that added the preference, and it is now frozen")
     func schemaVersion() throws {
         #expect(DashPilotSchemaV17.versionIdentifier == Schema.Version(17, 0, 0))
-        #expect(DashPilotMigrationPlan.schemas.count == 17)
-        #expect(DashPilotMigrationPlan.stages.count == 16)
-        #expect(DashPilotMigrationPlan.schemas.last is DashPilotSchemaV17.Type)
+        #expect(DashPilotMigrationPlan.schemas.contains { $0 is DashPilotSchemaV17.Type })
 
-        let entities = Set(ModelContainerFactory.currentSchema.entities.map(\.name))
+        let schema = Schema(versionedSchema: DashPilotSchemaV17.self)
+        let entities = Set(schema.entities.map(\.name))
         #expect(
             entities == [
                 "Shift", "RouteSample", "RouteSuspension", "Delivery", "PickupPlace", "Expense",
                 "ShiftPause", "Offer", "DeliveryTip", "VehicleProfile", "DriverSettings"
             ],
             "v17 moves one column and no entity"
+        )
+        let settings = try #require(schema.entities.first { $0.name == "DriverSettings" })
+        #expect(settings.properties.map(\.name).contains("recordsPickupWhenParking"))
+        let delivery = try #require(schema.entities.first { $0.name == "Delivery" })
+        #expect(
+            !delivery.properties.map(\.name).contains("pickupProvenanceRawValue"),
+            "The frozen v17 delivery records no provenance; v18 adds it"
         )
     }
 

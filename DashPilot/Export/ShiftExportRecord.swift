@@ -403,7 +403,20 @@ nonisolated struct DeliveryExportRecord: Equatable, Sendable, Codable {
     /// both ends exist and are in order. Nothing here is predicted, and a
     /// delivery cancelled before the pickup contributes no wait rather than a
     /// wait of zero.
+    ///
+    /// Written exactly as recorded whoever recorded the pickup. Read it beside
+    /// ``pickupRecordedBy``: a wait whose pickup Park recorded ends when the
+    /// driver parked, and `summary.deliveries.medianPickupWaitSeconds` leaves
+    /// it out.
     let pickupWaitSeconds: Int?
+
+    /// How ``pickedUpAt`` was recorded: `manual`, `parkAutomation` or
+    /// `unknown`, and `null` when no pickup was recorded.
+    ///
+    /// Added by format version 5. `unknown` is a pickup recorded before
+    /// DashPilot kept this, and is written as what it is rather than as
+    /// `manual`: the store never said.
+    let pickupRecordedBy: ExportPickupRecording?
 
     /// Acceptance to completion, for a delivery that was actually delivered.
     let acceptedToDeliveredSeconds: Int?
@@ -478,7 +491,7 @@ nonisolated struct DeliveryExportRecord: Equatable, Sendable, Codable {
 
     private enum CodingKeys: String, CodingKey {
         case id, number, offerNumber, state, acceptedAt, arrivedAtPickupAt, pickedUpAt, deliveredAt, cancelledAt
-        case pickupPlaceName, pickupWaitSeconds, acceptedToDeliveredSeconds
+        case pickupPlaceName, pickupWaitSeconds, pickupRecordedBy, acceptedToDeliveredSeconds
         case grossEarnings, expectedEarnings
         case additionalTips, additionalTipsTotal, effectiveEarnings
         case effectiveEarningsPerDeliveryHour
@@ -497,6 +510,7 @@ nonisolated struct DeliveryExportRecord: Equatable, Sendable, Codable {
         try container.encodeAlways(cancelledAt, forKey: .cancelledAt)
         try container.encodeAlways(pickupPlaceName, forKey: .pickupPlaceName)
         try container.encodeAlways(pickupWaitSeconds, forKey: .pickupWaitSeconds)
+        try container.encodeAlways(pickupRecordedBy, forKey: .pickupRecordedBy)
         try container.encodeAlways(acceptedToDeliveredSeconds, forKey: .acceptedToDeliveredSeconds)
         try container.encodeAlways(grossEarnings, forKey: .grossEarnings)
         try container.encodeAlways(expectedEarnings, forKey: .expectedEarnings)
@@ -504,6 +518,28 @@ nonisolated struct DeliveryExportRecord: Equatable, Sendable, Codable {
         try container.encodeAlways(additionalTipsTotal, forKey: .additionalTipsTotal)
         try container.encodeAlways(effectiveEarnings, forKey: .effectiveEarnings)
         try container.encodeAlways(effectiveEarningsPerDeliveryHour, forKey: .effectiveEarningsPerDeliveryHour)
+    }
+}
+
+/// How a delivery's pickup was recorded, in the file's own vocabulary.
+///
+/// Three values where the store has two, because the file must say what the
+/// store does not know rather than leave a reader to guess what a missing value
+/// meant: `unknown` is a recorded pickup with no provenance, and a delivery
+/// with no pickup has no value at all.
+nonisolated enum ExportPickupRecording: String, Equatable, Sendable, Codable {
+    case manual
+    case parkAutomation
+    case unknown
+
+    /// The value for a delivery, or `nil` when it recorded no pickup.
+    init?(_ delivery: Delivery) {
+        guard delivery.pickedUpAt != nil else { return nil }
+        switch delivery.pickupProvenance {
+        case .manual: self = .manual
+        case .parkAutomation: self = .parkAutomation
+        case nil: self = .unknown
+        }
     }
 }
 

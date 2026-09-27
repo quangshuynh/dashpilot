@@ -208,7 +208,8 @@ struct SettingsView: View {
     /// three things a driver needs before trusting it: it only ever moves a
     /// delivery already at its pickup, it refuses to choose between two, and the
     /// pickup is recorded at the moment of parking, which is what that
-    /// delivery's recorded pickup wait will then end at.
+    /// delivery's recorded pickup wait will then end at, and why that wait is
+    /// left out of typical pickup waits.
     private var pickupWorkflowSection: some View {
         Section {
             Toggle(isOn: recordsPickupWhenParking) {
@@ -231,7 +232,7 @@ struct SettingsView: View {
                 When on, parking also records Picked Up for a delivery that has Arrived at Pickup \
                 recorded, if it is the only one. With two or more waiting, or none, only the \
                 vehicle is parked. The pickup is recorded at the moment you park, from your tap, \
-                not from anything DashPilot detects.
+                not from anything DashPilot detects, so its wait is left out of typical pickup waits.
                 """
             )
         }

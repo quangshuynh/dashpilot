@@ -41,6 +41,7 @@ struct PeriodSummaryView: View {
     @Environment(\.calendar) private var calendar
     @Environment(\.locale) private var locale
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     /// Every completed shift. The period's own shifts are selected from these by
     /// ``ReportingPeriod/contains(_:)``, which is also the rule the calculator
@@ -232,32 +233,51 @@ struct PeriodSummaryView: View {
     }
 
     /// A calendar period: its name, with a step to either neighbour.
+    ///
+    /// At the accessibility text sizes the name takes a row of its own, with
+    /// the two steps beneath it. Squeezed between them, `Today` broke in the
+    /// middle of the word at the largest size.
+    @ViewBuilder
     private var steppingHeader: some View {
-        HStack {
-            stepButton(
-                systemImage: "chevron.left",
-                label: "Previous \(unit.stepNoun)",
-                identifier: "periodPreviousButton",
-                destination: period?.previous(using: calendar)
-            )
-
-            Spacer(minLength: DashSpacing.md)
-
-            periodTitleLabel
-
-            Spacer(minLength: DashSpacing.md)
-
-            stepButton(
-                systemImage: "chevron.right",
-                label: "Next \(unit.stepNoun)",
-                identifier: "periodNextButton",
-                // Nothing is offered beyond the period the driver is in.
-                // A future week or month holds no records, and an empty state
-                // for one is a screen that looks broken rather than
-                // informative.
-                destination: isCurrent ? nil : period?.next(using: calendar)
-            )
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(spacing: DashSpacing.md) {
+                periodTitleLabel
+                HStack {
+                    previousStepButton
+                    Spacer(minLength: DashSpacing.md)
+                    nextStepButton
+                }
+            }
+        } else {
+            HStack {
+                previousStepButton
+                Spacer(minLength: DashSpacing.md)
+                periodTitleLabel
+                Spacer(minLength: DashSpacing.md)
+                nextStepButton
+            }
         }
+    }
+
+    private var previousStepButton: some View {
+        stepButton(
+            systemImage: "chevron.left",
+            label: "Previous \(unit.stepNoun)",
+            identifier: "periodPreviousButton",
+            destination: period?.previous(using: calendar)
+        )
+    }
+
+    private var nextStepButton: some View {
+        stepButton(
+            systemImage: "chevron.right",
+            label: "Next \(unit.stepNoun)",
+            identifier: "periodNextButton",
+            // Nothing is offered beyond the period the driver is in. A future
+            // week or month holds no records, and an empty state for one is a
+            // screen that looks broken rather than informative.
+            destination: isCurrent ? nil : period?.next(using: calendar)
+        )
     }
 
     /// A range the driver chose: its dates, and the way back to the picker.
@@ -365,16 +385,7 @@ struct PeriodSummaryView: View {
         } header: {
             Text("Summary")
         } footer: {
-            Text(
-                """
-                Only completed shifts are counted, and a shift belongs to the \(unit.stepNoun) its \
-                start time falls in — one that runs past midnight is counted whole, in the \
-                \(unit.stepNoun) it began. Elapsed time is the whole of those shifts. Delivery active time is the part of \
-                them a recorded delivery was open for, with deliveries worked at once counted once. \
-                Non-delivery time is the rest: it is not idle time, and DashPilot does not know what \
-                you were doing during either.
-                """
-            )
+            Text(PeriodSummaryExplanation.summary(periodNoun: unit.stepNoun))
         }
     }
 
@@ -445,15 +456,7 @@ struct PeriodSummaryView: View {
         } header: {
             Text("Expenses")
         } footer: {
-            Text(
-                """
-                Expenses are what you entered, on the dates you gave them. They are not attached to a \
-                shift or a delivery, nothing is divided across your work, and DashPilot records no \
-                purchase and estimates no cost of its own — so anything you did not enter is missing \
-                here rather than counted as nothing. \(metrics.netTitle) is those recorded costs \
-                taken off your recorded gross earnings. It is not profit and it is not a tax figure.
-                """
-            )
+            Text(PeriodSummaryExplanation.expenses)
         }
     }
 
@@ -508,16 +511,7 @@ struct PeriodSummaryView: View {
             // above it on position alone.
             Label("Estimated Fuel", systemImage: "fuelpump")
         } footer: {
-            Text(
-                """
-                Estimated fuel is each shift's recorded miles divided by the miles per gallon that \
-                shift recorded, priced at the gas price it recorded, added up over the shifts that \
-                recorded both. It is an estimate and not a recorded cost: it is not in the recorded \
-                expenses above, it is never added to them, and a fuel purchase you recorded there \
-                may be the same fuel. DashPilot does not know which shifts a tank was burned on and \
-                does not guess.
-                """
-            )
+            Text(PeriodSummaryExplanation.estimatedFuel)
         }
     }
 
@@ -625,14 +619,7 @@ struct PeriodSummaryView: View {
         } header: {
             Text("Driving")
         } footer: {
-            Text(
-                """
-                Recorded mileage is what the routes measured, not the miles driven: recording can \
-                be interrupted, and the distance across a gap is left out rather than guessed at. \
-                A shift whose route measured nothing contributes no distance at all — it is never \
-                counted as zero miles.
-                """
-            )
+            Text(PeriodSummaryExplanation.driving)
         }
     }
 
@@ -654,7 +641,11 @@ struct PeriodSummaryView: View {
             DashValueRow(
                 title: "Median recorded pickup wait",
                 value: metrics.pickupWaitStatement ?? "Not available",
-                detail: metrics.pickupWaitBasisStatement,
+                // The waits left out are said beside the figure they are left
+                // out of, never only in the footer.
+                detail: [metrics.pickupWaitBasisStatement, metrics.parkRecordedPickupStatement]
+                    .compactMap { $0 }
+                    .joined(separator: "\n"),
                 isFigure: metrics.pickupWaitStatement != nil
             )
             .accessibilityElement(children: .ignore)
@@ -686,16 +677,7 @@ struct PeriodSummaryView: View {
         } header: {
             Text("Deliveries")
         } footer: {
-            Text(
-                """
-                Delivered and cancelled deliveries are counted apart and never added into one figure. \
-                The median wait is the middle of the individual pickups recorded in this period, not \
-                an average of the places they happened at, and it describes those pickups rather than \
-                predicting the next one. Amounts recorded against individual deliveries are a separate \
-                record from the shift amounts above: they are not added to them, and the difference \
-                between the two is not a shortfall.
-                """
-            )
+            Text(PeriodSummaryExplanation.deliveries)
         }
     }
 
@@ -845,15 +827,7 @@ struct PeriodSummaryView: View {
             } header: {
                 Text("Export")
             } footer: {
-                Text(
-                    """
-                    Writes the completed shifts of this \(unit.stepNoun), their deliveries, the \
-                    expenses you recorded in it, and this summary — each figure with the count of \
-                    records it was worked out from — as a file on this device. The counts and the \
-                    expenses are in the JSON export; the CSV is the flat list of shifts and \
-                    deliveries. Recorded positions are not included.
-                    """
-                )
+                Text(PeriodSummaryExplanation.export(periodNoun: unit.stepNoun))
             }
         }
     }
@@ -912,29 +886,10 @@ struct PeriodSummaryView: View {
     /// What the earnings figures mean, with the sentence about missing amounts
     /// added only when this period actually has some.
     private func earningsExplanation(_ metrics: PeriodMetrics) -> String {
-        var sentences = [
-            """
-            Gross earnings are the amounts you recorded against these shifts, added up. Nothing is \
-            imported, nothing has been subtracted for fuel, wear or tax, and amounts you recorded \
-            against individual deliveries are never added into this figure.
-            """
-        ]
-        if !metrics.earningsCoverage.isComplete {
-            sentences.append(
-                """
-                Shifts with no amount recorded are left out of the total rather than counted as \
-                \(Money.zero.formatted(locale: locale)); the count under each figure says how many \
-                went into it.
-                """
-            )
-        }
-        sentences.append(
-            """
-            Each rate divides the amounts of the shifts that have both halves of it by those same \
-            shifts' hours or miles. It is never an average of the shifts' own rates.
-            """
+        PeriodSummaryExplanation.earnings(
+            hasShiftsWithoutAmount: !metrics.earningsCoverage.isComplete,
+            zero: Money.zero.formatted(locale: locale)
         )
-        return sentences.joined(separator: " ")
     }
 
     // MARK: Deriving

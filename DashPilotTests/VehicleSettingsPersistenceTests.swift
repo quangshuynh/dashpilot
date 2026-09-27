@@ -323,6 +323,6 @@ struct VehicleSettingsPersistenceTests {
 
     @Test("The export format version is unchanged: a new field is additive")
     func theExportVersionDoesNotMove() {
-        #expect(ExportFormat.version == 4)
+        #expect(ExportFormat.version == 5)
     }
 }
