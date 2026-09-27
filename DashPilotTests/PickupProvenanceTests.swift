@@ -9,9 +9,10 @@ private struct RefusedPickupSave: Error {}
 /// control that wrote it, and never moved by anything that keeps the event.
 ///
 /// The invariant every test here holds is the same: **a provenance exists
-/// exactly when a pickup the app recorded exists.** Nothing clears a pickup, so
-/// nothing clears its provenance; a correction moves the instant and leaves the
-/// provenance where it was.
+/// exactly when a pickup the app recorded exists.** The one thing that clears a
+/// pickup, taking back one Resume Driving just recorded, clears its provenance
+/// in the same statement (`AutomatedPickupStepUndoTests`); a correction moves
+/// the instant and leaves the provenance where it was.
 ///
 /// Rollback is read through a **fresh context**, because an already-held model
 /// and the store can disagree after one.
@@ -49,13 +50,15 @@ struct PickupProvenanceTests {
         return delivery
     }
 
-    /// The same delivery recorded picked up by Park at minute 16.
-    private func parkedPickup(in store: Store) throws -> Delivery {
+    /// The same delivery, parked for at minute 15 under the pickup workflow
+    /// and recorded picked up by Resume Driving at minute 16.
+    private func resumedPickup(in store: Store) throws -> Delivery {
         let delivery = try deliveryAtPickup(in: store)
-        try SettingsService(context: store.context).setRecordsPickupWhenParking(true)
-        let result = try ParkVehicleService(context: store.context).park(at: at(16))
-        #expect(result.pickup.recordedPickup)
-        try store.shifts.resumeDrivingOnActiveShift(at: at(20))
+        try SettingsService(context: store.context).setUsesParkAndResumeForPickups(true)
+        let parked = try ParkVehicleService(context: store.context).park(at: at(15))
+        #expect(parked.pickup == .alreadyArrived(deliveryNumber: 1))
+        let resumed = try ParkVehicleService(context: store.context).resumeDriving(at: at(16))
+        #expect(resumed.pickup == .markedPickedUp(deliveryNumber: 1))
         return delivery
     }
 
@@ -104,37 +107,51 @@ struct PickupProvenanceTests {
         #expect(delivery.pickupWait == 420)
     }
 
-    @Test("Park in the app records the pickup as Park's, at the instant of parking")
-    func parkPickup() throws {
+    @Test("Resume Driving in the app records the pickup as Resume's, at the instant of driving")
+    func resumePickup() throws {
         let store = try makeStore()
-        let delivery = try parkedPickup(in: store)
+        let delivery = try resumedPickup(in: store)
 
         #expect(delivery.pickedUpAt == at(16))
-        #expect(delivery.pickupProvenance == .parkAutomation)
+        #expect(delivery.pickupProvenance == .resumeAutomation)
     }
 
-    @Test("With the setting off, Park records no pickup and so no provenance")
+    @Test("With the workflow off, Park and Resume record no pickup and so no provenance")
     func parkWithTheSettingOff() throws {
         let store = try makeStore()
         let delivery = try deliveryAtPickup(in: store)
         try ParkVehicleService(context: store.context).park(at: at(16))
+        try ParkVehicleService(context: store.context).resumeDriving(at: at(20))
 
         #expect(delivery.pickedUpAt == nil)
         #expect(delivery.pickupProvenance == nil)
     }
 
-    @Test("A pickup Park could not save leaves neither the instant nor the provenance in the store")
-    func refusedParkPickupSave() throws {
+    @Test("Nothing records a pickup as Park's any more: Park records the arrival")
+    func parkRecordsNoPickup() throws {
+        let store = try makeStore()
+        let delivery = try store.deliveries.startDelivery(at: at(10))
+        try SettingsService(context: store.context).setUsesParkAndResumeForPickups(true)
+        try ParkVehicleService(context: store.context).park(at: at(15))
+
+        #expect(delivery.state == .arrivedAtPickup)
+        #expect(delivery.pickedUpAt == nil)
+        #expect(delivery.pickupProvenance == nil)
+    }
+
+    @Test("A pickup Resume could not save leaves neither the instant nor the provenance in the store")
+    func refusedResumePickupSave() throws {
         let store = try makeStore()
         let delivery = try deliveryAtPickup(in: store)
         let id = delivery.id
-        try SettingsService(context: store.context).setRecordsPickupWhenParking(true)
+        try SettingsService(context: store.context).setUsesParkAndResumeForPickups(true)
+        try ParkVehicleService(context: store.context).park(at: at(15))
 
         let result = try ParkVehicleService(
             context: store.context,
             deliveryCommit: { _ in throw RefusedPickupSave() }
-        ).park(at: at(16))
-        #expect(result.pickup == .notRecorded(deliveryNumber: 1))
+        ).resumeDriving(at: at(16))
+        #expect(result.pickup == .pickupNotRecorded(deliveryNumber: 1))
 
         let fresh = ModelContext(store.container)
         let stored = try #require(
@@ -149,35 +166,35 @@ struct PickupProvenanceTests {
     @Test("Delivering, cancelling after pickup and reopening keep the provenance")
     func lifecycleKeepsIt() throws {
         let store = try makeStore()
-        let delivered = try parkedPickup(in: store)
+        let delivered = try resumedPickup(in: store)
         try store.deliveries.markDelivered(delivered, at: at(30))
-        #expect(delivered.pickupProvenance == .parkAutomation)
+        #expect(delivered.pickupProvenance == .resumeAutomation)
 
         try store.deliveries.reopenDelivered(delivered)
         #expect(delivered.state == .pickedUp)
-        #expect(delivered.pickupProvenance == .parkAutomation, "Reopening keeps the pickup, so it keeps how")
+        #expect(delivered.pickupProvenance == .resumeAutomation, "Reopening keeps the pickup, so it keeps how")
 
         try store.deliveries.cancelDelivery(delivered, at: at(35))
         #expect(delivered.state == .cancelled)
-        #expect(delivered.pickupProvenance == .parkAutomation)
+        #expect(delivered.pickupProvenance == .resumeAutomation)
     }
 
     @Test("Correcting a completion to a cancellation keeps the provenance")
     func historicalCancellationKeepsIt() throws {
         let store = try makeStore()
-        let delivery = try parkedPickup(in: store)
+        let delivery = try resumedPickup(in: store)
         try store.deliveries.markDelivered(delivery, at: at(30))
         try store.shifts.endActiveShift(at: at(60))
 
         try store.deliveries.correctCompletionToCancellation(delivery)
         #expect(delivery.state == .cancelled)
-        #expect(delivery.pickupProvenance == .parkAutomation)
+        #expect(delivery.pickupProvenance == .resumeAutomation)
     }
 
     @Test("Correcting the pickup's time moves the instant and leaves the provenance")
     func timeCorrectionKeepsIt() throws {
         let store = try makeStore()
-        let delivery = try parkedPickup(in: store)
+        let delivery = try resumedPickup(in: store)
         try store.deliveries.markDelivered(delivery, at: at(30))
         try store.shifts.endActiveShift(at: at(60))
 
@@ -186,7 +203,7 @@ struct PickupProvenanceTests {
 
         #expect(delivery.pickedUpAt == at(24))
         #expect(delivery.pickupWait == 540, "The wait follows the corrected instant at once")
-        #expect(delivery.pickupProvenance == .parkAutomation, "A correction is not a second recording")
+        #expect(delivery.pickupProvenance == .resumeAutomation, "A correction is not a second recording")
     }
 
     @Test("A manual pickup stays manual through a correction")
@@ -202,16 +219,16 @@ struct PickupProvenanceTests {
         #expect(delivery.pickupProvenance == .manual)
     }
 
-    // MARK: Recovering from a pickup Park recorded too early
+    // MARK: Recovering from an automated pickup once Undo has gone
 
-    /// The recovery path an accidental or early Park pickup already has, with
-    /// nothing new built for it: the delivery keeps every next step, its wait
-    /// stays out of every typical figure, and once the shift ends the instant
-    /// can be moved to the real handover by the existing correction.
-    @Test("A pickup Park recorded too early leaves the driver every next step, and the time correctable afterwards")
-    func earlyParkPickupIsRecoverable() throws {
+    /// The recovery path an automated pickup has once its short Undo has gone,
+    /// with nothing new built for it: the delivery keeps every next step, its
+    /// wait stays out of every typical figure, and once the shift ends the
+    /// instant can be moved to the real handover by the existing correction.
+    @Test("A pickup Resume recorded leaves the driver every next step, and the time correctable afterwards")
+    func automatedPickupIsRecoverable() throws {
         let store = try makeStore()
-        let delivery = try parkedPickup(in: store)
+        let delivery = try resumedPickup(in: store)
 
         #expect(delivery.state.nextAction == .complete, "Delivered is still the next step on the card")
         #expect(PickupWaitSample(delivery)?.countsTowardTypicalWait == false, "Its wait is already left out")
@@ -225,14 +242,14 @@ struct PickupProvenanceTests {
         #expect(delivery.recordedEvents.count == 4, "No event created, none removed")
     }
 
-    @Test("A pickup Park recorded for an order that never came can still end as a cancellation")
-    func earlyParkPickupThenCancelled() throws {
+    @Test("A pickup Resume recorded for an order that never came can still end as a cancellation")
+    func automatedPickupThenCancelled() throws {
         let store = try makeStore()
-        let delivery = try parkedPickup(in: store)
+        let delivery = try resumedPickup(in: store)
 
         try store.deliveries.cancelDelivery(delivery, at: at(25))
         #expect(delivery.state == .cancelled)
-        #expect(delivery.pickupProvenance == .parkAutomation, "Who recorded the pickup is still on the record")
+        #expect(delivery.pickupProvenance == .resumeAutomation, "Who recorded the pickup is still on the record")
         #expect(PickupWaitSample(delivery)?.countsTowardTypicalWait == false)
     }
 
@@ -242,12 +259,14 @@ struct PickupProvenanceTests {
     func logDescriptionIsStructural() {
         #expect(PickupProvenance.manual.logDescription == "pickup recorded manually")
         #expect(PickupProvenance.parkAutomation.logDescription == "pickup recorded by configured park automation")
+        #expect(PickupProvenance.resumeAutomation.logDescription == "pickup recorded by configured resume automation")
     }
 
     @Test("A stored value this build does not know reads as unknown")
     func unknownRawValue() {
         #expect(PickupProvenance.stored("manual") == .manual)
         #expect(PickupProvenance.stored("parkAutomation") == .parkAutomation)
+        #expect(PickupProvenance.stored("resumeAutomation") == .resumeAutomation)
         #expect(PickupProvenance.stored("geofence") == nil)
         #expect(PickupProvenance.stored(nil) == nil)
     }

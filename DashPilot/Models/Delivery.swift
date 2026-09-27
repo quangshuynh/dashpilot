@@ -125,10 +125,12 @@ nonisolated final class Delivery {
     ///
     /// **Written in the same statement as ``pickedUpAt`` and nowhere else**, by
     /// ``markPickedUp(at:recordedBy:)``, so a pickup the app records always says
-    /// how, and a delivery with no pickup never claims one. Nothing clears
-    /// ``pickedUpAt`` afterwards: reopening, cancelling and correcting a
-    /// completion keep it, and correcting its time moves only the instant. So
-    /// this is never cleared either.
+    /// how, and a delivery with no pickup never claims one. Reopening,
+    /// cancelling and correcting a completion keep ``pickedUpAt``, and
+    /// correcting its time moves only the instant, so none of them touch this.
+    /// The one place both are cleared, **together**, is
+    /// ``undoAutomatedStep(_:)``, which takes back a pickup Resume Driving
+    /// recorded moments ago.
     ///
     /// `nil` beside a recorded pickup means **unknown**: a pickup recorded before
     /// v18, which migration deliberately did not label. See ``pickupProvenance``.
@@ -382,6 +384,44 @@ nonisolated final class Delivery {
         cancelledAt = date
     }
 
+    // MARK: Taking back an automated pickup step
+
+    /// Removes the one lifecycle event the Park and Resume pickup workflow
+    /// recorded for this delivery a moment ago, returning it to the state
+    /// before that event.
+    ///
+    /// **The one place ``arrivedAtPickupAt`` is ever cleared, and one of two
+    /// places ``pickedUpAt`` is** (with its provenance), so the rule deciding
+    /// whether that is truthful cannot be bypassed. ``AutomatedPickupStepUndo``
+    /// is the rule: the delivery must still record exactly that event at exactly
+    /// that instant, with nothing recorded after it, and a pickup must still be
+    /// one Resume Driving recorded. It derives before anything is cleared, so a
+    /// refusal mutates nothing.
+    ///
+    /// Nothing else moves: not the other timestamps, not the pickup place, not
+    /// an amount, not the offer, and not the vehicle, whose parked stretch
+    /// belongs to the shift and is not this delivery's to change.
+    ///
+    /// - Returns: the state the delivery is now in.
+    /// - Throws: ``AutomatedStepUndoRefusal``.
+    @discardableResult
+    func undoAutomatedStep(_ step: AutomatedPickupStep) throws -> DeliveryState {
+        let undo = try AutomatedPickupStepUndo(
+            undoing: step,
+            deliveryID: id,
+            record: DeliveryLifecycleRecord(self),
+            pickupProvenance: pickupProvenance
+        )
+        switch step.kind {
+        case .arrivedWhenParked:
+            arrivedAtPickupAt = nil
+        case .pickedUpWhenResumed:
+            pickedUpAt = nil
+            pickupProvenanceRawValue = nil
+        }
+        return undo.restoredState
+    }
+
     // MARK: Correcting an accidental completion
 
     /// Removes the delivered timestamp, returning this delivery to the state its
@@ -495,7 +535,9 @@ nonisolated final class Delivery {
     /// Rewrites the lifecycle instants this delivery records.
     ///
     /// **The only place `acceptedAt`, `arrivedAtPickupAt` and `pickedUpAt` are
-    /// ever written after the lifecycle recorded them**, and one of only three
+    /// ever moved to another instant after the lifecycle recorded them** (the
+    /// only thing that removes one of the last two is
+    /// ``undoAutomatedStep(_:)``), and one of only three
     /// that touch `deliveredAt` or `cancelledAt` afterwards — the other two
     /// being ``reopenFromDelivered()`` and
     /// ``correctCompletionToCancellation()``, which change *which* events exist

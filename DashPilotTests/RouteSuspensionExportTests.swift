@@ -137,8 +137,8 @@ struct RouteSuspensionExportTests {
             ) as? [String: Any]
         )
 
-        #expect(object["formatVersion"] as? Int == 5)
-        #expect(ExportFormat.version == 5)
+        #expect(object["formatVersion"] as? Int == 6)
+        #expect(ExportFormat.version == 6)
 
         // Nothing existing changed meaning, nothing was removed or renamed, and
         // no enumeration gained a value, which is the format's own rule.

@@ -65,11 +65,42 @@ nonisolated final class RouteSuspension {
     /// write.
     private(set) var shift: Shift?
 
-    init(id: UUID = UUID(), shift: Shift, startedAt: Date, endedAt: Date? = nil) {
+    /// The ``Delivery/id`` this parked stretch was taken to be the pickup of,
+    /// under the driver's `Pick up orders with Park & Resume` setting, or `nil`.
+    ///
+    /// **Written once, by ``ShiftService/parkActiveShift(at:pickupWorkflowDeliveryID:)``,
+    /// in the same save that opens the row**, and read once, by
+    /// ``ParkVehicleService/resumeDriving(at:)``, which is how Resume Driving
+    /// records Picked Up for the delivery Park recorded at its pickup rather than
+    /// for whichever delivery a second choice would name. It has to outlive the
+    /// process for the reason the row does: Resume is often pressed from the
+    /// Lock Screen after iOS has ended the app that parked.
+    ///
+    /// **An identifier, not a relationship.** The stretch still belongs to the
+    /// shift and to no delivery, so however many deliveries are in progress
+    /// there is still at most one open row, and nothing cascades either way. An
+    /// identifier that no longer resolves, or resolves to a delivery that has
+    /// moved on, is read as nothing to pick up.
+    ///
+    /// `nil` for a stretch parked with the workflow off, for one where no
+    /// delivery was waiting for its pickup, and for every stretch recorded
+    /// before v19, which migration deliberately did not associate with anything.
+    /// It says which delivery the workflow was **for**, never that Park recorded
+    /// its arrival: that delivery may already have had one.
+    private(set) var pickupWorkflowDeliveryID: UUID?
+
+    init(
+        id: UUID = UUID(),
+        shift: Shift,
+        startedAt: Date,
+        endedAt: Date? = nil,
+        pickupWorkflowDeliveryID: UUID? = nil
+    ) {
         self.id = id
         self.shift = shift
         self.startedAt = startedAt
         self.endedAt = endedAt
+        self.pickupWorkflowDeliveryID = pickupWorkflowDeliveryID
     }
 
     /// Whether the driver has not recorded driving again.

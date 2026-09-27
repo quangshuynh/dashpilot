@@ -4,7 +4,7 @@ import Foundation
 ///
 /// ## Why this is not the schema version
 ///
-/// The store is at schema v18 and will move on. That number describes how
+/// The store is at schema v19 and will move on. That number describes how
 /// SwiftData lays out a database on one device, and nothing outside the app has
 /// ever seen it. This one describes a **file a driver has already taken
 /// somewhere else** — a spreadsheet, a folder, an accountant's inbox — and the
@@ -18,6 +18,38 @@ import Foundation
 /// keeps working.
 ///
 /// ## Version history
+///
+/// ### 6: pickups Resume Driving recorded
+///
+/// The Park and Resume pickup workflow records Arrived at Pickup when the driver
+/// parks and **Picked Up when they resume driving**, and the store says so
+/// (`resumeAutomation`). Evaluated against the rule above and **bumped**,
+/// because an existing enumeration gained a value and two fields changed
+/// meaning:
+///
+/// - **An enumeration gained a value:** `shifts[].deliveries[].pickupRecordedBy`
+///   and the CSV's `deliveryPickupRecordedBy` can now say `resumeAutomation`.
+///   A reader that knew every value version 5 could write would meet one it
+///   cannot interpret, which is the judgement version 4 recorded as a reason to
+///   bump.
+/// - **Redefined:** `summary.deliveries.medianPickupWaitSeconds` and
+///   `pickupWaitSampleCount` now also leave out waits whose pickup Resume
+///   Driving recorded, exactly as the app's own figures do. Such a wait ends
+///   when the driver drove off, after walking back and however long they sat
+///   in the vehicle, so it runs long by that much, and measured through the
+///   app's median a few of them move it by minutes
+///   (`PickupWaitResumeMeasurementTests`). **No previously exported file would
+///   carry a different number**, because no store written before this build
+///   records such a pickup; the definition moved.
+///
+/// One thing was **added**, which on its own would not have bumped it:
+/// `summary.deliveries.resumeRecordedPickupCount`. `parkRecordedPickupCount`
+/// is **not** redefined: it still counts the pickups Park recorded when parking
+/// under the earlier setting, which nothing records any more but stores still
+/// hold. No CSV column was added or moved, so it stays at **42**. The arrival
+/// Park now records is not labelled: it is recorded when the driver parks,
+/// which is what an arrival the driver taps means too, and nothing about it
+/// moves any figure.
 ///
 /// ### 5: which pickup waits the period's median is taken over
 ///
@@ -312,8 +344,8 @@ import Foundation
 nonisolated enum ExportFormat {
     /// The current format version, written into every export.
     ///
-    /// Not the store's schema version, which is unrelated and currently 18.
-    static let version = 5
+    /// Not the store's schema version, which is unrelated and currently 19.
+    static let version = 6
 
     /// What produced the file. A product name and nothing more — no build, no
     /// device, no identifier of any kind.

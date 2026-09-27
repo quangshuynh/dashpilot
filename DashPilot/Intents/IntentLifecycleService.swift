@@ -175,9 +175,9 @@ struct IntentLifecycleService {
     /// Nothing here infers **why** the driver parked.
     ///
     /// It runs ``ParkVehicleService/park(at:)``, the operation the app's own
-    /// button runs, so the driver's pickup-when-parking setting applies here
-    /// exactly as it does there. The Live Activity's Park control reaches this
-    /// method too, which makes that one operation behind all three surfaces.
+    /// button runs, so the driver's pickup workflow applies here exactly as it
+    /// does there. The Live Activity's Park control reaches this method too,
+    /// which makes that one operation behind all three surfaces.
     ///
     /// The confirmation names the two facts the state is easy to confuse, because
     /// a driver who asked for this from a doorway has no screen to check, and
@@ -200,13 +200,21 @@ struct IntentLifecycleService {
     /// reason: a capture session can only be *started* in the foreground, so a
     /// driver who says this with DashPilot behind another app records no route
     /// until they open it.
+    ///
+    /// It runs ``ParkVehicleService/resumeDriving(at:)``, the operation the
+    /// app's own button runs, so under the driver's pickup workflow the delivery
+    /// Park recorded at its pickup is recorded as picked up here exactly as it
+    /// is there, and the Live Activity's control reaches this method too.
     func resumeDriving(at date: Date = .now) throws -> IntentLifecycleOutcome {
-        let shift = try shiftRefusal { try ShiftService(context: context).resumeDrivingOnActiveShift(at: date) }
+        let result = try shiftRefusal { try ParkVehicleService(context: context).resumeDriving(at: date) }
         reconcileActivity()
         AppLog.intents.info("Intent recorded the vehicle as driving again")
         // Read from the shift after the write, like every other figure said
         // back here, so the confirmation reports what the store now holds.
-        return .drivingResumed(parkedDuration: shift.suspendedTime(asOf: date).duration)
+        return .drivingResumed(
+            parkedDuration: result.shift.suspendedTime(asOf: date).duration,
+            pickup: result.pickup
+        )
     }
 
     // MARK: Delivery

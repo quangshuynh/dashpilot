@@ -46,8 +46,8 @@ nonisolated struct PickupWaitSample: Equatable, Sendable {
     /// How the pickup that ends this wait was recorded, or `nil` when the store
     /// does not know (a pickup recorded before DashPilot kept this).
     ///
-    /// It never changes ``duration``: a wait closed by Park is exactly as long
-    /// as its two recorded instants say. It decides only whether the wait
+    /// It never changes ``duration``: a wait closed by Park or by Resume
+    /// Driving is exactly as long as its two recorded instants say. It decides only whether the wait
     /// counts toward a typical wait. See ``countsTowardTypicalWait``.
     let provenance: PickupProvenance?
 
@@ -65,19 +65,29 @@ nonisolated struct PickupWaitSample: Equatable, Sendable {
     /// that lists waits beside the figures, so the list and the median are
     /// always drawn from the same waits.
     ///
-    /// A wait whose pickup **Park recorded** does not count. It ends when the
-    /// driver parked, usually before they walked in, so it measures the time
-    /// from arriving to parking rather than a wait for an order, and measured
-    /// through this calculator a few of them move a place's median by minutes.
-    /// It is not discarded: it is counted separately, and every figure it is
-    /// left out of says how many were left out.
+    /// A wait whose pickup was **recorded automatically** does not count, by
+    /// either control:
+    ///
+    /// - **Resume Driving**, under the Park and Resume workflow, ends the wait
+    ///   when the driver drives off, after walking back and however long they
+    ///   sat in the car, so it runs from parking to pulling away rather than to
+    ///   the handover, and is long by that much.
+    /// - **Park**, under the setting that workflow replaced, ended it when the
+    ///   driver parked, usually before they walked in, so it is short.
+    ///
+    /// Measured through this calculator (`PickupWaitResumeMeasurementTests`,
+    /// `PickupWaitProvenanceMeasurementTests`), a few of either move a place's
+    /// median by minutes, and the median then follows how often the driver uses
+    /// the workflow rather than the place. Neither is discarded: each is counted
+    /// separately, and every figure it is left out of says how many were left
+    /// out.
     ///
     /// A wait whose provenance is **unknown** counts, as it did before the app
     /// recorded provenance. Nothing can say what it was, and treating every
     /// pickup recorded before v18 as suspect would empty the history of every
     /// place for the sake of the few pickups a short-lived earlier build may
     /// have recorded by parking.
-    var countsTowardTypicalWait: Bool { provenance != .parkAutomation }
+    var countsTowardTypicalWait: Bool { !(provenance?.isAutomated ?? false) }
 }
 
 nonisolated extension PickupWaitSample {
