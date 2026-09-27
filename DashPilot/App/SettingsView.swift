@@ -26,6 +26,7 @@ import SwiftUI
 /// added to the main screen does.
 struct SettingsView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(ShiftLiveActivityService.self) private var liveActivity
     @Environment(\.locale) private var locale
 
     /// Oldest first: the order the driver added them, which does not move when
@@ -266,6 +267,10 @@ struct SettingsView: View {
                     failure = (error as? any LocalizedError)?.errorDescription
                         ?? "The pickup workflow setting could not be changed."
                 }
+                // The Live Activity puts Park Vehicle first while this is on, so
+                // a running shift's card follows the switch now rather than at
+                // its next delivery step.
+                liveActivity.reconcile()
             }
         )
     }

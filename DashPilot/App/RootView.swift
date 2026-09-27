@@ -59,6 +59,12 @@ struct RootView: View {
     var body: some View {
         NavigationStack {
             List {
+                #if DEBUG
+                if let activeShift, LaunchArgument.isPresent(LaunchArgument.liveActivityPreview) {
+                    LiveActivityPreviewSection(shift: activeShift)
+                }
+                #endif
+
                 Section {
                     if let activeShift {
                         ActiveShiftPanel(

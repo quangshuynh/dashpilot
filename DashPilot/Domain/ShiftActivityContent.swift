@@ -38,6 +38,48 @@ nonisolated extension ShiftActivityDeliveryStep {
 }
 
 nonisolated extension ShiftActivityDeliveryTimer {
+    /// The rows the card draws for the deliveries in progress, in their order.
+    ///
+    /// One per delivery, except that deliveries the driver recorded as sharing
+    /// a pickup or a drop-off are drawn as **one** row when they are also in the
+    /// same state and were accepted in the same instant: one clock and one state
+    /// are then true of every one of them, and a row each would spend a line of
+    /// a card whose height is fixed saying the same thing twice. Nothing is
+    /// merged on anything the driver did not say: two deliveries of one offer
+    /// that share no recorded stop keep a row each, however alike they are.
+    ///
+    /// A merged row is placed where its first delivery was, so the order stays
+    /// the shift's own.
+    static func rows(for active: [NumberedDelivery]) -> [ShiftActivityDeliveryTimer] {
+        var groups: [[NumberedDelivery]] = []
+        for numbered in active {
+            if let index = groups.firstIndex(where: { canShareARow(numbered, with: $0[0]) }) {
+                groups[index].append(numbered)
+            } else {
+                groups.append([numbered])
+            }
+        }
+        return groups.map { group in
+            guard group.count > 1 else { return ShiftActivityDeliveryTimer(group[0]) }
+            return ShiftActivityDeliveryTimer(
+                title: PickupWorkflowNotice.names(group.map(\.number)),
+                stateLabel: group[0].delivery.state.compactStatusDescription,
+                startedAt: group[0].delivery.acceptedAt,
+                deliveryCount: group.count
+            )
+        }
+    }
+
+    private static func canShareARow(_ numbered: NumberedDelivery, with first: NumberedDelivery) -> Bool {
+        let lhs = numbered.delivery
+        let rhs = first.delivery
+        guard lhs.offer?.id == rhs.offer?.id, lhs.offer != nil,
+              lhs.state == rhs.state, lhs.acceptedAt == rhs.acceptedAt else { return false }
+        return SharedStopKind.allCases.contains { kind in
+            lhs.sharedStopID(kind).map { $0 == rhs.sharedStopID(kind) } == true
+        }
+    }
+
     /// The counting anchor for one delivery in progress.
     ///
     /// The mapping exists because the widget extension cannot see
@@ -103,6 +145,18 @@ nonisolated extension ShiftActivityDeliveryTimer {
 /// has nothing to bite on, and the rule that withholds Pause and End is about
 /// time nobody worked rather than about a vehicle nobody moved.
 ///
+/// ## Which control leads is the driver's own setting
+///
+/// With `Pick up orders with Park & Resume` on, the parked pair is how the
+/// driver records their pickups, so **Park Vehicle leads every running
+/// shift's list** and takes the emphasis, ahead of a delivery step and Start
+/// Delivery, which stay on the card behind it. With it off, the lists are the
+/// ones the card always had. Resume Driving leads every parked list either
+/// way. The setting is read by the app when it builds the snapshot and arrives
+/// as the order of ``ShiftActivityAttributes/ContentState/controls``: the
+/// extension reads no setting and decides nothing, and no new field was needed
+/// because the order already was the app's to choose.
+///
 /// A control is a courtesy and never a permission. Pressing one runs
 /// ``IntentLifecycleService``, which asks the store, so a snapshot that is a
 /// moment out of date costs a refusal sentence rather than a wrong write.
@@ -130,12 +184,15 @@ nonisolated enum ShiftActivityContent {
     ///     no answer to which delivery the driver meant.
     ///   - asOf: the instant the figures were read at.
     ///   - locale: the locale the mileage sentence is written in.
+    ///   - parkLeads: whether the driver's Park and Resume pickup workflow is
+    ///     on, which puts Park Vehicle first on a running shift.
     static func state(
         of metrics: ActiveShiftMetrics,
         deliveryInProgress: DeliveryState?,
         activeDeliveryTimers: [ShiftActivityDeliveryTimer],
         asOf: Date,
-        locale: Locale = .autoupdatingCurrent
+        locale: Locale = .autoupdatingCurrent,
+        parkLeads: Bool = false
     ) -> ShiftActivityAttributes.ContentState {
         let step = deliveryInProgress?.nextAction.flatMap(ShiftActivityDeliveryStep.init)
 
@@ -153,7 +210,7 @@ nonisolated enum ShiftActivityContent {
             completedDeliveryCount: metrics.deliverySummary.completed,
             deliveryStatus: deliveryInProgress?.statusDescription,
             activeDeliveryTimers: activeDeliveryTimers,
-            controls: controls(for: metrics, nextStep: step)
+            controls: controls(for: metrics, nextStep: step, parkLeads: parkLeads)
         )
     }
 
@@ -161,10 +218,13 @@ nonisolated enum ShiftActivityContent {
     ///
     /// The delivery step comes first where there is one, then Start Delivery:
     /// both are pressed many times a shift, the step belongs to an order already
-    /// in the car, and the two lifecycle controls are pressed once each.
+    /// in the car, and the two lifecycle controls are pressed once each. Under
+    /// the driver's pickup workflow Park Vehicle comes before all of them, and
+    /// nothing is removed to make room for it.
     private static func controls(
         for metrics: ActiveShiftMetrics,
-        nextStep: ShiftActivityDeliveryStep?
+        nextStep: ShiftActivityDeliveryStep?,
+        parkLeads: Bool
     ) -> [ShiftActivityControl] {
         // A paused shift is never parked, by ``Shift/isRouteSuspended``'s own
         // rule, so neither parked control can reach this branch.
@@ -182,8 +242,12 @@ nonisolated enum ShiftActivityContent {
         // accepting, and the control that starts one names no existing record.
         // Parking sits with them rather than with Pause and End, because it is
         // reached several times a shift and those are reached once.
+        // Leads while parked, always; leads while driving when the driver's
+        // pickup workflow makes Park the way they record a pickup.
+        let parkedPairLeads = metrics.isRouteSuspended || parkLeads
+
         if let nextStep {
-            return metrics.isRouteSuspended
+            return parkedPairLeads
                 ? [parkedControl, .deliveryStep(nextStep), .startDelivery]
                 : [.deliveryStep(nextStep), .startDelivery, parkedControl]
         }
@@ -192,11 +256,11 @@ nonisolated enum ShiftActivityContent {
         // the parked control. Parking is a **shift** operation and reads no
         // delivery, so the ambiguity that withholds the step does not touch it.
         guard metrics.deliverySummary.inProgress == 0 else {
-            return metrics.isRouteSuspended
+            return parkedPairLeads
                 ? [parkedControl, .startDelivery]
                 : [.startDelivery, parkedControl]
         }
-        return metrics.isRouteSuspended
+        return parkedPairLeads
             ? [parkedControl, .startDelivery, .pause, .end]
             : [.startDelivery, parkedControl, .pause, .end]
     }
@@ -211,10 +275,15 @@ extension Shift {
     /// walks every position it holds, and a shift in progress is exactly the
     /// case where the caller should be extending a measurement rather than
     /// repeating one.
+    ///
+    /// `parkLeads` is the driver's Park and Resume pickup workflow setting,
+    /// read by the caller that builds the card and passed in, so this adapter
+    /// reads no preference.
     func activityContentState(
         for recordedDistance: RouteDistance,
         asOf referenceDate: Date,
-        locale: Locale = .autoupdatingCurrent
+        locale: Locale = .autoupdatingCurrent,
+        parkLeads: Bool = false
     ) -> ShiftActivityAttributes.ContentState {
         // Numbered rather than bare, because a timer has to say which delivery
         // it belongs to, and `NumberedDelivery` is the one place that decides
@@ -226,9 +295,10 @@ extension Shift {
         return ShiftActivityContent.state(
             of: activeMetrics(for: recordedDistance, asOf: referenceDate),
             deliveryInProgress: UnambiguousDelivery.target(among: active)?.delivery.state,
-            activeDeliveryTimers: active.map(ShiftActivityDeliveryTimer.init),
+            activeDeliveryTimers: ShiftActivityDeliveryTimer.rows(for: active),
             asOf: referenceDate,
-            locale: locale
+            locale: locale,
+            parkLeads: parkLeads
         )
     }
 }

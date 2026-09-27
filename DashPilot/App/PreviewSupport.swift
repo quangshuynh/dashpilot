@@ -1830,7 +1830,14 @@ enum PreviewSupport {
             try? service.setGasPricePerGallon(Money(minorUnits: 319))
         }
 
-        return NavigationStack { SettingsView() }.modelContainer(container)
+        // Presenting nothing, for the reason `rootView` presents nothing.
+        let liveActivity = ShiftLiveActivityService(
+            context: container.mainContext,
+            presenter: SuppressedShiftActivityPresenter()
+        )
+        return NavigationStack { SettingsView() }
+            .modelContainer(container)
+            .environment(liveActivity)
     }
 
     /// The vehicle editor, empty or over one synthetic profile.
