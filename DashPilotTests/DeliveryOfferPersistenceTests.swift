@@ -66,8 +66,8 @@ struct DeliveryOfferPersistenceTests {
         #expect(
             Set(delivery.properties.map(\.name)) == [
                 "id", "acceptedAt", "arrivedAtPickupAt", "pickedUpAt", "pickupProvenanceRawValue",
-                "deliveredAt", "cancelledAt", "shift", "offer", "pickupPlace", "grossEarningsAmount",
-                "expectedEarningsAmount", "additionalTips"
+                "deliveredAt", "cancelledAt", "shift", "offer", "pickupPlace", "sharedPickupID", "sharedDropOffID",
+                "grossEarningsAmount", "expectedEarningsAmount", "additionalTips"
             ]
         )
 

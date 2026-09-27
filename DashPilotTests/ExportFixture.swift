@@ -177,7 +177,7 @@ struct ExportFixture {
     /// A delivery in a one-delivery offer of its own, which is what one tap
     /// records.
     ///
-    /// Built directly rather than through ``Shift/beginOffer(deliveryCount:at:)``
+    /// Built directly rather than through ``Shift/beginOffer(deliveryCount:sharing:at:)``
     /// because the shifts here are **already finished** when their deliveries
     /// are attached: this fixture assembles the stored state of a shift that
     /// happened, rather than replaying one as it runs, which is why the helpers

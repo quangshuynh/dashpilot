@@ -31,19 +31,16 @@ struct PickupWorkflowPersistenceTests {
 
     // MARK: Schema
 
-    /// The plan's own shape, asserted here because v19 is the current version.
+    /// What is still true of v19 now that v20 is current.
     ///
     /// The count of versions and stages lives in the suite belonging to
-    /// whichever version is current. It moved here from
-    /// `PickupProvenancePersistenceTests`, which owned it while v18 was current.
-    @Test("Version 19 is the current version, and it adds no entity")
+    /// whichever version is current, and moved to `SharedStopPersistenceTests`
+    /// with v20.
+    @Test("Version 19 is frozen, and it added no entity")
     func schemaVersion() throws {
         #expect(DashPilotSchemaV19.versionIdentifier == Schema.Version(19, 0, 0))
-        #expect(DashPilotMigrationPlan.schemas.count == 19)
-        #expect(DashPilotMigrationPlan.stages.count == 18)
-        #expect(DashPilotMigrationPlan.schemas.last is DashPilotSchemaV19.Type)
 
-        let entities = Set(ModelContainerFactory.currentSchema.entities.map(\.name))
+        let entities = Set(Schema(versionedSchema: DashPilotSchemaV19.self).entities.map(\.name))
         #expect(
             entities == [
                 "Shift", "RouteSample", "RouteSuspension", "Delivery", "PickupPlace", "Expense",
@@ -55,6 +52,7 @@ struct PickupWorkflowPersistenceTests {
 
     @Test("The settings row asks the two new questions, has dropped the old one, and joins nothing")
     func theSettingsColumns() throws {
+        // Unchanged by v20, so the current schema is still the one described.
         let settings = try #require(ModelContainerFactory.currentSchema.entities.first { $0.name == "DriverSettings" })
         #expect(
             Set(settings.properties.map(\.name)) == [
@@ -69,7 +67,9 @@ struct PickupWorkflowPersistenceTests {
     /// stretch now names a delivery, and that must stay an identifier.
     @Test("A suspension names its delivery by identifier and still belongs to the shift alone")
     func theSuspensionStaysShiftOwned() throws {
-        let schema = ModelContainerFactory.currentSchema
+        // The frozen v19 shape: v20 adds the others sharing the pickup, which
+        // `SharedStopPersistenceTests` pins.
+        let schema = Schema(versionedSchema: DashPilotSchemaV19.self)
 
         let suspension = try #require(schema.entities.first { $0.name == "RouteSuspension" })
         #expect(

@@ -4,7 +4,7 @@ import Foundation
 ///
 /// ## Why this is not the schema version
 ///
-/// The store is at schema v19 and will move on. That number describes how
+/// The store is at schema v20 and will move on. That number describes how
 /// SwiftData lays out a database on one device, and nothing outside the app has
 /// ever seen it. This one describes a **file a driver has already taken
 /// somewhere else** — a spreadsheet, a folder, an accountant's inbox — and the

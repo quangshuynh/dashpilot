@@ -869,17 +869,36 @@ extension Shift {
     /// insert exactly what was built instead of reading it back out of a
     /// relationship on an object no store holds yet.
     ///
+    /// ## Shared stops, only when the driver says so
+    ///
+    /// `sharing` is what the driver chose on the offer sheet: that every
+    /// delivery of this offer is collected at the same pickup, taken to the
+    /// same drop-off, or both. Empty is the default and the ordinary case, and
+    /// nothing here ever fills it in because the deliveries were accepted
+    /// together: that is what two unrelated orders in one offer look like too.
+    /// Each kind chosen gets one fresh identity, written on every delivery in
+    /// the same act that creates them. A subset is said afterwards, through
+    /// ``Delivery/recordSharedStop(_:among:in:)``.
+    ///
     /// - Throws: ``OfferError/deliveryCountNotPositive``,
+    ///   ``OfferError/sharedStopNeedsSeveralDeliveries``,
     ///   ``OfferError/shiftAlreadyEnded`` or
     ///   ``OfferError/acceptedBeforeShiftStart``.
-    func beginOffer(deliveryCount: Int, at date: Date) throws -> (offer: Offer, deliveries: [Delivery]) {
+    func beginOffer(
+        deliveryCount: Int,
+        sharing: Set<SharedStopKind> = [],
+        at date: Date
+    ) throws -> (offer: Offer, deliveries: [Delivery]) {
         guard deliveryCount >= 1 else { throw OfferError.deliveryCountNotPositive }
+        guard sharing.isEmpty || deliveryCount >= 2 else { throw OfferError.sharedStopNeedsSeveralDeliveries }
         guard endedAt == nil else { throw OfferError.shiftAlreadyEnded }
         guard date >= startedAt else { throw OfferError.acceptedBeforeShiftStart }
 
         let offer = Offer(shift: self, acceptedAt: date)
+        let pickup = sharing.contains(.pickup) ? UUID() : nil
+        let dropOff = sharing.contains(.dropOff) ? UUID() : nil
         let deliveries = (0..<deliveryCount).map { _ in
-            Delivery(shift: self, offer: offer, acceptedAt: date)
+            Delivery(shift: self, offer: offer, acceptedAt: date, sharedPickupID: pickup, sharedDropOffID: dropOff)
         }
         return (offer, deliveries)
     }
@@ -888,7 +907,7 @@ extension Shift {
     /// driver correcting which deliveries arrived together.
     ///
     /// **The one place an offer is created without creating deliveries**, and it
-    /// is written so that the invariant ``beginOffer(deliveryCount:at:)`` keeps
+    /// is written so that the invariant ``beginOffer(deliveryCount:sharing:at:)`` keeps
     /// is kept here too: the deliveries are required up front and attached
     /// before it returns, so no caller can be handed an empty offer to fill in
     /// later.
@@ -909,7 +928,7 @@ extension Shift {
     /// acceptance, lifecycle timestamps, pickup places, amounts and terminal
     /// states are left exactly as they are.
     ///
-    /// Unlike ``beginOffer(deliveryCount:at:)`` this is **allowed on a shift
+    /// Unlike ``beginOffer(deliveryCount:sharing:at:)`` this is **allowed on a shift
     /// that has ended**. It records no new work and no new acceptance: it
     /// restates which of the deliveries already in that shift arrived together,
     /// which is a review action, and history is where a driver notices the
@@ -1101,7 +1120,7 @@ extension Shift {
     /// them against this shift's window, its other pauses and its delivery work.
     ///
     /// The context insert is the caller's, exactly as it is for
-    /// ``beginPause(at:)`` and ``beginOffer(deliveryCount:at:)``, so a refused or
+    /// ``beginPause(at:)`` and ``beginOffer(deliveryCount:sharing:at:)``, so a refused or
     /// failed write leaves the store holding nothing the model does not also
     /// hold.
     func addMissedPause(_ correction: ShiftPauseCorrection) -> ShiftPause {
@@ -1179,20 +1198,34 @@ extension Shift {
     /// ``beginPause(at:)``, so a refused or failed write leaves the store
     /// holding nothing the model does not also hold.
     ///
-    /// - Parameter pickupWorkflowDeliveryID: the delivery the driver's pickup
-    ///   workflow took this stop to be the pickup of, stored with the row. See
-    ///   ``RouteSuspension/pickupWorkflowDeliveryID``.
+    /// - Parameters:
+    ///   - pickupWorkflowDeliveryID: the delivery the driver's pickup workflow
+    ///     took this stop to be the pickup of, stored with the row. See
+    ///     ``RouteSuspension/pickupWorkflowDeliveryID``.
+    ///   - sharingPickupWith: the other deliveries the driver recorded as
+    ///     collected at that same pickup, which the workflow is also for. See
+    ///     ``RouteSuspension/pickupWorkflowSharedPickupDeliveryIDs``.
     /// - Throws: ``ShiftError/shiftAlreadyEnded``, ``ShiftError/alreadyParked``,
     ///   ``ShiftError/alreadyPaused`` or ``ShiftError/endPrecedesStart`` when
     ///   `date` precedes the shift start.
     @discardableResult
-    func beginRouteSuspension(at date: Date, pickupWorkflowDeliveryID: UUID? = nil) throws -> RouteSuspension {
+    func beginRouteSuspension(
+        at date: Date,
+        pickupWorkflowDeliveryID: UUID? = nil,
+        sharingPickupWith: [UUID] = []
+    ) throws -> RouteSuspension {
         guard endedAt == nil else { throw ShiftError.shiftAlreadyEnded }
         guard openPause == nil else { throw ShiftError.alreadyPaused }
         guard openRouteSuspension == nil else { throw ShiftError.alreadyParked }
         guard date >= startedAt else { throw ShiftError.endPrecedesStart }
 
-        return RouteSuspension(shift: self, startedAt: date, pickupWorkflowDeliveryID: pickupWorkflowDeliveryID)
+        return RouteSuspension(
+            shift: self,
+            startedAt: date,
+            pickupWorkflowDeliveryID: pickupWorkflowDeliveryID,
+            // A companion with no delivery to accompany is not an association.
+            pickupWorkflowSharedPickupDeliveryIDs: pickupWorkflowDeliveryID == nil ? [] : sharingPickupWith
+        )
     }
 
     /// Closes the open suspension: the driver is driving again.

@@ -192,6 +192,46 @@ nonisolated final class Delivery {
     /// leaves the place for every other delivery naming it.
     private(set) var pickupPlace: PickupPlace?
 
+    /// An opaque identity this delivery shares with the others of its offer the
+    /// driver said are **collected at the same pickup**, or `nil` when they said
+    /// nothing, which is the ordinary case.
+    ///
+    /// ## What it records, and what it is never inferred from
+    ///
+    /// Only the driver's own statement, made when they recorded the offer or
+    /// when they corrected it afterwards. It is never written because two
+    /// deliveries were accepted together, share a pickup place name, carry
+    /// consecutive numbers, were accepted a second apart or have anything else
+    /// in common: every one of those is also what two unrelated orders look
+    /// like. See ``SharedStopKind``.
+    ///
+    /// ## Why an identity rather than a place
+    ///
+    /// DashPilot does not know where the pickup is and does not need to. Two
+    /// deliveries holding the same value are one stop; the value says nothing
+    /// else, is local to this device, and is never shown. No name, address or
+    /// coordinate is stored for it.
+    ///
+    /// ## Who reads it
+    ///
+    /// The Park and Resume pickup workflow, and only at Park: a delivery chosen
+    /// by ``ParkPickupSelection`` brings the others sharing its pickup with it,
+    /// because the driver said they are collected at one counter. It is written
+    /// by ``Delivery/recordSharedStop(_:among:in:)`` and at creation by
+    /// ``Shift/beginOffer(deliveryCount:sharing:at:)``, and nowhere else.
+    private(set) var sharedPickupID: UUID?
+
+    /// The same kind of identity for deliveries the driver said go to **the
+    /// same drop-off**: one customer, one door.
+    ///
+    /// Kept apart from ``sharedPickupID`` deliberately, and that is the finding
+    /// of the interval that added both. Two orders for one customer can come
+    /// from two restaurants, so a shared drop-off says nothing about where the
+    /// orders are collected, and nothing that records a pickup event reads it.
+    /// It groups what the driver sees and what the export carries, and moves no
+    /// lifecycle event.
+    private(set) var sharedDropOffID: UUID?
+
     /// Gross earnings for this delivery, exactly as entered, or `nil` if none
     /// were.
     ///
@@ -267,16 +307,30 @@ nonisolated final class Delivery {
     @Relationship(deleteRule: .cascade, inverse: \DeliveryTip.delivery)
     private(set) var additionalTips: [DeliveryTip] = []
 
-    /// - Parameter offer: the accepted offer this delivery came in. Defaulted to
-    ///   `nil` so that a fixture exercising the lifecycle alone does not have to
-    ///   construct a grouping it is not testing; the app's own creation path
-    ///   goes through ``Shift/beginOffer(deliveryCount:at:)``, which always
-    ///   supplies one.
-    init(id: UUID = UUID(), shift: Shift, offer: Offer? = nil, acceptedAt: Date) {
+    /// - Parameters:
+    ///   - offer: the accepted offer this delivery came in. Defaulted to `nil`
+    ///     so that a fixture exercising the lifecycle alone does not have to
+    ///     construct a grouping it is not testing; the app's own creation path
+    ///     goes through ``Shift/beginOffer(deliveryCount:sharing:at:)``, which
+    ///     always supplies one.
+    ///   - sharedPickupID: the shared-pickup identity the driver recorded for
+    ///     this delivery when its offer was recorded, if any. See
+    ///     ``sharedPickupID``.
+    ///   - sharedDropOffID: likewise for a shared drop-off.
+    init(
+        id: UUID = UUID(),
+        shift: Shift,
+        offer: Offer? = nil,
+        acceptedAt: Date,
+        sharedPickupID: UUID? = nil,
+        sharedDropOffID: UUID? = nil
+    ) {
         self.id = id
         self.acceptedAt = acceptedAt
         self.shift = shift
         self.offer = offer
+        self.sharedPickupID = sharedPickupID
+        self.sharedDropOffID = sharedDropOffID
     }
 
     /// Where the delivery has reached, read from its timestamps.
@@ -908,5 +962,92 @@ extension Delivery {
     static func acceptedBefore(_ lhs: Delivery, _ rhs: Delivery) -> Bool {
         if lhs.acceptedAt != rhs.acceptedAt { return lhs.acceptedAt < rhs.acceptedAt }
         return lhs.id.uuidString < rhs.id.uuidString
+    }
+}
+
+extension Delivery {
+    /// The identity this delivery shares with others of its offer for `kind`,
+    /// or `nil` when the driver recorded none.
+    func sharedStopID(_ kind: SharedStopKind) -> UUID? {
+        switch kind {
+        case .pickup: sharedPickupID
+        case .dropOff: sharedDropOffID
+        }
+    }
+
+    /// Records that exactly `selected`, all deliveries of `offer`, share one
+    /// `kind` of stop, and that no other delivery of that offer shares it.
+    ///
+    /// **The one place a shared stop is changed after an offer is recorded**, so
+    /// the rules below cannot be bypassed by a screen, a test or a future
+    /// caller. It lives here because the two columns' setters do.
+    ///
+    /// ## What it writes
+    ///
+    /// A **fresh** identity on every selected delivery, and `nil` for this
+    /// `kind` on every other delivery of the offer. Fresh rather than reused so
+    /// a correction can never leave a delivery that was taken out of a group
+    /// still matching one it was never meant to join. Selecting nothing clears
+    /// the offer's `kind` entirely, which is how a driver takes the statement
+    /// back.
+    ///
+    /// Nothing else moves: no lifecycle timestamp, no pickup place, no amount,
+    /// no offer membership, and not the other `kind`. A parked stretch that has
+    /// already stored the deliveries it is for keeps them, because Resume Driving
+    /// acts on what Park chose rather than on what is grouped now.
+    ///
+    /// ## What it refuses
+    ///
+    /// A delivery from outside the offer, because a shared stop is a statement
+    /// about deliveries accepted together; and a selection of exactly one,
+    /// because one delivery sharing a stop with nobody is not a fact.
+    ///
+    /// - Throws: ``SharedStopError``.
+    static func recordSharedStop(_ kind: SharedStopKind, among selected: [Delivery], in offer: Offer) throws {
+        if let refusal = sharedStopRefusal(among: selected, in: offer) { throw refusal }
+
+        let chosen = Set(selected.map(\.id))
+        let identity: UUID? = chosen.isEmpty ? nil : UUID()
+        for delivery in offer.deliveries {
+            delivery.setSharedStopID(chosen.contains(delivery.id) ? identity : nil, for: kind)
+        }
+    }
+
+    /// Why ``recordSharedStop(_:among:in:)`` would refuse `selected`, or `nil`
+    /// when it would not. Reads and never writes, so a caller recording two
+    /// kinds in one act can check both before writing either.
+    static func sharedStopRefusal(among selected: [Delivery], in offer: Offer) -> SharedStopError? {
+        let members = Set(offer.deliveries.map(\.id))
+        guard selected.allSatisfy({ members.contains($0.id) }) else { return .deliveryOutsideOffer }
+        return Set(selected.map(\.id)).count == 1 ? .onlyOneDelivery : nil
+    }
+
+    /// Clears every shared stop in `offer` that fewer than two of its deliveries
+    /// still hold.
+    ///
+    /// Run by ``OfferCorrectionService`` after membership moves, in the same
+    /// save, on every offer a correction touched. It keeps the one invariant
+    /// shared stops have: **a stop is shared only among deliveries of one
+    /// offer**, by at least two of them. A delivery moved out of an offer
+    /// therefore leaves its shared stops behind rather than carrying a claim
+    /// into an offer where nobody shares it, and a group left holding one
+    /// delivery stops claiming anything. Merging two offers loses nothing,
+    /// because every group arrives whole.
+    static func dissolveUnsharedStops(in offer: Offer) {
+        for kind in SharedStopKind.allCases {
+            let counts = Dictionary(grouping: offer.deliveries.compactMap { $0.sharedStopID(kind) }) { $0 }
+                .mapValues(\.count)
+            for delivery in offer.deliveries {
+                guard let identity = delivery.sharedStopID(kind), counts[identity, default: 0] < 2 else { continue }
+                delivery.setSharedStopID(nil, for: kind)
+            }
+        }
+    }
+
+    private func setSharedStopID(_ identity: UUID?, for kind: SharedStopKind) {
+        switch kind {
+        case .pickup: sharedPickupID = identity
+        case .dropOff: sharedDropOffID = identity
+        }
     }
 }
