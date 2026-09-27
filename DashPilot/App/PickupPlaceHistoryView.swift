@@ -60,8 +60,12 @@ struct PickupPlaceHistoryView: View {
     private var metrics: PickupWaitMetrics { place.pickupWaitMetrics() }
 
     /// Newest first, which is the order a driver reads their own history in.
+    ///
+    /// The waits the summary is taken over and no others, so a driver checking
+    /// the middle value sees exactly the numbers it sits among. Waits Park
+    /// recorded are counted in the summary's own sentence instead.
     private var recentSamples: [PickupWaitSample] {
-        place.pickupWaitSamples.reversed().prefix(Self.listedWaitLimit).map { $0 }
+        place.countedPickupWaitSamples.reversed().prefix(Self.listedWaitLimit).map { $0 }
     }
 
     var body: some View {
@@ -216,6 +220,13 @@ struct PickupPlaceHistoryView: View {
                         .monospacedDigit()
                         .fixedSize(horizontal: false, vertical: true)
                 }
+
+                if let parkRecorded = metrics.parkRecordedStatement {
+                    Text(parkRecorded)
+                        .dashFont(.body)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
             .padding(.vertical, DashSpacing.xs)
             .accessibilityElement(children: .combine)
@@ -284,8 +295,9 @@ struct PickupPlaceHistoryView: View {
     private static let explanation = """
         A wait is the time between arriving at a pickup and marking the order picked up, \
         measured only from those two events. Deliveries that recorded one of them, or \
-        neither, are left out. Nothing is discarded for being unusually long, and none of \
-        this predicts how long the next pickup here will take.
+        neither, are left out, and so are pickups recorded when you parked. Nothing is \
+        discarded for being unusually long, and none of this predicts how long the next \
+        pickup here will take.
         """
 }
 

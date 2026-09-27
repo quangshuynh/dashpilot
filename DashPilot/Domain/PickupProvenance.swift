@@ -45,6 +45,16 @@ nonisolated enum PickupProvenance: String, CaseIterable, Sendable, Hashable, Cod
         rawValue.flatMap(PickupProvenance.init(rawValue:))
     }
 
+    /// What a delivery's history calls a pickup recorded this way.
+    ///
+    /// Only Park's is qualified: the event row is where a driver reviewing a
+    /// shift sees why this delivery's wait is left out of their typical waits.
+    /// It says who recorded the instant, not that the instant is wrong, because
+    /// a corrected pickup keeps its provenance.
+    static func pickedUpEventTitle(_ provenance: PickupProvenance?) -> String {
+        provenance == .parkAutomation ? "Picked up (recorded by Park)" : "Picked up"
+    }
+
     /// A structural description, safe for a log line: it names the kind of
     /// recording and nothing about the delivery, the place or the time.
     var logDescription: String {

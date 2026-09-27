@@ -177,28 +177,40 @@ struct PickupWaitProvenanceStoreMeasurementTests {
         return (place, parked)
     }
 
+    /// The place's waits with every one counted, which is what the figure was
+    /// before provenance was recorded (policy A). Built by dropping each
+    /// sample's provenance, so the measurement keeps describing that figure
+    /// now that the app's own leaves Park's waits out.
+    private func everyWaitCounted(_ place: PickupPlace) -> PickupWaitMetrics {
+        PickupWaitCalculator().metrics(
+            of: place.pickupWaitSamples.map { PickupWaitSample(duration: $0.duration, pickedUpAt: $0.pickedUpAt) }
+        )
+    }
+
     @Test("Park at the arrival instant enters the place's history as a wait of zero")
     func parkAtTheArrivalInstant() throws {
         let context = try makeContext()
         let (place, parked) = try shiftAtOnePlace(parkAfter: 0, in: context)
 
         #expect(parked.pickupWait == 0)
-        let metrics = place.pickupWaitMetrics()
+        let metrics = everyWaitCounted(place)
         #expect(metrics.sampleCount == 3)
         #expect(metrics.medianDuration == 360, "6 minutes, where two manual pickups alone read 7")
         #expect(metrics.shortestDuration == 0)
+
+        #expect(place.pickupWaitMetrics().medianDuration == 420, "The app's figure now leaves it out")
     }
 
     @Test("Correcting the pickup Park recorded rederives the place's median at once")
     func correctionRederives() throws {
         let context = try makeContext()
         let (place, parked) = try shiftAtOnePlace(parkAfter: 0.5, in: context)
-        #expect(place.pickupWaitMetrics().medianDuration == 360)
+        #expect(everyWaitCounted(place).medianDuration == 360)
 
         let proposed = DeliveryLifecycleRecord(parked).replacing(.pickedUp, with: at(109))
         try DeliveryService(context: context).correctRecordedTimes(parked, to: proposed)
 
         #expect(parked.pickupWait == 540)
-        #expect(place.pickupWaitMetrics().medianDuration == 480, "8 minutes: nothing is cached to invalidate")
+        #expect(everyWaitCounted(place).medianDuration == 480, "8 minutes: nothing is cached to invalidate")
     }
 }

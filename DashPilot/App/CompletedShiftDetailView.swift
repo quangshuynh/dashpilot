@@ -1972,7 +1972,7 @@ private struct DeliveryHistoryRow: View {
             recorded.append(("Arrived at pickup", arrivedAtPickupAt))
         }
         if let pickedUpAt = delivery.pickedUpAt {
-            recorded.append(("Picked up", pickedUpAt))
+            recorded.append((PickupProvenance.pickedUpEventTitle(delivery.pickupProvenance), pickedUpAt))
         }
         if let deliveredAt = delivery.deliveredAt {
             recorded.append(("Delivered", deliveredAt))

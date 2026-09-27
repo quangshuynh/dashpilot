@@ -237,6 +237,11 @@ nonisolated struct PeriodMetrics: Equatable, Sendable {
     /// How many recorded waits the median is the middle of.
     let pickupWaitSampleCount: Int
 
+    /// How many recorded waits were left out of the median because Park
+    /// recorded their pickup. The rule is ``PickupWaitSample/countsTowardTypicalWait``,
+    /// applied by the same calculator a place's history uses.
+    let parkRecordedPickupCount: Int
+
     // MARK: Delivery earnings coverage
 
     /// What individual deliveries in the period actually paid, added up, or
@@ -358,6 +363,7 @@ nonisolated struct PeriodMetrics: Equatable, Sendable {
             pickupPlaceCount: 0,
             medianPickupWait: nil,
             pickupWaitSampleCount: 0,
+            parkRecordedPickupCount: 0,
             recordedDeliveryEarnings: nil,
             deliveryEarningsCoverage: .none,
             expenses: expenses,
@@ -702,11 +708,19 @@ nonisolated extension PeriodMetrics {
     }
 
     var spokenPickupWaitStatement: String {
+        let exclusion = parkRecordedPickupStatement.map { " " + $0 } ?? ""
         guard let median = medianPickupWait else {
-            return "No recorded pickup waits in this period."
+            return "No recorded pickup waits in this period." + exclusion
         }
         return "Median recorded pickup wait, \(DurationText.spoken(median)), "
             + "based on \(pickupWaitSampleCount) recorded \(Self.pickupNoun(pickupWaitSampleCount))."
+            + exclusion
+    }
+
+    /// Which waits the median leaves out, or `nil` when it leaves none out.
+    /// The place screen's sentence, so the two surfaces say it alike.
+    var parkRecordedPickupStatement: String? {
+        PickupWaitMetrics.parkRecordedStatement(count: parkRecordedPickupCount)
     }
 
     /// The distinct places named, as a count and nothing else:

@@ -43,10 +43,41 @@ nonisolated struct PickupWaitSample: Equatable, Sendable {
     /// depend on time.
     let pickedUpAt: Date
 
-    init(duration: TimeInterval, pickedUpAt: Date) {
+    /// How the pickup that ends this wait was recorded, or `nil` when the store
+    /// does not know (a pickup recorded before DashPilot kept this).
+    ///
+    /// It never changes ``duration``: a wait closed by Park is exactly as long
+    /// as its two recorded instants say. It decides only whether the wait
+    /// counts toward a typical wait. See ``countsTowardTypicalWait``.
+    let provenance: PickupProvenance?
+
+    /// - Parameter provenance: defaults to unknown, which is what a sample
+    ///   built from bare numbers is.
+    init(duration: TimeInterval, pickedUpAt: Date, provenance: PickupProvenance? = nil) {
         self.duration = duration
         self.pickedUpAt = pickedUpAt
+        self.provenance = provenance
     }
+
+    /// Whether this wait enters a median, a spread or a count of recorded waits.
+    ///
+    /// **The one rule**, read by ``PickupWaitCalculator`` and by every screen
+    /// that lists waits beside the figures, so the list and the median are
+    /// always drawn from the same waits.
+    ///
+    /// A wait whose pickup **Park recorded** does not count. It ends when the
+    /// driver parked, usually before they walked in, so it measures the time
+    /// from arriving to parking rather than a wait for an order, and measured
+    /// through this calculator a few of them move a place's median by minutes.
+    /// It is not discarded: it is counted separately, and every figure it is
+    /// left out of says how many were left out.
+    ///
+    /// A wait whose provenance is **unknown** counts, as it did before the app
+    /// recorded provenance. Nothing can say what it was, and treating every
+    /// pickup recorded before v18 as suspect would empty the history of every
+    /// place for the sake of the few pickups a short-lived earlier build may
+    /// have recorded by parking.
+    var countsTowardTypicalWait: Bool { provenance != .parkAutomation }
 }
 
 nonisolated extension PickupWaitSample {
@@ -57,7 +88,7 @@ nonisolated extension PickupWaitSample {
     /// for this rather than subtracting timestamps themselves.
     init?(_ delivery: Delivery) {
         guard let duration = delivery.pickupWait, let pickedUpAt = delivery.pickedUpAt else { return nil }
-        self.init(duration: duration, pickedUpAt: pickedUpAt)
+        self.init(duration: duration, pickedUpAt: pickedUpAt, provenance: delivery.pickupProvenance)
     }
 
     /// Newest last, then by length, so a list of samples has one order whatever
