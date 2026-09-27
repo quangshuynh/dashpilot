@@ -406,14 +406,15 @@ nonisolated struct DeliveryExportRecord: Equatable, Sendable, Codable {
     ///
     /// Written exactly as recorded whoever recorded the pickup. Read it beside
     /// ``pickupRecordedBy``: a wait whose pickup Park recorded ends when the
-    /// driver parked, and `summary.deliveries.medianPickupWaitSeconds` leaves
-    /// it out.
+    /// driver parked, one whose pickup Resume Driving recorded ends when they
+    /// drove off, and `summary.deliveries.medianPickupWaitSeconds` leaves both
+    /// out.
     let pickupWaitSeconds: Int?
 
-    /// How ``pickedUpAt`` was recorded: `manual`, `parkAutomation` or
-    /// `unknown`, and `null` when no pickup was recorded.
+    /// How ``pickedUpAt`` was recorded: `manual`, `parkAutomation`,
+    /// `resumeAutomation` or `unknown`, and `null` when no pickup was recorded.
     ///
-    /// Added by format version 5. `unknown` is a pickup recorded before
+    /// Added by format version 5; `resumeAutomation` added by version 6. `unknown` is a pickup recorded before
     /// DashPilot kept this, and is written as what it is rather than as
     /// `manual`: the store never said.
     let pickupRecordedBy: ExportPickupRecording?
@@ -523,13 +524,15 @@ nonisolated struct DeliveryExportRecord: Equatable, Sendable, Codable {
 
 /// How a delivery's pickup was recorded, in the file's own vocabulary.
 ///
-/// Three values where the store has two, because the file must say what the
-/// store does not know rather than leave a reader to guess what a missing value
+/// One more value than the store has, because the file must say what the store
+/// does not know rather than leave a reader to guess what a missing value
 /// meant: `unknown` is a recorded pickup with no provenance, and a delivery
-/// with no pickup has no value at all.
+/// with no pickup has no value at all. `resumeAutomation` was added by format
+/// version 6.
 nonisolated enum ExportPickupRecording: String, Equatable, Sendable, Codable {
     case manual
     case parkAutomation
+    case resumeAutomation
     case unknown
 
     /// The value for a delivery, or `nil` when it recorded no pickup.
@@ -538,6 +541,7 @@ nonisolated enum ExportPickupRecording: String, Equatable, Sendable, Codable {
         switch delivery.pickupProvenance {
         case .manual: self = .manual
         case .parkAutomation: self = .parkAutomation
+        case .resumeAutomation: self = .resumeAutomation
         case nil: self = .unknown
         }
     }

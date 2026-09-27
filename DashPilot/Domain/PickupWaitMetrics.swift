@@ -67,30 +67,41 @@ nonisolated struct PickupWaitMetrics: Equatable, Sendable {
     let mostRecentSampleAt: Date?
 
     /// How many recorded waits were left out because Park recorded their
-    /// pickup.
+    /// pickup, under the setting the Park and Resume workflow replaced.
     ///
     /// Carried beside the figures rather than folded into ``sampleCount``, so
     /// the population every figure above is taken over has a name: the waits
     /// the driver closed with their own Picked Up step, and those recorded
     /// before DashPilot kept how. A figure that leaves waits out says how many,
-    /// in ``parkRecordedStatement``, so nothing is dropped silently.
+    /// in ``automatedPickupStatement``, so nothing is dropped silently.
     let parkRecordedPickupCount: Int
+
+    /// How many recorded waits were left out because Resume Driving recorded
+    /// their pickup, under the Park and Resume workflow. Counted apart from
+    /// ``parkRecordedPickupCount`` because the two end at different moments,
+    /// one before the handover and one after it.
+    var resumeRecordedPickupCount: Int = 0
+
+    /// Every wait left out because a pickup was recorded automatically.
+    var automatedPickupCount: Int { parkRecordedPickupCount + resumeRecordedPickupCount }
 
     /// The count at or above which a median is offered as a typical wait.
     static let minimumSampleCount = 2
 
     /// A place nothing has been recorded at.
-    static let none = onlyParkRecorded(0)
+    static let none = onlyAutomated(parkRecorded: 0, resumeRecorded: 0)
 
-    /// No wait counts, and `count` were left out because Park recorded them.
-    static func onlyParkRecorded(_ count: Int) -> PickupWaitMetrics {
+    /// No wait counts, and these were left out because they were recorded
+    /// automatically.
+    static func onlyAutomated(parkRecorded: Int, resumeRecorded: Int) -> PickupWaitMetrics {
         PickupWaitMetrics(
             sampleCount: 0,
             medianDuration: nil,
             shortestDuration: nil,
             longestDuration: nil,
             mostRecentSampleAt: nil,
-            parkRecordedPickupCount: count
+            parkRecordedPickupCount: parkRecorded,
+            resumeRecordedPickupCount: resumeRecorded
         )
     }
 
@@ -151,9 +162,10 @@ nonisolated extension PickupWaitMetrics {
     var insufficientHistoryExplanation: String? {
         switch availability {
         case .noRecordedWaits:
-            // With pickups recorded by Park, deliveries here did record both
-            // ends; ``parkRecordedStatement`` says why they are not counted.
-            parkRecordedPickupCount > 0
+            // With pickups recorded automatically, deliveries here did record
+            // both ends; ``automatedPickupStatement`` says why they are not
+            // counted.
+            automatedPickupCount > 0
                 ? "A wait is measured between a recorded arrival and a recorded pickup."
                 : """
                 A wait is measured between a recorded arrival and a recorded pickup. \
@@ -194,32 +206,45 @@ nonisolated extension PickupWaitMetrics {
         if let explanation = insufficientHistoryExplanation {
             statement += " " + explanation
         }
-        if let parkRecorded = parkRecordedStatement {
-            statement += " " + parkRecorded
+        if let automated = automatedPickupStatement {
+            statement += " " + automated
         }
         return statement
     }
 
     /// Which waits were left out and why, or `nil` when none was.
     ///
-    /// Shown and spoken beside the figure it qualifies. It names the setting's
-    /// effect in the driver's terms and claims nothing about the handover: the
-    /// app does not know when it happened, and does not estimate it.
-    var parkRecordedStatement: String? {
-        Self.parkRecordedStatement(count: parkRecordedPickupCount)
+    /// Shown and spoken beside the figure it qualifies. It names what the
+    /// driver's own controls did, in their terms, and claims nothing about the
+    /// handover: the app does not know when it happened, and does not estimate
+    /// it.
+    var automatedPickupStatement: String? {
+        Self.automatedPickupStatement(parkRecorded: parkRecordedPickupCount, resumeRecorded: resumeRecordedPickupCount)
     }
 
     /// The same sentence for any figure over pickup waits, so the place screen
     /// and a period summary say it in the same words.
-    static func parkRecordedStatement(count: Int) -> String? {
-        switch count {
-        case ..<1:
+    ///
+    /// The two kinds are named apart because they are wrong in opposite
+    /// directions: one ends before the handover and one after it.
+    static func automatedPickupStatement(parkRecorded: Int, resumeRecorded: Int) -> String? {
+        switch (parkRecorded, resumeRecorded) {
+        case (..<1, ..<1):
             return nil
-        case 1:
-            return "1 pickup recorded when you parked is not counted: it ends when you parked, not at the handover."
+        case (_, ..<1):
+            return parkRecorded == 1
+                ? "1 pickup recorded when you parked is not counted: it ends when you parked, not at the handover."
+                : "\(parkRecorded) pickups recorded when you parked are not counted: they end when you parked, "
+                    + "not at the handover."
+        case (..<1, _):
+            return resumeRecorded == 1
+                ? "1 pickup recorded when you resumed driving is not counted: it ends when you drove off, "
+                    + "not at the handover."
+                : "\(resumeRecorded) pickups recorded when you resumed driving are not counted: they end when "
+                    + "you drove off, not at the handover."
         default:
-            return "\(count) pickups recorded when you parked are not counted: they end when you parked, "
-                + "not at the handover."
+            return "\(parkRecorded + resumeRecorded) pickups recorded when you parked or resumed driving are "
+                + "not counted: they end then, not at the handover."
         }
     }
 

@@ -582,7 +582,7 @@ struct DeliveryControlPanel: View {
     /// single sleep of the whole window stops the app going quiet for the length
     /// of it, and anything waiting for the app to go quiet, XCUITest included,
     /// waits the window out with it.
-    private static let undoSeconds = 20
+    static let undoSeconds = 20
 
     /// Offers to take back the completion just recorded, where there is
     /// something truthful to take it back to.

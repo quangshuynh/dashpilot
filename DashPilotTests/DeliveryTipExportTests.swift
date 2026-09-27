@@ -290,8 +290,8 @@ struct DeliveryTipExportTests {
         let shift = try tippedShift(fixture)
         let object = try object(try document(fixture, scope: .shift(shift.id), shifts: [shift]))
 
-        #expect(ExportFormat.version == 5)
-        #expect(object["formatVersion"] as? Int == 5)
+        #expect(ExportFormat.version == 6)
+        #expect(object["formatVersion"] as? Int == 6)
         #expect(
             ExportFormat.version != Int(DashPilotSchemaV13.versionIdentifier.major),
             "The file's version and the store's schema version are unrelated numbers"

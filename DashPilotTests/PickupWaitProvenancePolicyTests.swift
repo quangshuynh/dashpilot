@@ -7,11 +7,13 @@ import Testing
 /// left out are accounted for.
 ///
 /// **The population, named once:** every recorded wait except those whose
-/// pickup Park recorded. That is the driver's own Picked Up step on any
-/// surface, plus pickups recorded before DashPilot kept how (unknown), which
-/// were counted before and still are. Waits Park recorded are counted apart and
-/// said beside every figure they are left out of. Nothing is scaled, corrected,
-/// estimated or replaced.
+/// pickup was recorded automatically, by Resume Driving under the Park and
+/// Resume workflow or by Park under the setting that workflow replaced. That
+/// is the driver's own Picked Up step on any surface, plus pickups recorded
+/// before DashPilot kept how (unknown), which were counted before and still
+/// are. Automated waits are counted apart, by kind, and said beside every
+/// figure they are left out of. Nothing is scaled, corrected, estimated or
+/// replaced.
 @Suite("Pickup wait provenance policy")
 struct PickupWaitProvenancePolicyTests {
     private let base = Date(timeIntervalSince1970: 1_760_000_000)
@@ -78,6 +80,42 @@ struct PickupWaitProvenancePolicyTests {
         #expect(result.spokenStatement.contains("2 pickups recorded when you parked are not counted"))
     }
 
+    @Test("Resume-recorded waits are left out and counted apart from Park's")
+    func resumeWaitsAreCountedApart() {
+        let result = metrics([
+            sample(4, .manual, index: 0), sample(6, .manual, index: 1), sample(7, .manual, index: 2),
+            sample(9, .resumeAutomation, index: 3), sample(14, .resumeAutomation, index: 4),
+            sample(0.5, .parkAutomation, index: 5)
+        ])
+
+        #expect(result.sampleCount == 3)
+        #expect(result.medianDuration == 360, "The manual median, where all six would read 6:30")
+        #expect(result.longestDuration == 420, "A Resume wait is not the longest wait")
+        #expect(result.resumeRecordedPickupCount == 2)
+        #expect(result.parkRecordedPickupCount == 1)
+        #expect(result.automatedPickupCount == 3)
+        #expect(result.spokenStatement.hasSuffix(
+            "3 pickups recorded when you parked or resumed driving are not counted: they end then, not at the handover."
+        ))
+    }
+
+    @Test("Only Resume-recorded waits: no figure, the count said, and the screen does not claim nothing was recorded")
+    func onlyResumeRecordedIsNoFigure() {
+        let result = metrics([sample(9, .resumeAutomation), sample(12, .resumeAutomation, index: 1)])
+
+        #expect(result.availability == .noRecordedWaits)
+        #expect(result.typicalDuration == nil)
+        #expect(result.resumeRecordedPickupCount == 2)
+        #expect(result.insufficientHistoryExplanation?.contains("No delivery here recorded both") == false)
+        #expect(result.spokenStatement.contains("2 pickups recorded when you resumed driving are not counted"))
+    }
+
+    @Test("A wait Park began and the driver's own Picked Up step ended counts: it is keyed on the pickup")
+    func automatedArrivalManualPickupCounts() {
+        #expect(sample(8, .manual).countsTowardTypicalWait, "Park's arrival does not make the wait automated")
+        #expect(!sample(8, .resumeAutomation).countsTowardTypicalWait)
+    }
+
     @Test("A sample keeps its recorded duration whoever recorded it: nothing is scaled or replaced")
     func noFabricatedWait() {
         let parked = sample(0.5, .parkAutomation)
@@ -91,16 +129,31 @@ struct PickupWaitProvenancePolicyTests {
 
     @Test("The left-out waits are said in singular and plural, and not at all when there are none")
     func exclusionWording() {
-        #expect(PickupWaitMetrics.parkRecordedStatement(count: 0) == nil)
+        #expect(PickupWaitMetrics.automatedPickupStatement(parkRecorded: 0, resumeRecorded: 0) == nil)
         #expect(
-            PickupWaitMetrics.parkRecordedStatement(count: 1)
+            PickupWaitMetrics.automatedPickupStatement(parkRecorded: 1, resumeRecorded: 0)
                 == "1 pickup recorded when you parked is not counted: it ends when you parked, not at the handover."
         )
         #expect(
-            PickupWaitMetrics.parkRecordedStatement(count: 3)
+            PickupWaitMetrics.automatedPickupStatement(parkRecorded: 3, resumeRecorded: 0)
                 == "3 pickups recorded when you parked are not counted: they end when you parked, not at the handover."
         )
-        #expect(metrics([sample(5, .manual)]).parkRecordedStatement == nil)
+        #expect(
+            PickupWaitMetrics.automatedPickupStatement(parkRecorded: 0, resumeRecorded: 1)
+                == "1 pickup recorded when you resumed driving is not counted: it ends when you drove off, "
+                + "not at the handover."
+        )
+        #expect(
+            PickupWaitMetrics.automatedPickupStatement(parkRecorded: 0, resumeRecorded: 2)
+                == "2 pickups recorded when you resumed driving are not counted: they end when you drove off, "
+                + "not at the handover."
+        )
+        #expect(
+            PickupWaitMetrics.automatedPickupStatement(parkRecorded: 1, resumeRecorded: 2)
+                == "3 pickups recorded when you parked or resumed driving are not counted: they end then, "
+                + "not at the handover."
+        )
+        #expect(metrics([sample(5, .manual)]).automatedPickupStatement == nil)
     }
 
     @Test("VoiceOver hears the exclusion with the figure it qualifies")
@@ -115,10 +168,13 @@ struct PickupWaitProvenancePolicyTests {
     @Test("Nothing says DashPilot knows when the order was handed over")
     func noHandoverClaim() {
         for count in 1...3 {
-            let statement = PickupWaitMetrics.parkRecordedStatement(count: count) ?? ""
-            #expect(!statement.contains("detected"))
-            #expect(!statement.contains("estimate"))
+            for (park, resume) in [(count, 0), (0, count), (count, count)] {
+                let statement = PickupWaitMetrics.automatedPickupStatement(parkRecorded: park, resumeRecorded: resume) ?? ""
+                #expect(!statement.contains("detected"))
+                #expect(!statement.contains("estimate"))
+            }
         }
+        #expect(PickupProvenance.pickedUpEventTitle(.resumeAutomation) == "Picked up (recorded by Resume Driving)")
         #expect(PickupProvenance.pickedUpEventTitle(.parkAutomation) == "Picked up (recorded by Park)")
         #expect(PickupProvenance.pickedUpEventTitle(.manual) == "Picked up")
         #expect(PickupProvenance.pickedUpEventTitle(nil) == "Picked up", "Unknown is not labelled as anything")
@@ -171,11 +227,14 @@ struct PickupWaitProvenanceStorePolicyTests {
             manual.append(delivery)
         }
 
-        try SettingsService(context: context).setRecordsPickupWhenParking(true)
+        // A pickup the retired Park-when-parking setting recorded. Nothing
+        // records one any more, so it is written with its provenance directly,
+        // as stores from that build hold it.
         let parked = try service.startDelivery(at: at(90))
         let place = try places.assignPlace(named: "Synthetic Dumplings", to: parked, at: at(90))
         try service.markArrivedAtPickup(parked, at: at(100))
-        try ParkVehicleService(context: context).park(at: at(100.5))
+        try service.markPickedUp(parked, at: at(100.5), recordedBy: .parkAutomation)
+        try shifts.parkActiveShift(at: at(100.5))
         try shifts.resumeDrivingOnActiveShift(at: at(115))
         try service.markDelivered(parked, at: at(130))
         try shifts.endActiveShift(at: at(140))
@@ -213,7 +272,7 @@ struct PickupWaitProvenanceStorePolicyTests {
         #expect(metrics.medianPickupWait == 420)
         #expect(metrics.parkRecordedPickupCount == 1)
         #expect(metrics.pickupWaitBasisStatement == "Based on 2 recorded pickups")
-        #expect(metrics.parkRecordedPickupStatement?.hasPrefix("1 pickup recorded when you parked") == true)
+        #expect(metrics.automatedPickupStatement?.hasPrefix("1 pickup recorded when you parked") == true)
         #expect(metrics.spokenPickupWaitStatement.contains("1 pickup recorded when you parked is not counted"))
     }
 
@@ -222,11 +281,11 @@ struct PickupWaitProvenanceStorePolicyTests {
         let store = try makeStore()
         let before = store.place.pickupWaitMetrics()
 
-        try SettingsService(context: store.context).setRecordsPickupWhenParking(false)
+        try SettingsService(context: store.context).setUsesParkAndResumeForPickups(true)
         #expect(store.place.pickupWaitMetrics() == before)
         #expect(store.parked.pickupProvenance == .parkAutomation)
 
-        try SettingsService(context: store.context).setRecordsPickupWhenParking(true)
+        try SettingsService(context: store.context).setUsesParkAndResumeForPickups(false)
         #expect(store.place.pickupWaitMetrics() == before, "Nor does turning it on again")
         #expect(store.manual.allSatisfy { $0.pickupProvenance == .manual })
     }
@@ -350,6 +409,7 @@ struct PickupWaitProvenanceStorePolicyTests {
         #expect(deliveries["medianPickupWaitSeconds"] as? Int == 420)
         #expect(deliveries["pickupWaitSampleCount"] as? Int == 2)
         #expect(deliveries["parkRecordedPickupCount"] as? Int == 1)
-        #expect(ExportFormat.version == 5)
+        #expect(deliveries["resumeRecordedPickupCount"] as? Int == 0, "Added by version 6, and none here")
+        #expect(ExportFormat.version == 6)
     }
 }

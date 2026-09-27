@@ -551,6 +551,17 @@ struct ShiftService {
     /// parked. So there is at most one suspension at a time, it belongs to the
     /// shift, and no delivery starts, ends or owns one.
     ///
+    /// ## The pickup workflow's association travels in the same save
+    ///
+    /// `pickupWorkflowDeliveryID` is the delivery ``ParkVehicleService`` chose
+    /// for this stop under the driver's pickup workflow, or `nil`. It is stored
+    /// on the row this opens, in **this** save, so a stretch is never recorded
+    /// with half of what Park decided: either the vehicle is parked and the
+    /// stretch says which delivery it was for, or nothing was written. It joins
+    /// nothing, and nothing here reads it.
+    ///
+    /// - Parameter pickupWorkflowDeliveryID: see
+    ///   ``RouteSuspension/pickupWorkflowDeliveryID``.
     /// - Throws: ``ShiftLifecycleError/noActiveShift`` if none is running,
     ///   ``ShiftLifecycleError/shiftAlreadyParked(parkedAt:)`` if the vehicle is
     ///   already recorded as parked,
@@ -558,7 +569,7 @@ struct ShiftService {
     ///   paused, or ``ShiftLifecycleError/storeUnavailable(underlying:)`` if the
     ///   write fails.
     @discardableResult
-    func parkActiveShift(at date: Date = .now) throws -> Shift {
+    func parkActiveShift(at date: Date = .now, pickupWorkflowDeliveryID: UUID? = nil) throws -> Shift {
         guard let shift = try activeShift() else {
             AppLog.shift.notice("Refused to record parking: no shift is running")
             throw ShiftLifecycleError.noActiveShift
@@ -584,7 +595,7 @@ struct ShiftService {
 
         let suspension: RouteSuspension
         do {
-            suspension = try shift.beginRouteSuspension(at: parkDate)
+            suspension = try shift.beginRouteSuspension(at: parkDate, pickupWorkflowDeliveryID: pickupWorkflowDeliveryID)
         } catch let error as ShiftError {
             context.rollback()
             AppLog.shift.error(

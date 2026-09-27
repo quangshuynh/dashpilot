@@ -1179,17 +1179,20 @@ extension Shift {
     /// ``beginPause(at:)``, so a refused or failed write leaves the store
     /// holding nothing the model does not also hold.
     ///
+    /// - Parameter pickupWorkflowDeliveryID: the delivery the driver's pickup
+    ///   workflow took this stop to be the pickup of, stored with the row. See
+    ///   ``RouteSuspension/pickupWorkflowDeliveryID``.
     /// - Throws: ``ShiftError/shiftAlreadyEnded``, ``ShiftError/alreadyParked``,
     ///   ``ShiftError/alreadyPaused`` or ``ShiftError/endPrecedesStart`` when
     ///   `date` precedes the shift start.
     @discardableResult
-    func beginRouteSuspension(at date: Date) throws -> RouteSuspension {
+    func beginRouteSuspension(at date: Date, pickupWorkflowDeliveryID: UUID? = nil) throws -> RouteSuspension {
         guard endedAt == nil else { throw ShiftError.shiftAlreadyEnded }
         guard openPause == nil else { throw ShiftError.alreadyPaused }
         guard openRouteSuspension == nil else { throw ShiftError.alreadyParked }
         guard date >= startedAt else { throw ShiftError.endPrecedesStart }
 
-        return RouteSuspension(shift: self, startedAt: date)
+        return RouteSuspension(shift: self, startedAt: date, pickupWorkflowDeliveryID: pickupWorkflowDeliveryID)
     }
 
     /// Closes the open suspension: the driver is driving again.

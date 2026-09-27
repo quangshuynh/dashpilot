@@ -44,7 +44,7 @@ nonisolated enum IntentLifecycleOutcome: Equatable, Sendable {
     /// the driver needs told is the pair of facts the state is easy to confuse:
     /// the route has stopped, and the shift has not.
     ///
-    /// `pickup` is what the driver's pickup-when-parking setting did, which is
+    /// `pickup` is what the driver's pickup workflow did, which is
     /// ``ParkPickupOutcome/notEnabled`` for everybody who never turned it on.
     case vehicleParked(pickup: ParkPickupOutcome)
 
@@ -54,7 +54,10 @@ nonisolated enum IntentLifecycleOutcome: Equatable, Sendable {
     /// Optional for the reason every other duration here is: it is read from the
     /// shift rather than assumed, and zero is a different claim from "not
     /// known".
-    case drivingResumed(parkedDuration: TimeInterval?)
+    ///
+    /// `pickup` is what the driver's pickup workflow did, which is
+    /// ``ResumePickupOutcome/notEnabled`` for everybody who never turned it on.
+    case drivingResumed(parkedDuration: TimeInterval?, pickup: ResumePickupOutcome)
 
     /// A delivery began, alongside however many were already running.
     case deliveryStarted(number: Int?, inProgress: Int?)
@@ -111,30 +114,34 @@ nonisolated enum IntentLifecycleOutcome: Equatable, Sendable {
             // has stopped, which is what parking is for; the shift has not,
             // which is what parking is not. A spoken confirmation is the only
             // report this driver gets, and they are standing away from the car
-            // with no screen to check. What the pickup setting recorded, if it
-            // recorded or declined anything, follows as a third sentence, so a
-            // driver who never turned it on hears exactly what they always did.
+            // with no screen to check. What the pickup workflow recorded, if it
+            // recorded or declined anything, follows, so a driver who never
+            // turned it on hears exactly what they always did.
             [
                 """
                 Vehicle parked. Route recording is stopped until you resume driving. \
                 Your shift is still running and its working time is still counting.
                 """,
-                pickup.statement
+                pickup.notice?.sentence
             ]
             .compactMap { $0 }
             .joined(separator: " ")
-        case let .drivingResumed(parkedDuration):
+        case let .drivingResumed(parkedDuration, pickup):
             // The same caution a spoken resume carries, for the same reason: a
             // capture session can only be started with the app on screen, so
             // driving again by voice records no route until DashPilot is opened.
-            if let parkedDuration {
-                """
-                Driving again after \(DurationText.spoken(parkedDuration)) parked. \
-                Open DashPilot to start recording your route again.
-                """
-            } else {
-                "Driving again. Open DashPilot to start recording your route again."
-            }
+            // What the pickup workflow recorded follows it, as it does for Park.
+            [
+                parkedDuration.map {
+                    """
+                    Driving again after \(DurationText.spoken($0)) parked. \
+                    Open DashPilot to start recording your route again.
+                    """
+                } ?? "Driving again. Open DashPilot to start recording your route again.",
+                pickup.notice?.sentence
+            ]
+            .compactMap { $0 }
+            .joined(separator: " ")
         case let .deliveryStarted(number, inProgress):
             [Self.started(number), Self.inProgressStatement(inProgress)]
                 .compactMap { $0 }

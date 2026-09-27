@@ -244,7 +244,8 @@ nonisolated struct ExportDocumentEncoder: Equatable, Sendable {
         // changes how that column should be read: a wait whose pickup Park
         // recorded ends when the driver parked, and a spreadsheet taking a
         // median of waits needs to be able to filter those out, as the app
-        // does. `manual`, `parkAutomation` or `unknown`; empty with no pickup.
+        // does. `manual`, `parkAutomation`, `resumeAutomation` (format version
+        // 6) or `unknown`; empty with no pickup.
         "deliveryPickupRecordedBy"
     ]
 

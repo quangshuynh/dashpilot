@@ -3,8 +3,10 @@ import SwiftData
 import Testing
 @testable import DashPilot
 
-/// What pickups recorded by Park do to the pickup-wait median, measured through
-/// the calculator the app actually uses.
+/// What pickups recorded by Park did to the pickup-wait median, under the
+/// setting the Park and Resume workflow replaced, measured through the
+/// calculator the app actually uses. The new workflow's own measurement is
+/// `PickupWaitResumeMeasurementTests`.
 ///
 /// ## Why this suite exists
 ///
@@ -165,12 +167,15 @@ struct PickupWaitProvenanceStoreMeasurementTests {
             try service.markDelivered(delivery, at: at(base + 30))
         }
 
-        try SettingsService(context: context).setRecordsPickupWhenParking(true)
+        // Nothing records a pickup when parking any more: the Park and Resume
+        // workflow replaced that setting. The pickup is written as that setting
+        // wrote it, at the instant of parking, so this measurement keeps
+        // describing the behaviour it measured.
         let parked = try #require(try service.startOffer(deliveryCount: 1, at: at(90)).deliveriesInOrder.first)
         let place = try places.assignPlace(named: "Synthetic Noodles", to: parked, at: at(90))
         try service.markArrivedAtPickup(parked, at: at(100))
-        let result = try ParkVehicleService(context: context).park(at: at(100 + parkAfter))
-        #expect(result.pickup.recordedPickup)
+        try service.markPickedUp(parked, at: at(100 + parkAfter), recordedBy: .parkAutomation)
+        try ShiftService(context: context).parkActiveShift(at: at(100 + parkAfter))
         try ShiftService(context: context).resumeDrivingOnActiveShift(at: at(115))
         try service.markDelivered(parked, at: at(130))
         try shifts.endActiveShift(at: at(140))

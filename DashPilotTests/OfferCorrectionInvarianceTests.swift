@@ -229,7 +229,7 @@ struct OfferCorrectionInvarianceTests {
         #expect(after.deliveries.map(\.acceptedAt) == before.deliveries.map(\.acceptedAt))
         #expect(after.grossEarnings == before.grossEarnings)
         #expect(after.deliveryActiveSeconds == before.deliveryActiveSeconds)
-        #expect(ExportFormat.version == 5, "Correcting a grouping moves values, never the contract")
+        #expect(ExportFormat.version == 6, "Correcting a grouping moves values, never the contract")
     }
 
     @Test("Removing an offer renumbers the offers that outlive it, with nothing stored to go stale")

@@ -338,10 +338,11 @@ nonisolated struct PeriodDeliveriesExport: Equatable, Sendable, Codable {
     /// The middle of the **individual** recorded waits in the period, not an
     /// average of each place's median. `null` when none counts.
     ///
-    /// **Redefined by format version 5**: waits whose pickup Park recorded
-    /// are left out, as they are on screen, and counted in
-    /// ``parkRecordedPickupCount``. Waits recorded before DashPilot kept how
-    /// (`unknown` on the delivery) are still in it.
+    /// **Redefined by format version 5, and again by 6**: waits whose pickup
+    /// was recorded automatically are left out, as they are on screen, and
+    /// counted in ``parkRecordedPickupCount`` (Park, since 5) and
+    /// ``resumeRecordedPickupCount`` (Resume Driving, since 6). Waits recorded
+    /// before DashPilot kept how (`unknown` on the delivery) are still in it.
     let medianPickupWaitSeconds: Int?
 
     /// How many recorded waits that median is the middle of. Redefined with it.
@@ -351,6 +352,10 @@ nonisolated struct PeriodDeliveriesExport: Equatable, Sendable, Codable {
     /// their pickup. Added by format version 5; `0` when none was.
     let parkRecordedPickupCount: Int
 
+    /// How many recorded waits the median leaves out because Resume Driving
+    /// recorded their pickup. Added by format version 6; `0` when none was.
+    let resumeRecordedPickupCount: Int
+
     init(_ metrics: PeriodMetrics) {
         deliveredCount = metrics.deliverySummary.completed
         cancelledCount = metrics.deliverySummary.cancelled
@@ -359,11 +364,12 @@ nonisolated struct PeriodDeliveriesExport: Equatable, Sendable, Codable {
         medianPickupWaitSeconds = ExportDuration.seconds(metrics.medianPickupWait)
         pickupWaitSampleCount = metrics.pickupWaitSampleCount
         parkRecordedPickupCount = metrics.parkRecordedPickupCount
+        resumeRecordedPickupCount = metrics.resumeRecordedPickupCount
     }
 
     private enum CodingKeys: String, CodingKey {
         case deliveredCount, cancelledCount, inProgressCount, pickupPlaceCount
-        case medianPickupWaitSeconds, pickupWaitSampleCount, parkRecordedPickupCount
+        case medianPickupWaitSeconds, pickupWaitSampleCount, parkRecordedPickupCount, resumeRecordedPickupCount
     }
 
     func encode(to encoder: any Encoder) throws {
@@ -375,6 +381,7 @@ nonisolated struct PeriodDeliveriesExport: Equatable, Sendable, Codable {
         try container.encodeAlways(medianPickupWaitSeconds, forKey: .medianPickupWaitSeconds)
         try container.encode(pickupWaitSampleCount, forKey: .pickupWaitSampleCount)
         try container.encode(parkRecordedPickupCount, forKey: .parkRecordedPickupCount)
+        try container.encode(resumeRecordedPickupCount, forKey: .resumeRecordedPickupCount)
     }
 }
 

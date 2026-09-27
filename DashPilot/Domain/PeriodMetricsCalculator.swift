@@ -250,6 +250,7 @@ nonisolated struct PeriodMetricsCalculator: Equatable, Sendable {
             medianPickupWait: waitMetrics.medianDuration,
             pickupWaitSampleCount: waitMetrics.sampleCount,
             parkRecordedPickupCount: waitMetrics.parkRecordedPickupCount,
+            resumeRecordedPickupCount: waitMetrics.resumeRecordedPickupCount,
             recordedDeliveryEarnings: deliveryEarnings.isEmpty ? nil : deliveryEarnings.reduce(Money.zero, +),
             deliveryEarningsCoverage: MetricCoverage(
                 contributingCount: deliveryEarnings.count,
