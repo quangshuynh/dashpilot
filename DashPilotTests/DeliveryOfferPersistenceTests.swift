@@ -65,9 +65,9 @@ struct DeliveryOfferPersistenceTests {
         let delivery = try #require(ModelContainerFactory.currentSchema.entities.first { $0.name == "Delivery" })
         #expect(
             Set(delivery.properties.map(\.name)) == [
-                "id", "acceptedAt", "arrivedAtPickupAt", "pickedUpAt", "deliveredAt", "cancelledAt",
-                "shift", "offer", "pickupPlace", "grossEarningsAmount", "expectedEarningsAmount",
-                "additionalTips"
+                "id", "acceptedAt", "arrivedAtPickupAt", "pickedUpAt", "pickupProvenanceRawValue",
+                "deliveredAt", "cancelledAt", "shift", "offer", "pickupPlace", "grossEarningsAmount",
+                "expectedEarningsAmount", "additionalTips"
             ]
         )
 
