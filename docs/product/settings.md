@@ -31,7 +31,8 @@ Fuel Defaults
   Recorded on your next shift
 
 Pickup Workflow
-  Pick up order when parking                 ( off )
+  Pick up orders with Park & Resume          ( off )
+  Handle stacked orders in order             ( off )
 
 About
   Acknowledgements
@@ -40,8 +41,9 @@ About
 With nothing selected the first section says `No vehicle selected` and that the
 next shift records no miles per gallon, rather than drawing an empty card.
 Starting a shift is never refused over it. Nothing about the vehicle or the gas
-price reaches a shift already running. The pickup switch is the one preference
-that acts during a shift, and only at the moment Park is pressed.
+price reaches a shift already running. The two pickup switches are the only
+preferences that act during a shift, and only at the moment Park or Resume
+Driving is pressed.
 
 ## The vehicle and the gas price are defaults for the next shift
 
@@ -155,47 +157,90 @@ That is the only way a preference ever reaches a shift after it has started, and
 it only ever happens because the driver saved. See
 [Correcting the vehicle](shift-workflow.md#correcting-the-vehicle-before-any-driving-is-recorded).
 
-## Pick up order when parking
+## Pick up orders with Park & Resume
 
-**Off unless the driver turns it on.** A driver who never opens this switch parks exactly as they
-always have.
+**Off unless the driver turns it on.** A driver who never opens this switch parks and resumes
+exactly as they always have.
 
-When it is on, pressing Park (in the app, by voice or on the Lock Screen) records the vehicle as
-parked and then, if **exactly one** delivery in progress is at `Arrived at Pickup`, records that
-delivery as `Picked Up` too, through the same operation the `Picked Up` button on its card runs. It
-exists for the moment a driver has arrived, parked, and is walking in: one tap instead of two.
+It is for the stop a driver makes at a pickup: park, walk in, wait, collect the order, walk back,
+drive off. With it on:
 
-| Deliveries in progress when Park is pressed | What is recorded |
+- **Park** records the vehicle as parked, then records `Arrived at Pickup` for the delivery being
+  picked up.
+- **Resume Driving** records the vehicle as driving, then records `Picked Up` for **that same
+  delivery**.
+
+Both steps go through the same operations the buttons on the delivery's card run, with the same
+refusals, and both surfaces behave identically: the app's buttons, `Park my vehicle in DashPilot`
+and its Resume counterpart, and the Lock Screen's `Park Vehicle` and `Resume Driving`.
+
+### Which delivery
+
+| Deliveries in progress when Park is pressed | What Park records |
 | --- | --- |
-| Exactly one at `Arrived at Pickup` (any number of others heading to a pickup or already carried) | Parked, and that delivery `Picked Up` |
-| Two or more at `Arrived at Pickup` | Parked only. Neither delivery moves, and the panel says why |
-| None at a pickup, one or more still heading to one | Parked only, and the panel says no arrival is recorded |
-| None at a pickup, none heading to one | Parked only, and nothing more is said |
+| One, heading to its pickup | Parked, and that delivery `Arrived at Pickup` |
+| One, already at `Arrived at Pickup` | Parked only; Resume Driving will record its pickup |
+| One, already picked up | Parked only, and nothing more is said (this is a stop at a customer) |
+| Two or more, `Handle stacked orders in order` off | Parked only, and the panel says why |
+| Two or more, `Handle stacked orders in order` on | Parked, and the lowest-numbered delivery still waiting for its pickup `Arrived at Pickup` (or nothing new, if it already was) |
 
-What it deliberately will not do:
+"Lowest-numbered" is the delivery number its card shows, which is the order the deliveries were
+accepted in. With Delivery 3 and Delivery 4 both heading to their pickups, the first Park and Resume
+work on Delivery 3, and the next on Delivery 4. A delivery already picked up, delivered or cancelled
+is never chosen and never moved. Nothing else is consulted: not distance, location, pickup place,
+expected pay or the order of the cards on screen.
 
-- **It never records an arrival.** A delivery still `Accepted` is not moved. Parking says the vehicle
-  stopped, not which place it stopped at, and recording an arrival and a pickup at the same instant
-  would also put a pickup wait of exactly zero into that place's history.
-- **It never chooses between two orders.** Not the oldest, not the newest, not the first card and not
-  the nearest. With two at a pickup, the driver records the one they are collecting on its card.
-- **It never undoes parking.** Parking is saved first. If the pickup is then refused or cannot be
-  saved, the vehicle stays parked and the panel says the pickup was not recorded.
-- **It never touches a delivery already picked up, delivered or cancelled.**
+**Resume Driving does not choose again.** It records the pickup of the delivery Park chose for that
+stop, which is stored with the parked stretch so it survives the app being closed while the driver
+is inside, and it does so only if that delivery is still at `Arrived at Pickup`. A delivery cancelled
+while the driver was inside is not replaced by the next one; one whose pickup the driver already
+recorded by hand is left alone.
 
-**The pickup is recorded at the moment Park is pressed.** That is what the driver said by pressing
-it, and DashPilot does not know when the order was actually handed over. One consequence is worth
-knowing: that delivery's [recorded pickup wait](pickup-wait.md) runs from its arrival to the moment
-of parking, not to the moment the bag changed hands. So DashPilot records that **Park** recorded the
-pickup, and that wait is [left out of typical and median waits](pickup-wait.md#pickups-recorded-by-park),
-with a sentence beside the figure saying how many were. The switch's own footer says so.
+### Handle stacked orders in order
 
-Nothing here is a detection. The panel's line says the pickup was **marked** when the driver parked,
-and its spoken form names this setting, so a listener knows the event came from their automation.
+**Off unless the driver turns it on, and it does nothing while the workflow is off.** It is drawn
+under the workflow switch and is disabled until that switch is on; its own answer is kept either
+way. It is a separate choice because with two or more orders the one Park acts on is chosen by a
+rule rather than being the only one there is, and parking at a customer's door with another order
+still to collect would mark that order `Arrived at Pickup`. Undo is the way back from exactly that.
 
-Unlike the vehicle and the gas price, this switch is not copied onto anything. It is read at the
-moment Park is pressed and nowhere else, and turning it off changes the next press and no delivery
-already recorded: a pickup Park recorded stays Park's, and stays out of typical waits.
+### Undo
+
+Beside a step the workflow has just recorded, the panel offers **Undo** for the same short window
+the app's immediate undo of a `Delivered` uses (20 seconds on screen). It takes back **that delivery
+step and nothing else**: after Park, the delivery goes back to `Accepted` and the vehicle stays
+parked; after Resume Driving, the delivery goes back to `Arrived at Pickup`, its pickup is no
+longer recorded, and the vehicle stays driving. It is refused, and says why, if anything has been
+recorded for that delivery since. It is offered only in the app, only by the screen that made the
+press, and not after the app is closed. After that, the delivery's ordinary controls and the
+finished shift's [time correction](delivery-lifecycle.md#correcting-the-times-a-delivery-recorded) are the way to change what was recorded.
+
+### What it will not do
+
+- **It never detects anything.** DashPilot does not know which restaurant the vehicle stopped at, or
+  when an order was handed over. The panel says a step was recorded **automatically when you
+  parked** or **when you resumed driving**, and its spoken form names this setting.
+- **It never records Picked Up from Park**, and never records either step for a delivery the rule did
+  not name.
+- **It never lets a delivery step undo the vehicle.** The vehicle state is saved first. If the
+  delivery step is then refused or cannot be saved, the vehicle stays parked (or driving) and the
+  panel says the step was not recorded.
+
+**The steps are recorded at the moments the vehicle was.** One consequence is worth knowing: the
+delivery's [recorded pickup wait](pickup-wait.md) then runs from parking to driving away, which
+includes the walks and any time spent in the vehicle before pressing Resume Driving. So DashPilot
+records that **Resume Driving** recorded the pickup, and that wait is
+[left out of typical and median waits](pickup-wait.md#pickups-recorded-automatically), with a
+sentence beside the figure saying how many were. The footer says so.
+
+Unlike the vehicle and the gas price, these switches are not copied onto anything. They are read at
+the moment Park or Resume Driving is pressed and nowhere else, and changing them changes the next
+press and no delivery already recorded.
+
+**The earlier `Pick up order when parking` switch was retired.** It let Park record `Picked Up`,
+which this workflow replaces. Because the new switch records different steps at different moments,
+turning the old one on is not taken as agreeing to this one: after updating, the workflow is off
+until the driver turns it on.
 
 ## Accessibility
 
@@ -214,10 +259,12 @@ already recorded: a pickup Park recorded stays Park's, and stays out of typical 
   recorded one.
 - Both footers carry the historical-stability sentence, so the rule is readable
   rather than something a driver has to infer from behaviour.
-- `Pick up order when parking` is a standard switch whose spoken hint says what it
-  records and that nothing is recorded when two or more deliveries are waiting.
-  The line Park adds beneath the parked notice carries a symbol and words, never a
-  tint alone, and names the delivery it moved.
+- `Pick up orders with Park & Resume` and `Handle stacked orders in order` are
+  standard switches whose spoken hints say what each records. The second is
+  announced as dimmed while the first is off. The line Park or Resume Driving
+  adds carries a symbol and words, never a tint alone, names the delivery, and
+  its Undo control says which step it takes back and that the vehicle stays as
+  it is.
 
 ## Acknowledgements
 

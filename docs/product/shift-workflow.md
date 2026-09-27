@@ -279,23 +279,25 @@ above applies to all three ways of saying it, because all three call the same tw
 See [Voice and system actions](voice-actions.md) and
 [The shift on the Lock Screen](live-activity.md).
 
-### Recording the pickup with the same tap
+### Park and Resume as the pickup steps
 
-A driver who turns on `Pick up order when parking` in Settings can let Park also record the pickup
-of the **one** delivery waiting at its pickup. It is off by default, and with it off nothing above
-changes.
+A driver who turns on `Pick up orders with Park & Resume` in Settings can let Park record
+`Arrived at Pickup` and Resume Driving record `Picked Up`, for the delivery being picked up. It is off
+by default, and with it off nothing above changes.
 
-It is one operation behind all three surfaces, so the app's button, `Park my vehicle in DashPilot`
-and the Lock Screen's `Park Vehicle` behave identically. Parking is recorded first, and always stands;
-the pickup follows through the delivery's own `Picked Up` operation, at the same instant, and only
-when exactly one delivery is at `Arrived at Pickup`. Two at a pickup record neither, and a delivery
-still heading to its pickup is never given an arrival. The panel then says so under the parked
-notice, for example `Delivery 2 marked Picked Up when you parked.` or `Pickup not recorded: 2
-deliveries are at a pickup`. There is no confirmation to answer first, because the point is fewer
-taps at a door.
+Each is one operation behind all three surfaces, so the app's buttons, the spoken actions and the
+Lock Screen's controls behave identically. The vehicle state is recorded first, and always stands;
+the delivery step follows through the delivery's own operation, at the same instant. The panel then
+says so under the shift's status, for example `Delivery 3 marked Arrived at Pickup` with
+`Recorded automatically when you parked.` beneath it and an **Undo** beside it for a few seconds. Undo
+takes back that delivery step only: the vehicle stays parked, or driving. There is no confirmation to
+answer first, because the point is fewer taps at a door.
 
-The stretch parked still belongs to the shift and to no delivery. See
-[Pick up order when parking](settings.md#pick-up-order-when-parking).
+With one delivery in progress it is that delivery. With several, nothing is recorded unless
+`Handle stacked orders in order` is also on, and then Park takes the lowest-numbered delivery still
+waiting for its pickup; Resume Driving always finishes the one Park took. The stretch parked still
+belongs to the shift; it stores which delivery it was for and joins none. See
+[Pick up orders with Park & Resume](settings.md#pick-up-orders-with-park-resume).
 
 ## Correcting a recorded pause
 

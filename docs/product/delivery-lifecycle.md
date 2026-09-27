@@ -64,23 +64,30 @@ timestamps exist, so there is exactly one authoritative answer to what a deliver
 is the same data that forms the historical record. A stored state could drift out of step with the
 events it claims to summarise; a derived one cannot.
 
-## One tap that records a pickup as well as parking
+## Park and Resume Driving as the pickup steps
 
-With [Pick up order when parking](settings.md#pick-up-order-when-parking) turned on, pressing Park
-can also record `Picked Up` for the one delivery at `Arrived at Pickup`. It is not a second way to
-change state: it calls the same operation the card's `Picked Up` button does, with the same
-validation and the same instant rule, and it never records an arrival, never chooses between two
-deliveries at a pickup and never moves a delivery already picked up or finished.
+With [Pick up orders with Park & Resume](settings.md#pick-up-orders-with-park-resume) turned on,
+Park records `Arrived at Pickup` and Resume Driving records `Picked Up`, for one delivery: the one
+in progress, or, with stacked orders handled, the lowest-numbered one still waiting for its pickup.
+It is not a second way to change state: each step calls the same operation the card's button does,
+with the same validation and the same instant rule, and Resume records the pickup of the delivery
+Park chose rather than choosing again. Neither step ever moves a delivery already picked up or
+finished, and Park never records `Picked Up`.
 
-The one thing it records differently is **how**: every `Picked Up` is stored with whether the
-driver's own step or Park wrote it, and a finished delivery's history calls a pickup Park recorded
-`Picked up (recorded by Park)`. Correcting the pickup's time keeps that, reopening and cancelling
-keep it because they keep the pickup, and a pickup recorded before DashPilot kept this reads as
-unknown. See [Pickups recorded by Park](pickup-wait.md#pickups-recorded-by-park).
+The one thing it records differently is **how the pickup was recorded**: every `Picked Up` is stored
+with whether the driver's own step or Resume Driving wrote it, and a finished delivery's history
+calls the second `Picked up (recorded by Resume Driving)`. Correcting the pickup's time keeps that,
+reopening and cancelling keep it because they keep the pickup, and a pickup recorded before
+DashPilot kept this reads as unknown. An arrival Park recorded is not labelled: it is recorded when
+the driver parks, which is what an arrival the driver taps means too. See
+[Pickups recorded automatically](pickup-wait.md#pickups-recorded-automatically).
 
-**Recovering from a Park pickup recorded too early** needs nothing new. The delivery still offers
-`Delivered` and `Cancel`; its wait is already out of every typical figure; and once the shift has
-ended, [correcting its recorded times](#correcting-the-times-a-delivery-recorded) moves the pickup to the real handover
+**Taking a step back.** For a few seconds after Park or Resume Driving records a step, the panel
+offers Undo, which removes that one timestamp and leaves the vehicle parked or driving. It is refused
+if anything has been recorded for the delivery since, so it never removes a step the driver recorded.
+After that window, the delivery still offers its next step and `Cancel`; an automated pickup's wait is
+already out of every typical figure; and once the shift has ended,
+[correcting its recorded times](#correcting-the-times-a-delivery-recorded) moves either instant
 without creating or removing an event.
 
 ## Cancellation is history, not deletion
