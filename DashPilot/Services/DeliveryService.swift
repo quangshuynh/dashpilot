@@ -515,12 +515,24 @@ struct DeliveryService {
         }
     }
 
-    /// Records that `delivery`'s order is in the car.
+    /// Records that `delivery`'s order is in the car, and how that was recorded.
+    ///
+    /// - Parameter provenance: ``PickupProvenance/manual`` for the driver's own
+    ///   Picked Up step on any surface, which is every caller except Park.
+    ///   ``ParkVehicleService`` passes ``PickupProvenance/parkAutomation``. The
+    ///   two are written together with the instant, and rolled back together.
     @discardableResult
-    func markPickedUp(_ delivery: Delivery, at date: Date = .now) throws -> Delivery {
-        try advance(delivery, to: .pickedUp, at: date) { delivery, eventDate in
-            try delivery.markPickedUp(at: eventDate)
+    func markPickedUp(
+        _ delivery: Delivery,
+        at date: Date = .now,
+        recordedBy provenance: PickupProvenance = .manual
+    ) throws -> Delivery {
+        let recorded = try advance(delivery, to: .pickedUp, at: date) { delivery, eventDate in
+            try delivery.markPickedUp(at: eventDate, recordedBy: provenance)
         }
+        // How, and nothing about which delivery, where, when or how long.
+        AppLog.delivery.info("\(provenance.logDescription, privacy: .public)")
+        return recorded
     }
 
     /// Records that `delivery` was completed.

@@ -1008,4 +1008,57 @@ struct AppIntentTests {
             #expect(recorder.count == 3)
         }
     }
+
+    // MARK: How a pickup was recorded
+
+    /// A delivery at its pickup, reached through the intents themselves, with
+    /// the pickup-when-parking setting on.
+    private func deliveryAtPickupWithParkPickupOn(in context: ModelContext) async throws -> Delivery {
+        _ = try await StartShiftIntent().perform()
+        _ = try await StartDeliveryIntent().perform()
+        _ = try await RecordDeliveryProgressIntent().perform()
+        try SettingsService(context: context).setRecordsPickupWhenParking(true)
+        let delivery = try #require(try context.fetch(FetchDescriptor<Delivery>()).first)
+        #expect(delivery.state == .arrivedAtPickup)
+        return delivery
+    }
+
+    @Test("Parking by voice records the pickup as Park's, exactly as the button does")
+    func parkIntentRecordsParkProvenance() async throws {
+        try await withStore { context in
+            let delivery = try await deliveryAtPickupWithParkPickupOn(in: context)
+            _ = try await ParkVehicleIntent().perform()
+
+            #expect(delivery.state == .pickedUp)
+            #expect(delivery.pickupProvenance == .parkAutomation)
+        }
+    }
+
+    @Test("Parking from the Live Activity records the pickup as Park's too")
+    func activityParkIntentRecordsParkProvenance() async throws {
+        try await withStore { context in
+            let delivery = try await deliveryAtPickupWithParkPickupOn(in: context)
+            _ = try await ParkVehicleFromActivityIntent().perform()
+
+            #expect(delivery.state == .pickedUp)
+            #expect(delivery.pickupProvenance == .parkAutomation)
+        }
+    }
+
+    @Test("The next-step control records a manual pickup by voice and from the Live Activity, setting or not")
+    func stepIntentsRecordManualProvenance() async throws {
+        try await withStore { context in
+            let spoken = try await deliveryAtPickupWithParkPickupOn(in: context)
+            _ = try await RecordDeliveryProgressIntent().perform()
+            #expect(spoken.pickupProvenance == .manual, "The setting governs Park, not the Picked Up step")
+
+            _ = try await RecordDeliveryProgressIntent().perform()
+            _ = try await StartDeliveryIntent().perform()
+            _ = try await RecordDeliveryProgressFromActivityIntent().perform()
+            _ = try await RecordDeliveryProgressFromActivityIntent().perform()
+            let tapped = try #require(try context.fetch(FetchDescriptor<Delivery>()).first { $0.id != spoken.id })
+            #expect(tapped.state == .pickedUp)
+            #expect(tapped.pickupProvenance == .manual)
+        }
+    }
 }
