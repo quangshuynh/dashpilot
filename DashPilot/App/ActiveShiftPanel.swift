@@ -491,8 +491,11 @@ struct ActiveShiftPanel: View {
     private var parkPickupNotice: some View {
         if let parkPickup, let statement = parkPickup.statement {
             Label {
+                // Body, not the supporting caption the line above it uses: this
+                // says a lifecycle event was written, or asks the driver to
+                // record one, and is not a detail of the parked state.
                 Text(statement)
-                    .dashFont(.supporting)
+                    .dashFont(.body)
                     .fixedSize(horizontal: false, vertical: true)
             } icon: {
                 Image(systemName: parkPickup.symbolName)
