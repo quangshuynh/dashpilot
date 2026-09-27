@@ -72,10 +72,21 @@ and one they cannot.
   on, pressing Park records `Picked Up` for the one delivery at its pickup at the moment of parking.
   DashPilot does not know whether the order was handed over, or when.
 - **That delivery's recorded pickup wait ends when the driver parked**, which is usually earlier than
-  the handover, so a place's median can read shorter for drivers who use the setting.
+  the handover. It is therefore left out of typical and median waits, and counted apart beside them.
+  A driver who always uses the setting sees no typical wait at all, and is told why: DashPilot does
+  not know how long they waited, and does not estimate it.
+- **A Park pickup corrected to the real handover is still left out.** Correcting a time keeps how the
+  pickup was recorded, and DashPilot keeps no record that a correction happened, so there is nothing
+  that could say the corrected instant is the driver's rather than Park's.
+- **Pickups a v17 build recorded by parking are unknown, and are counted.** That build kept no trace
+  of which pickups Park recorded, so they are indistinguishable from the driver's own and stay in the
+  figures, as they were. Only the one build that shipped the setting before provenance can have
+  written any.
 - **A pickup recorded by mistake cannot be taken back on a running shift.** There is no undo for
-  `Picked Up` while the shift runs, the same as for the card's own button; the finished shift's
-  delivery-time correction can move the instant afterwards.
+  `Picked Up` while the shift runs, the same as for the card's own button. Nothing is stuck: the
+  delivery still offers `Delivered` and `Cancel`, its wait is already out of the typical figures, and
+  the finished shift's delivery-time correction can move the instant afterwards. A pickup that never
+  happened cannot be removed, only followed by a cancellation.
 - **Two deliveries at a pickup record neither**, even when the driver knows which one they are
   collecting. The panel says so and the card records it.
 - **A delivery still `Accepted` is never advanced**, so a driver who did not record the arrival gets
@@ -83,8 +94,8 @@ and one they cannot.
 - **The line saying what Park recorded is shown only in the app that pressed it.** Voice speaks it;
   the Lock Screen shows only the delivery's new state; a stretch parked from elsewhere shows no line
   in the app.
-- **Nothing records that the setting, rather than the card, wrote the pickup**, in the app or in an
-  export.
+- **Unknown provenance is not shown as such in the app.** A pickup recorded before v18 reads as an
+  ordinary `Picked up`; only the export says `unknown`.
 
 ## Shift end-time correction
 

@@ -61,6 +61,52 @@ refuses a timestamp earlier than the last recorded event. If one ever existed in
 is **excluded**, not clamped to zero and not repaired. A zero standing in for an impossible interval
 would enter a place's history as a real wait of no length.
 
+## Pickups recorded by Park
+
+With [Pick up order when parking](settings.md#pick-up-order-when-parking) on, pressing Park can
+record `Picked Up` for the one delivery at its pickup. That pickup is recorded when the driver
+**parks**, usually before they walk in, so the wait it closes runs from the arrival to parking rather
+than to the handover. DashPilot records **how** each pickup was recorded, with the event:
+
+| How the pickup was recorded | Stored as | In a typical or median wait |
+| --- | --- | --- |
+| The driver's own `Picked Up` step, on the card, by voice or from the Lock Screen | `manual` | Counted |
+| Park, under the setting | `parkAutomation` | **Left out, and counted apart** |
+| Before DashPilot kept this (a store from before schema v18) | nothing: unknown | Counted, as it always was |
+
+Why Park's are left out, measured rather than assumed: through the app's own median, one Park pickup
+at a place with one other halves the typical wait shown (8:15 becomes 4:15); as half of a place's
+pickups they halve its median; and once they are most of them, the median is the time from arriving
+to parking and says nothing about waiting for an order. The figure would then move because of a
+setting, not because of the place.
+
+Left out is never silent. Wherever a figure leaves waits out, it says how many beside it, on screen
+and to VoiceOver:
+
+```
+Typical recorded wait
+7 min
+Median of 2 recorded pickups
+1 pickup recorded when you parked is not counted: it ends when you parked, not at the handover.
+```
+
+A place whose only waits were recorded by Park shows **no** typical wait, never a zero, with the same
+sentence. The list of waits under a place's summary lists the waits the figure is taken over, and
+says "counted" rather than "recorded" when it leaves any out. The wait itself is kept exactly as
+recorded: it still appears on its delivery, in the export, and in the place's own history of
+deliveries. Nothing is scaled, corrected or replaced, and nothing estimates when the order was
+actually handed over.
+
+**Unknown is counted, and is never relabelled.** A pickup recorded before schema v18 has no
+provenance, and migration deliberately did not write `manual` into it. The one build that could
+already record a pickup by parking left no trace of which pickups it recorded that way, so those stay
+unknown and stay counted; see [Limitations](../reference/limitations.md#pick-up-order-when-parking).
+
+**Corrections and settings.** Correcting a pickup's recorded time moves the instant and rederives
+every figure at once, and **keeps** its provenance: a Park pickup corrected to the real handover is
+still Park's, and still left out. Turning the setting on or off changes the next press of Park and
+nothing already recorded.
+
 ## Renaming and merging a place
 
 Both figure here because a place's history is derived from its deliveries and stored nowhere.

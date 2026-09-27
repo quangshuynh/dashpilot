@@ -186,14 +186,16 @@ What it deliberately will not do:
 **The pickup is recorded at the moment Park is pressed.** That is what the driver said by pressing
 it, and DashPilot does not know when the order was actually handed over. One consequence is worth
 knowing: that delivery's [recorded pickup wait](pickup-wait.md) runs from its arrival to the moment
-of parking, not to the moment the bag changed hands.
+of parking, not to the moment the bag changed hands. So DashPilot records that **Park** recorded the
+pickup, and that wait is [left out of typical and median waits](pickup-wait.md#pickups-recorded-by-park),
+with a sentence beside the figure saying how many were. The switch's own footer says so.
 
 Nothing here is a detection. The panel's line says the pickup was **marked** when the driver parked,
 and its spoken form names this setting, so a listener knows the event came from their automation.
 
 Unlike the vehicle and the gas price, this switch is not copied onto anything. It is read at the
 moment Park is pressed and nowhere else, and turning it off changes the next press and no delivery
-already recorded.
+already recorded: a pickup Park recorded stays Park's, and stays out of typical waits.
 
 ## Accessibility
 
