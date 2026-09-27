@@ -654,8 +654,8 @@ struct HistoricalDeliveryCancellationServiceTests {
         // Both `deliveredAt` and `cancelledAt` were already in the format, and
         // `cancelled` was already one of the states a delivery could be exported
         // in. Nothing was added, removed, renamed or redefined.
-        #expect(object["formatVersion"] as? Int == 4)
-        #expect(ExportFormat.version == 4)
+        #expect(object["formatVersion"] as? Int == 5)
+        #expect(ExportFormat.version == 5)
     }
 
     @Test("CSV says the same thing through the columns it already has")

@@ -336,11 +336,20 @@ nonisolated struct PeriodDeliveriesExport: Equatable, Sendable, Codable {
     let pickupPlaceCount: Int
 
     /// The middle of the **individual** recorded waits in the period, not an
-    /// average of each place's median. `null` when none was recorded.
+    /// average of each place's median. `null` when none counts.
+    ///
+    /// **Redefined by format version 5**: waits whose pickup Park recorded
+    /// are left out, as they are on screen, and counted in
+    /// ``parkRecordedPickupCount``. Waits recorded before DashPilot kept how
+    /// (`unknown` on the delivery) are still in it.
     let medianPickupWaitSeconds: Int?
 
-    /// How many recorded waits that median is the middle of.
+    /// How many recorded waits that median is the middle of. Redefined with it.
     let pickupWaitSampleCount: Int
+
+    /// How many recorded waits the median leaves out because Park recorded
+    /// their pickup. Added by format version 5; `0` when none was.
+    let parkRecordedPickupCount: Int
 
     init(_ metrics: PeriodMetrics) {
         deliveredCount = metrics.deliverySummary.completed
@@ -349,11 +358,12 @@ nonisolated struct PeriodDeliveriesExport: Equatable, Sendable, Codable {
         pickupPlaceCount = metrics.pickupPlaceCount
         medianPickupWaitSeconds = ExportDuration.seconds(metrics.medianPickupWait)
         pickupWaitSampleCount = metrics.pickupWaitSampleCount
+        parkRecordedPickupCount = metrics.parkRecordedPickupCount
     }
 
     private enum CodingKeys: String, CodingKey {
         case deliveredCount, cancelledCount, inProgressCount, pickupPlaceCount
-        case medianPickupWaitSeconds, pickupWaitSampleCount
+        case medianPickupWaitSeconds, pickupWaitSampleCount, parkRecordedPickupCount
     }
 
     func encode(to encoder: any Encoder) throws {
@@ -364,6 +374,7 @@ nonisolated struct PeriodDeliveriesExport: Equatable, Sendable, Codable {
         try container.encode(pickupPlaceCount, forKey: .pickupPlaceCount)
         try container.encodeAlways(medianPickupWaitSeconds, forKey: .medianPickupWaitSeconds)
         try container.encode(pickupWaitSampleCount, forKey: .pickupWaitSampleCount)
+        try container.encode(parkRecordedPickupCount, forKey: .parkRecordedPickupCount)
     }
 }
 
