@@ -202,6 +202,40 @@ struct PickupProvenanceTests {
         #expect(delivery.pickupProvenance == .manual)
     }
 
+    // MARK: Recovering from a pickup Park recorded too early
+
+    /// The recovery path an accidental or early Park pickup already has, with
+    /// nothing new built for it: the delivery keeps every next step, its wait
+    /// stays out of every typical figure, and once the shift ends the instant
+    /// can be moved to the real handover by the existing correction.
+    @Test("A pickup Park recorded too early leaves the driver every next step, and the time correctable afterwards")
+    func earlyParkPickupIsRecoverable() throws {
+        let store = try makeStore()
+        let delivery = try parkedPickup(in: store)
+
+        #expect(delivery.state.nextAction == .complete, "Delivered is still the next step on the card")
+        #expect(PickupWaitSample(delivery)?.countsTowardTypicalWait == false, "Its wait is already left out")
+
+        try store.deliveries.markDelivered(delivery, at: at(40))
+        try store.shifts.endActiveShift(at: at(60))
+        let proposed = DeliveryLifecycleRecord(delivery).replacing(.pickedUp, with: at(27))
+        #expect(store.deliveries.timeCorrectionRefusal(on: delivery, to: proposed) == nil)
+        try store.deliveries.correctRecordedTimes(delivery, to: proposed)
+        #expect(delivery.pickupWait == 720, "The handover the driver remembers, recorded honestly")
+        #expect(delivery.recordedEvents.count == 4, "No event created, none removed")
+    }
+
+    @Test("A pickup Park recorded for an order that never came can still end as a cancellation")
+    func earlyParkPickupThenCancelled() throws {
+        let store = try makeStore()
+        let delivery = try parkedPickup(in: store)
+
+        try store.deliveries.cancelDelivery(delivery, at: at(25))
+        #expect(delivery.state == .cancelled)
+        #expect(delivery.pickupProvenance == .parkAutomation, "Who recorded the pickup is still on the record")
+        #expect(PickupWaitSample(delivery)?.countsTowardTypicalWait == false)
+    }
+
     // MARK: Logging
 
     @Test("The log line names the kind of recording and nothing else")
