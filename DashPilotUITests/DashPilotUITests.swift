@@ -6435,7 +6435,13 @@ final class DashPilotUITests: XCTestCase {
             "\(identifier) records the time that was chosen rather than the one it opened on"
         )
 
-        app.navigationBars.firstMatch.tap()
+        // A tap on the bar's own frame rather than on the bar as an element.
+        // Tapping the element asks XCUITest for a hit point first, and with the
+        // wheels' popover over the form that can come back as {-1, -1}: the tap
+        // then lands nowhere and the wheels stay up, which is how this failed on
+        // a CI runner. A coordinate inside the bar is outside the popover either
+        // way, and a touch there is what closes it.
+        app.navigationBars.firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         XCTAssertTrue(
             waitForDisappearance(of: app.pickerWheels.firstMatch),
             "The wheels close, so the rest of the form can be reached"
@@ -6991,7 +6997,7 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertTrue(economyField.waitForExistence(timeout: 5))
         replaceTappedField(economyField, with: "41", in: app)
         app.buttons["saveVehicleButton"].tap()
-        XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 5))
+        assertVehicleSheetClosed(in: app)
         goBack(in: app)
 
         let unmoved = app.descendants(matching: .any)["activeShiftVehicle"]
@@ -7212,7 +7218,7 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertEqual(XCTWaiter().wait(for: [focused], timeout: 5), .completed)
         economyField.typeText("34")
         app.buttons["saveVehicleButton"].tap()
-        XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 5))
+        assertVehicleSheetClosed(in: app)
         goBack(in: app)
 
         let next = app.descendants(matching: .any)["nextShiftVehicle"]
@@ -7948,7 +7954,7 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertEqual(XCTWaiter().wait(for: [focused], timeout: 5), .completed)
         economyField.typeText("34")
         app.buttons["saveVehicleButton"].tap()
-        XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 5))
+        assertVehicleSheetClosed(in: app)
 
         let summary = app.descendants(matching: .any)["defaultVehicleSummary"]
         XCTAssertTrue(scrollToTop(reaching: summary, in: app), "The default card is at the top")
@@ -8020,6 +8026,22 @@ final class DashPilotUITests: XCTestCase {
         economyField.typeText(milesPerGallon)
 
         app.buttons["saveVehicleButton"].tap()
+        assertVehicleSheetClosed(in: app)
+    }
+
+    /// Waits for the vehicle sheet to be **gone**, and then for Settings.
+    ///
+    /// Waiting for the `Settings` bar alone is not enough: the bar exists behind
+    /// the sheet the whole time it animates away, so a journey that proceeds on
+    /// it taps a row the sheet is still covering, the tap does nothing, and the
+    /// journey fails on the assertion after it. That is the race `addTip`
+    /// already closes, and it failed a CI run here once.
+    @MainActor
+    private func assertVehicleSheetClosed(in app: XCUIApplication) {
+        XCTAssertTrue(
+            waitForDisappearance(of: app.textFields["vehicleMilesPerGallonField"]),
+            "The vehicle sheet closes back to Settings"
+        )
         XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 5))
     }
 
@@ -8031,6 +8053,11 @@ final class DashPilotUITests: XCTestCase {
 
         replaceTappedField(app.textFields["currentGasPriceField"], with: price, in: app)
         app.buttons["saveCurrentGasPriceButton"].tap()
+        // Gone, not merely behind: see `assertVehicleSheetClosed(in:)`.
+        XCTAssertTrue(
+            waitForDisappearance(of: app.textFields["currentGasPriceField"]),
+            "The gas price sheet closes back to Settings"
+        )
         XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 5))
     }
 
@@ -8353,6 +8380,13 @@ final class DashPilotUITests: XCTestCase {
         app.buttons["shiftDetailDeliveryEarningsButton"].firstMatch.tap()
         typeDeliveryAmount(text, in: app)
         app.buttons["saveDeliveryEarningsButton"].tap()
+        // Gone, not merely saved: a caller reads the row behind the sheet next,
+        // and a row read while the sheet is still animating away can be read
+        // before it shows what was saved. The same race `addTip` closes.
+        XCTAssertTrue(
+            waitForDisappearance(of: app.textFields["deliveryEarningsAmountField"]),
+            "The earnings sheet closes back to the shift"
+        )
     }
 
     /// Records one additional tip from the tips sheet, which must already be
