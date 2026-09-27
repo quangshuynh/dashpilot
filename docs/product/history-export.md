@@ -46,7 +46,7 @@ therefore carries none, because no expense belongs to a shift. See
 
 ## Export format version
 
-Every file states `formatVersion: 5`.
+Every file states `formatVersion: 6`.
 
 **This is not the SwiftData schema version**, which is currently v18. The two describe different
 things and are free to move independently:
@@ -65,13 +65,34 @@ Exports are never called "v13".
 
 ### Version history
 
+#### 6: pickups Resume Driving recorded
+
+Under [Pick up orders with Park & Resume](settings.md#pick-up-orders-with-park-resume), Park records
+`Arrived at Pickup` and Resume Driving records `Picked Up`, and the store says the pickup was
+Resume Driving's. A wait it closes runs from parking to driving away, so the app's typical and
+median waits [leave it out](pickup-wait.md#pickups-recorded-automatically). Evaluated against the
+rule above and **bumped to 6**:
+
+- **An enumeration gained a value:** `pickupRecordedBy` and the CSV's `deliveryPickupRecordedBy` can
+  now say `resumeAutomation`, which a reader that knew every value version 5 could write would not
+  recognise.
+- **Redefined:** `summary.deliveries.medianPickupWaitSeconds` and `pickupWaitSampleCount` now also
+  leave out waits whose pickup Resume Driving recorded, exactly as the screen does. No file written
+  before this build would carry a different number, because no earlier store records such a pickup.
+
+One thing was **added**: `summary.deliveries.resumeRecordedPickupCount`, how many waits the median
+leaves out because Resume Driving recorded them (`0` when none). `parkRecordedPickupCount` is **not**
+redefined: it still counts pickups Park recorded under the retired setting. No CSV column was added
+or moved; it stays at 42. The arrival Park now records is not labelled, because it moves no figure:
+it is recorded when the driver parks, which is when a driver taps `Arrived` too.
+
 #### 5: which pickup waits the period's median is taken over
 
-A pickup can now be recorded by Park, under the driver's
-[Pick up order when parking](settings.md#pick-up-order-when-parking) setting, as well as by the
-driver's own `Picked Up` step, and the store records which. A wait Park closes ends when the driver
-parked, usually before the handover, so the app's typical and median waits
-[leave it out](pickup-wait.md#pickups-recorded-by-park). Evaluated against the rule above and
+A pickup could be recorded by Park, under the driver's `Pick up order when parking` setting (since
+replaced by [Pick up orders with Park & Resume](settings.md#pick-up-orders-with-park-resume)), as
+well as by the driver's own `Picked Up` step, and the store records which. A wait Park closes ends
+when the driver parked, usually before the handover, so the app's typical and median waits
+[leave it out](pickup-wait.md#pickups-recorded-automatically). Evaluated against the rule above and
 **bumped to 5**, because two fields changed meaning:
 
 - **Redefined:** `summary.deliveries.medianPickupWaitSeconds` and `pickupWaitSampleCount` now leave

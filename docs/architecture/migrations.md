@@ -26,13 +26,18 @@ rather than a store reset.
 | 16.0.0 | Adds the `RouteSuspension` entity and a cascading `Shift.routeSuspensions` relationship, holding the stretches the driver recorded the vehicle as parked. Backfills nothing |
 | 17.0.0 | Adds `DriverSettings.recordsPickupWhenParking`, a `Bool` declared `false`, holding whether pressing Park may also record a pickup. Backfills nothing; every migrated row reads off |
 | 18.0.0 | Adds `Delivery.pickupProvenanceRawValue`, an optional `String` holding how a pickup was recorded. Backfills nothing; every migrated pickup reads as unknown |
+| 19.0.0 | Adds `RouteSuspension.pickupWorkflowDeliveryID`, an optional `UUID` naming the delivery a parked stretch was for, and `DriverSettings.usesParkAndResumeForPickups` and `handlesStackedOrdersInOrder`, two `Bool`s declared `false`; removes `DriverSettings.recordsPickupWhenParking`. Backfills nothing; the workflow reads off and no stretch is associated |
 
-The current version is **v18**. Field-level detail is on [Data model](../reference/data-model.md).
+The current version is **v19**. Field-level detail is on [Data model](../reference/data-model.md).
 
-`DashPilotSchemaV1` through `DashPilotSchemaV17` hold frozen copies of their models rather than
+`DashPilotSchemaV1` through `DashPilotSchemaV18` hold frozen copies of their models rather than
 reusing the file-scope types, which have moved on. The plan then describes where a store is coming
 from as truthfully as where it is going, and the copies are never used at runtime outside
 migration.
+
+`DashPilotSchemaV18` was frozen in the interval that added v19, with copies of all eleven of its
+models. v19 moves the route suspension and the settings row, and reusing the file-scope types under
+v18 would describe every v18 store as one whose parked stretches already named a delivery.
 
 `DashPilotSchemaV17` was frozen in the interval that added v18, with copies of all eleven of its
 models. v18 moves the delivery, and reusing the file-scope types under v17 would describe every v17
@@ -347,8 +352,8 @@ the driver's behalf. A migrated settings row therefore reads off, and a store wi
 at all reads off too, without one being created by the read.
 
 No shift, delivery, suspension or export field moves. The preference is current configuration and is
-read only at the moment Park is pressed. See
-[Pick up order when parking](../product/settings.md#pick-up-order-when-parking).
+read only at the moment Park is pressed. v19 retired it; see
+[Pick up orders with Park & Resume](../product/settings.md#pick-up-orders-with-park-resume).
 
 ### v17 to v18
 
@@ -363,7 +368,26 @@ the same two rows. So every migrated pickup reads as **unknown**, a delivery wit
 without one, and nothing later infers the kind from timestamps, suspensions or the setting.
 
 Unknown pickups keep counting toward typical and median waits, as they always did. See
-[Pickups recorded by Park](../product/pickup-wait.md#pickups-recorded-by-park).
+[Pickups recorded automatically](../product/pickup-wait.md#pickups-recorded-automatically).
+
+### v18 to v19
+
+Three columns and one removal, applied lightweight, and **nothing written**.
+
+`RouteSuspension.pickupWorkflowDeliveryID` is the delivery the Park and Resume workflow chose for a
+parked stretch. It is stored because Resume Driving has to record the pickup of **that** delivery,
+and Resume is often pressed from the Lock Screen in a process that is not the one that parked; an
+identifier held in memory would be gone, and choosing again could pick up a different stacked order.
+It is an identifier rather than a relationship, so the stretch still belongs to the shift alone. The
+tempting backfill associates each recorded stretch with the delivery whose arrival or pickup falls at
+its instants, which is inference from a coincidence, so every migrated stretch names no delivery.
+
+The two new settings columns are declared `false`. The removed `recordsPickupWhenParking` let Park
+record `Picked Up`; the workflow that replaces it records `Arrived at Pickup` on Park and `Picked Up`
+on Resume Driving, which is a different automation, and agreeing to the old one was not agreeing to
+this. So its value is not carried over: the workflow reads off until the driver turns it on. Nothing
+about a delivery moves, including how its pickup was recorded. See
+[Pick up orders with Park & Resume](../product/settings.md#pick-up-orders-with-park-resume).
 
 ## Proving a migration rather than assuming it
 

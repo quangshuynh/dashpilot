@@ -37,11 +37,12 @@ A delivery contributes exactly one recorded wait when **all** of these hold:
 
 Everything else contributes nothing. Not a zero, not an estimate, not a partial figure — nothing.
 
-A pickup recorded by [Pick up order when parking](settings.md#pick-up-order-when-parking) is an
-ordinary `pickedUpAt`, taken at the moment the driver pressed Park. That delivery's wait therefore
-runs from its arrival to the moment of parking, which is usually before the order was handed over,
-and it is counted like any other. The setting never records an arrival, so it never adds a wait of
-zero.
+A pickup recorded by [Pick up orders with Park & Resume](settings.md#pick-up-orders-with-park-resume) is an ordinary `pickedUpAt`, taken at
+the moment the driver pressed Resume Driving, and its arrival is an ordinary `arrivedAtPickupAt`,
+taken when they pressed Park. That delivery's wait therefore runs from parking to driving away. It
+is recorded like any other, and left out of typical waits for the reason given under
+[Pickups recorded automatically](#pickups-recorded-automatically). The two steps are separate
+presses, so the workflow never records an arrival and a pickup at one instant.
 
 ### Cancelled deliveries
 
@@ -61,51 +62,70 @@ refuses a timestamp earlier than the last recorded event. If one ever existed in
 is **excluded**, not clamped to zero and not repaired. A zero standing in for an impossible interval
 would enter a place's history as a real wait of no length.
 
-## Pickups recorded by Park
+## Pickups recorded automatically
 
-With [Pick up order when parking](settings.md#pick-up-order-when-parking) on, pressing Park can
-record `Picked Up` for the one delivery at its pickup. That pickup is recorded when the driver
-**parks**, usually before they walk in, so the wait it closes runs from the arrival to parking rather
-than to the handover. DashPilot records **how** each pickup was recorded, with the event:
+With [Pick up orders with Park & Resume](settings.md#pick-up-orders-with-park-resume) on, Park records
+`Arrived at Pickup` and Resume Driving records `Picked Up`. The wait between them is recorded exactly,
+and it runs from **parking** to **driving away**: the walk in, the wait inside, the walk back, and
+however long the driver sat in the vehicle before pressing Resume Driving. A wait recorded with the
+card's own buttons ends when the driver says the order is in hand. DashPilot records **how** each
+pickup was recorded, with the event:
 
 | How the pickup was recorded | Stored as | In a typical or median wait |
 | --- | --- | --- |
 | The driver's own `Picked Up` step, on the card, by voice or from the Lock Screen | `manual` | Counted |
-| Park, under the setting | `parkAutomation` | **Left out, and counted apart** |
+| Resume Driving, under the workflow | `resumeAutomation` | **Left out, and counted apart** |
+| Park, under the retired `Pick up order when parking` setting | `parkAutomation` | **Left out, and counted apart** |
 | Before DashPilot kept this (a store from before schema v18) | nothing: unknown | Counted, as it always was |
 
-Why Park's are left out, measured rather than assumed: through the app's own median, one Park pickup
-at a place with one other halves the typical wait shown (8:15 becomes 4:15); as half of a place's
-pickups they halve its median; and once they are most of them, the median is the time from arriving
-to parking and says nothing about waiting for an order. The figure would then move because of a
-setting, not because of the place.
+Which waits count is decided by how the **pickup** was recorded. A wait that Park began and the
+driver's own `Picked Up` step ended counts: parking is when a driver taps Arrived too.
+
+Why Resume Driving's are left out, measured rather than assumed, through the app's own median over
+the synthetic waits `4, 6, 7, 9, 12` minutes (median 7:00), with a minute's walk each way:
+
+| What is in the sample | Median |
+| --- | --- |
+| The five waits, recorded by hand | 7:00 |
+| The same five visits recorded by Park and Resume, leaving at once | 9:00 |
+| The same, with five minutes in the vehicle before resuming | 14:00 |
+| The five by hand plus one by Park and Resume | 8:00 |
+| Half and half, leaving at once / after a minute / after five minutes | 8:30 / 9:00 / 11:30 |
+| Two waits, `8` by hand and `10` by Park and Resume | 9:00 |
+
+The workflow's waits are never short, and they are long by exactly the walks and the time spent in
+the vehicle, which DashPilot does not know. Mixed in, the median climbs with the share of pickups
+recorded this way, so it would describe how often the driver uses the setting rather than the place.
+The retired Park-when-parking setting had the same effect in the other direction (its waits ended
+before the handover and halved a median at half the sample). Neither is adjusted, and neither is
+estimated.
 
 Left out is never silent. Wherever a figure leaves waits out, it says how many beside it, on screen
-and to VoiceOver:
+and to VoiceOver, naming which control recorded them:
 
 ```
 Typical recorded wait
 7 min
 Median of 2 recorded pickups
-1 pickup recorded when you parked is not counted: it ends when you parked, not at the handover.
+1 pickup recorded when you resumed driving is not counted: it ends when you drove off, not at the handover.
 ```
 
-A place whose only waits were recorded by Park shows **no** typical wait, never a zero, with the same
-sentence. The list of waits under a place's summary lists the waits the figure is taken over, and
-says "counted" rather than "recorded" when it leaves any out. The wait itself is kept exactly as
-recorded: it still appears on its delivery, in the export, and in the place's own history of
-deliveries. Nothing is scaled, corrected or replaced, and nothing estimates when the order was
+A place whose only waits were recorded automatically shows **no** typical wait, never a zero, with
+the same sentence. The list of waits under a place's summary lists the waits the figure is taken
+over, and says "counted" rather than "recorded" when it leaves any out. The wait itself is kept
+exactly as recorded: it still appears on its delivery, in the export, and in the place's own history
+of deliveries. Nothing is scaled, corrected or replaced, and nothing estimates when the order was
 actually handed over.
 
 **Unknown is counted, and is never relabelled.** A pickup recorded before schema v18 has no
 provenance, and migration deliberately did not write `manual` into it. The one build that could
 already record a pickup by parking left no trace of which pickups it recorded that way, so those stay
-unknown and stay counted; see [Limitations](../reference/limitations.md#pick-up-order-when-parking).
+unknown and stay counted; see [Limitations](../reference/limitations.md#automated-pickups).
 
 **Corrections and settings.** Correcting a pickup's recorded time moves the instant and rederives
-every figure at once, and **keeps** its provenance: a Park pickup corrected to the real handover is
-still Park's, and still left out. Turning the setting on or off changes the next press of Park and
-nothing already recorded.
+every figure at once, and **keeps** its provenance: an automated pickup corrected to the real
+handover is still automated, and still left out. Turning the setting on or off changes the next
+press and nothing already recorded.
 
 ## Renaming and merging a place
 

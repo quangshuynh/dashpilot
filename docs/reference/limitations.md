@@ -66,36 +66,44 @@ and one they cannot.
 - **No widget, control, watch app or notification.** The intents and the shift's Live Activity are
   the whole off-screen surface.
 
-## Pick up order when parking
+## Automated pickups
 
-- **A recorded pickup is an assumption the driver configured, not an observation.** With the setting
-  on, pressing Park records `Picked Up` for the one delivery at its pickup at the moment of parking.
-  DashPilot does not know whether the order was handed over, or when.
-- **That delivery's recorded pickup wait ends when the driver parked**, which is usually earlier than
-  the handover. It is therefore left out of typical and median waits, and counted apart beside them.
-  A driver who always uses the setting sees no typical wait at all, and is told why: DashPilot does
-  not know how long they waited, and does not estimate it.
-- **A Park pickup corrected to the real handover is still left out.** Correcting a time keeps how the
-  pickup was recorded, and DashPilot keeps no record that a correction happened, so there is nothing
-  that could say the corrected instant is the driver's rather than Park's.
+These are the limits of `Pick up orders with Park & Resume`, and of the retired `Pick up order when
+parking` whose pickups stores may still hold.
+
+- **Both steps are assumptions the driver configured, not observations.** With the workflow on, Park
+  records `Arrived at Pickup` and Resume Driving records `Picked Up`. DashPilot does not know which
+  restaurant the vehicle stopped at, whether the order was handed over, or when.
+- **It cannot tell a pickup stop from a customer stop.** With an order still to collect and stacked
+  orders handled, parking at a customer's door marks that other order `Arrived at Pickup`. Undo takes
+  it back; after the Undo window, the step stands until the finished shift's time correction, like
+  any mis-tap.
+- **With stacked orders handled, the order is the delivery number.** A driver collecting Delivery 4
+  before Delivery 3 gets Delivery 3 marked, and uses Undo and the cards. DashPilot does not guess
+  from distance, place or pay.
+- **Resume Driving records nothing for a stretch parked before the workflow existed**, or one parked
+  with the workflow off, because such a stretch was not for any delivery.
+- **Undo lasts a few seconds, in the app that pressed it, and not across a relaunch.** Siri, Shortcuts
+  and the Lock Screen offer none. After it, a step cannot be removed on a running shift, the same as
+  for the card's own buttons: the delivery still offers its next step and `Cancel`, and the finished
+  shift's delivery-time correction can move the instant.
+- **An automated pickup's wait is left out of typical and median waits**, and counted apart beside
+  them. A Resume Driving wait runs from parking to driving away, and a retired Park wait ended when the
+  driver parked. A driver who always uses the workflow sees no typical wait at all, and is told why:
+  DashPilot does not know how long they waited inside, and does not estimate it.
+- **An automated pickup corrected to the real handover is still left out.** Correcting a time keeps
+  how the pickup was recorded, and DashPilot keeps no record that a correction happened.
+- **Turning the old switch on was not carried over.** After updating, the workflow is off until the
+  driver turns it on, whatever `Pick up order when parking` was set to.
 - **Pickups a v17 build recorded by parking are unknown, and are counted.** That build kept no trace
   of which pickups Park recorded, so they are indistinguishable from the driver's own and stay in the
-  figures, as they were. Only the one build that shipped the setting before provenance can have
-  written any.
-- **A pickup recorded by mistake cannot be taken back on a running shift.** There is no undo for
-  `Picked Up` while the shift runs, the same as for the card's own button. Nothing is stuck: the
-  delivery still offers `Delivered` and `Cancel`, its wait is already out of the typical figures, and
-  the finished shift's delivery-time correction can move the instant afterwards. A pickup that never
-  happened cannot be removed, only followed by a cancellation.
-- **Two deliveries at a pickup record neither**, even when the driver knows which one they are
-  collecting. The panel says so and the card records it.
-- **A delivery still `Accepted` is never advanced**, so a driver who did not record the arrival gets
-  parking only.
-- **The line saying what Park recorded is shown only in the app that pressed it.** Voice speaks it;
-  the Lock Screen shows only the delivery's new state; a stretch parked from elsewhere shows no line
-  in the app.
+  figures, as they were.
+- **The line saying what the workflow recorded is shown only in the app that pressed it.** Voice
+  speaks it; the Lock Screen shows only the delivery's new state.
 - **Unknown provenance is not shown as such in the app.** A pickup recorded before v18 reads as an
   ordinary `Picked up`; only the export says `unknown`.
+- **Nothing was seen on hardware.** The workflow was asked for after a real shift with the earlier
+  switch; this one has been exercised on the simulator only.
 
 ## Shift end-time correction
 
