@@ -44,6 +44,9 @@ struct ActiveShiftPanel: View {
     let park: () -> Void
     /// Records that the driver is driving again.
     let resumeDriving: () -> Void
+    /// What the press of Park that began this parked stretch did about a pickup,
+    /// when this screen made it. `nil` for a stretch parked elsewhere.
+    var parkPickup: ParkPickupOutcome?
 
     /// How often the stored route is read again while the shift is running.
     ///
@@ -471,6 +474,34 @@ struct ActiveShiftPanel: View {
                 """
             )
             .accessibilityIdentifier("parkedShiftNotice")
+
+            parkPickupNotice
+        }
+    }
+
+    /// What the driver's pickup-when-parking setting did, under the parked
+    /// notice it belongs to.
+    ///
+    /// A line and not an alert: parking is the tap before a driver walks into a
+    /// shop, and nothing here should stand between them and the door. A symbol
+    /// and words carry the result, never the tint alone, and the spoken form
+    /// names the setting so a listener knows the event came from their
+    /// automation rather than from anything DashPilot observed.
+    @ViewBuilder
+    private var parkPickupNotice: some View {
+        if let parkPickup, let statement = parkPickup.statement {
+            Label {
+                Text(statement)
+                    .dashFont(.supporting)
+                    .fixedSize(horizontal: false, vertical: true)
+            } icon: {
+                Image(systemName: parkPickup.symbolName)
+                    .foregroundStyle(parkPickup.recordedPickup ? Color.teal : Color.secondary)
+            }
+            .foregroundStyle(parkPickup.recordedPickup ? .primary : .secondary)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(parkPickup.spokenStatement ?? statement)
+            .accessibilityIdentifier("parkPickupNotice")
         }
     }
 

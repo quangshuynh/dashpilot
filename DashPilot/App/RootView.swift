@@ -25,6 +25,15 @@ struct RootView: View {
 
     @State private var lifecycleError: ShiftLifecycleError?
 
+    /// What the last press of Park in this screen did about a pickup, and the
+    /// instant that parking began.
+    ///
+    /// Screen state rather than a stored fact: the delivery's own timestamp is
+    /// the record, and this is only the sentence saying the tap wrote it. Keyed
+    /// to the suspension's start so the line is shown only for the stretch it
+    /// describes, and never under a later one parked from the Lock Screen.
+    @State private var parkPickup: (parkedAt: Date, outcome: ParkPickupOutcome)?
+
     /// Exporting every completed shift.
     @State private var isExportingHistory = false
 
@@ -61,7 +70,8 @@ struct RootView: View {
                             resume: resumeShift,
                             end: endShift,
                             park: park,
-                            resumeDriving: resumeDriving
+                            resumeDriving: resumeDriving,
+                            parkPickup: parkPickupOutcome(for: activeShift)
                         )
                     } else {
                         StartShiftPanel(start: startShift)
@@ -293,9 +303,21 @@ struct RootView: View {
         // as parked. `synchronize()` afterwards restarts capture if the write
         // did not go through.
         routeCapture.prepareForRouteSuspension()
-        perform { try ShiftService(context: modelContext).parkActiveShift() }
+        // The operation the intents and the Lock Screen run too, so the pickup
+        // setting behaves the same from every surface.
+        var result: ParkVehicleResult?
+        perform { result = try ParkVehicleService(context: modelContext).park() }
+        parkPickup = result.flatMap { result in
+            result.shift.openRouteSuspension.map { (parkedAt: $0.startedAt, outcome: result.pickup) }
+        }
         routeCapture.synchronize()
         liveActivity.reconcile()
+    }
+
+    /// The pickup line for the stretch the shift is parked in now, or `nil`.
+    private func parkPickupOutcome(for shift: Shift) -> ParkPickupOutcome? {
+        guard let parkPickup, shift.openRouteSuspension?.startedAt == parkPickup.parkedAt else { return nil }
+        return parkPickup.outcome
     }
 
     private func resumeDriving() {
@@ -303,6 +325,7 @@ struct RootView: View {
         // that is driving again, so a refused or failed write cannot leave it
         // recording a walk.
         perform { try ShiftService(context: modelContext).resumeDrivingOnActiveShift() }
+        parkPickup = nil
         routeCapture.synchronize()
         liveActivity.reconcile()
     }

@@ -164,8 +164,11 @@ timestamp recorded at the moment the driver says so is the accurate one.
 same sentence they would read, and adds exactly one rule of its own.
 
 That rule is which delivery a spoken step meant. It is about deliveries alone: the two parked actions
-are shift operations, read no delivery in either direction and are refused by no number of them,
-because one driver has one vehicle however many orders are in the car. On screen the question does not arise: with three
+are shift operations and are refused by no number of deliveries, because one driver has one vehicle
+however many orders are in the car. Park runs `ParkVehicleService`, which the app's button runs too:
+it saves the suspension through `ShiftService`, and only then, if the driver turned on `Pick up order
+when parking` and exactly one delivery is at its pickup, calls `DeliveryService.markPickedUp` for it.
+A refused pickup never undoes the parking, and the suspension never joins a delivery. On screen the question does not arise: with three
 deliveries running there are three cards, each with its own button. A sentence has no card, so a step
 is recorded only while **exactly one** delivery is in progress; with more, nothing is recorded and the
 refusal names the count. That is `DeliveryService`'s own principle, where every mutation takes its

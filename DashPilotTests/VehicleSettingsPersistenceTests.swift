@@ -76,7 +76,9 @@ struct VehicleSettingsPersistenceTests {
             "The selected vehicle is an identifier, so a deleted profile reads as no selection"
         )
         #expect(
-            Set(settings.properties.map(\.name)) == ["id", "gasPricePerGallonAmount", "selectedVehicleID"]
+            Set(settings.properties.map(\.name))
+                == ["id", "gasPricePerGallonAmount", "selectedVehicleID", "recordsPickupWhenParking"],
+            "v17 adds the one preference that is a behaviour rather than a default"
         )
     }
 

@@ -174,13 +174,19 @@ struct IntentLifecycleService {
     /// records no route either and already has its own reason for the stop.
     /// Nothing here infers **why** the driver parked.
     ///
+    /// It runs ``ParkVehicleService/park(at:)``, the operation the app's own
+    /// button runs, so the driver's pickup-when-parking setting applies here
+    /// exactly as it does there. The Live Activity's Park control reaches this
+    /// method too, which makes that one operation behind all three surfaces.
+    ///
     /// The confirmation names the two facts the state is easy to confuse, because
-    /// a driver who asked for this from a doorway has no screen to check.
+    /// a driver who asked for this from a doorway has no screen to check, and
+    /// then what the setting recorded, if anything.
     func parkVehicle(at date: Date = .now) throws -> IntentLifecycleOutcome {
-        _ = try shiftRefusal { try ShiftService(context: context).parkActiveShift(at: date) }
+        let result = try shiftRefusal { try ParkVehicleService(context: context).park(at: date) }
         reconcileActivity()
         AppLog.intents.info("Intent recorded the vehicle as parked")
-        return .vehicleParked
+        return .vehicleParked(pickup: result.pickup)
     }
 
     /// Records that the driver is driving again.

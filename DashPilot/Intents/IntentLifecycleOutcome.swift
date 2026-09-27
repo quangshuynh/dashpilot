@@ -43,7 +43,10 @@ nonisolated enum IntentLifecycleOutcome: Equatable, Sendable {
     /// omission: parking subtracts nothing, so there is no figure it moves. What
     /// the driver needs told is the pair of facts the state is easy to confuse:
     /// the route has stopped, and the shift has not.
-    case vehicleParked
+    ///
+    /// `pickup` is what the driver's pickup-when-parking setting did, which is
+    /// ``ParkPickupOutcome/notEnabled`` for everybody who never turned it on.
+    case vehicleParked(pickup: ParkPickupOutcome)
 
     /// The driver recorded that they are driving again, having had the vehicle
     /// recorded as parked for `parkedDuration` in total over this shift.
@@ -103,16 +106,23 @@ nonisolated enum IntentLifecycleOutcome: Equatable, Sendable {
             } else {
                 "Shift resumed. Open DashPilot to start recording your route again."
             }
-        case .vehicleParked:
+        case let .vehicleParked(pickup):
             // Two facts, and they are the two a driver can confuse. The route
             // has stopped, which is what parking is for; the shift has not,
             // which is what parking is not. A spoken confirmation is the only
             // report this driver gets, and they are standing away from the car
-            // with no screen to check.
-            """
-            Vehicle parked. Route recording is stopped until you resume driving. \
-            Your shift is still running and its working time is still counting.
-            """
+            // with no screen to check. What the pickup setting recorded, if it
+            // recorded or declined anything, follows as a third sentence, so a
+            // driver who never turned it on hears exactly what they always did.
+            [
+                """
+                Vehicle parked. Route recording is stopped until you resume driving. \
+                Your shift is still running and its working time is still counting.
+                """,
+                pickup.statement
+            ]
+            .compactMap { $0 }
+            .joined(separator: " ")
         case let .drivingResumed(parkedDuration):
             // The same caution a spoken resume carries, for the same reason: a
             // capture session can only be started with the app on screen, so
