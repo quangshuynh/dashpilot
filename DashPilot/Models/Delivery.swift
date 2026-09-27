@@ -381,8 +381,7 @@ nonisolated final class Delivery {
     /// - Throws: ``DeliveryError`` if the delivery has finished, the event is
     ///   already recorded, or `date` precedes the last recorded event.
     func markArrivedAtPickup(at date: Date) throws {
-        try validateTransition(at: date)
-        guard arrivedAtPickupAt == nil else { throw DeliveryError.alreadyRecorded(.arrivedAtPickup) }
+        if let refusal = refusal(recording: .arrivedAtPickup, at: date) { throw refusal }
         arrivedAtPickupAt = date
     }
 
@@ -396,11 +395,30 @@ nonisolated final class Delivery {
     ///   already recorded, the arrival was never recorded, or `date` precedes
     ///   the last recorded event.
     func markPickedUp(at date: Date, recordedBy provenance: PickupProvenance = .manual) throws {
-        try validateTransition(at: date)
-        guard pickedUpAt == nil else { throw DeliveryError.alreadyRecorded(.pickedUp) }
-        guard arrivedAtPickupAt != nil else { throw DeliveryError.outOfOrder(missing: .arrivedAtPickup) }
+        if let refusal = refusal(recording: .pickedUp, at: date) { throw refusal }
         pickedUpAt = date
         pickupProvenanceRawValue = provenance.rawValue
+    }
+
+    /// Why recording one of the two pickup events at `date` would be refused,
+    /// or `nil` when it would be recorded.
+    ///
+    /// **The rule ``markArrivedAtPickup(at:)`` and ``markPickedUp(at:recordedBy:)``
+    /// apply**, read without writing, so a caller recording the same event for
+    /// several deliveries in one act can judge every one of them before it
+    /// writes any. Only the two pickup events are answered here; asking about
+    /// any other stage is a caller defect and reads as out of order.
+    func refusal(recording stage: DeliveryState, at date: Date) -> DeliveryError? {
+        if let shared = transitionRefusal(at: date) { return shared }
+        switch stage {
+        case .arrivedAtPickup:
+            return arrivedAtPickupAt == nil ? nil : .alreadyRecorded(.arrivedAtPickup)
+        case .pickedUp:
+            guard pickedUpAt == nil else { return .alreadyRecorded(.pickedUp) }
+            return arrivedAtPickupAt == nil ? .outOfOrder(missing: .arrivedAtPickup) : nil
+        case .accepted, .delivered, .cancelled:
+            return .outOfOrder(missing: stage)
+        }
     }
 
     /// How the recorded pickup was written, or `nil` when there is no pickup or
@@ -814,9 +832,15 @@ nonisolated final class Delivery {
     /// The two rules every transition shares: a finished delivery does not
     /// transition again, and the lifecycle does not run backwards.
     private func validateTransition(at date: Date) throws {
+        if let refusal = transitionRefusal(at: date) { throw refusal }
+    }
+
+    /// The two rules every transition shares, read without throwing.
+    private func transitionRefusal(at date: Date) -> DeliveryError? {
         let current = state
-        guard current.isActive else { throw DeliveryError.alreadyFinished(current) }
-        guard date >= lastEventAt else { throw DeliveryError.timestampPrecedesLastEvent }
+        guard current.isActive else { return .alreadyFinished(current) }
+        guard date >= lastEventAt else { return .timestampPrecedesLastEvent }
+        return nil
     }
 
     // MARK: Derived intervals
