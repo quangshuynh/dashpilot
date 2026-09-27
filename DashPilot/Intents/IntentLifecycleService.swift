@@ -258,7 +258,7 @@ struct IntentLifecycleService {
         case .arriveAtPickup:
             try deliveryRefusal { try service.markArrivedAtPickup(delivery, at: date) }
         case .pickUp:
-            try deliveryRefusal { try service.markPickedUp(delivery, at: date) }
+            try deliveryRefusal { try service.markPickedUp(delivery, at: date, recordedBy: .manual) }
         case .complete:
             try deliveryRefusal { try service.markDelivered(delivery, at: date) }
         case .start, nil:

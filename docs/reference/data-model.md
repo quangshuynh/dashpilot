@@ -1,7 +1,7 @@
 # Data model
 
 Eleven persisted entities, and a small set of value types derived from them. Current schema
-version: **v17**.
+version: **v18**.
 
 ## `Shift`
 
@@ -181,6 +181,7 @@ none are kept, because nothing implemented reads them.
 | `acceptedAt` | `Date` | Acceptance is the delivery's creation, not an optional event |
 | `arrivedAtPickupAt` | `Date?` | `nil` until the driver records reaching the pickup |
 | `pickedUpAt` | `Date?` | `nil` until the driver records collecting the order |
+| `pickupProvenanceRawValue` | `String?` | Private. How `pickedUpAt` was recorded: `manual` (the driver's own step, on any surface) or `parkAutomation` (Park, under the setting). Written with `pickedUpAt` by `markPickedUp(at:recordedBy:)` and nowhere else, and never cleared, because nothing clears a pickup. `nil` beside a pickup means **unknown**: recorded before v18, and never inferred |
 | `deliveredAt` | `Date?` | Terminal. Cleared by exactly two corrections: reopening a delivery on a running shift, and correcting a historical completion to a cancellation |
 | `cancelledAt` | `Date?` | Terminal. Set without erasing the events that preceded it. A historical correction sets it to the delivery's own former `deliveredAt` rather than to a new instant |
 | `offer` | `Offer?` | The accepted offer this delivery arrived in. Optional because SwiftData models a reference that way, and because a pre-v12 store had none until the migration gave each delivery its own. It groups and does not govern: no timestamp, figure, fetch or delete rule reads it |
@@ -198,6 +199,7 @@ Derived, never stored:
 | `isActive` | Neither delivered nor cancelled |
 | `lastEventAt` | The most recent recorded event, which the next one may not precede |
 | `pickupWait` | `pickedUpAt - arrivedAtPickupAt`, or `nil` if either end is missing or the pickup precedes the arrival |
+| `pickupProvenance` | A `PickupProvenance`, or `nil` when there is no pickup or it is unknown. Tell the two apart by `pickedUpAt` |
 | `completedDuration` | `deliveredAt - acceptedAt`, or `nil` unless the delivery was delivered |
 | `grossEarnings` | The stored decimal as a `Money`, or `nil` |
 | `expectedEarnings` | The stored expected decimal as a `Money`, or `nil`. No rate is derived from it, here or anywhere |
@@ -210,7 +212,7 @@ Derived, never stored:
 | `makeHistoricalOffer()` | The v11 to v12 migration's one write: the one-delivery offer a delivery recorded before offers existed belongs in. `nil`, changing nothing, for a delivery that already holds one or belongs to no shift |
 | `move(into:)` | The one place a delivery's grouping changes. Returns the offer it left, so the caller can decide what happens to an offer left holding nothing. Refuses another shift's offer, the offer it is already in, and an offer accepted after this delivery was |
 
-`markArrivedAtPickup(at:)`, `markPickedUp(at:)` and `markDelivered(at:)` refuse a skipped step, a
+`markArrivedAtPickup(at:)`, `markPickedUp(at:recordedBy:)` and `markDelivered(at:)` refuse a skipped step, a
 repeated event, a transition after a terminal state, and a timestamp earlier than the last recorded
 event. `cancel(at:)` is allowed from every active state. `setGrossEarnings(_:)` rejects a negative
 amount and an amount on a delivery that is still in progress; a cancelled delivery may carry one, and
@@ -443,6 +445,7 @@ The row is created the first time the driver opens Settings. A migration never c
 | 15.0.0 | Adds `VehicleProfile`, `DriverSettings` and `Shift.fuelVehicleName`. Lightweight, and nothing is backfilled: a v14 store holds no evidence of which vehicle any shift was worked in, so no profile is invented, no settings row is created and no shift is given a name |
 | 16.0.0 | Adds `RouteSuspension` and a cascading `Shift.routeSuspensions`. Lightweight, and nothing is backfilled: a gap in a v15 route is left by a pause, a lost permission or a terminated process just as readily as by a driver walking into a shop, and the route holds no evidence of which |
 | 17.0.0 | Adds `DriverSettings.recordsPickupWhenParking`, declared `false`. Lightweight, and nothing is backfilled: no build that wrote a v16 store could ask the question, so every migrated row reads off |
+| 18.0.0 | Adds `Delivery.pickupProvenanceRawValue`. Lightweight, and nothing is backfilled: a v17 store could already hold pickups recorded by Park and holds no trace of which, so every migrated pickup reads as unknown rather than manual |
 
 Every step but 12.0.0 is a lightweight stage, and none but that one writes a value. See
 [Migrations](../architecture/migrations.md).

@@ -137,8 +137,8 @@ struct RouteSuspensionExportTests {
             ) as? [String: Any]
         )
 
-        #expect(object["formatVersion"] as? Int == 4)
-        #expect(ExportFormat.version == 4)
+        #expect(object["formatVersion"] as? Int == 5)
+        #expect(ExportFormat.version == 5)
 
         // Nothing existing changed meaning, nothing was removed or renamed, and
         // no enumeration gained a value, which is the format's own rule.
@@ -163,8 +163,8 @@ struct RouteSuspensionExportTests {
         let rows = text.split(separator: "\r\n", omittingEmptySubsequences: true)
         let header = try #require(rows.first).split(separator: ",", omittingEmptySubsequences: false)
 
-        #expect(header.count == 41, "39 before this interval, and two appended")
-        #expect(header.suffix(2).map(String.init) == ["shiftRouteSuspensionCount", "shiftRouteSuspendedSeconds"])
+        #expect(header.count == 42, "39 before parking, two appended by it, and one by pickup provenance")
+        #expect(header[39...40].map(String.init) == ["shiftRouteSuspensionCount", "shiftRouteSuspendedSeconds"])
         // The columns a positional reader already reads are exactly where they
         // were, which is the other half of not bumping the version.
         #expect(header[0] == "shiftStartedAt")
@@ -172,8 +172,8 @@ struct RouteSuspensionExportTests {
         #expect(header[38] == "deliveryEffectiveEarnings")
 
         let row = try #require(rows.dropFirst().first).split(separator: ",", omittingEmptySubsequences: false)
-        #expect(row.count == 41)
-        #expect(row.suffix(2).map(String.init) == ["1", "1500"])
+        #expect(row.count == 42)
+        #expect(row[39...40].map(String.init) == ["1", "1500"])
     }
 
     @Test("Every row of a shift carries the same two figures, as its other shift columns do")
@@ -190,8 +190,8 @@ struct RouteSuspensionExportTests {
         #expect(rows.count == 2)
         for row in rows {
             let fields = row.split(separator: ",", omittingEmptySubsequences: false)
-            #expect(fields.count == 41)
-            #expect(fields.suffix(2).map(String.init) == ["1", "1500"])
+            #expect(fields.count == 42)
+            #expect(fields[39...40].map(String.init) == ["1", "1500"])
         }
     }
 
@@ -207,6 +207,6 @@ struct RouteSuspensionExportTests {
             text.split(separator: "\r\n", omittingEmptySubsequences: true).dropFirst().first
         ).split(separator: ",", omittingEmptySubsequences: false)
 
-        #expect(row.suffix(2).map(String.init) == ["0", "0"])
+        #expect(row[39...40].map(String.init) == ["0", "0"])
     }
 }

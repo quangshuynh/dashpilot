@@ -46,9 +46,9 @@ therefore carries none, because no expense belongs to a shift. See
 
 ## Export format version
 
-Every file states `formatVersion: 4`.
+Every file states `formatVersion: 5`.
 
-**This is not the SwiftData schema version**, which is currently v16. The two describe different
+**This is not the SwiftData schema version**, which is currently v18. The two describe different
 things and are free to move independently:
 
 - The schema version describes how a database is laid out on one device. Nothing outside the app has
@@ -64,6 +64,36 @@ that ignores unknown keys keeps working.
 Exports are never called "v13".
 
 ### Version history
+
+#### 5: which pickup waits the period's median is taken over
+
+A pickup can now be recorded by Park, under the driver's
+[Pick up order when parking](settings.md#pick-up-order-when-parking) setting, as well as by the
+driver's own `Picked Up` step, and the store records which. A wait Park closes ends when the driver
+parked, usually before the handover, so the app's typical and median waits
+[leave it out](pickup-wait.md#pickups-recorded-by-park). Evaluated against the rule above and
+**bumped to 5**, because two fields changed meaning:
+
+- **Redefined:** `summary.deliveries.medianPickupWaitSeconds` and `pickupWaitSampleCount` now leave
+  out waits whose pickup Park recorded, exactly as the screen does. Waits whose provenance is
+  unknown, which is every pickup recorded before this build, are still counted. No file written
+  before this build would carry a different number, because no earlier store records a pickup as
+  Park's; the definition moved, which is the judgement version 4 made about tips.
+
+Three things were **added**, which on their own would not have bumped it:
+
+- `shifts[].deliveries[].pickupRecordedBy`: `manual` for the driver's own `Picked Up` step on any
+  surface, `parkAutomation` for Park, `unknown` for a pickup recorded before DashPilot kept how, and
+  `null` when no pickup was recorded. `unknown` is written as what it is rather than as `manual`.
+- `summary.deliveries.parkRecordedPickupCount`: how many waits the median leaves out. `0` when none.
+- The CSV's **appended** `deliveryPickupRecordedBy`, with the same values and an empty cell where no
+  pickup was recorded, taking the CSV from 41 to 42 columns. It is in the CSV because it changes how
+  `deliveryPickupWaitSeconds` should be read: a spreadsheet taking a median of waits needs to be
+  able to leave Park's out, as the app does.
+
+`pickupWaitSeconds` on a delivery is **not** redefined. It is still the recorded interval, whoever
+recorded its end, and the field beside it says how to read it. Nothing estimates when an order was
+handed over.
 
 #### Still 4: the stretches a shift recorded parked
 
@@ -332,7 +362,7 @@ three derived rates, the delivered and cancelled counts, and its deliveries.
 ### Per delivery
 
 Every lifecycle timestamp that was recorded, the state it ended in, the pickup place name if one was
-recorded, the recorded pickup wait, acceptance-to-delivery duration, the platform amount recorded
+recorded, the recorded pickup wait and how its pickup was recorded, acceptance-to-delivery duration, the platform amount recorded
 against that delivery, each additional tip with its method and the moment it was recorded, those
 tips' total, what the delivery paid altogether, and that delivery's own earnings per recorded
 delivery hour.
@@ -397,7 +427,7 @@ profit, and a reader relabelling it as such is making a claim this file does not
 
 Route partiality is preserved as its own counts (`measuredShiftCount`, `partialShiftCount`,
 `unmeasurableShiftCount`, `totalShiftCount`), and so is the pickup-wait sample count behind the
-median.
+median, beside `parkRecordedPickupCount`, the waits it leaves out because Park recorded their pickup.
 
 ## What the file deliberately keeps apart
 
@@ -420,7 +450,8 @@ is exactly where they get lost.
   the delivery rows gives a larger number, and that one is not a duration of anything.
 - **A recorded pickup wait is not a predicted one.** `pickupWaitSeconds` exists only when both ends
   of the wait were recorded and are in order. A delivery cancelled before its pickup exports no wait
-  rather than a wait of zero.
+  rather than a wait of zero. `pickupRecordedBy` beside it says whether the driver or Park recorded
+  the pickup that ends it.
 - **What the platform paid is not everything the delivery paid.** `grossEarnings` is the
   platform-recorded amount, unchanged and meaning exactly what it always has; `additionalTips` are
   the tips that reached the driver outside it; `effectiveEarnings` is the two together, and `null`
@@ -472,8 +503,8 @@ the full key set, and so every record in an array is the same shape.
 
 ## CSV
 
-**One row per recorded delivery**, with its shift's own columns repeated across it and a final
-column saying which accepted offer the delivery came in. A shift with no deliveries still gets a row,
+**One row per recorded delivery**, with its shift's own columns repeated across it, a column saying
+which accepted offer the delivery came in, and, last, how its pickup was recorded. A shift with no deliveries still gets a row,
 with the delivery columns empty. Records end `\r\n`, per RFC 4180, and the file is UTF-8.
 
 Four things are **not** in the CSV.

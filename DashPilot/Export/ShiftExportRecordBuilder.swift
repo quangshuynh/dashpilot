@@ -122,6 +122,7 @@ nonisolated extension DeliveryExportRecord {
             cancelledAt: delivery.cancelledAt,
             pickupPlaceName: delivery.pickupPlace?.displayName,
             pickupWaitSeconds: ExportDuration.seconds(delivery.pickupWait),
+            pickupRecordedBy: ExportPickupRecording(delivery),
             acceptedToDeliveredSeconds: ExportDuration.seconds(delivery.completedDuration),
             // The platform-recorded amount alone, unchanged and meaning exactly
             // what it always has. Tips are beside it rather than inside it.

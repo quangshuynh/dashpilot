@@ -22,16 +22,25 @@ nonisolated struct PickupWaitCalculator: Equatable, Sendable {
     ///
     /// Order-independent: the samples are sorted here, so whatever order the
     /// store hands relationships back in cannot change a figure.
+    ///
+    /// Only waits that ``PickupWaitSample/countsTowardTypicalWait`` enter the
+    /// figures. Waits whose pickup Park recorded are **counted apart** in
+    /// ``PickupWaitMetrics/parkRecordedPickupCount`` rather than dropped, and
+    /// nothing about them is scaled, corrected or estimated.
     func metrics(of samples: some Sequence<PickupWaitSample>) -> PickupWaitMetrics {
-        let durations = samples.map(\.duration).sorted()
-        guard !durations.isEmpty else { return .none }
+        let all = Array(samples)
+        let counted = all.filter(\.countsTowardTypicalWait)
+        let parkRecordedCount = all.count - counted.count
+        let durations = counted.map(\.duration).sorted()
+        guard !durations.isEmpty else { return .onlyParkRecorded(parkRecordedCount) }
 
         return PickupWaitMetrics(
             sampleCount: durations.count,
             medianDuration: Self.median(ofSorted: durations),
             shortestDuration: durations.first,
             longestDuration: durations.last,
-            mostRecentSampleAt: samples.map(\.pickedUpAt).max()
+            mostRecentSampleAt: counted.map(\.pickedUpAt).max(),
+            parkRecordedPickupCount: parkRecordedCount
         )
     }
 
@@ -72,6 +81,12 @@ extension PickupPlace {
     /// except a second answer free to drift.
     var pickupWaitSamples: [PickupWaitSample] {
         deliveries.compactMap(PickupWaitSample.init).sorted(by: PickupWaitSample.recordedBefore)
+    }
+
+    /// The waits a typical wait here is taken over, oldest first: every
+    /// recorded wait except those whose pickup Park recorded.
+    var countedPickupWaitSamples: [PickupWaitSample] {
+        pickupWaitSamples.filter(\.countsTowardTypicalWait)
     }
 
     /// What this place's recorded waits add up to.

@@ -153,9 +153,8 @@ maintenance was free.
 ```
 Net after recorded expenses                                  $37.65
 Recorded gross earnings across 1 of 2 shifts, less 2 recorded expenses.
-Both halves are what you recorded: shifts with no amount are not counted, and
-costs you did not enter are not subtracted. This is not profit, and it is not a
-tax figure.
+Shifts with no amount are not counted, and costs you did not enter are not
+subtracted. This is not profit, and not a tax figure.
 ```
 
 The figure is the difference between two subtotals of things the driver typed:

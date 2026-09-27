@@ -239,7 +239,7 @@ struct DeliveryTipExportTests {
     func csvAppendsRatherThanInserts() throws {
         let columns = ExportDocumentEncoder.columns
 
-        #expect(columns.count == 41, "36 before tips, three appended by them, and two by parking")
+        #expect(columns.count == 42, "36 before tips, three appended by them, two by parking and one by pickup provenance")
         #expect(
             Array(columns[36...38]) == [
                 "deliveryAdditionalTipCount", "deliveryAdditionalTipsTotal", "deliveryEffectiveEarnings"
@@ -247,7 +247,7 @@ struct DeliveryTipExportTests {
             "Appended, because inserting one moves every column after it"
         )
         #expect(
-            Array(columns.suffix(2)) == ["shiftRouteSuspensionCount", "shiftRouteSuspendedSeconds"],
+            Array(columns[39...40]) == ["shiftRouteSuspensionCount", "shiftRouteSuspendedSeconds"],
             "And the two appended after them left the tip columns exactly where they were"
         )
         #expect(columns[35] == "deliveryOfferNumber", "The previous last column is still the 36th")
@@ -290,8 +290,8 @@ struct DeliveryTipExportTests {
         let shift = try tippedShift(fixture)
         let object = try object(try document(fixture, scope: .shift(shift.id), shifts: [shift]))
 
-        #expect(ExportFormat.version == 4)
-        #expect(object["formatVersion"] as? Int == 4)
+        #expect(ExportFormat.version == 5)
+        #expect(object["formatVersion"] as? Int == 5)
         #expect(
             ExportFormat.version != Int(DashPilotSchemaV13.versionIdentifier.major),
             "The file's version and the store's schema version are unrelated numbers"

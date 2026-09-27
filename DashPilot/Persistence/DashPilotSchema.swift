@@ -2945,11 +2945,337 @@ enum DashPilotSchemaV16: VersionedSchema {
 /// A store with no settings row at all has no preference either, and reads as
 /// off without a row being created.
 ///
-/// This version reuses the file-scope models rather than freezing copies,
-/// because it *is* the current shape. It gets frozen copies of its own the first
-/// time v18 moves them on, exactly as v16 did above.
+/// **Frozen** by v18, with copies of all eleven of its models below: v18 moves
+/// the delivery, and a version whose models were the file-scope types would
+/// describe v18's shape under v17's number.
 enum DashPilotSchemaV17: VersionedSchema {
     static var versionIdentifier: Schema.Version { Schema.Version(17, 0, 0) }
+
+    static var models: [any PersistentModel.Type] {
+        [
+            Shift.self,
+            RouteSample.self,
+            RouteSuspension.self,
+            Delivery.self,
+            PickupPlace.self,
+            Expense.self,
+            ShiftPause.self,
+            Offer.self,
+            DeliveryTip.self,
+            VehicleProfile.self,
+            DriverSettings.self
+        ]
+    }
+
+    /// The v17 shift, unchanged from v16.
+    @Model
+    nonisolated final class Shift {
+        @Attribute(.unique) private(set) var id: UUID
+        private(set) var startedAt: Date
+        private(set) var endedAt: Date?
+
+        @Relationship(deleteRule: .cascade, inverse: \Delivery.shift)
+        private(set) var deliveries: [Delivery] = []
+
+        @Relationship(deleteRule: .cascade, inverse: \ShiftPause.shift)
+        private(set) var pauses: [ShiftPause] = []
+
+        @Relationship(deleteRule: .cascade, inverse: \Offer.shift)
+        private(set) var offers: [Offer] = []
+
+        @Relationship(deleteRule: .cascade, inverse: \RouteSuspension.shift)
+        private(set) var routeSuspensions: [RouteSuspension] = []
+
+        private(set) var grossEarningsAmount: Decimal?
+
+        private(set) var fuelMilesPerGallonValue: Decimal?
+
+        private(set) var fuelGasPricePerGallonAmount: Decimal?
+
+        private(set) var fuelVehicleName: String?
+
+        init(
+            id: UUID = UUID(),
+            startedAt: Date,
+            endedAt: Date? = nil,
+            grossEarningsAmount: Decimal? = nil,
+            fuelMilesPerGallonValue: Decimal? = nil,
+            fuelGasPricePerGallonAmount: Decimal? = nil,
+            fuelVehicleName: String? = nil
+        ) {
+            self.id = id
+            self.startedAt = startedAt
+            self.endedAt = endedAt
+            self.grossEarningsAmount = grossEarningsAmount
+            self.fuelMilesPerGallonValue = fuelMilesPerGallonValue
+            self.fuelGasPricePerGallonAmount = fuelGasPricePerGallonAmount
+            self.fuelVehicleName = fuelVehicleName
+        }
+    }
+
+    /// The v17 route sample, unchanged in shape since v3.
+    @Model
+    nonisolated final class RouteSample {
+        private(set) var timestamp: Date
+        private(set) var latitude: Double
+        private(set) var longitude: Double
+        private(set) var horizontalAccuracy: Double
+        private(set) var captureSessionID: UUID?
+        private(set) var shift: Shift?
+
+        init(
+            shift: Shift,
+            timestamp: Date,
+            latitude: Double,
+            longitude: Double,
+            horizontalAccuracy: Double,
+            captureSessionID: UUID?
+        ) {
+            self.timestamp = timestamp
+            self.latitude = latitude
+            self.longitude = longitude
+            self.horizontalAccuracy = horizontalAccuracy
+            self.captureSessionID = captureSessionID
+            self.shift = shift
+        }
+    }
+
+    /// The v17 delivery, unchanged from v16, and the shape v18 moves: it
+    /// records a pickup's instant and not how the pickup was recorded.
+    @Model
+    nonisolated final class Delivery {
+        @Attribute(.unique) private(set) var id: UUID
+        private(set) var acceptedAt: Date
+        private(set) var arrivedAtPickupAt: Date?
+        private(set) var pickedUpAt: Date?
+        private(set) var deliveredAt: Date?
+        private(set) var cancelledAt: Date?
+        private(set) var shift: Shift?
+        private(set) var offer: Offer?
+        private(set) var pickupPlace: PickupPlace?
+        private(set) var grossEarningsAmount: Decimal?
+        private(set) var expectedEarningsAmount: Decimal?
+
+        @Relationship(deleteRule: .cascade, inverse: \DeliveryTip.delivery)
+        private(set) var additionalTips: [DeliveryTip] = []
+
+        init(
+            id: UUID = UUID(),
+            shift: Shift,
+            offer: Offer? = nil,
+            acceptedAt: Date,
+            arrivedAtPickupAt: Date? = nil,
+            pickedUpAt: Date? = nil,
+            deliveredAt: Date? = nil,
+            cancelledAt: Date? = nil,
+            pickupPlace: PickupPlace? = nil,
+            grossEarningsAmount: Decimal? = nil,
+            expectedEarningsAmount: Decimal? = nil
+        ) {
+            self.id = id
+            self.acceptedAt = acceptedAt
+            self.arrivedAtPickupAt = arrivedAtPickupAt
+            self.pickedUpAt = pickedUpAt
+            self.deliveredAt = deliveredAt
+            self.cancelledAt = cancelledAt
+            self.shift = shift
+            self.offer = offer
+            self.pickupPlace = pickupPlace
+            self.grossEarningsAmount = grossEarningsAmount
+            self.expectedEarningsAmount = expectedEarningsAmount
+        }
+    }
+
+    /// The v17 delivery tip, unchanged since v13 introduced it.
+    @Model
+    nonisolated final class DeliveryTip {
+        @Attribute(.unique) private(set) var id: UUID
+        private(set) var amountValue: Decimal
+        private(set) var methodRawValue: String
+        private(set) var recordedAt: Date
+        private(set) var delivery: Delivery?
+
+        init(
+            id: UUID = UUID(),
+            delivery: Delivery,
+            amountValue: Decimal,
+            methodRawValue: String,
+            recordedAt: Date
+        ) {
+            self.id = id
+            self.amountValue = amountValue
+            self.methodRawValue = methodRawValue
+            self.recordedAt = recordedAt
+            self.delivery = delivery
+        }
+    }
+
+    /// The v17 offer, unchanged from v12.
+    @Model
+    nonisolated final class Offer {
+        @Attribute(.unique) private(set) var id: UUID
+        private(set) var acceptedAt: Date
+        private(set) var shift: Shift?
+
+        @Relationship(deleteRule: .cascade, inverse: \Delivery.offer)
+        private(set) var deliveries: [Delivery] = []
+
+        init(id: UUID = UUID(), shift: Shift, acceptedAt: Date) {
+            self.id = id
+            self.acceptedAt = acceptedAt
+            self.shift = shift
+        }
+    }
+
+    /// The v17 pickup place, unchanged from v6.
+    @Model
+    nonisolated final class PickupPlace {
+        @Attribute(.unique) private(set) var id: UUID
+        private(set) var displayName: String
+        private(set) var normalizedName: String
+        private(set) var createdAt: Date
+
+        @Relationship(deleteRule: .nullify, inverse: \Delivery.pickupPlace)
+        private(set) var deliveries: [Delivery] = []
+
+        init(id: UUID = UUID(), displayName: String, normalizedName: String, createdAt: Date) {
+            self.id = id
+            self.displayName = displayName
+            self.normalizedName = normalizedName
+            self.createdAt = createdAt
+        }
+    }
+
+    /// The v17 expense, unchanged from v8.
+    @Model
+    nonisolated final class Expense {
+        @Attribute(.unique) private(set) var id: UUID
+        private(set) var occurredAt: Date
+        private(set) var amountValue: Decimal
+        private(set) var categoryRawValue: String
+        private(set) var note: String?
+
+        init(
+            id: UUID = UUID(),
+            occurredAt: Date,
+            amountValue: Decimal,
+            categoryRawValue: String,
+            note: String? = nil
+        ) {
+            self.id = id
+            self.occurredAt = occurredAt
+            self.amountValue = amountValue
+            self.categoryRawValue = categoryRawValue
+            self.note = note
+        }
+    }
+
+    /// The v17 shift pause, unchanged from v9.
+    @Model
+    nonisolated final class ShiftPause {
+        @Attribute(.unique) private(set) var id: UUID
+        private(set) var startedAt: Date
+        private(set) var endedAt: Date?
+        private(set) var shift: Shift?
+
+        init(id: UUID = UUID(), shift: Shift, startedAt: Date, endedAt: Date? = nil) {
+            self.id = id
+            self.startedAt = startedAt
+            self.endedAt = endedAt
+            self.shift = shift
+        }
+    }
+
+    /// The v17 route suspension, unchanged from v16. It joins the shift and
+    /// never a delivery.
+    @Model
+    nonisolated final class RouteSuspension {
+        @Attribute(.unique) private(set) var id: UUID
+        private(set) var startedAt: Date
+        private(set) var endedAt: Date?
+        private(set) var shift: Shift?
+
+        init(id: UUID = UUID(), shift: Shift, startedAt: Date, endedAt: Date? = nil) {
+            self.id = id
+            self.shift = shift
+            self.startedAt = startedAt
+            self.endedAt = endedAt
+        }
+    }
+
+    /// The v17 vehicle profile, unchanged from v15.
+    @Model
+    nonisolated final class VehicleProfile {
+        @Attribute(.unique) private(set) var id: UUID
+        private(set) var name: String
+        private(set) var milesPerGallonValue: Decimal
+        private(set) var createdAt: Date
+
+        init(id: UUID = UUID(), name: String, milesPerGallonValue: Decimal, createdAt: Date) {
+            self.id = id
+            self.name = name
+            self.milesPerGallonValue = milesPerGallonValue
+            self.createdAt = createdAt
+        }
+    }
+
+    /// The v17 driver settings: v16's row and the parking preference v17
+    /// added, with its declared default.
+    @Model
+    nonisolated final class DriverSettings {
+        @Attribute(.unique) private(set) var id: UUID
+        private(set) var gasPricePerGallonAmount: Decimal?
+        private(set) var selectedVehicleID: UUID?
+        private(set) var recordsPickupWhenParking: Bool = false
+
+        init(
+            id: UUID,
+            gasPricePerGallonAmount: Decimal? = nil,
+            selectedVehicleID: UUID? = nil,
+            recordsPickupWhenParking: Bool = false
+        ) {
+            self.id = id
+            self.gasPricePerGallonAmount = gasPricePerGallonAmount
+            self.selectedVehicleID = selectedVehicleID
+            self.recordsPickupWhenParking = recordsPickupWhenParking
+        }
+    }
+}
+
+/// Version 18 of the persisted schema: how a delivery's pickup was recorded.
+///
+/// One optional `String` column on `Delivery`, `pickupProvenanceRawValue`, which
+/// holds `manual` for a pickup recorded by the driver's own Picked Up control
+/// (on the card, by voice or from the Lock Screen) and `parkAutomation` for one
+/// recorded by Park under `Pick up order when parking`. Nothing else anywhere
+/// changes shape, and not one stored value moves.
+///
+/// ## What the version is for
+///
+/// A pickup recorded by Park is written when the driver parks, usually before
+/// they walk in, so its recorded wait ends before the order was handed over.
+/// Measured through the app's own median (`PickupWaitProvenanceMeasurementTests`),
+/// one such pickup at a place with one other halves the typical wait shown, and
+/// once they are most of a place's pickups the median is the time from arriving
+/// to parking. Nothing in a v17 store can tell those pickups from any other, and
+/// nothing could later: the setting is current configuration and a suspension
+/// beginning at the pickup instant is a coincidence, not a record. So the fact
+/// is written when it is known, which is the moment the pickup is recorded.
+///
+/// ## Why this migrates lightweight, and why the column is empty
+///
+/// A new optional column, which SwiftData adds as `nil` without being told how,
+/// and **nothing truthful to write**. A v17 store could already hold pickups
+/// recorded by Park, and it holds no trace of which ones. Writing `manual` into
+/// every migrated pickup would state something the store never knew, so a
+/// migrated pickup reads as **unknown**, and it stays unknown: nothing later
+/// infers it from timestamps, from a suspension or from the setting.
+///
+/// This version reuses the file-scope models rather than freezing copies,
+/// because it *is* the current shape. It gets frozen copies of its own the first
+/// time v19 moves them on, exactly as v17 did above.
+enum DashPilotSchemaV18: VersionedSchema {
+    static var versionIdentifier: Schema.Version { Schema.Version(18, 0, 0) }
 
     static var models: [any PersistentModel.Type] {
         [
@@ -2992,14 +3318,15 @@ enum DashPilotMigrationPlan: SchemaMigrationPlan {
             DashPilotSchemaV14.self,
             DashPilotSchemaV15.self,
             DashPilotSchemaV16.self,
-            DashPilotSchemaV17.self
+            DashPilotSchemaV17.self,
+            DashPilotSchemaV18.self
         ]
     }
 
     static var stages: [MigrationStage] {
         [
             v1ToV2, v2ToV3, v3ToV4, v4ToV5, v5ToV6, v6ToV7, v7ToV8, v8ToV9, v9ToV10, v10ToV11, v11ToV12,
-            v12ToV13, v13ToV14, v14ToV15, v15ToV16, v16ToV17
+            v12ToV13, v13ToV14, v14ToV15, v15ToV16, v16ToV17, v17ToV18
         ]
     }
 
@@ -3409,5 +3736,20 @@ enum DashPilotMigrationPlan: SchemaMigrationPlan {
     static let v16ToV17 = MigrationStage.lightweight(
         fromVersion: DashPilotSchemaV16.self,
         toVersion: DashPilotSchemaV17.self
+    )
+
+    /// V17 → V18 is lightweight.
+    ///
+    /// One optional column, and **nothing to backfill**. The tempting stage would
+    /// write `manual` into every recorded pickup, on the grounds that most of them
+    /// were. That is exactly the statement this version exists to stop the app
+    /// making without evidence: v17 could already record a pickup by parking,
+    /// and a v17 store says nothing about which pickups it recorded that way. The
+    /// other tempting stage, matching a pickup instant to the start of a
+    /// suspension, would be inference from a coincidence. So every migrated
+    /// pickup reads as unknown, and a delivery with no pickup stays without one.
+    static let v17ToV18 = MigrationStage.lightweight(
+        fromVersion: DashPilotSchemaV17.self,
+        toVersion: DashPilotSchemaV18.self
     )
 }

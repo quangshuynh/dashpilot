@@ -4,7 +4,7 @@ import Foundation
 ///
 /// ## Why this is not the schema version
 ///
-/// The store is at schema v14 and will move on. That number describes how
+/// The store is at schema v18 and will move on. That number describes how
 /// SwiftData lays out a database on one device, and nothing outside the app has
 /// ever seen it. This one describes a **file a driver has already taken
 /// somewhere else** — a spreadsheet, a folder, an accountant's inbox — and the
@@ -18,6 +18,31 @@ import Foundation
 /// keeps working.
 ///
 /// ## Version history
+///
+/// ### 5: which pickup waits the period's median is taken over
+///
+/// A pickup can now be recorded by Park, under the driver's `Pick up order
+/// when parking` setting, as well as by the driver's own Picked Up step, and
+/// the store records which (schema v18). Evaluated against the rule above and
+/// **bumped**, because two fields changed meaning:
+///
+/// - **Redefined:** `summary.deliveries.medianPickupWaitSeconds` and
+///   `pickupWaitSampleCount` now leave out waits whose pickup Park recorded,
+///   exactly as the app's own figures do. Such a wait ends when the driver
+///   parked, usually before the handover, and measured through the app's median
+///   a few of them move it by minutes. Waits whose provenance is unknown, which
+///   is every pickup recorded before v18, are still counted. **No previously
+///   exported file would carry a different number**, because no store written
+///   before this build records a pickup as Park's; the definition moved, which
+///   is the judgement version 4 made about tips.
+///
+/// Three things were **added**, which on their own would not have bumped it:
+/// `shifts[].deliveries[].pickupRecordedBy` (`manual`, `parkAutomation`,
+/// `unknown`, or `null` with no pickup), `summary.deliveries.parkRecordedPickupCount`,
+/// and the CSV's **appended** `deliveryPickupRecordedBy`, taking it from 41 to
+/// 42 columns. `pickupWaitSeconds` on a delivery is **not** redefined: it is
+/// still the recorded interval, whoever recorded its end, and the new field
+/// beside it says how to read it. Nothing estimates when a handover happened.
 ///
 /// ### 4 (unchanged): the fuel assumptions a shift was estimated under
 ///
@@ -287,8 +312,8 @@ import Foundation
 nonisolated enum ExportFormat {
     /// The current format version, written into every export.
     ///
-    /// Not the store's schema version, which is unrelated and currently 13.
-    static let version = 4
+    /// Not the store's schema version, which is unrelated and currently 18.
+    static let version = 5
 
     /// What produced the file. A product name and nothing more — no build, no
     /// device, no identifier of any kind.
