@@ -9484,12 +9484,16 @@ final class DashPilotUITests: XCTestCase {
         app.descendants(matching: .any)["periodTitle"].label
     }
 
-    /// A month holds at least everything its weeks and days do.
+    /// A month holds at least everything its days do, and everything this week
+    /// does whenever the week lies inside it.
     ///
     /// Counted rather than asserted against a literal: the fixture is anchored
     /// to whenever the test runs, so which of its shifts share a month with
-    /// today depends on the date. The relationship between the three is what
-    /// this journey is about, and that holds on every date.
+    /// today depends on the date. A week can straddle two months (the week of
+    /// 1 October 2026 began in September), and then it may hold shifts the month
+    /// does not, so `week <= month` is asserted only when the week is inside
+    /// the month. That case failed the suite on 1 October 2026; the claim that
+    /// the relation held on every date was wrong, not the app.
     @MainActor
     func testMonthSummaryIncludesTheWholeWeekAndMore() throws {
         let app = launchWithPeriodSummary()
@@ -9505,8 +9509,22 @@ final class DashPilotUITests: XCTestCase {
         let month = try XCTUnwrap(shiftCount(in: app), "And so does this month")
 
         XCTAssertLessThanOrEqual(day, week, "A week holds at least its days")
-        XCTAssertLessThanOrEqual(week, month, "A month holds at least the part of the week inside it")
+        XCTAssertLessThanOrEqual(day, month, "A month holds at least its days")
+        if Self.currentWeekIsInsideCurrentMonth() {
+            XCTAssertLessThanOrEqual(week, month, "A month holds at least a week that lies inside it")
+        }
         XCTAssertGreaterThanOrEqual(month, 2, "The fixture's shifts are all in the month it is anchored to")
+    }
+
+    /// Whether today's week starts and ends in today's month, by the device's
+    /// own calendar, which is the one Period Summary's weeks use (unlike
+    /// History, which is Monday to Sunday). The journey runs on the same
+    /// simulator as the app, so both read the same calendar.
+    private static func currentWeekIsInsideCurrentMonth(now: Date = .now) -> Bool {
+        let calendar = Calendar.current
+        guard let week = calendar.dateInterval(of: .weekOfYear, for: now),
+              let month = calendar.dateInterval(of: .month, for: now) else { return false }
+        return week.start >= month.start && week.end <= month.end
     }
 
     /// Stepping back from the current month changes which records are included.
