@@ -69,6 +69,8 @@ events it claims to summarise; a derived one cannot.
 With [Pick up orders with Park & Resume](settings.md#pick-up-orders-with-park-resume) turned on,
 Park records `Arrived at Pickup` and Resume Driving records `Picked Up`, for one delivery: the one
 in progress, or, with stacked orders handled, the lowest-numbered one still waiting for its pickup.
+When that delivery was marked [Same pickup](#same-pickup-and-same-drop-off) with others, those still
+waiting for their pickup move with it, in one write.
 It is not a second way to change state: each step calls the same operation the card's button does,
 with the same validation and the same instant rule, and Resume records the pickup of the delivery
 Park chose rather than choosing again. Neither step ever moves a delivery already picked up or
@@ -545,7 +547,8 @@ overlap count their shared minutes once whether or not they share an offer.
 App Shortcut and the Live Activity button, which both go through the same service call.
 
 Beside it on the running shift is one small secondary control, `Offer With Several Deliveries`. It
-opens a sheet that asks **a count and nothing else**: no pickup place, no amount, no customer and no
+opens a sheet that asks **a count**, and two optional switches, `Same pickup` and `Same drop-off`,
+both off (see [below](#same-pickup-and-same-drop-off)): no pickup place, no amount, no customer and no
 name, because each of those is optional on a delivery and can be added later from its own card. The
 confirm button repeats the number it will record.
 
@@ -617,6 +620,78 @@ Every correction is one write. A refused save restores the grouping exactly, so 
 combined pair of offers to find afterwards. None of it is undoable, which is why each one is
 confirmed by a sentence that names the deliveries that will move, the offer they will move to, and
 whether an offer is removed by it.
+
+## Same pickup and same drop-off
+
+A platform offer sometimes holds two orders that belong together: one customer, one door. DashPilot
+records that **only when the driver says so**, and records two separate facts:
+
+| Switch | What it says | What reads it |
+| --- | --- | --- |
+| `Same pickup` | These deliveries are collected at the same pickup | The cards, the export, and the [Park and Resume pickup workflow](#park-and-resume-driving-as-the-pickup-steps) |
+| `Same drop-off` | These deliveries go to the same drop-off | The cards and the export, and nothing that records an event |
+
+**They are two switches because they are two facts.** One customer can order from two restaurants.
+If `Same drop-off` also moved pickups, parking at the first restaurant would mark the order from the
+second one arrived, which is an event that never happened. So the pickup workflow reads `Same pickup`
+and nothing else, and a driver whose two orders share both says both.
+
+**Deliveries are independent unless the driver says otherwise.** Nothing is ever inferred from two
+deliveries being accepted in one offer, naming the same pickup place, carrying consecutive numbers,
+being accepted a second apart or following a similar route: every one of those is also what two
+unrelated orders look like. Deliveries recorded before DashPilot could be told this share nothing.
+
+**No customer, address or place is stored for it.** Each delivery holds an opaque identity it shares
+with the others; the identity says they are one stop and nothing more, and it never leaves the device
+as itself.
+
+### Saying it
+
+On the offer sheet, the two switches apply to **every delivery of the offer**. For part of an offer
+(two of three to one door), or to take it back, `Correct Grouping` has a `Same Pickup or Drop-off`
+screen for each offer of several deliveries: choose two or more deliveries for each, or none. One on
+its own cannot be saved, because one delivery shares a stop with nobody. Both answers are written
+together when Save is pressed.
+
+A shared stop is held **within one offer**. Moving a delivery to another offer leaves its shared
+stops behind, and a pair left with one delivery stops sharing; combining two offers keeps each group
+whole. Correcting it moves no lifecycle event, place, amount or offer, so it is allowed on a running
+shift, while parked, and on a finished one. A change made while parked affects the **next** Park:
+Resume Driving acts on the deliveries Park stored.
+
+### Seeing it
+
+A heading over an offer whose deliveries all share a stop says so (`Same pickup and drop-off`). Each
+card names the siblings it shares a stop with, `Same pickup and drop-off as Delivery 4`, and
+VoiceOver hears it as something the driver recorded: *You recorded it as the same pickup and drop-off
+as Delivery 4*. A completed shift's history says the same. On the
+[Live Activity](live-activity.md#how-long-a-delivery-has-been-open), deliveries sharing a stop, in
+the same state, are one line.
+
+### Park and Resume Driving with a shared pickup
+
+With [Pick up orders with Park & Resume](settings.md#pick-up-orders-with-park-resume) on:
+
+- **Park** chooses as it always does, the lowest-numbered delivery still waiting for its pickup. If
+  that delivery shares a pickup with others still waiting for theirs, they are chosen with it. Those
+  at `Accepted` are recorded `Arrived at Pickup` together, at the instant of parking, **in one write:
+  all of them or none**. Those already arrived are left as they are. Every chosen delivery is stored
+  on the parked stretch.
+- **Resume Driving** records `Picked Up`, together and in one write, for **exactly the deliveries
+  Park stored** that are still at `Arrived at Pickup`, including after the app was closed in between.
+  One cancelled inside, or picked up by hand, is left alone and named in the line under the shift.
+- **Undo** takes back every event that press recorded, together, and leaves the vehicle as it is. If
+  anything was recorded since on any of them, the whole Undo is refused and nothing moves; it never
+  takes back half of a shared arrival and never touches a delivery the press did not write to.
+- **With `Handle stacked orders in order` off**, deliveries that all share one pickup are one stop,
+  so Park acts on them. An unrelated order in progress beside them is still a choice the driver has
+  not agreed to, and nothing is chosen.
+- An unrelated delivery with a lower number is still chosen first, alone, and the shared pair waits
+  for the next Park.
+
+The line under the shift names every delivery and says why: *Deliveries 3 and 4 marked Arrived at
+Pickup. Recorded automatically when you parked, for the deliveries you marked Same pickup.* Siri and
+the Lock Screen run the same operation and record the same events.
 
 ## Stacked deliveries
 

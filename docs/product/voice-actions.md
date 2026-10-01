@@ -59,8 +59,9 @@ refused by how many are open, and DashPilot does not infer **why** the driver pa
 [Parked for a pickup](recorded-mileage.md#parked-for-a-pickup). The one exception is opt-in: with
 [Pick up orders with Park & Resume](settings.md#pick-up-orders-with-park-resume) on, `Park Vehicle` records `Arrived at Pickup` **after**
 parking has been recorded, for the one delivery in progress (or, with stacked orders handled, the
-lowest-numbered one still waiting for its pickup), and `Resume Driving` records `Picked Up` for that
-same delivery. Parking and driving are still never refused over a delivery.
+lowest-numbered one still waiting for its pickup, together with any it was marked
+[Same pickup](delivery-lifecycle.md#same-pickup-and-same-drop-off) with), and `Resume Driving` records
+`Picked Up` for those same deliveries. Parking and driving are still never refused over a delivery.
 
 `Start Delivery` is not affected, because it names no existing delivery: it creates one, in an offer
 of one. Two deliveries that share an **offer** are still two deliveries, so a spoken step is refused

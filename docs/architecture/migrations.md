@@ -27,13 +27,18 @@ rather than a store reset.
 | 17.0.0 | Adds `DriverSettings.recordsPickupWhenParking`, a `Bool` declared `false`, holding whether pressing Park may also record a pickup. Backfills nothing; every migrated row reads off |
 | 18.0.0 | Adds `Delivery.pickupProvenanceRawValue`, an optional `String` holding how a pickup was recorded. Backfills nothing; every migrated pickup reads as unknown |
 | 19.0.0 | Adds `RouteSuspension.pickupWorkflowDeliveryID`, an optional `UUID` naming the delivery a parked stretch was for, and `DriverSettings.usesParkAndResumeForPickups` and `handlesStackedOrdersInOrder`, two `Bool`s declared `false`; removes `DriverSettings.recordsPickupWhenParking`. Backfills nothing; the workflow reads off and no stretch is associated |
+| 20.0.0 | Adds `Delivery.sharedPickupID` and `Delivery.sharedDropOffID`, optional `UUID`s the deliveries of one offer share when the driver said they are collected at the same pickup or go to the same drop-off, and `RouteSuspension.pickupWorkflowSharedPickupDeliveryIDs`, a `[UUID]` declared empty, naming the other deliveries a parked stretch was for. Backfills nothing; every migrated delivery is independent |
 
-The current version is **v19**. Field-level detail is on [Data model](../reference/data-model.md).
+The current version is **v20**. Field-level detail is on [Data model](../reference/data-model.md).
 
-`DashPilotSchemaV1` through `DashPilotSchemaV18` hold frozen copies of their models rather than
+`DashPilotSchemaV1` through `DashPilotSchemaV19` hold frozen copies of their models rather than
 reusing the file-scope types, which have moved on. The plan then describes where a store is coming
 from as truthfully as where it is going, and the copies are never used at runtime outside
 migration.
+
+`DashPilotSchemaV19` was frozen in the interval that added v20, with copies of all eleven of its
+models. v20 moves the delivery and the route suspension, and reusing the file-scope types under v19
+would describe every v19 store as one whose deliveries could already say they shared a stop.
 
 `DashPilotSchemaV18` was frozen in the interval that added v19, with copies of all eleven of its
 models. v19 moves the route suspension and the settings row, and reusing the file-scope types under
@@ -439,3 +444,23 @@ covered by the same suite rather than by assumption.
   just the fact that the store opens.
 - Do not invent a value to fill a column that older data genuinely does not answer. Optional and
   absent is a truthful migration; a fabricated default is not.
+
+### v19 to v20
+
+Three columns, applied lightweight, and **nothing written**.
+
+`Delivery.sharedPickupID` and `sharedDropOffID` hold an opaque identity the deliveries of one offer
+share when the driver said they are collected at the same pickup, or go to the same drop-off. Two
+columns because they are two facts: one customer can order from two restaurants, and the Park and
+Resume workflow reads only the pickup. No customer, address or place is stored for either.
+
+The tempting backfill groups deliveries that were accepted in one offer, name the same pickup place,
+were accepted a second apart or carry consecutive numbers. Every one of those is also exactly what
+two unrelated orders look like, and a v19 store holds no statement from the driver that any two
+deliveries shared a stop. So **every migrated delivery is independent**.
+
+`RouteSuspension.pickupWorkflowSharedPickupDeliveryIDs` is declared empty. It names the other
+deliveries a parked stretch was for when the chosen one shares its pickup, so Resume Driving acts on
+exactly what Park chose. It is a column beside `pickupWorkflowDeliveryID` rather than a rewrite of it,
+so a stretch parked before v20 keeps meaning what it meant: one delivery, and no others. See
+[Same pickup and same drop-off](../product/delivery-lifecycle.md#same-pickup-and-same-drop-off).

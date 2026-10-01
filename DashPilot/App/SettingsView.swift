@@ -248,8 +248,9 @@ struct SettingsView: View {
                 When on, Park marks Arrived at Pickup and Resume Driving marks the same delivery \
                 Picked Up. DashPilot is following this setting and your taps; it does not know which \
                 restaurant you are at. Without stacked orders on, it only acts while one delivery is \
-                in progress; with it on, it takes them in delivery-number order. Undo, shown for a few \
-                seconds, takes back only that delivery step and leaves the vehicle parked or driving. \
+                in progress; with it on, it takes them in delivery-number order. Orders you marked Same \
+                pickup move together. Undo, shown for a few seconds, takes back only those delivery \
+                steps and leaves the vehicle parked or driving. \
                 Pickups recorded this way are left out of typical pickup waits.
                 """
             )
