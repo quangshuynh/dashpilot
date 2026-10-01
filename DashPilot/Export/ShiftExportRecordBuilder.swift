@@ -73,9 +73,33 @@ nonisolated extension Shift {
             // numbering is over the whole shift, so a record cannot derive it
             // from the delivery alone.
             deliveries: numberedDeliveries.map { numbered in
-                DeliveryExportRecord(numbered, offerNumber: offerNumbersByDelivery[numbered.id])
+                DeliveryExportRecord(
+                    numbered,
+                    offerNumber: offerNumbersByDelivery[numbered.id],
+                    sharedPickupGroup: sharedStopGroups(.pickup)[numbered.id],
+                    sharedDropOffGroup: sharedStopGroups(.dropOff)[numbered.id]
+                )
             }
         )
+    }
+
+    /// Which shared `kind` of stop each delivery belongs to, as a number local
+    /// to this shift, counted in delivery order, by delivery.
+    ///
+    /// Only an identity at least two of the shift's deliveries hold is given a
+    /// number, which the model already guarantees and this does not assume. The
+    /// stored identity itself never reaches the file.
+    private func sharedStopGroups(_ kind: SharedStopKind) -> [UUID: Int] {
+        let identities = numberedDeliveries.compactMap { $0.delivery.sharedStopID(kind) }
+        var numbers: [UUID: Int] = [:]
+        var groups: [UUID: Int] = [:]
+        for numbered in numberedDeliveries {
+            guard let identity = numbered.delivery.sharedStopID(kind),
+                  identities.filter({ $0 == identity }).count > 1 else { continue }
+            if groups[identity] == nil { groups[identity] = groups.count + 1 }
+            numbers[numbered.id] = groups[identity]
+        }
+        return numbers
     }
 
     /// Which offer of this shift each delivery arrived in, by delivery.
@@ -105,7 +129,10 @@ nonisolated extension DeliveryExportRecord {
     ///   in, or `nil` for a delivery that records none. Supplied by the caller
     ///   because the numbering runs over the shift rather than over the
     ///   delivery.
-    init(_ numbered: NumberedDelivery, offerNumber: Int?) {
+    ///   - sharedPickupGroup: which shared pickup of the shift it was recorded
+    ///     in, or `nil`. Numbered by the caller, over the shift.
+    ///   - sharedDropOffGroup: likewise for a shared drop-off.
+    init(_ numbered: NumberedDelivery, offerNumber: Int?, sharedPickupGroup: Int? = nil, sharedDropOffGroup: Int? = nil) {
         let delivery = numbered.delivery
         let effective = delivery.effectiveEarnings
         self.init(
@@ -114,6 +141,8 @@ nonisolated extension DeliveryExportRecord {
             // The grouping key, and nothing else about the offer: it holds no
             // money and no time, so there is nothing else of it to export.
             offerNumber: offerNumber,
+            sharedPickupGroup: sharedPickupGroup,
+            sharedDropOffGroup: sharedDropOffGroup,
             state: delivery.state,
             acceptedAt: delivery.acceptedAt,
             arrivedAtPickupAt: delivery.arrivedAtPickupAt,
