@@ -42,6 +42,11 @@ import SwiftUI
 struct DeliveryControlPanel: View {
     let shift: Shift
 
+    /// The short-lived line and Undo a Delivered, or a step recorded while
+    /// parked, leaves. Drawn by ``RootView`` below the list rather than here, so
+    /// that its arriving and leaving move no card; see ``TransientUndoBar``.
+    @Binding var transientUndo: TransientUndo?
+
     @Environment(\.modelContext) private var modelContext
     /// Write-only from here, like ``RootView``'s: a delivery starting or
     /// advancing changes what the shift's Live Activity should say, including
@@ -111,15 +116,6 @@ struct DeliveryControlPanel: View {
     /// stale again in its new state can be mentioned again.
     @State private var dismissedSuggestions: Set<DismissedSuggestion> = []
 
-    /// The delivery just marked delivered, while the offer to take it back is
-    /// still on screen.
-    ///
-    /// Held as the numbered delivery and the state it would go back to, for the
-    /// reason ``PendingEarningsConfirmation`` holds its amount: the card leaves
-    /// ``activeDeliveries`` with the write, so there is nothing left on screen to
-    /// read either from, and the offer has to name the delivery it belongs to.
-    @State private var recentlyDelivered: RecentCompletion?
-
     private var activeDeliveries: [NumberedDelivery] {
         let running = Set(unfinishedDeliveries.lazy.filter { $0.shift?.id == shift.id }.map(\.id))
         return shift.numberedDeliveries.filter { running.contains($0.id) }
@@ -151,7 +147,6 @@ struct DeliveryControlPanel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            undoBanner
             suggestions
             status
 
@@ -179,10 +174,10 @@ struct DeliveryControlPanel: View {
         }
         .padding(.vertical, 8)
         // The window the immediate undo is offered for, counted in one-second
-        // ticks while the banner is actually on screen. It restarts with each
+        // ticks while the line is actually on screen. It restarts with each
         // completion, because the offer names the latest one.
-        .task(id: recentlyDelivered?.id) {
-            guard recentlyDelivered != nil else { return }
+        .task(id: transientUndo?.id) {
+            guard transientUndo != nil else { return }
             var remaining = Self.undoSeconds
 
             while !Task.isCancelled, remaining > 0 {
@@ -195,7 +190,7 @@ struct DeliveryControlPanel: View {
             }
 
             guard !Task.isCancelled else { return }
-            recentlyDelivered = nil
+            transientUndo = nil
         }
         // The reminders' clock. It only advances while the shift is actually
         // running, so a paused or finished shift costs nothing, and it advances
@@ -262,39 +257,7 @@ struct DeliveryControlPanel: View {
         }
     }
 
-    /// Taking back the `Delivered` that has just been recorded, for as long as
-    /// the driver is plausibly still looking at the screen.
-    ///
-    /// At the top of the panel rather than where the card was, because the card
-    /// is gone: the write that raised this is the write that removed it. It
-    /// names the delivery in print and says aloud what pressing it does, since a
-    /// listener has no card left to refer back to.
-    ///
-    /// Deliberately low friction. There is no confirmation, because the action
-    /// being taken back happened seconds ago and undoing it immediately is the
-    /// least consequential correction in the app. The deliberate path under
-    /// `Reopen a Delivered Delivery` is the one that confirms.
-    @ViewBuilder
-    private var undoBanner: some View {
-        if let recent = recentlyDelivered {
-            HStack(alignment: .firstTextBaseline, spacing: 12) {
-                // A symbol and a sentence, never a tint alone.
-                Label(recent.numbered.deliveredStatement, systemImage: DeliveryState.delivered.symbolName)
-                    .dashFont(.body)
-                    .accessibilityIdentifier("undoDeliveredBanner")
-
-                Spacer(minLength: 0)
-
-                Button("Undo") { perform(.undo(recent)) }
-                    .buttonStyle(.bordered)
-                    .accessibilityLabel(recent.numbered.spokenUndoDeliveredLabel(restoredTo: recent.restored))
-                    .accessibilityIdentifier("undoDeliveredButton")
-            }
-            .dashInsetSurface()
-        }
-    }
-
-    /// The reminders, above everything else on the panel and below the undo.
+    /// The reminders, above everything else on the panel.
     ///
     /// Passive: it is drawn where it is rather than raised, it interrupts
     /// nothing, and a driver who ignores it entirely works exactly the shift
@@ -445,14 +408,13 @@ struct DeliveryControlPanel: View {
     ///
     /// Cancelling is kept apart from the ordered lifecycle steps because it is
     /// not one of them: it is available from every active state rather than
-    /// following one. So is undoing a completion, which records no event and
-    /// removes one.
+    /// following one. Undoing a completion is ``RootView``'s, which draws the
+    /// line that offers it.
     private enum Operation {
         case start
         case startOffer(Int, sharing: Set<SharedStopKind>)
         case advance(NumberedDelivery)
         case cancel(NumberedDelivery)
-        case undo(RecentCompletion)
     }
 
     private func perform(_ operation: Operation) {
@@ -468,7 +430,13 @@ struct DeliveryControlPanel: View {
                 // that same delivery, so a card can only ever advance itself.
                 switch numbered.delivery.state.nextAction {
                 case .arriveAtPickup: try service.markArrivedAtPickup(numbered.delivery)
-                case .pickUp: try service.markPickedUp(numbered.delivery, recordedBy: .manual)
+                case .pickUp:
+                    // Through the one path every surface records Picked Up by,
+                    // which is where the driver's resume-after-progress setting
+                    // is applied.
+                    let result = try DeliveryProgressService(context: modelContext)
+                        .record(.pickedUp, of: numbered.delivery)
+                    show(result.parked, action: result.undoableAction)
                 case .complete:
                     // Read before the write, because the card disappears with
                     // it. Nothing is offered unless an expectation is the only
@@ -478,7 +446,8 @@ struct DeliveryControlPanel: View {
                     let expected = numbered.delivery.hasUnconfirmedExpectedEarnings
                         ? numbered.delivery.expectedEarnings
                         : nil
-                    try service.markDelivered(numbered.delivery)
+                    let result = try DeliveryProgressService(context: modelContext)
+                        .record(.delivered, of: numbered.delivery)
                     // Only after the transition actually succeeded. A refused
                     // write leaves a delivery still in progress, and offering to
                     // record what it paid would be the screen disagreeing with
@@ -489,19 +458,18 @@ struct DeliveryControlPanel: View {
                             expected: expected
                         )
                     }
-                    offerToUndo(numbered)
+                    if case .resumed = result.parked {
+                        // One Undo for the step and the driving it resumed;
+                        // reopening alone would leave the vehicle driving.
+                        show(result.parked, action: result.undoableAction)
+                    } else {
+                        offerToUndo(numbered, parked: result.parked.notice)
+                    }
                 case .start, nil: break
                 }
             case let .cancel(numbered):
                 pendingCancellation = nil
                 try service.cancelDelivery(numbered.delivery)
-            case let .undo(recent):
-                // The offer goes whatever happens next: a refusal is reported by
-                // the alert below, and leaving the control up would invite a
-                // second press at a delivery the store has already refused to
-                // reopen.
-                recentlyDelivered = nil
-                try service.reopenDelivered(recent.numbered.delivery)
             }
         } catch let error as DeliveryLifecycleError {
             lifecycleError = error
@@ -590,26 +558,23 @@ struct DeliveryControlPanel: View {
     /// The state is derived by the same rule the write will apply, so the offer
     /// cannot exist for a delivery the service would refuse. A row it refuses is
     /// one the app cannot produce, and no banner is shown for one.
-    private func offerToUndo(_ numbered: NumberedDelivery) {
+    private func offerToUndo(_ numbered: NumberedDelivery, parked: PickupWorkflowNotice?) {
         guard let restored = try? DeliveryRecovery(
             reopening: DeliveryLifecycleRecord(numbered.delivery)
         ).restoredState else { return }
 
-        recentlyDelivered = RecentCompletion(numbered: numbered, restored: restored)
+        transientUndo = .delivered(numbered, restoredTo: restored, parked: parked)
     }
 
-    /// A delivery marked delivered a moment ago, and the state taking that back
-    /// would return it to.
+    /// Says what the driver's resume-after-progress setting did, when it did
+    /// anything, and offers the one Undo of step and driving when it resumed.
     ///
-    /// The state is carried rather than looked up when the button is pressed, so
-    /// the sentence VoiceOver reads is the one that describes what will actually
-    /// happen, and so the banner is unpresentable for a delivery that cannot be
-    /// reopened.
-    private struct RecentCompletion: Identifiable {
-        let numbered: NumberedDelivery
-        let restored: DeliveryState
-
-        var id: UUID { numbered.id }
+    /// Announced as well as drawn: the line appears below the list, where a
+    /// VoiceOver user's focus is not, and a resumed route is a fact they need.
+    private func show(_ parked: ParkedProgressOutcome, action: ParkedProgressAction?) {
+        guard let notice = parked.notice else { return }
+        transientUndo = .parked(notice, action: action)
+        AccessibilityNotification.Announcement(notice.spokenLabel).post()
     }
 
     /// A delivery that has just been recorded as delivered, together with the

@@ -2,8 +2,8 @@ import SwiftData
 import SwiftUI
 
 /// The driver's reusable preferences: the vehicles they work in, which one they
-/// are working in now, what a gallon currently costs, and whether Park and
-/// Resume Driving may also record a delivery's pickup.
+/// are working in now, what a gallon currently costs, and what parking may
+/// record for them.
 ///
 /// ## What this screen is, and the one sentence it has to get across
 ///
@@ -202,22 +202,26 @@ struct SettingsView: View {
         }
     }
 
-    /// Whether Park and Resume Driving may also record a pickup, and whether
-    /// they may with stacked orders.
+    /// What parking may record for the driver: a pickup through Park and
+    /// Resume Driving, stacked orders in order, and driving again after a step
+    /// recorded while parked.
     ///
-    /// Both off until the driver turns them on, including for a driver who has
-    /// never opened this screen and has no settings row at all. The second is
-    /// drawn under the first and disabled while the first is off, keeping its
-    /// own answer, so it can never cause anything by itself. The footer says
-    /// what a driver needs before trusting it: which two events are recorded
-    /// and when, that DashPilot is following their setting rather than
-    /// detecting a restaurant or an order, what happens with more than one
-    /// order, and that Undo takes back only the delivery step.
+    /// All three off until the driver turns them on, including for a driver who
+    /// has never opened this screen and has no settings row at all. Each says
+    /// what it does in one line under its own name, rather than one paragraph
+    /// for the group, so the line a driver reads is the one beside the switch
+    /// they are about to touch. The stacked-order switch depends on the
+    /// workflow and is drawn under it, disabled while the workflow is off and
+    /// keeping its own answer, with a line saying **why** it is unavailable; the
+    /// resume switch depends on nothing and says so by being on its own.
     private var pickupWorkflowSection: some View {
-        Section {
+        let workflowOn = settings?.usesParkAndResumeForPickups ?? false
+        return Section {
             Toggle(isOn: usesParkAndResumeForPickups) {
-                Text(PickupWorkflowNotice.settingName)
-                    .dashFont(.body)
+                SettingLabel(
+                    title: PickupWorkflowNotice.settingName,
+                    detail: "Park marks Arrived at Pickup; Resume Driving marks Picked Up."
+                )
             }
             .accessibilityHint(
                 """
@@ -228,33 +232,64 @@ struct SettingsView: View {
             .accessibilityIdentifier("pickupWorkflowToggle")
 
             Toggle(isOn: handlesStackedOrdersInOrder) {
-                Text("Handle stacked orders in order")
-                    .dashFont(.body)
+                SettingLabel(
+                    title: "Handle stacked orders in order",
+                    detail: workflowOn
+                        ? "With several orders, Park works on the lowest-numbered one still to collect."
+                        : "Needs \(PickupWorkflowNotice.settingName) on."
+                )
             }
-            .disabled(!(settings?.usesParkAndResumeForPickups ?? false))
+            .disabled(!workflowOn)
             .accessibilityHint(
-                """
-                When on, with more than one delivery in progress, Park works on the lowest-numbered \
-                delivery still waiting for its pickup. Available when Pick up orders with Park and \
-                Resume is on.
-                """
+                workflowOn
+                    ? "When on, with more than one delivery in progress, Park works on the lowest-numbered delivery still waiting for its pickup."
+                    : "Unavailable until \(PickupWorkflowNotice.settingName) is on. Your choice is kept."
             )
             .accessibilityIdentifier("stackedOrdersInOrderToggle")
+
+            Toggle(isOn: resumesDrivingAfterDeliveryProgress) {
+                SettingLabel(
+                    title: ParkedProgressOutcome.settingName,
+                    detail: "When you record Picked Up or Delivered while parked, resume route recording once that stop has nothing left."
+                )
+            }
+            .accessibilityHint(
+                """
+                When on, recording Picked Up or Delivered while the vehicle is parked resumes route recording \
+                once no order you marked Same pickup or Same drop-off, and no other order, still needs that \
+                stop. It never resumes a paused shift. Works with or without the pickup workflow.
+                """
+            )
+            .accessibilityIdentifier("resumeAfterProgressToggle")
         } header: {
-            Text("Pickup Workflow")
+            Text("Pickup & Parking")
         } footer: {
             Text(
                 """
-                When on, Park marks Arrived at Pickup and Resume Driving marks the same delivery \
-                Picked Up. DashPilot is following this setting and your taps; it does not know which \
-                restaurant you are at. Without stacked orders on, it only acts while one delivery is \
-                in progress; with it on, it takes them in delivery-number order. Orders you marked Same \
-                pickup move together. Undo, shown for a few seconds, takes back only those delivery \
-                steps and leaves the vehicle parked or driving. \
-                Pickups recorded this way are left out of typical pickup waits.
+                DashPilot follows these settings and your taps; it does not know where you are. Undo, \
+                shown for a few seconds, takes back what a tap recorded. Pickups Resume Driving records are \
+                left out of typical pickup waits.
                 """
             )
         }
+    }
+
+    /// The resume-after-progress switch, read from the row and written through
+    /// the service. Nothing on the Lock Screen depends on it: Resume Driving
+    /// leads the card whenever the vehicle is parked, whoever closes the
+    /// stretch.
+    private var resumesDrivingAfterDeliveryProgress: Binding<Bool> {
+        Binding(
+            get: { settings?.resumesDrivingAfterDeliveryProgress ?? false },
+            set: { isEnabled in
+                do {
+                    try SettingsService(context: modelContext).setResumesDrivingAfterDeliveryProgress(isEnabled)
+                } catch {
+                    failure = (error as? any LocalizedError)?.errorDescription
+                        ?? "The resume driving setting could not be changed."
+                }
+            }
+        )
     }
 
     /// The workflow switch, read from the row and written through the service.
@@ -472,3 +507,21 @@ private enum VehicleEditorSubject: Identifiable {
     PreviewSupport.settingsView(withVehicles: false)
 }
 #endif
+
+/// A switch's name and the one line saying what it does, read together by
+/// VoiceOver as the switch's label.
+private struct SettingLabel: View {
+    let title: String
+    let detail: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: DashSpacing.xs) {
+            Text(title)
+                .dashFont(.body)
+            Text(detail)
+                .dashFont(.body)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
