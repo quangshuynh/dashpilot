@@ -367,6 +367,36 @@ struct SettingsService {
         AppLog.settings.info("Stacked orders in order \(isEnabled ? "enabled" : "disabled", privacy: .public)")
     }
 
+    // MARK: Resuming after delivery progress
+
+    /// Whether a Picked Up or Delivered recorded while parked may also record
+    /// driving again once its stop is done.
+    ///
+    /// **Off when no settings row exists and off when the store cannot be
+    /// read**, and never creates a row, for the reason
+    /// ``pickupWorkflowPreferences()`` does not: a delivery step must never
+    /// fail, or write a preference, because of this read, and off is the
+    /// driving the driver already had.
+    ///
+    /// The **third** read of a preference that reaches a recorded fact, at
+    /// ``DeliveryProgressService/record(_:of:at:)`` alone.
+    func resumesDrivingAfterDeliveryProgress() -> Bool {
+        ((try? existingSettings()) ?? nil)?.resumesDrivingAfterDeliveryProgress ?? false
+    }
+
+    /// Turns resuming driving after delivery progress on or off.
+    ///
+    /// **Nothing recorded moves**: no delivery, no parked stretch, no shift.
+    ///
+    /// - Throws: ``SettingsError/storeUnavailable(underlying:)``.
+    func setResumesDrivingAfterDeliveryProgress(_ isEnabled: Bool) throws {
+        try settings().setResumesDrivingAfterDeliveryProgress(isEnabled)
+        try save(describing: "change the resume after delivery progress setting")
+        AppLog.settings.info(
+            "Resume driving after delivery progress \(isEnabled ? "enabled" : "disabled", privacy: .public)"
+        )
+    }
+
     // MARK: Saving
 
     /// Saves, and rolls back if the store refuses.

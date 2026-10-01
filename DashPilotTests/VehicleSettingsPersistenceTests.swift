@@ -79,9 +79,10 @@ struct VehicleSettingsPersistenceTests {
             Set(settings.properties.map(\.name))
                 == [
                     "id", "gasPricePerGallonAmount", "selectedVehicleID",
-                    "usesParkAndResumeForPickups", "handlesStackedOrdersInOrder"
+                    "usesParkAndResumeForPickups", "handlesStackedOrdersInOrder",
+                    "resumesDrivingAfterDeliveryProgress"
                 ],
-            "v19's two pickup workflow answers are the preferences that are a behaviour rather than a default"
+            "v19's two pickup workflow answers and v21's resume answer are the preferences that are a behaviour"
         )
     }
 

@@ -52,8 +52,10 @@ struct PickupWorkflowPersistenceTests {
 
     @Test("The settings row asks the two new questions, has dropped the old one, and joins nothing")
     func theSettingsColumns() throws {
-        // Unchanged by v20, so the current schema is still the one described.
-        let settings = try #require(ModelContainerFactory.currentSchema.entities.first { $0.name == "DriverSettings" })
+        // The frozen v19 shape; v21 adds a third answer to the current row.
+        let settings = try #require(
+            Schema(versionedSchema: DashPilotSchemaV19.self).entities.first { $0.name == "DriverSettings" }
+        )
         #expect(
             Set(settings.properties.map(\.name)) == [
                 "id", "gasPricePerGallonAmount", "selectedVehicleID",

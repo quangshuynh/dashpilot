@@ -18,8 +18,9 @@ nonisolated extension DriverSettingsError: LocalizedError {
 }
 
 /// The driver's current preferences: which vehicle they are working in, what
-/// they last said a gallon of fuel costs, and whether Park and Resume Driving
-/// may also record a delivery's pickup.
+/// they last said a gallon of fuel costs, whether Park and Resume Driving may
+/// also record a delivery's pickup, and whether recording delivery progress
+/// while parked may resume driving.
 ///
 /// ## One row, and why it is in the store rather than in `UserDefaults`
 ///
@@ -43,7 +44,7 @@ nonisolated extension DriverSettingsError: LocalizedError {
 /// puts today's gas price in here has not restated what they paid last week, and
 /// one who switches vehicle has not changed what last Tuesday's shift consumed.
 ///
-/// ## Two preferences are a behaviour rather than a default
+/// ## Three preferences are a behaviour rather than a default
 ///
 /// ``usesParkAndResumeForPickups`` and ``handlesStackedOrdersInOrder`` are not
 /// copied onto anything. They are read at the moment the driver presses Park or
@@ -114,18 +115,33 @@ nonisolated final class DriverSettings {
     /// marked Arrived at Pickup; that is a risk a driver takes on knowingly.
     private(set) var handlesStackedOrdersInOrder: Bool = false
 
+    /// Whether a Picked Up or Delivered the driver records while the vehicle is
+    /// parked may also record driving again, once the stop it belongs to has
+    /// nothing left to do there.
+    ///
+    /// **Off unless the driver turns it on**, and the declared default is what
+    /// makes that true of a row migrated from v20. Independent of
+    /// ``usesParkAndResumeForPickups``: it answers when the driver is leaving a
+    /// stop, not what Park records arriving at one. Read only by
+    /// ``DeliveryProgressService`` at the moment a step is recorded; nothing
+    /// derived reads it and nothing exports it. What counts as the stop being
+    /// done is ``ParkedStopCompletion``'s to say.
+    private(set) var resumesDrivingAfterDeliveryProgress: Bool = false
+
     init(
         id: UUID = DriverSettings.singletonID,
         gasPricePerGallon: Money? = nil,
         selectedVehicleID: UUID? = nil,
         usesParkAndResumeForPickups: Bool = false,
-        handlesStackedOrdersInOrder: Bool = false
+        handlesStackedOrdersInOrder: Bool = false,
+        resumesDrivingAfterDeliveryProgress: Bool = false
     ) {
         self.id = id
         self.gasPricePerGallonAmount = gasPricePerGallon?.amount
         self.selectedVehicleID = selectedVehicleID
         self.usesParkAndResumeForPickups = usesParkAndResumeForPickups
         self.handlesStackedOrdersInOrder = handlesStackedOrdersInOrder
+        self.resumesDrivingAfterDeliveryProgress = resumesDrivingAfterDeliveryProgress
     }
 
     /// The current gas price, in the app's money vocabulary.
@@ -164,6 +180,14 @@ nonisolated final class DriverSettings {
     /// Turns handling stacked orders in order on or off.
     func setHandlesStackedOrdersInOrder(_ isEnabled: Bool) {
         handlesStackedOrdersInOrder = isEnabled
+    }
+
+    /// Turns resuming driving after delivery progress on or off.
+    ///
+    /// Takes effect at the next Picked Up or Delivered recorded while parked.
+    /// Nothing already recorded moves.
+    func setResumesDrivingAfterDeliveryProgress(_ isEnabled: Bool) {
+        resumesDrivingAfterDeliveryProgress = isEnabled
     }
 
     /// The two answers together, as the workflow reads them.
