@@ -301,6 +301,17 @@ Undo takes back all of them. The stretch parked still
 belongs to the shift; it stores which delivery it was for and joins none. See
 [Pick up orders with Park & Resume](settings.md#pick-up-orders-with-park-resume).
 
+### Driving again after the last step at a stop
+
+With `Resume driving after delivery progress` on in Settings, the driver's own `Picked Up` or
+`Delivered`, recorded while parked, records driving again once that stop has nothing left: no order
+marked `Same pickup` (for a pickup) or `Same drop-off` (for a drop-off) still waiting there, and no
+other order still needing that kind of stop. It is the same Resume Driving the button records, and it
+never resumes a paused shift. Parking and pausing stay different statements: a pause stops working
+time and is left only by `Resume Shift`; parking stops the route and is left by `Resume Driving`, by
+this setting, by pausing or by ending. See
+[Resume driving after delivery progress](settings.md#resume-driving-after-delivery-progress).
+
 ## Correcting a recorded pause
 
 A pause is two taps made at a kerb, and it is the easiest thing in DashPilot to record at the wrong

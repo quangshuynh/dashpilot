@@ -1,4 +1,4 @@
-# Settings: vehicles, fuel defaults and the pickup workflow
+# Settings: vehicles, fuel defaults, pickup and parking
 
 DashPilot keeps a small set of reusable preferences so that figures a driver
 would otherwise retype on every shift are typed once. It is reached from the gear
@@ -157,6 +157,9 @@ That is the only way a preference ever reaches a shift after it has started, and
 it only ever happens because the driver saved. See
 [Correcting the vehicle](shift-workflow.md#correcting-the-vehicle-before-any-driving-is-recorded).
 
+The three switches below sit together under **Pickup & Parking**. Each says in one line under its
+name what it does, and the one that depends on another says on screen why it is unavailable.
+
 ## Pick up orders with Park & Resume
 
 **Off unless the driver turns it on.** A driver who never opens this switch parks and resumes
@@ -204,8 +207,8 @@ recorded by hand is left alone.
 ### Handle stacked orders in order
 
 **Off unless the driver turns it on, and it does nothing while the workflow is off.** It is drawn
-under the workflow switch and is disabled until that switch is on; its own answer is kept either
-way. It is a separate choice because with two or more orders the one Park acts on is chosen by a
+under the workflow switch and is disabled until that switch is on, with `Needs Pick up orders with
+Park & Resume on` under its name while it is; its own answer is kept either way. It is a separate choice because with two or more orders the one Park acts on is chosen by a
 rule rather than being the only one there is, and parking at a customer's door with another order
 still to collect would mark that order `Arrived at Pickup`. Undo is the way back from exactly that.
 
@@ -223,7 +226,7 @@ finished shift's [time correction](delivery-lifecycle.md#correcting-the-times-a-
 
 ### What it will not do
 
-- **It never detects anything.** DashPilot does not know which restaurant the vehicle stopped at, or
+- **It never detects anything.** DashPilot does not know where the vehicle stopped, or
   when an order was handed over. The panel says a step was recorded **automatically when you
   parked** or **when you resumed driving**, and its spoken form names this setting.
 - **It never records Picked Up from Park**, and never records either step for a delivery the rule did
@@ -247,6 +250,43 @@ press and no delivery already recorded.
 which this workflow replaces. Because the new switch records different steps at different moments,
 turning the old one on is not taken as agreeing to this one: after updating, the workflow is off
 until the driver turns it on.
+
+## Resume driving after delivery progress
+
+**Off unless the driver turns it on, and independent of the two switches above.** It answers a
+different question: not what Park records when the driver arrives, but whether the driver's own
+`Picked Up` or `Delivered`, recorded while the vehicle is parked, may also record driving again.
+
+With it on, a `Picked Up` or `Delivered` recorded while parked resumes driving **only when that stop
+has nothing left to record**:
+
+| Just recorded | The vehicle stays parked while |
+| --- | --- |
+| `Picked Up` | another order marked [`Same pickup`](delivery-lifecycle.md#same-pickup-and-same-drop-off) with it is still to collect, or any other order in progress is still to collect |
+| `Delivered` | another order marked `Same drop-off` with it is still to hand over, or any other order already in the car is still to hand over |
+| Either | an order Park chose for this stretch (under the pickup workflow) is still at `Arrived at Pickup` |
+
+Otherwise driving resumes, through the same operation the `Resume Driving` button runs, at the
+instant the step was recorded: a new route recording starts, nothing is measured across the parked
+stretch, and working time is unchanged, exactly as after the button.
+
+**Orders the driver did not mark are not assumed to be elsewhere.** DashPilot cannot tell two orders
+from one restaurant from two orders from two restaurants, so with an unmarked order still needing
+the same kind of stop, it stays parked rather than guess that the driver has left; `Resume Driving`
+is one tap. `Same pickup` never counts as `Same drop-off`, nor the other way round.
+
+It **never** resumes a paused shift, never touches a running one that is not parked, reads no
+position or speed, and never records a pickup itself. The line under the list says what happened, for
+example `Delivery 3 picked up · driving resumed`, and that it was this setting; it never says the
+vehicle moved or the driver left. When it keeps the vehicle parked it says which order is still
+waiting. Siri and the Lock Screen's step control follow the same rule, and say it aloud.
+
+**Undo** beside that line, for the same 20 seconds as every other immediate Undo, takes back **both**
+the step and the driving: the delivery returns to where it was, the parked stretch reopens as if it
+had never closed, and the route positions recorded since are removed, because they were recorded
+during what the driver now says was still the parked stretch. It is refused whole, with the reason,
+if anything was recorded for that delivery since, or if the vehicle was parked again, the shift
+paused or ended. It is offered only in the app.
 
 ## Accessibility
 

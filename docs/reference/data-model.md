@@ -420,6 +420,7 @@ preferences.
 | `gasPricePerGallonAmount` | `Decimal?` | What the driver says a gallon currently costs. `nil` means none recorded; `0` means the fuel is recorded as costing nothing |
 | `selectedVehicleID` | `UUID?` | The `VehicleProfile.id` new shifts are recorded under, or `nil` when none is selected |
 | `usesParkAndResumeForPickups` | `Bool` | Added by v19. Whether Park may record `Arrived at Pickup` and Resume Driving `Picked Up`. Declared `false`; off unless the driver turns it on |
+| `resumesDrivingAfterDeliveryProgress` | `Bool` | Added by v21. Whether a `Picked Up` or `Delivered` recorded while parked may also record driving again once that stop has nothing left to record. Declared `false`; independent of the two above, and not exported |
 | `handlesStackedOrdersInOrder` | `Bool` | Added by v19. With the workflow on and more than one delivery in progress, whether Park may work on the lowest-numbered one still waiting for its pickup. Declared `false`, and inert while the workflow is off |
 
 v19 removed v17's `recordsPickupWhenParking`, which let Park record `Picked Up`; its value was not

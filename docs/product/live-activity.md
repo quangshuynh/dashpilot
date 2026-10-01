@@ -126,6 +126,10 @@ on the card behind it, so a pickup recorded by hand, or a Delivered, is still on
 are unchanged, with `Resume Driving` first either way. With the setting off the rows are exactly the
 ones above.
 
+`Resume driving after delivery progress` changes no row. When a `Picked Up` or `Delivered` resumes
+driving under it, from the app, Siri or the card's own step control, the card is rebuilt at once and
+is the driving card: `Resume Driving` goes and the next step is first again.
+
 The setting is read **by the app** when it builds the card, and reaches the card as the order of its
 controls; the extension reads no setting and holds no rule. Turning the switch in Settings updates a
 running shift's card at once. No state offers more than four controls, which is two rows.

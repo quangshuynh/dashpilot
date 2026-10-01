@@ -72,8 +72,8 @@ These are the limits of `Pick up orders with Park & Resume`, and of the retired 
 parking` whose pickups stores may still hold.
 
 - **Both steps are assumptions the driver configured, not observations.** With the workflow on, Park
-  records `Arrived at Pickup` and Resume Driving records `Picked Up`. DashPilot does not know which
-  restaurant the vehicle stopped at, whether the order was handed over, or when.
+  records `Arrived at Pickup` and Resume Driving records `Picked Up`. DashPilot does not know where
+  the vehicle stopped, whether the order was handed over, or when.
 - **It cannot tell a pickup stop from a customer stop.** With an order still to collect and stacked
   orders handled, parking at a customer's door marks that other order `Arrived at Pickup`. Undo takes
   it back; after the Undo window, the step stands until the finished shift's time correction, like
@@ -85,7 +85,7 @@ parking` whose pickups stores may still hold.
   nothing checks that they were. Two orders for one customer from two restaurants should be marked
   `Same drop-off` only, or parking at the first marks the second arrived. Undo takes back the whole
   press.
-- **A shared stop is held within one offer.** An add-on offer accepted later for the same restaurant
+- **A shared stop is held within one offer.** An add-on offer accepted later for the same pickup
   or the same customer cannot join a group from an earlier offer without combining the two offers,
   which would misstate the acceptance. The offer sheet's switches apply to the whole offer; a subset
   is said in `Correct Grouping`, and only one shared pickup and one shared drop-off per offer can be
@@ -113,6 +113,25 @@ parking` whose pickups stores may still hold.
   ordinary `Picked up`; only the export says `unknown`.
 - **Nothing was seen on hardware.** The workflow was asked for after a real shift with the earlier
   switch; this one has been exercised on the simulator only.
+
+## Resuming after delivery progress
+
+- **It follows the driver's taps, not the vehicle.** A step recorded while parked resumes driving when
+  the stop has nothing left to record; DashPilot does not know the driver walked back to the car, and
+  recording starts again at the step even if they linger.
+- **Unmarked stacked orders keep it parked.** With another order in progress that still needs the
+  same kind of stop, and that the driver did not mark `Same pickup` or `Same drop-off`, nothing
+  resumes, because DashPilot cannot tell one restaurant or one door from two. The common stacked case
+  (two orders to two customers) therefore still needs `Resume Driving`.
+- **Under the pickup workflow, an order Park chose that is still at `Arrived at Pickup` keeps it
+  parked**, so Resume Driving's own pickup is never recorded on the driver's behalf by a step of
+  another order.
+- **Undo is app-only and short**, like every immediate Undo; after Siri or the Lock Screen there is
+  none. It removes the route positions recorded since the resume, which for those seconds is the
+  point.
+- **Driving resumed by Siri or the Lock Screen records no route until DashPilot is opened**, as
+  after any spoken Resume Driving, and the confirmation says so.
+
 
 ## Shift end-time correction
 
