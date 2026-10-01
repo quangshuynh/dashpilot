@@ -8,6 +8,10 @@ nonisolated enum RouteSuspensionError: Error, Equatable {
     case alreadyEnded
     /// The proposed end timestamp is earlier than the suspension's start.
     case endPrecedesStart
+    /// Reopening was asked of a suspension that is still open.
+    case notEnded
+    /// Reopening was asked for an end the suspension no longer records.
+    case endChanged
 }
 
 /// One stretch of a shift the driver recorded the vehicle as parked while they
@@ -146,5 +150,18 @@ nonisolated final class RouteSuspension {
         guard endedAt == nil else { throw RouteSuspensionError.alreadyEnded }
         guard date >= startedAt else { throw RouteSuspensionError.endPrecedesStart }
         endedAt = date
+    }
+
+    /// Takes back the end recorded at `closedAt`: the vehicle never stopped
+    /// being parked.
+    ///
+    /// Only for the Undo of a delivery step that resumed driving
+    /// automatically, through ``Shift/reopenRouteSuspension(_:closedAt:)``,
+    /// which owns the rules. Refused unless the row is closed at exactly that
+    /// instant, so a second invocation writes nothing.
+    func reopen(closedAt: Date) throws {
+        guard let endedAt else { throw RouteSuspensionError.notEnded }
+        guard endedAt == closedAt else { throw RouteSuspensionError.endChanged }
+        self.endedAt = nil
     }
 }

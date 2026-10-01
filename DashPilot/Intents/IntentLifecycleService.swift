@@ -262,13 +262,20 @@ struct IntentLifecycleService {
 
         // Which step comes next is ``DeliveryState``'s answer, exactly as it is
         // for the button on the running shift. Nothing here decides the order.
+        // Picked Up and Delivered go through the one path the card uses, so the
+        // driver's setting for resuming after delivery progress applies here too.
+        var parked = ParkedProgressOutcome.notApplicable
         switch delivery.state.nextAction {
         case .arriveAtPickup:
             try deliveryRefusal { try service.markArrivedAtPickup(delivery, at: date) }
         case .pickUp:
-            try deliveryRefusal { try service.markPickedUp(delivery, at: date, recordedBy: .manual) }
+            parked = try deliveryRefusal {
+                try DeliveryProgressService(context: context).record(.pickedUp, of: delivery, at: date)
+            }.parked
         case .complete:
-            try deliveryRefusal { try service.markDelivered(delivery, at: date) }
+            parked = try deliveryRefusal {
+                try DeliveryProgressService(context: context).record(.delivered, of: delivery, at: date)
+            }.parked
         case .start, nil:
             // Unreachable: a delivery that is running always has a next step,
             // and `.start` is never one of them.
@@ -280,7 +287,7 @@ struct IntentLifecycleService {
         AppLog.intents.info("Intent recorded a delivery event")
         // Read back from the delivery rather than from what was asked for, so
         // the confirmation cannot name an event the store did not record.
-        return .deliveryEventRecorded(number: number(of: delivery), state: delivery.state)
+        return .deliveryEventRecorded(number: number(of: delivery), state: delivery.state, parked: parked)
     }
 
     // MARK: Internals

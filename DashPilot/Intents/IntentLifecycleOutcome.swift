@@ -64,7 +64,11 @@ nonisolated enum IntentLifecycleOutcome: Equatable, Sendable {
 
     /// One delivery reached `state`, read back from the delivery after the
     /// write rather than from what was asked for.
-    case deliveryEventRecorded(number: Int?, state: DeliveryState)
+    ///
+    /// `parked` is what the driver's `Resume driving after delivery progress`
+    /// setting did, which is ``ParkedProgressOutcome/notApplicable`` unless the
+    /// vehicle was parked and the setting is on.
+    case deliveryEventRecorded(number: Int?, state: DeliveryState, parked: ParkedProgressOutcome = .notApplicable)
 
     /// What Siri says, and what the Shortcuts app shows.
     var confirmation: String {
@@ -146,9 +150,25 @@ nonisolated enum IntentLifecycleOutcome: Equatable, Sendable {
             [Self.started(number), Self.inProgressStatement(inProgress)]
                 .compactMap { $0 }
                 .joined(separator: " ")
-        case let .deliveryEventRecorded(number, state):
-            "\(Self.name(number)) recorded as \(state.historyDescription.lowercased())."
+        case let .deliveryEventRecorded(number, state, parked):
+            // What the setting did follows, as Park's workflow does. A resume
+            // carries the same caution a spoken Resume Driving carries, because
+            // a capture session can only be started with the app on screen.
+            [
+                "\(Self.name(number)) recorded as \(state.historyDescription.lowercased()).",
+                Self.parkedSentence(parked)
+            ]
+            .compactMap { $0 }
+            .joined(separator: " ")
         }
+    }
+
+    private static func parkedSentence(_ parked: ParkedProgressOutcome) -> String? {
+        guard case .resumed = parked else { return parked.notice?.sentence }
+        return """
+        Driving resumed by your \(ParkedProgressOutcome.settingName) setting, because nothing is left to \
+        record at this stop. Open DashPilot to start recording your route again.
+        """
     }
 
     private static func started(_ number: Int?) -> String {
