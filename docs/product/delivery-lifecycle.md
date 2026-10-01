@@ -192,8 +192,9 @@ be corrected through it is an accidental completion.
 
 ### Two ways to reach it
 
-- **Undo**, offered at the top of the running shift's panel for the first few seconds after a
-  delivery is marked delivered. It names the delivery, says aloud that the delivery becomes active
+- **Undo**, offered in a line below the list for the first few seconds after a delivery is marked
+  delivered. It sits below the list rather than above the cards so that neither its arriving nor
+  its leaving moves a card under the driver's thumb. It names the delivery, says aloud that the delivery becomes active
   again and which state it returns to, and takes no confirmation: the action it reverses happened
   seconds ago. The window does not start while the [expected pay](#expected-pay) confirmation is
   covering it, because an offer the driver cannot see is not one they were given.

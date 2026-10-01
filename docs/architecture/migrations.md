@@ -29,12 +29,18 @@ rather than a store reset.
 | 19.0.0 | Adds `RouteSuspension.pickupWorkflowDeliveryID`, an optional `UUID` naming the delivery a parked stretch was for, and `DriverSettings.usesParkAndResumeForPickups` and `handlesStackedOrdersInOrder`, two `Bool`s declared `false`; removes `DriverSettings.recordsPickupWhenParking`. Backfills nothing; the workflow reads off and no stretch is associated |
 | 20.0.0 | Adds `Delivery.sharedPickupID` and `Delivery.sharedDropOffID`, optional `UUID`s the deliveries of one offer share when the driver said they are collected at the same pickup or go to the same drop-off, and `RouteSuspension.pickupWorkflowSharedPickupDeliveryIDs`, a `[UUID]` declared empty, naming the other deliveries a parked stretch was for. Backfills nothing; every migrated delivery is independent |
 
-The current version is **v20**. Field-level detail is on [Data model](../reference/data-model.md).
+| 21.0.0 | Adds `DriverSettings.resumesDrivingAfterDeliveryProgress`, a `Bool` declared `false`. Backfills nothing; every migrated driver has it off |
 
-`DashPilotSchemaV1` through `DashPilotSchemaV19` hold frozen copies of their models rather than
+The current version is **v21**. Field-level detail is on [Data model](../reference/data-model.md).
+
+`DashPilotSchemaV1` through `DashPilotSchemaV20` hold frozen copies of their models rather than
 reusing the file-scope types, which have moved on. The plan then describes where a store is coming
 from as truthfully as where it is going, and the copies are never used at runtime outside
 migration.
+
+`DashPilotSchemaV20` was frozen in the interval that added v21, with copies of all eleven of its
+models. v21 moves only the settings row, and reusing the file-scope types under v20 would describe
+every v20 store as one that had already answered whether to resume driving after delivery progress.
 
 `DashPilotSchemaV19` was frozen in the interval that added v20, with copies of all eleven of its
 models. v20 moves the delivery and the route suspension, and reusing the file-scope types under v19
@@ -464,3 +470,13 @@ deliveries a parked stretch was for when the chosen one shares its pickup, so Re
 exactly what Park chose. It is a column beside `pickupWorkflowDeliveryID` rather than a rewrite of it,
 so a stretch parked before v20 keeps meaning what it meant: one delivery, and no others. See
 [Same pickup and same drop-off](../product/delivery-lifecycle.md#same-pickup-and-same-drop-off).
+
+### v20 to v21
+
+One column, applied lightweight, and **nothing written**.
+
+`DriverSettings.resumesDrivingAfterDeliveryProgress` is declared `false`. The tempting backfill turns
+it on for a driver who already uses Park and Resume for pickups, and that driver agreed to Park and
+Resume recording steps, not to DashPilot restarting their route after a step of their own. So every
+migrated driver has it off, and no delivery, parked stretch or route moves. See
+[Resume driving after delivery progress](../product/settings.md#resume-driving-after-delivery-progress).
