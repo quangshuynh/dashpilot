@@ -62,6 +62,62 @@ nonisolated extension ShiftActivityAttributes.ContentState {
     /// A symbol for the state that does not rely on colour.
     var statusSymbolName: String { isPaused ? "pause.circle.fill" : "record.circle" }
 
+    // MARK: The card's header
+
+    /// What the card's header says: `Shift Paused`, the parked sentence while
+    /// the vehicle is parked (`Parked · route not recording`), or `Shift in
+    /// Progress`.
+    ///
+    /// Parked replaces the running title rather than taking a line of its own,
+    /// because that line is what pushed the controls off the card. It never
+    /// reads as paused: the clock beside it keeps counting, and the sentence is
+    /// the app's own.
+    var headerTitle: String {
+        if isPaused { return statusTitle }
+        return routeSuspendedNotice ?? statusTitle
+    }
+
+    /// The header's shorter form, drawn where the full one does not fit beside
+    /// the clock: `Parked`, or the ordinary title.
+    var shortHeaderTitle: String {
+        guard !isPaused, routeSuspendedNotice != nil else { return statusTitle }
+        return "Parked"
+    }
+
+    /// The header as VoiceOver hears it, whichever form is drawn: parked says
+    /// the whole of what is true, that the route has stopped and the shift has
+    /// not.
+    var spokenHeaderTitle: String {
+        guard !isPaused, let spokenRouteSuspendedNotice else { return statusTitle }
+        return spokenRouteSuspendedNotice
+    }
+
+    /// The header's symbol: the parking sign while parked, otherwise the
+    /// status symbol the compact presentations use too.
+    var headerSymbolName: String {
+        guard !isPaused, routeSuspendedNotice != nil else { return statusSymbolName }
+        return "parkingsign.circle.fill"
+    }
+
+    // MARK: The card's last line
+
+    /// The mileage line and, once any delivery is done, how many:
+    /// `4.5 mi recorded · partial route · 5 delivered`.
+    ///
+    /// The marker stays joined to the figure it qualifies, and the delivered
+    /// count comes after both, so a line cut back to fit drops the count first.
+    var secondaryLine: String {
+        guard completedDeliveryCount > 0 else { return mileageLine }
+        return "\(mileageLine) · \(completedDeliveryCount) delivered"
+    }
+
+    /// The same line spoken, where the marker is a sentence and the count has
+    /// its noun.
+    var spokenSecondaryLine: String {
+        guard completedDeliveryCount > 0 else { return spokenMileageLine }
+        return "\(spokenMileageLine). \(completedDeliveryCount) \(Self.noun(completedDeliveryCount)) delivered"
+    }
+
     /// The mileage and the marker that qualifies it, on one line:
     /// `"4.5 mi recorded · partial route"`.
     ///

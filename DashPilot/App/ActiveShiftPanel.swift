@@ -494,9 +494,11 @@ struct ActiveShiftPanel: View {
     /// because DashPilot saw nothing: the driver's setting and their tap did it.
     ///
     /// Undo is offered beside a recorded event for the same short window the
-    /// app's immediate undo of a Delivered uses, and takes back that delivery
-    /// event alone. It is its own control with its own spoken label, which
-    /// names what goes back and says the vehicle stays as it is.
+    /// app's immediate undo of a Delivered uses, and takes back exactly what
+    /// that press recorded: one delivery's event, or the same event for every
+    /// delivery of a shared pickup, all of them or none. It is its own control
+    /// with its own spoken label, which names what goes back and says the
+    /// vehicle stays as it is.
     @ViewBuilder
     private var pickupWorkflowNotice: some View {
         if let pickupWorkflow {
@@ -521,13 +523,13 @@ struct ActiveShiftPanel: View {
                 .accessibilityLabel(notice.spokenLabel)
                 .accessibilityIdentifier("pickupWorkflowNotice")
 
-                if let step = pickupWorkflow.undoableStep {
+                if let action = pickupWorkflow.undoableAction {
                     Button(action: undoPickupWorkflowStep) {
                         Label("Undo", systemImage: "arrow.uturn.backward")
                             .frame(minHeight: 44)
                     }
                     .buttonStyle(.bordered)
-                    .accessibilityLabel(step.spokenUndoLabel)
+                    .accessibilityLabel(action.spokenUndoLabel)
                     .accessibilityIdentifier("undoPickupWorkflowStepButton")
                 }
             }

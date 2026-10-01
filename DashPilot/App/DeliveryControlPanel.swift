@@ -246,7 +246,7 @@ struct DeliveryControlPanel: View {
         // count it confirms is written through the same path every other
         // lifecycle action on this screen is.
         .sheet(isPresented: $isStartingGroupedOffer) {
-            NewOfferSheet { count in perform(.startOffer(count)) }
+            NewOfferSheet { count, sharing in perform(.startOffer(count, sharing: sharing)) }
         }
         // A review action, reached from one control rather than from a button on
         // every card, and writing nothing until a correction is confirmed inside
@@ -449,7 +449,7 @@ struct DeliveryControlPanel: View {
     /// removes one.
     private enum Operation {
         case start
-        case startOffer(Int)
+        case startOffer(Int, sharing: Set<SharedStopKind>)
         case advance(NumberedDelivery)
         case cancel(NumberedDelivery)
         case undo(RecentCompletion)
@@ -461,8 +461,8 @@ struct DeliveryControlPanel: View {
             switch operation {
             case .start:
                 try service.startDelivery()
-            case let .startOffer(count):
-                try service.startOffer(deliveryCount: count)
+            case let .startOffer(count, sharing):
+                try service.startOffer(deliveryCount: count, sharing: sharing)
             case let .advance(numbered):
                 // The step is read from the delivery's own state and applied to
                 // that same delivery, so a card can only ever advance itself.
@@ -759,6 +759,13 @@ private struct OfferGroupHeader: View {
             Label("\(offer.title) · \(offer.groupStatement)", systemImage: "square.stack.3d.up.fill")
                 .dashFont(.status)
 
+            // What the driver said the whole offer shares, and only that: a
+            // stop shared by some of the deliveries is said on their cards.
+            if let shared = offer.sharedStopsStatement {
+                Label(shared, systemImage: "link")
+                    .dashFont(.supporting)
+            }
+
             // Only once some of the offer's deliveries have finished. While they
             // are all running it would repeat the line above it.
             if let remaining = offer.remainingStatement {
@@ -769,9 +776,13 @@ private struct OfferGroupHeader: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(
-            [offer.spokenGroupStatement, offer.remainingStatement]
-                .compactMap { $0 }
-                .joined(separator: " ")
+            [
+                offer.spokenGroupStatement,
+                offer.sharedStopsStatement.map { "You recorded them as the \($0.lowercased())." },
+                offer.remainingStatement
+            ]
+            .compactMap { $0 }
+            .joined(separator: " ")
         )
         .accessibilityIdentifier("offerGroupHeader")
     }
@@ -878,6 +889,15 @@ private struct ActiveDeliveryCard: View {
                         .dashFont(.supporting)
                         .foregroundStyle(.secondary)
                 }
+            }
+
+            // Which of its siblings the driver said share this delivery's pickup
+            // or drop-off, by name. A driver reading one card between steps can
+            // see which other card will move with it when they park.
+            if let shared = offer?.sharedStops(of: numbered).caption {
+                Label(shared, systemImage: "link")
+                    .dashFont(.supporting)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             // The state in a symbol and words, and how long it has been the
@@ -1022,6 +1042,11 @@ private struct ActiveDeliveryCard: View {
         // status above it.
         if let grouping = offer?.spokenGrouping(of: numbered) {
             spoken += ". \(grouping)"
+        }
+        // Right after the grouping it refines: which of those siblings share a
+        // stop with this one, as the driver recorded it.
+        if let shared = offer?.sharedStops(of: numbered).spokenCaption {
+            spoken += ". \(shared)"
         }
         if let expected = delivery.expectedEarnings {
             spoken += ". \(numbered.spokenExpectedEarnings(expected.formatted(locale: locale)))"

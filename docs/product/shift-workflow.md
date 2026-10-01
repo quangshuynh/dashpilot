@@ -295,7 +295,9 @@ answer first, because the point is fewer taps at a door.
 
 With one delivery in progress it is that delivery. With several, nothing is recorded unless
 `Handle stacked orders in order` is also on, and then Park takes the lowest-numbered delivery still
-waiting for its pickup; Resume Driving always finishes the one Park took. The stretch parked still
+waiting for its pickup; Resume Driving always finishes the one Park took. Deliveries the driver
+marked [Same pickup](delivery-lifecycle.md#same-pickup-and-same-drop-off) move together, and one
+Undo takes back all of them. The stretch parked still
 belongs to the shift; it stores which delivery it was for and joins none. See
 [Pick up orders with Park & Resume](settings.md#pick-up-orders-with-park-resume).
 

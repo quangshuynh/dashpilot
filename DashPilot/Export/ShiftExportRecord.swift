@@ -385,6 +385,27 @@ nonisolated struct DeliveryExportRecord: Equatable, Sendable, Codable {
     /// written rather than assumed for the reason every optional here is.
     let offerNumber: Int?
 
+    /// Which deliveries of this shift the driver recorded as **collected at the
+    /// same pickup**: deliveries carrying the same number here said so, and
+    /// `null` is a delivery recorded as independent, which is the ordinary case.
+    ///
+    /// A **local grouping key**, counted within the shift in delivery order, and
+    /// nothing else: no place, no customer, no address and no identifier from
+    /// the store. Added without a version bump, by the format's own rule: no
+    /// existing field changed meaning. It is in the file because it is a fact
+    /// the driver recorded and because it explains one reading of it. Under the
+    /// Park and Resume pickup workflow, deliveries sharing a pickup have their
+    /// arrival and pickup recorded by one press, so they carry the **same**
+    /// `arrivedAtPickupAt`, `pickedUpAt` and `pickupWaitSeconds`: one wait at
+    /// one counter, written once per delivery. Every delivery recorded before
+    /// the driver could say this carries `null`; nothing was inferred for them.
+    let sharedPickupGroup: Int?
+
+    /// The same for deliveries the driver recorded as going to **the same
+    /// drop-off**. Independent of ``sharedPickupGroup``: one customer can order
+    /// from two restaurants, so two deliveries may share this and not that.
+    let sharedDropOffGroup: Int?
+
     /// `accepted`, `arrivedAtPickup`, `pickedUp`, `delivered` or `cancelled` —
     /// ``DeliveryState``'s own vocabulary. A cancelled delivery is exported as
     /// what it is and is never counted as completed.
@@ -491,7 +512,8 @@ nonisolated struct DeliveryExportRecord: Equatable, Sendable, Codable {
     let effectiveEarningsPerDeliveryHour: ExportAmount?
 
     private enum CodingKeys: String, CodingKey {
-        case id, number, offerNumber, state, acceptedAt, arrivedAtPickupAt, pickedUpAt, deliveredAt, cancelledAt
+        case id, number, offerNumber, sharedPickupGroup, sharedDropOffGroup
+        case state, acceptedAt, arrivedAtPickupAt, pickedUpAt, deliveredAt, cancelledAt
         case pickupPlaceName, pickupWaitSeconds, pickupRecordedBy, acceptedToDeliveredSeconds
         case grossEarnings, expectedEarnings
         case additionalTips, additionalTipsTotal, effectiveEarnings
@@ -503,6 +525,8 @@ nonisolated struct DeliveryExportRecord: Equatable, Sendable, Codable {
         try container.encode(id, forKey: .id)
         try container.encode(number, forKey: .number)
         try container.encodeAlways(offerNumber, forKey: .offerNumber)
+        try container.encodeAlways(sharedPickupGroup, forKey: .sharedPickupGroup)
+        try container.encodeAlways(sharedDropOffGroup, forKey: .sharedDropOffGroup)
         try container.encode(state, forKey: .state)
         try container.encode(acceptedAt, forKey: .acceptedAt)
         try container.encodeAlways(arrivedAtPickupAt, forKey: .arrivedAtPickupAt)

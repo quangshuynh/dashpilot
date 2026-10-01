@@ -127,6 +127,23 @@ struct OfferCorrectionView: View {
                     .accessibilityIdentifier("offerCorrectionEmptyOffer")
             }
 
+            // Which of these share a pickup or a drop-off: said here for some of
+            // an offer, or taken back. Only a grouped offer has anyone to share
+            // a stop with.
+            if offer.isGrouped {
+                NavigationLink(value: CorrectionTarget.sharedStops(offer.id)) {
+                    VStack(alignment: .leading, spacing: DashSpacing.xs) {
+                        Text("Same Pickup or Drop-off")
+                        Text(offer.sharedStopsStatement ?? sharedStopsSummary(offer))
+                            .dashFont(.supporting)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .accessibilityLabel("Same pickup or drop-off for \(offer.title)")
+                .accessibilityValue(offer.sharedStopsStatement ?? sharedStopsSummary(offer))
+                .accessibilityIdentifier("offerCorrectionSharedStopsButton")
+            }
+
             if offer.isGrouped {
                 Button("Separate Into Single Deliveries") {
                     pending = PendingCorrection(operation: .separate(offer.id), plan: .separate(offer))
@@ -221,6 +238,7 @@ struct OfferCorrectionView: View {
     private enum CorrectionTarget: Hashable {
         case delivery(UUID)
         case offer(UUID)
+        case sharedStops(UUID)
     }
 
     @ViewBuilder
@@ -234,7 +252,18 @@ struct OfferCorrectionView: View {
             if let offer = offers.first(where: { $0.id == id }) {
                 offerDestinations(offer)
             }
+        case let .sharedStops(id):
+            if let offer = offers.first(where: { $0.id == id }) {
+                SharedStopEditor(offer: offer) { path.removeAll() }
+            }
         }
+    }
+
+    /// What an offer whose deliveries do not all share a stop records: that
+    /// some do, or that none does.
+    private func sharedStopsSummary(_ offer: NumberedOffer) -> String {
+        let any = offer.deliveries.contains { !offer.sharedStops(of: $0).isEmpty }
+        return any ? "Some deliveries share a stop" : "Independent"
     }
 
     /// Where one delivery can go: another offer of this shift, or one of its

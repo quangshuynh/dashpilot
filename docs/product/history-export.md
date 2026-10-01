@@ -65,6 +65,24 @@ Exports are never called "v13".
 
 ### Version history
 
+#### Still 6: deliveries recorded as sharing a stop
+
+The driver can now record that deliveries of one offer are collected at the
+[same pickup](delivery-lifecycle.md#same-pickup-and-same-drop-off), or go to the same drop-off. JSON
+gains `shifts[].deliveries[].sharedPickupGroup` and `sharedDropOffGroup`: deliveries of one shift
+carrying the same number were recorded as sharing that stop, and `null` is an independent delivery,
+which is the ordinary case and every delivery recorded before this could be said. The version was
+**evaluated and deliberately not moved**: nothing existing changed meaning, nothing was removed or
+renamed, and no enumeration gained a value.
+
+They are in the file because they are facts the driver recorded, and because they explain one
+reading: deliveries sharing a pickup, recorded by one Park and one Resume Driving, carry the **same**
+arrival, pickup and `pickupWaitSeconds`, one wait at one counter written once per delivery. The
+numbers are local to the shift and counted in delivery order; no stored identity, place, customer
+or address is written. **The CSV is unchanged at 42 columns**: its unit is a delivery, a group is a
+relationship between rows, and a column would be one more thing a spreadsheet sums for a fact most
+rows do not have.
+
 #### 6: pickups Resume Driving recorded
 
 Under [Pick up orders with Park & Resume](settings.md#pick-up-orders-with-park-resume), Park records
@@ -386,7 +404,8 @@ Every lifecycle timestamp that was recorded, the state it ended in, the pickup p
 recorded, the recorded pickup wait and how its pickup was recorded, acceptance-to-delivery duration, the platform amount recorded
 against that delivery, each additional tip with its method and the moment it was recorded, those
 tips' total, what the delivery paid altogether, and that delivery's own earnings per recorded
-delivery hour.
+delivery hour. In JSON, which offer it was accepted in and, where the driver recorded one, which
+shared pickup and shared drop-off it belongs to.
 
 ### Per expense (JSON only)
 

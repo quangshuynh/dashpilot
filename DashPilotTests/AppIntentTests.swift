@@ -607,6 +607,56 @@ struct AppIntentTests {
         #expect(DashPilotShortcuts.appShortcuts.count == 8, "And the shortcut count is unchanged by them")
     }
 
+    // MARK: A shared pickup, from every surface
+
+    /// A running shift with the workflow on and an offer of two the driver
+    /// marked Same pickup, in `context`.
+    private func sharedPickupOffer(in context: ModelContext) throws -> [Delivery] {
+        let settings = SettingsService(context: context)
+        try settings.setUsesParkAndResumeForPickups(true)
+        try settings.setHandlesStackedOrdersInOrder(true)
+        return try DeliveryService(context: context)
+            .startOffer(deliveryCount: 2, sharing: [.pickup], at: .now)
+            .deliveriesInOrder
+    }
+
+    @Test("Siri's Park and Resume Driving move a shared pickup together, and say what the app says")
+    func spokenParkAndResumeMoveASharedPickup() async throws {
+        try await withStore { context in
+            _ = try await StartShiftIntent().perform()
+            let pair = try sharedPickupOffer(in: context)
+
+            let parked = try IntentLifecycleService(context: context).parkVehicle()
+            #expect(pair.allSatisfy { $0.state == .arrivedAtPickup })
+            guard case let .vehicleParked(pickup) = parked else {
+                Issue.record("Parking said something else: \(parked)")
+                return
+            }
+            #expect(pickup == .sharedPickupArrived(SharedPickupArrival(recorded: [1, 2], alreadyArrived: [])))
+            #expect(parked.confirmation.contains("Deliveries 1 and 2 marked Arrived at Pickup"), "\(parked.confirmation)")
+
+            let resumed = try IntentLifecycleService(context: context).resumeDriving()
+            #expect(pair.allSatisfy { $0.state == .pickedUp && $0.pickupProvenance == .resumeAutomation })
+            #expect(resumed.confirmation.contains("Deliveries 1 and 2 marked Picked Up"), "\(resumed.confirmation)")
+        }
+    }
+
+    @Test("The Lock Screen's Park and Resume Driving move a shared pickup together, through the same service")
+    func activityParkAndResumeMoveASharedPickup() async throws {
+        try await withStore { context in
+            _ = try await StartShiftIntent().perform()
+            let pair = try sharedPickupOffer(in: context)
+
+            _ = try await ParkVehicleFromActivityIntent().perform()
+            #expect(pair.allSatisfy { $0.state == .arrivedAtPickup })
+            let shift = try #require(pair[0].shift)
+            #expect(shift.openRouteSuspension?.pickupWorkflowDeliveryIDs == pair.map(\.id))
+
+            _ = try await ResumeDrivingFromActivityIntent().perform()
+            #expect(pair.allSatisfy { $0.state == .pickedUp })
+        }
+    }
+
     @Test("Pausing and resuming from the Live Activity writes what the app's own button writes")
     func activityIntentsPauseAndResume() async throws {
         try await withStore { context in

@@ -4,7 +4,7 @@ import Foundation
 ///
 /// ## Why this is not the schema version
 ///
-/// The store is at schema v19 and will move on. That number describes how
+/// The store is at schema v20 and will move on. That number describes how
 /// SwiftData lays out a database on one device, and nothing outside the app has
 /// ever seen it. This one describes a **file a driver has already taken
 /// somewhere else** — a spreadsheet, a folder, an accountant's inbox — and the
@@ -18,6 +18,22 @@ import Foundation
 /// keeps working.
 ///
 /// ## Version history
+///
+/// ### 6, unchanged: deliveries recorded as sharing a stop
+///
+/// `shifts[].deliveries[].sharedPickupGroup` and `sharedDropOffGroup` were
+/// **added**, each a number local to the shift shared by the deliveries the
+/// driver recorded as collected at the same pickup or taken to the same
+/// drop-off, and an explicit `null` for an independent delivery. Evaluated
+/// against the rule above and **not bumped**: nothing existing changed meaning,
+/// nothing was removed or renamed, and no enumeration gained a value. They are
+/// in the file because they are facts the driver recorded, and because they
+/// explain why two deliveries sharing a pickup carry the same arrival, pickup
+/// and wait when one Park and one Resume Driving recorded them. No stored
+/// identity, place, customer or address is written. **The CSV is unchanged at
+/// 42 columns**: its unit is a delivery, a group is a relationship between
+/// rows, and a spreadsheet column would be one more thing summed for a fact
+/// most rows do not have.
 ///
 /// ### 6: pickups Resume Driving recorded
 ///

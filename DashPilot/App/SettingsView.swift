@@ -26,6 +26,7 @@ import SwiftUI
 /// added to the main screen does.
 struct SettingsView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(ShiftLiveActivityService.self) private var liveActivity
     @Environment(\.locale) private var locale
 
     /// Oldest first: the order the driver added them, which does not move when
@@ -247,8 +248,9 @@ struct SettingsView: View {
                 When on, Park marks Arrived at Pickup and Resume Driving marks the same delivery \
                 Picked Up. DashPilot is following this setting and your taps; it does not know which \
                 restaurant you are at. Without stacked orders on, it only acts while one delivery is \
-                in progress; with it on, it takes them in delivery-number order. Undo, shown for a few \
-                seconds, takes back only that delivery step and leaves the vehicle parked or driving. \
+                in progress; with it on, it takes them in delivery-number order. Orders you marked Same \
+                pickup move together. Undo, shown for a few seconds, takes back only those delivery \
+                steps and leaves the vehicle parked or driving. \
                 Pickups recorded this way are left out of typical pickup waits.
                 """
             )
@@ -266,6 +268,10 @@ struct SettingsView: View {
                     failure = (error as? any LocalizedError)?.errorDescription
                         ?? "The pickup workflow setting could not be changed."
                 }
+                // The Live Activity puts Park Vehicle first while this is on, so
+                // a running shift's card follows the switch now rather than at
+                // its next delivery step.
+                liveActivity.reconcile()
             }
         )
     }

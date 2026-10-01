@@ -192,10 +192,12 @@ final class ShiftLiveActivityService: ShiftActivityReconciling {
         guard let measurement = measureRoute(of: shift) else { return }
 
         let reference = now()
-        let content = shift.activityContentState(
-            for: measurement.recordedDistance,
+        let content = Self.content(
+            for: shift,
+            recordedDistance: measurement.recordedDistance,
             asOf: reference,
-            locale: locale()
+            locale: locale(),
+            context: context
         )
 
         guard let handle else {
@@ -225,6 +227,30 @@ final class ShiftLiveActivityService: ShiftActivityReconciling {
     /// when it was measured, and one failed query does not make it false. A
     /// measurement of a *different* shift is not a fallback at all, so it is
     /// discarded rather than attributed to this one.
+    /// The snapshot for `shift`: its own facts, and the order the driver's
+    /// pickup workflow setting gives the controls.
+    ///
+    /// **The one place the card's content is built**, for the activity and for
+    /// the debug preview a UI journey reads, so the two cannot disagree. The
+    /// setting is read here, in the app, and arrives on the card as the order
+    /// of its controls; the extension reads no preference. It is a read of
+    /// current configuration for a presentation, never copied onto anything
+    /// recorded, and a store that cannot be read gives the ordinary order.
+    static func content(
+        for shift: Shift,
+        recordedDistance: RouteDistance,
+        asOf reference: Date,
+        locale: Locale,
+        context: ModelContext
+    ) -> ShiftActivityAttributes.ContentState {
+        shift.activityContentState(
+            for: recordedDistance,
+            asOf: reference,
+            locale: locale,
+            parkLeads: SettingsService(context: context).pickupWorkflowPreferences().usesParkAndResume
+        )
+    }
+
     private func measureRoute(of shift: Shift) -> ActiveRouteMeasurement? {
         do {
             let measurement = try ActiveShiftRouteService(context: context)

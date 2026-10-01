@@ -145,34 +145,50 @@ nonisolated enum ShiftActivityControl: Codable, Hashable, Sendable {
         }
     }
 
-    /// Whether this is the control a driver most likely reached for.
+    /// Whether this control may take the card's emphasis when it comes first
+    /// among those that can.
     ///
-    /// At most one control is emphasised at a time, and it is never `end`:
-    /// emphasising the rarer, harder-to-undo action over the frequent one is how
-    /// a shift gets ended by mistake. That is the same judgement the app's own
-    /// panel makes about the same three buttons.
+    /// At most one control is emphasised at a time, and it is never `end` or
+    /// `pause`: emphasising the rarer, harder-to-undo action over the frequent
+    /// one is how a shift gets ended by mistake. That is the same judgement the
+    /// app's own panel makes about the same buttons.
     ///
-    /// ``startDelivery`` is deliberately **not** emphasised while a delivery is
-    /// running: the step of the order already in the car is what that driver
-    /// reached for, and the card would otherwise emphasise two controls at once.
-    /// The emphasis is therefore decided for the list rather than for the case,
-    /// by ``ShiftActivityControl/emphasised(in:)``.
+    /// Which of the rest is emphasised is **the app's order**, through
+    /// ``ShiftActivityControl/emphasised(in:)``: the first of them in the list.
+    /// ``park`` can take it because a driver using the Park and Resume pickup
+    /// workflow is given it first, where it is the control they reach for;
+    /// every other list puts a delivery step or Start Delivery ahead of it, so
+    /// it is emphasised nowhere else. ``resumeDriving`` leads every parked list
+    /// for the reason ``resume`` leads a paused one: leaving the state is the
+    /// tap that matters, because forgetting to costs the rest of the shift's
+    /// route.
     var isProminent: Bool {
         switch self {
-        // ``resumeDriving`` is emphasised for the reason ``resume`` is, and it
-        // is the app's own panel's judgement: leaving the parked state is the
-        // tap that matters, because forgetting to is what costs the rest of the
-        // shift's route. ``park`` is not, for the reason ``pause`` is not.
-        case .resume, .resumeDriving, .deliveryStep, .startDelivery: true
-        case .pause, .park, .end: false
+        case .resume, .resumeDriving, .park, .deliveryStep, .startDelivery: true
+        case .pause, .end: false
+        }
+    }
+
+    /// The identifier a UI journey finds this control by on the card's debug
+    /// preview, and nothing else reads.
+    var accessibilityIdentifier: String {
+        switch self {
+        case .pause: "activityControl.pause"
+        case .resume: "activityControl.resume"
+        case .end: "activityControl.end"
+        case .startDelivery: "activityControl.startDelivery"
+        case .park: "activityControl.park"
+        case .resumeDriving: "activityControl.resumeDriving"
+        case .deliveryStep: "activityControl.deliveryStep"
         }
     }
 
     /// The one control in `controls` to emphasise, or `nil`.
     ///
-    /// The first that would take emphasis on its own, which is the order the app
-    /// put them in: a delivery's next step outranks starting another, and both
-    /// outrank the two lifecycle controls, which are never emphasised at all.
+    /// The first that can take emphasis, in the order the app put them in: a
+    /// delivery's next step outranks starting another, Park leads only where
+    /// the driver's pickup workflow put it first, and the two lifecycle controls
+    /// are never emphasised at all.
     static func emphasised(in controls: [ShiftActivityControl]) -> ShiftActivityControl? {
         controls.first { $0.isProminent }
     }

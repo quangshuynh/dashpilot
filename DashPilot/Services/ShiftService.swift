@@ -560,8 +560,14 @@ struct ShiftService {
     /// stretch says which delivery it was for, or nothing was written. It joins
     /// nothing, and nothing here reads it.
     ///
-    /// - Parameter pickupWorkflowDeliveryID: see
-    ///   ``RouteSuspension/pickupWorkflowDeliveryID``.
+    /// The deliveries the driver recorded as sharing that delivery's pickup
+    /// travel in the same save, in `sharingPickupWith`, for the same reason.
+    ///
+    /// - Parameters:
+    ///   - pickupWorkflowDeliveryID: see
+    ///     ``RouteSuspension/pickupWorkflowDeliveryID``.
+    ///   - sharingPickupWith: see
+    ///     ``RouteSuspension/pickupWorkflowSharedPickupDeliveryIDs``.
     /// - Throws: ``ShiftLifecycleError/noActiveShift`` if none is running,
     ///   ``ShiftLifecycleError/shiftAlreadyParked(parkedAt:)`` if the vehicle is
     ///   already recorded as parked,
@@ -569,7 +575,11 @@ struct ShiftService {
     ///   paused, or ``ShiftLifecycleError/storeUnavailable(underlying:)`` if the
     ///   write fails.
     @discardableResult
-    func parkActiveShift(at date: Date = .now, pickupWorkflowDeliveryID: UUID? = nil) throws -> Shift {
+    func parkActiveShift(
+        at date: Date = .now,
+        pickupWorkflowDeliveryID: UUID? = nil,
+        sharingPickupWith: [UUID] = []
+    ) throws -> Shift {
         guard let shift = try activeShift() else {
             AppLog.shift.notice("Refused to record parking: no shift is running")
             throw ShiftLifecycleError.noActiveShift
@@ -595,7 +605,11 @@ struct ShiftService {
 
         let suspension: RouteSuspension
         do {
-            suspension = try shift.beginRouteSuspension(at: parkDate, pickupWorkflowDeliveryID: pickupWorkflowDeliveryID)
+            suspension = try shift.beginRouteSuspension(
+                at: parkDate,
+                pickupWorkflowDeliveryID: pickupWorkflowDeliveryID,
+                sharingPickupWith: sharingPickupWith
+            )
         } catch let error as ShiftError {
             context.rollback()
             AppLog.shift.error(

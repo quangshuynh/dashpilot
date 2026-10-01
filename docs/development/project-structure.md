@@ -10,9 +10,10 @@ DashPilot/
   Persistence/    Versioned schema, migration plan, container construction
   Services/       Application services that own state transitions, and platform adapters
   Support/        Cross-cutting utilities: logging and launch arguments
-DashPilotActivity/ Value types shared by the app and the widget extension: the Live Activity snapshot,
-                   its control vocabulary, its delivery clocks and its five intent declarations
-DashPilotWidgets/ The widget extension: the Live Activity's Lock Screen and Dynamic Island views
+DashPilotActivity/ Shared by the app and the widget extension: the Live Activity snapshot, its control
+                   vocabulary, its delivery clocks, its layout plan, its card views and its intent
+                   declarations
+DashPilotWidgets/ The widget extension: the Live Activity's configuration and Dynamic Island
 DashPilotTests/   Swift Testing suites
 DashPilotUITests/ XCUITest journeys
 docs/             This documentation site
@@ -44,8 +45,11 @@ the app wrong by voice and right by tap, so there is no rule there to disagree w
 [Voice and system actions](../product/voice-actions.md).
 
 `DashPilotActivity/` is compiled into the app **and** into the widget extension, which is how
-ActivityKit matches what one requests to what the other draws. It holds value types only: no
-SwiftData, no services, and nothing that would drag the model layer into the extension. A
+ActivityKit matches what one requests to what the other draws. It holds value types and the card's
+views only: no SwiftData, no services, and nothing that would drag the model layer into the
+extension. The card's views live here, rather than in the extension, so the app's tests can lay the
+card out and measure it against the Lock Screen's height, and a debug build can draw it for a UI
+journey; they read only the snapshot, and the WidgetKit-only modifiers stay in the extension. A
 `LiveActivityIntent` is performed in the app's process, so the extension compiles the intent
 declarations and a body that cannot run, and refuses if it somehow does, rather than a body that
 would report success having written nothing.

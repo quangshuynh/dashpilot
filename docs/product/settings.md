@@ -183,16 +183,21 @@ and its Resume counterpart, and the Lock Screen's `Park Vehicle` and `Resume Dri
 | One, already picked up | Parked only, and nothing more is said (this is a stop at a customer) |
 | Two or more, `Handle stacked orders in order` off | Parked only, and the panel says why |
 | Two or more, `Handle stacked orders in order` on | Parked, and the lowest-numbered delivery still waiting for its pickup `Arrived at Pickup` (or nothing new, if it already was) |
+| Two or more that all share one pickup the driver marked [`Same pickup`](delivery-lifecycle.md#same-pickup-and-same-drop-off), either answer | Parked, and every one still waiting for its pickup `Arrived at Pickup`, together |
+| The chosen delivery shares a pickup with others, `Handle stacked orders in order` on | Parked, and it and the others sharing its pickup `Arrived at Pickup`, together |
 
 "Lowest-numbered" is the delivery number its card shows, which is the order the deliveries were
 accepted in. With Delivery 3 and Delivery 4 both heading to their pickups, the first Park and Resume
 work on Delivery 3, and the next on Delivery 4. A delivery already picked up, delivered or cancelled
 is never chosen and never moved. Nothing else is consulted: not distance, location, pickup place,
-expected pay or the order of the cards on screen.
+expected pay or the order of the cards on screen. The one thing that joins deliveries is the
+driver's own `Same pickup`; a shared **drop-off** never does, because one customer can order from
+two restaurants.
 
 **Resume Driving does not choose again.** It records the pickup of the delivery Park chose for that
 stop, which is stored with the parked stretch so it survives the app being closed while the driver
-is inside, and it does so only if that delivery is still at `Arrived at Pickup`. A delivery cancelled
+is inside, and it does so only if that delivery is still at `Arrived at Pickup`. For a shared pickup
+it is every delivery Park stored, recorded together. A delivery cancelled
 while the driver was inside is not replaced by the next one; one whose pickup the driver already
 recorded by hand is left alone.
 
@@ -207,8 +212,9 @@ still to collect would mark that order `Arrived at Pickup`. Undo is the way back
 ### Undo
 
 Beside a step the workflow has just recorded, the panel offers **Undo** for the same short window
-the app's immediate undo of a `Delivered` uses (20 seconds on screen). It takes back **that delivery
-step and nothing else**: after Park, the delivery goes back to `Accepted` and the vehicle stays
+the app's immediate undo of a `Delivered` uses (20 seconds on screen). It takes back **exactly what
+that press recorded and nothing else**, one delivery's step or the same step for every delivery of a
+shared pickup, all of them or none: after Park, the delivery goes back to `Accepted` and the vehicle stays
 parked; after Resume Driving, the delivery goes back to `Arrived at Pickup`, its pickup is no
 longer recorded, and the vehicle stays driving. It is refused, and says why, if anything has been
 recorded for that delivery since. It is offered only in the app, only by the screen that made the

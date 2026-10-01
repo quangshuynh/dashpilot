@@ -81,6 +81,15 @@ parking` whose pickups stores may still hold.
 - **With stacked orders handled, the order is the delivery number.** A driver collecting Delivery 4
   before Delivery 3 gets Delivery 3 marked, and uses Undo and the cards. DashPilot does not guess
   from distance, place or pay.
+- **A shared pickup is only what the driver said.** Deliveries marked `Same pickup` move together;
+  nothing checks that they were. Two orders for one customer from two restaurants should be marked
+  `Same drop-off` only, or parking at the first marks the second arrived. Undo takes back the whole
+  press.
+- **A shared stop is held within one offer.** An add-on offer accepted later for the same restaurant
+  or the same customer cannot join a group from an earlier offer without combining the two offers,
+  which would misstate the acceptance. The offer sheet's switches apply to the whole offer; a subset
+  is said in `Correct Grouping`, and only one shared pickup and one shared drop-off per offer can be
+  said there.
 - **Resume Driving records nothing for a stretch parked before the workflow existed**, or one parked
   with the workflow off, because such a stretch was not for any delivery.
 - **Undo lasts a few seconds, in the app that pressed it, and not across a relaunch.** Siri, Shortcuts
@@ -222,19 +231,24 @@ parking` whose pickups stores may still hold.
   route has recorded, which is a floor as it is everywhere else, and it does not claim that recording
   is running. If capture has stopped, the figure simply stops growing. The place that says whether
   capture is running, and why it is not, is the app's own status line.
-- **Nothing is rendered by a test.** The card's contents, its controls, its refusals and its
-  synchronisation with the store are covered by unit tests over the same snapshot the extension
-  draws; what the extension makes of that snapshot is verified by running it, not by an assertion.
-  XCUITest cannot reach a Lock Screen.
+- **The card is measured, but not on a Lock Screen.** Its own view is laid out in the app's test
+  host at two phone widths and every text size and held under the 160-point limit, and a debug build
+  draws it on the main screen for UI journeys. Neither is the system's rendering: the Lock Screen
+  draws its own background and margins, and a bordered button on a device may differ by a few
+  points, which is why the budget keeps a margin. XCUITest cannot reach a Lock Screen.
+- **Text larger than `xLarge` is drawn at `xLarge` on the card.** Past it, two control labels no
+  longer fit side by side on the narrowest supported phone and the controls would need a third row.
+  The app's own screens follow every size.
 - **It has never run on a physical device.** The behaviour described here was verified on the iOS
   26.5 simulator, which has no battery, cannot be carried and cannot evict an app under real memory
   pressure.
 - **No delivery cancellation, amount or expense can be reached from it**, and there is no Home
   Screen or Lock Screen widget of any kind. A delivery started from the card by mistake is cancelled
   in the app, which keeps it in history.
-- **Past three open deliveries, the card stops drawing a clock per order** and states how many more
-  are running. The controls sit below those lines on a card of fixed height, and pushing them off
-  the bottom would be worse than sending a driver to the app for the fourth timer.
+- **The card draws only as many order lines as its height allows**, two or three at the default
+  text size and fewer with three or four controls or larger text, and states how many more are
+  running. The mileage line is the first thing left out. Pushing the controls off the bottom would be
+  worse than sending a driver to the app for the rest.
 - **A delivery's clock is its elapsed lifecycle, and nothing more.** It counts from the moment the
   driver recorded accepting the order, which says nothing about whether they were driving, waiting
   or parked during it, and it is not reduced by a shift pause. A shift cannot be paused while a
