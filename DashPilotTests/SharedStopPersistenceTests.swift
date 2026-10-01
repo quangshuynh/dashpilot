@@ -159,8 +159,11 @@ struct SharedStopPersistenceTests {
 
         // Resuming the migrated stretch under the workflow picks up the one
         // delivery Park chose in v19, and not its look-alike sibling.
+        // The two share an acceptance instant, so which is numbered first is the
+        // identity tie-break; the number is read from the shift, not assumed.
+        let firstNumber = shift.numberedDeliveries.first { $0.id == firstID }?.number
         let resumed = try ParkVehicleService(context: context).resumeDriving(at: at(20))
-        #expect(resumed.pickup == .markedPickedUp(deliveryNumber: 1))
+        #expect(resumed.pickup == .markedPickedUp(deliveryNumber: firstNumber))
         let first = try #require(deliveries.first { $0.id == firstID })
         let second = try #require(deliveries.first { $0.id == secondID })
         #expect(first.state == .pickedUp)
