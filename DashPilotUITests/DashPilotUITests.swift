@@ -2687,6 +2687,273 @@ final class DashPilotUITests: XCTestCase {
         assertCard("Delivery 1", says: "waiting at the pickup", in: app)
     }
 
+    // MARK: Same pickup and same drop-off
+
+    /// Starts an offer of `count` from the sheet, with the two switches as
+    /// asked, and waits for its cards.
+    @MainActor
+    private func startOffer(
+        of count: Int = 2,
+        samePickup: Bool = false,
+        sameDropOff: Bool = false,
+        expectingCards total: Int,
+        in app: XCUIApplication
+    ) {
+        let offerControl = app.buttons["startOfferButton"]
+        XCTAssertTrue(scrollTo(offerControl, in: app))
+        XCTAssertTrue(scrollUntilHittable(offerControl, in: app))
+        offerControl.tap()
+
+        let confirm = app.buttons["confirmStartOfferButton"]
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        // The stepper's second button is its increment; it carries no stable
+        // identifier of its own.
+        let stepper = app.steppers["offerDeliveryCountStepper"]
+        for _ in 2..<max(count, 2) {
+            stepper.buttons.element(boundBy: 1).tap()
+        }
+        XCTAssertEqual(stepper.value as? String, "\(max(count, 2))", "The sheet records the count asked for")
+        let pickup = app.switches["offerSamePickupToggle"]
+        let dropOff = app.switches["offerSameDropOffToggle"]
+        XCTAssertEqual(pickup.value as? String, "0", "Independent unless the driver says otherwise")
+        XCTAssertEqual(dropOff.value as? String, "0")
+        if samePickup { setSwitch("offerSamePickupToggle", to: true, in: app) }
+        if sameDropOff { setSwitch("offerSameDropOffToggle", to: true, in: app) }
+
+        XCTAssertTrue(scrollUntilHittable(confirm, in: app))
+        confirm.tap()
+        XCTAssertTrue(waitForDisappearance(of: confirm), "The sheet is gone before the panel is read")
+        XCTAssertTrue(waitForCount(app.buttons.matching(identifier: "deliveryActionButton"), toEqual: total))
+    }
+
+    /// An offer is recorded as independent by default; saying Same pickup and
+    /// Same drop-off on the sheet is shown on the heading and on each card, as
+    /// something the driver recorded.
+    @MainActor
+    func testAnOfferIsIndependentUnlessMarkedSamePickupAndDropOff() throws {
+        let app = launchWithEmptyStore()
+        app.buttons["startShiftButton"].tap()
+        XCTAssertTrue(app.buttons["startDeliveryButton"].waitForExistence(timeout: 5))
+
+        startOffer(expectingCards: 2, in: app)
+        let independent = app.descendants(matching: .any)["offerGroupHeader"]
+        XCTAssertTrue(scrollTo(independent, in: app))
+        XCTAssertFalse(independent.label.contains("same"), "Accepted together says nothing about a stop: \(independent.label)")
+        assertCard("Delivery 1", says: "heading to the pickup", in: app)
+        XCTAssertFalse(deliveryStatusCard(named: "Delivery 1", in: app).label.contains("You recorded it as"))
+
+        XCTAssertTrue(scrollToTop(reaching: app.buttons["startDeliveryButton"], in: app))
+        startOffer(samePickup: true, sameDropOff: true, expectingCards: 4, in: app)
+
+        let headers = app.descendants(matching: .any).matching(identifier: "offerGroupHeader")
+        let shared = headers.matching(NSPredicate(format: "label CONTAINS %@", "Offer 2")).firstMatch
+        XCTAssertTrue(scrollTo(shared, in: app))
+        XCTAssertTrue(shared.label.contains("same pickup and drop-off"), "Showed: \(shared.label)")
+        let card = deliveryStatusCard(named: "Delivery 3", in: app)
+        XCTAssertTrue(scrollTo(card, in: app))
+        XCTAssertTrue(
+            card.label.contains("You recorded it as the same pickup and drop-off as Delivery 4"),
+            "Showed: \(card.label)"
+        )
+    }
+
+    /// Two deliveries marked Same pickup move together under Park and Resume
+    /// Driving, one Undo takes back both, and each card's own step still works.
+    @MainActor
+    func testSamePickupMovesTogetherAndUndoesTogether() throws {
+        let app = launchWithEmptyStore()
+        // Stacked orders off: two deliveries the driver said share one pickup
+        // are one stop, so the workflow still acts.
+        setPickupWorkflow(true, stackedOrders: false, in: app)
+        app.buttons["startShiftButton"].tap()
+        XCTAssertTrue(app.buttons["startDeliveryButton"].waitForExistence(timeout: 5))
+        startOffer(samePickup: true, expectingCards: 2, in: app)
+
+        pressPark(in: app)
+        let parked = assertPickupWorkflowNotice(contains: "Deliveries 1 and 2 marked Arrived at Pickup", in: app)
+        XCTAssertTrue(parked.label.contains("you marked Same pickup"), parked.label)
+        assertCard("Delivery 1", says: "waiting at the pickup", in: app)
+        assertCard("Delivery 2", says: "waiting at the pickup", in: app)
+
+        let undo = app.buttons["undoPickupWorkflowStepButton"]
+        XCTAssertTrue(scrollUpUntilHittable(undo, in: app, maxSwipes: 6))
+        XCTAssertTrue(undo.label.contains("Undo Arrived at Pickup for Deliveries 1 and 2"), undo.label)
+        undo.tap()
+        assertPickupWorkflowNotice(contains: "Undid Arrived at Pickup for Deliveries 1 and 2", in: app)
+        XCTAssertTrue(app.buttons["resumeDrivingButton"].exists, "The vehicle is still parked")
+        assertCard("Delivery 1", says: "heading to the pickup", in: app)
+        assertCard("Delivery 2", says: "heading to the pickup", in: app)
+
+        pressResumeDriving(in: app)
+        pressPark(in: app)
+        assertPickupWorkflowNotice(contains: "Deliveries 1 and 2 marked Arrived at Pickup", in: app)
+        pressResumeDriving(in: app)
+        assertPickupWorkflowNotice(contains: "Deliveries 1 and 2 marked Picked Up", in: app)
+        assertCard("Delivery 1", says: "heading to the customer", in: app)
+        assertCard("Delivery 2", says: "heading to the customer", in: app)
+
+        let undoPickup = app.buttons["undoPickupWorkflowStepButton"]
+        XCTAssertTrue(scrollUpUntilHittable(undoPickup, in: app, maxSwipes: 6))
+        undoPickup.tap()
+        assertPickupWorkflowNotice(contains: "Undid Picked Up for Deliveries 1 and 2", in: app)
+        XCTAssertTrue(app.buttons["parkShiftButton"].exists, "The vehicle is still driving")
+
+        // The manual workflow is untouched: one card's own step moves one
+        // delivery and leaves its sibling.
+        let first = deliveryButton("deliveryActionButton", containing: "Delivery 1", in: app)
+        XCTAssertTrue(scrollTo(first, in: app))
+        XCTAssertTrue(scrollUntilHittable(first, in: app))
+        first.tap()
+        assertCard("Delivery 1", says: "heading to the customer", in: app)
+        assertCard("Delivery 2", says: "waiting at the pickup", in: app)
+    }
+
+    /// Part of an offer is marked Same pickup in Correct Grouping; one delivery
+    /// alone cannot be saved, and the third stays independent.
+    @MainActor
+    func testCorrectingWhichDeliveriesShareAPickup() throws {
+        let app = launchWithEmptyStore()
+        app.buttons["startShiftButton"].tap()
+        XCTAssertTrue(app.buttons["startDeliveryButton"].waitForExistence(timeout: 5))
+        startOffer(of: 3, expectingCards: 3, in: app)
+
+        let correct = app.buttons["correctOffersButton"]
+        XCTAssertTrue(scrollTo(correct, in: app))
+        correct.tap()
+        let sharedStops = app.buttons["offerCorrectionSharedStopsButton"]
+        XCTAssertTrue(sharedStops.waitForExistence(timeout: 5))
+        XCTAssertEqual(sharedStops.value as? String, "Independent")
+        sharedStops.tap()
+
+        func row(_ name: String) -> XCUIElement {
+            app.buttons.matching(NSPredicate(format: "identifier == %@ AND label BEGINSWITH %@", "sharedPickupRow", "\(name),"))
+                .firstMatch
+        }
+        let save = app.buttons["saveSharedStopsButton"]
+        XCTAssertTrue(row("Delivery 1").waitForExistence(timeout: 5))
+        row("Delivery 1").tap()
+        XCTAssertFalse(save.isEnabled, "One delivery shares a stop with nobody")
+        XCTAssertTrue(
+            app.descendants(matching: .any)["sharedStopsMessage"].label.contains("Choose one more delivery for Same pickup"),
+            "Says why Save is not available"
+        )
+        row("Delivery 2").tap()
+        XCTAssertEqual(row("Delivery 2").value as? String, "Chosen")
+        XCTAssertTrue(save.isEnabled)
+        save.tap()
+
+        XCTAssertTrue(sharedStops.waitForExistence(timeout: 5), "Back to the list once saved")
+        XCTAssertEqual(sharedStops.value as? String, "Some deliveries share a stop")
+        app.buttons["closeOfferCorrectionButton"].tap()
+        XCTAssertTrue(waitForDisappearance(of: sharedStops))
+
+        let first = deliveryStatusCard(named: "Delivery 1", in: app)
+        XCTAssertTrue(scrollTo(first, in: app))
+        XCTAssertTrue(first.label.contains("same pickup as Delivery 2"), "Showed: \(first.label)")
+        let third = deliveryStatusCard(named: "Delivery 3", in: app)
+        XCTAssertTrue(scrollTo(third, in: app))
+        XCTAssertFalse(third.label.contains("You recorded it as"), "Showed: \(third.label)")
+    }
+
+    // MARK: The Live Activity card
+
+    /// Launches over an empty throwaway store with the Live Activity's card
+    /// drawn on the main screen, clipped to the Lock Screen's height.
+    @MainActor
+    private func launchWithLiveActivityPreview() -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments += [Self.inMemoryStoreArgument, "-dashpilot-live-activity-preview"]
+        launchInPortrait(app)
+        return app
+    }
+
+    /// The card's controls, in the order they are drawn: row by row, left to
+    /// right.
+    @MainActor
+    private func activityControls(in app: XCUIApplication) -> [String] {
+        let card = app.descendants(matching: .any)["liveActivityPreview"]
+        XCTAssertTrue(card.waitForExistence(timeout: 5))
+        let controls = card.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "activityControl."))
+        return controls.allElementsBoundByIndex
+            .sorted { lhs, rhs in
+                abs(lhs.frame.minY - rhs.frame.minY) < 4 ? lhs.frame.minX < rhs.frame.minX : lhs.frame.minY < rhs.frame.minY
+            }
+            .map(\.identifier)
+    }
+
+    /// Asserts the card draws `identifier` wholly inside the 160 points a Lock
+    /// Screen shows, which is the property the real-device defect lost.
+    @MainActor
+    private func assertInsideTheCard(_ identifier: String, in app: XCUIApplication, file: StaticString = #filePath, line: UInt = #line) {
+        let card = app.descendants(matching: .any)["liveActivityPreview"]
+        let control = card.buttons[identifier]
+        XCTAssertTrue(control.waitForExistence(timeout: 5), "\(identifier) is on the card", file: file, line: line)
+        XCTAssertLessThanOrEqual(
+            control.frame.maxY, card.frame.maxY + 0.5,
+            "\(identifier) is inside the card: \(control.frame) in \(card.frame)", file: file, line: line
+        )
+        XCTAssertGreaterThanOrEqual(control.frame.minY, card.frame.minY - 0.5, file: file, line: line)
+    }
+
+    /// The driver's setting decides which control leads: the delivery step with
+    /// the workflow off, Park Vehicle with it on, and Resume Driving once parked.
+    @MainActor
+    func testLiveActivityLeadsWithParkOnlyUnderTheWorkflow() throws {
+        let app = launchWithLiveActivityPreview()
+        startShiftAndDelivery(in: app)
+
+        XCTAssertTrue(scrollToTop(reaching: app.descendants(matching: .any)["liveActivityPreview"], in: app))
+        XCTAssertEqual(
+            activityControls(in: app),
+            ["activityControl.deliveryStep", "activityControl.startDelivery", "activityControl.park"],
+            "Workflow off: the delivery step leads, as it always did"
+        )
+
+        setPickupWorkflow(true, in: app)
+        XCTAssertTrue(scrollToTop(reaching: app.descendants(matching: .any)["liveActivityPreview"], in: app))
+        XCTAssertEqual(
+            activityControls(in: app),
+            ["activityControl.park", "activityControl.deliveryStep", "activityControl.startDelivery"],
+            "Workflow on: Park leads, and the step stays on the card"
+        )
+        for control in ["activityControl.park", "activityControl.deliveryStep", "activityControl.startDelivery"] {
+            assertInsideTheCard(control, in: app)
+        }
+
+        pressPark(in: app)
+        XCTAssertTrue(scrollToTop(reaching: app.descendants(matching: .any)["liveActivityPreview"], in: app))
+        XCTAssertEqual(activityControls(in: app).first, "activityControl.resumeDriving")
+        assertInsideTheCard("activityControl.resumeDriving", in: app)
+        assertInsideTheCard("activityControl.deliveryStep", in: app)
+    }
+
+    /// Several orders, two of them sharing a pickup, parked: the card still
+    /// holds Resume Driving and Start Delivery inside its height.
+    @MainActor
+    func testLiveActivityKeepsResumeDrivingWithSeveralOrders() throws {
+        let app = launchWithLiveActivityPreview()
+        setPickupWorkflow(true, stackedOrders: true, in: app)
+        app.buttons["startShiftButton"].tap()
+        // The card's preview now sits above the shift, so the panel's controls
+        // start below the fold.
+        XCTAssertTrue(app.descendants(matching: .any)["liveActivityPreview"].waitForExistence(timeout: 5))
+        startOffer(samePickup: true, sameDropOff: true, expectingCards: 2, in: app)
+        XCTAssertTrue(scrollToTop(reaching: app.descendants(matching: .any)["liveActivityPreview"], in: app))
+        startOffer(of: 3, expectingCards: 5, in: app)
+
+        pressPark(in: app)
+        XCTAssertTrue(scrollToTop(reaching: app.descendants(matching: .any)["liveActivityPreview"], in: app))
+        XCTAssertEqual(activityControls(in: app), ["activityControl.resumeDriving", "activityControl.startDelivery"])
+        assertInsideTheCard("activityControl.resumeDriving", in: app)
+        assertInsideTheCard("activityControl.startDelivery", in: app)
+
+        let card = app.descendants(matching: .any)["liveActivityPreview"]
+        XCTAssertTrue(
+            card.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Deliveries 1 and 2")).firstMatch.exists,
+            "The pair the driver marked as sharing a stop is one row"
+        )
+    }
+
     /// A completed shift that was parked says how much of its short route the
     /// driver asked for, and reports every minute of it as worked.
     @MainActor
@@ -3660,6 +3927,17 @@ final class DashPilotUITests: XCTestCase {
             "One remaining delivery still blocks the end, and the wording follows the count"
         )
         app.buttons["OK"].tap()
+
+        // The Undo offered for Delivery 3's completion stays for its 20-second
+        // window and then collapses, moving every card below it up. CI run
+        // 36324925828 tapped Delivery 2's Delivered at the moment it went, so
+        // the tap landed where the button had been and the journey failed on
+        // the count. Waiting for the banner to go is a condition, not a delay:
+        // the steps below are then tapped on a panel that is not moving.
+        XCTAssertTrue(
+            waitForDisappearance(of: app.descendants(matching: .any)["undoDeliveredBanner"], timeout: 30),
+            "The completion's Undo leaves after its window"
+        )
 
         // Resolving the last one unblocks it.
         let accepted = deliveryButton("deliveryActionButton", containing: "Delivery 2", in: app)
@@ -8444,12 +8722,12 @@ final class DashPilotUITests: XCTestCase {
     }
 
     @MainActor
-    private func waitForDisappearance(of element: XCUIElement) -> Bool {
+    private func waitForDisappearance(of element: XCUIElement, timeout: TimeInterval = 5) -> Bool {
         let expectation = XCTNSPredicateExpectation(
             predicate: NSPredicate(format: "exists == false"),
             object: element
         )
-        return XCTWaiter().wait(for: [expectation], timeout: 5) == .completed
+        return XCTWaiter().wait(for: [expectation], timeout: timeout) == .completed
     }
 
     @MainActor
