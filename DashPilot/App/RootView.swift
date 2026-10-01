@@ -59,6 +59,12 @@ struct RootView: View {
     var body: some View {
         NavigationStack {
             List {
+                #if DEBUG
+                if let activeShift, LaunchArgument.isPresent(LaunchArgument.liveActivityPreview) {
+                    LiveActivityPreviewSection(shift: activeShift)
+                }
+                #endif
+
                 Section {
                     if let activeShift {
                         ActiveShiftPanel(
@@ -130,7 +136,7 @@ struct RootView: View {
                 }
                 guard let feedback = pickupWorkflow else { return }
                 switch feedback.moment {
-                case .parked: pickupWorkflow?.undoableStep = nil
+                case .parked: pickupWorkflow?.undoableAction = nil
                 case .resumed: pickupWorkflow = nil
                 }
             }
@@ -347,7 +353,7 @@ struct RootView: View {
             return PickupWorkflowFeedback(
                 moment: .parked(at: parkedAt),
                 notice: notice,
-                undoableStep: result.automatedStep
+                undoableAction: AutomatedPickupAction(result.automatedSteps)
             )
         }
         routeCapture.synchronize()
@@ -366,25 +372,26 @@ struct RootView: View {
             return PickupWorkflowFeedback(
                 moment: .resumed(at: resumedAt),
                 notice: notice,
-                undoableStep: result.automatedStep
+                undoableAction: AutomatedPickupAction(result.automatedSteps)
             )
         }
         routeCapture.synchronize()
         liveActivity.reconcile()
     }
 
-    /// Takes back the one delivery event the workflow just recorded.
+    /// Takes back the delivery events the workflow just recorded: one, or
+    /// every delivery of a shared pickup together, and never part of them.
     ///
     /// **The vehicle is not touched**: no suspension is opened or closed and
     /// capture is not reconciled, because the driver did park and is driving.
     /// The offer goes whatever happens next, so a refusal cannot invite a second
     /// press; the line then says what was undone, or the alert says why not.
     private func undoPickupWorkflowStep() {
-        guard var feedback = pickupWorkflow, let step = feedback.undoableStep else { return }
-        feedback.undoableStep = nil
+        guard var feedback = pickupWorkflow, let action = feedback.undoableAction else { return }
+        feedback.undoableAction = nil
         do {
-            try DeliveryService(context: modelContext).undoAutomatedStep(step)
-            feedback.notice = step.undoneNotice
+            try DeliveryService(context: modelContext).undoAutomatedSteps(action.steps)
+            feedback.notice = action.undoneNotice
         } catch let error as DeliveryLifecycleError {
             undoError = error
         } catch {

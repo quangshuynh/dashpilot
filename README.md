@@ -33,15 +33,16 @@ measure.
   app mid-shift. Paused time is excluded from working time and from every hourly figure.
 - **Delivery lifecycle.** One large control per delivery for accepted, arrived at pickup, picked
   up, delivered or cancelled, with a live clock for each delivery in progress.
-- **Stacked deliveries.** Several deliveries can run at once, grouped by the offer they arrived in.
-  Overlapping time is counted once, never summed.
+- **Stacked deliveries.** Several deliveries can run at once, grouped by the offer they arrived in,
+  and marked Same pickup or Same drop-off only when the driver says so. Overlapping time is counted
+  once, never summed.
 - **Route and recorded mileage.** Route capture runs with the shift, including off screen, and a
   single filtering policy decides which positions count. Mileage is measured only across what was
   captured continuously.
 - **Pause and Park.** *Pause* stops the clock and the route. *Park* stops only the route, for the
   walk around a shop, so it never inflates recorded mileage and never subtracts working time. An
   optional setting, off by default, lets Park mark Arrived at Pickup and Resume Driving mark Picked
-  Up, with a short Undo for the delivery step.
+  Up, moving deliveries marked Same pickup together, with a short Undo for the delivery steps.
 - **Earnings and additional tips.** Optional gross earnings per shift and per delivery, kept as
   independent facts, plus tips received outside the platform's amount, each with its method.
 - **Fuel estimates and vehicle profiles.** Save your vehicles and a gas price. Each shift copies

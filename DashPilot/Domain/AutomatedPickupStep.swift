@@ -57,18 +57,18 @@ nonisolated struct AutomatedPickupStep: Equatable, Hashable, Sendable, Identifia
         }
     }
 
-    private var deliveryName: String {
+    fileprivate var deliveryName: String {
         deliveryNumber.map(NumberedDelivery.title(number:)) ?? "The delivery"
     }
 
-    private var vehicleState: String {
+    fileprivate var vehicleState: String {
         switch kind {
         case .arrivedWhenParked: "The vehicle is still parked."
         case .pickedUpWhenResumed: "The vehicle is still recorded as driving."
         }
     }
 
-    private var eventName: String {
+    fileprivate var eventName: String {
         switch kind {
         case .arrivedWhenParked: "Arrived at Pickup"
         case .pickedUpWhenResumed: "Picked Up"
@@ -88,6 +88,63 @@ nonisolated struct AutomatedPickupStep: Equatable, Hashable, Sendable, Identifia
     var undoneNotice: PickupWorkflowNotice {
         let title = "Undid \(eventName) for \(deliveryName)"
         let detail = "It is back to \(restoredState.historyDescription). \(vehicleState)"
+        return PickupWorkflowNotice(
+            title: title,
+            detail: detail,
+            spokenLabel: "\(title). \(detail)",
+            symbolName: "arrow.uturn.backward.circle",
+            recordedAnEvent: false
+        )
+    }
+}
+
+/// Everything one press of Park or Resume Driving recorded, as the one thing
+/// its Undo takes back.
+///
+/// Usually one step. More than one only when the driver recorded deliveries as
+/// sharing a pickup and the press recorded the same event for each of them,
+/// together; its Undo then takes back **all of them or none**, through
+/// ``DeliveryService/undoAutomatedSteps(_:)``, because one physical arrival or
+/// pickup must not be left half-recorded. It is never more than that press:
+/// no delivery the press did not write to, and no other event.
+nonisolated struct AutomatedPickupAction: Equatable, Sendable, Identifiable {
+    /// The events, lowest delivery number first. Never empty, and all of one
+    /// kind, because one press records one kind of event.
+    let steps: [AutomatedPickupStep]
+
+    /// `nil` for a press that recorded nothing.
+    init?(_ steps: [AutomatedPickupStep]) {
+        guard let first = steps.first, steps.allSatisfy({ $0.kind == first.kind }) else { return nil }
+        self.steps = steps.sorted { ($0.deliveryNumber ?? .max) < ($1.deliveryNumber ?? .max) }
+    }
+
+    var id: String { steps.map(\.id).joined(separator: "+") }
+
+    private var first: AutomatedPickupStep { steps[0] }
+
+    /// `Delivery 3` or `Deliveries 3 and 4`. A delivery whose number could not
+    /// be read is not given one.
+    private var names: String {
+        let numbers = steps.compactMap(\.deliveryNumber)
+        guard numbers.count == steps.count else { return steps.count == 1 ? first.deliveryName : "these deliveries" }
+        return PickupWorkflowNotice.names(numbers)
+    }
+
+    /// What VoiceOver says for the Undo control. One step reads exactly as it
+    /// always did.
+    var spokenUndoLabel: String {
+        guard steps.count > 1 else { return first.spokenUndoLabel }
+        return """
+        Undo \(first.eventName) for \(names). They go back to \(first.restoredState.historyDescription). \
+        \(first.vehicleState)
+        """
+    }
+
+    /// What the line says once every event has been taken back.
+    var undoneNotice: PickupWorkflowNotice {
+        guard steps.count > 1 else { return first.undoneNotice }
+        let title = "Undid \(first.eventName) for \(names)"
+        let detail = "They are back to \(first.restoredState.historyDescription). \(first.vehicleState)"
         return PickupWorkflowNotice(
             title: title,
             detail: detail,

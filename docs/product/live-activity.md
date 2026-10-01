@@ -11,15 +11,35 @@ act on the wrong one.
 
 ## What it shows
 
-| Line | What it is |
+The card is laid out in a fixed order, most important first, and the controls are never what gives
+way:
+
+| In order | What it is |
 | --- | --- |
-| `Shift in Progress` / `Shift Paused` | Which of the two states the shift is in, in colour and in a symbol |
-| The large figure | **Working** time so far: elapsed time less the time the shift has been paused |
-| `4.5 mi recorded · partial route` | What the retained route supports, with the marker that qualifies it |
-| `2 in progress · 5 delivered` | How the shift's deliveries stand |
-| `Waiting at the pickup` | What the one delivery in progress is doing, and only when there is exactly one |
-| `Parked · route not recording` | Only while the driver has the vehicle recorded as parked |
-| `Delivery 1 · At pickup · 18:04` | What each delivery in progress is doing and how long it has been open, one line each |
+| `Shift in Progress` / `Shift Paused` / `Parked · route not recording`, beside the clock | Which state the shift is in, in colour and in a symbol, and **working** time so far: elapsed time less the time the shift has been paused |
+| `Delivery 1 · At pickup · 18:04` | What each delivery in progress is doing and how long it has been open, one line each, as many as fit |
+| The controls | In the order the app chose; see [What it offers](#what-it-offers) |
+| `4.5 mi recorded · partial route · 5 delivered` | What the retained route supports, with the marker that qualifies it, and how many deliveries are done; drawn only when the card has room |
+
+### Why the card has a height budget
+
+The system cuts a Lock Screen Live Activity off at **160 points** tall, from the bottom. The card used
+to draw a parked line, the mileage, the delivery counts, a status line and a line per order **above**
+its controls, and measured in the app's own test host it was 242 points with one order in progress
+and 266 once parked. On a real shift that cut off the controls, and after parking the one lost was
+`Resume Driving`.
+
+The card now gives each state a fixed number of lines between the header and the controls, decided by
+how many rows of controls it has and the text size, and fills them in order: the orders, then the
+sentence explaining a withheld step, then the mileage line. Whatever does not fit is left out rather
+than drawn and cut: a count of the orders without a line (`2 more · Open DashPilot for steps`) takes
+the last line, and the mileage is never drawn without its `partial route` marker. Measured the same
+way, the tallest state is now 154 points. Text larger than `xLarge` is drawn at `xLarge` on the card,
+because past it two control labels no longer fit side by side on the narrowest supported phone; the
+app's own screens follow every text size.
+
+Parked is said **in the header**, in place of `Shift in Progress`, rather than on a line of its own.
+The clock beside it keeps counting, which is what says the shift is still running.
 
 Every one of those is the app's own figure rather than a second calculation. The working duration is
 `Shift.workingDuration(asOf:)`, the same one every hourly rate divides by and the same one a spoken
@@ -29,13 +49,13 @@ wherever the figure goes. See [Recorded mileage](recorded-mileage.md).
 
 ## How long a delivery has been open
 
-Under the delivery counts, each delivery in progress gets a line of its own:
+Under the header, each delivery in progress gets a line of its own:
 
 > `Delivery 1 · At pickup · 18:04`
 
-The **state** in the middle is there because the single status line above is withheld whenever two
-deliveries are open: with two there is no "the delivery" for it to be about, so a driver carrying two
-orders read a card that named both and said what neither was doing. It is a shortened form of the
+The **state** in the middle says what each order is doing; with one order it is the whole of the
+delivery's status, and with two it is the only place each one's is said, because with two there is
+no "the delivery" for a single status to be about. It is a shortened form of the
 app's own vocabulary — `To pickup`, `At pickup`, `To customer` — derived in the app and drawn by the
 extension, never a second set of words. It gives way first when the row is too narrow; the live
 figure keeps its place.
@@ -60,9 +80,14 @@ overlapping deliveries rather than summing them. See
 freezing at a number that still looks live, and the duration that delivery finally reports is
 unchanged by any of this.
 
-Past three open orders the card states the remainder rather than drawing a fourth line
-(`1 more also active`): the controls sit below these lines, and pushing the buttons a driver reaches
-for off the bottom of a fixed-height card would be worse than saying how many timers are in the app.
+Past the lines the card has room for, it states the remainder rather than drawing another line
+(`2 more · Open DashPilot for steps`): pushing the buttons a driver reaches for off the bottom of a
+fixed-height card would be worse than saying how many timers are in the app.
+
+Deliveries the driver recorded as [sharing a pickup or a drop-off](delivery-lifecycle.md#same-pickup-and-same-drop-off),
+in the same state since the same acceptance, are **one line**: `Deliveries 3 and 4 · At pickup ·
+18:04`. One clock and one state are then true of both. Deliveries that share nothing the driver said
+keep a line each, however alike they look.
 
 VoiceOver reads the delivery's name as its own element ahead of the figure, as
 `How long Delivery 1 has been active`, so the count that follows is heard as a duration of something
@@ -84,13 +109,26 @@ printed on a surface that anyone standing beside them can read without unlocking
 The controls follow the lifecycle rules the app already enforces, and the card offers only what those
 rules permit:
 
-| The shift is | The card offers |
+| The shift is | The card offers, in order |
 | --- | --- |
 | Running, with no delivery open | **Start Delivery**, **Park Vehicle**, **Pause Shift**, **End Shift** |
 | Running, with exactly one delivery open | That delivery's next step (**Arrived at Pickup**, then **Picked Up**, then **Delivered**), **Start Delivery**, **Park Vehicle** |
 | Running, with two or more deliveries open | **Start Delivery**, **Park Vehicle**, and the reason there is no step |
 | Parked | **Resume Driving** first, then whatever the row above offers, with **Park Vehicle** replaced |
 | Paused | **Resume Shift**, **End Shift** |
+
+**With [Pick up orders with Park & Resume](settings.md#pick-up-orders-with-park-resume) on, Park
+Vehicle moves to the front** of every running row and takes the emphasis: `Park Vehicle`, then the
+delivery's next step and `Start Delivery`, or `Park Vehicle`, `Start Delivery`, `Pause Shift`,
+`End Shift` with nothing open. That driver records their pickups by parking and driving off, so the
+parked pair is the control they reach for. Nothing is removed to make room: the delivery's step stays
+on the card behind it, so a pickup recorded by hand, or a Delivered, is still one tap. Parked rows
+are unchanged, with `Resume Driving` first either way. With the setting off the rows are exactly the
+ones above.
+
+The setting is read **by the app** when it builds the card, and reaches the card as the order of its
+controls; the extension reads no setting and holds no rule. Turning the switch in Settings updates a
+running shift's card at once. No state offers more than four controls, which is two rows.
 
 A delivery [reopened in the app](delivery-lifecycle.md#taking-back-a-delivery-marked-delivered-by-mistake)
 is a delivery in progress, so the card's counts and its controls follow it like any other change: the
@@ -114,7 +152,8 @@ because one of them would always be refused.
 
 `Resume Driving` leads the card and carries the emphasis, which is the judgement the app's own panel
 makes: leaving the state is the tap that matters, because forgetting to leave it costs the rest of
-the shift's route. `Park Vehicle` is unemphasised, for the reason `Pause Shift` is.
+the shift's route. `Park Vehicle` carries the emphasis only where the pickup workflow puts it first;
+otherwise a delivery step or `Start Delivery` comes before it and keeps the emphasis.
 
 **Parking is not pausing, and the card must never let it read as one.** A parked shift keeps running,
 its working clock keeps counting from the shift's own start and its deliveries stay open; what has
@@ -131,8 +170,9 @@ offers neither, because a paused shift is never parked. See
 
 `Park Vehicle` and `Resume Driving` here run the same operations as the app's buttons and the spoken
 actions, so with [Pick up orders with Park & Resume](settings.md#pick-up-orders-with-park-resume) on, Park also records `Arrived at Pickup`
-and Resume Driving records `Picked Up` for the delivery Park chose, including when the app was closed
-in between. The card has no sentence to say it in and no Undo; the delivery's own row moving from
+and Resume Driving records `Picked Up` for the delivery Park chose, and for the others the driver
+marked [Same pickup](delivery-lifecycle.md#same-pickup-and-same-drop-off) with it, including when the
+app was closed in between. The card has no sentence to say it in and no Undo; the delivery's own row moving from
 `To pickup` to `At pickup`, and then to `To customer`, is the report. No business rule runs in the
 widget extension: the control asks the app to perform the action.
 
@@ -171,10 +211,11 @@ With two orders in the car there is no "the delivery". A Lock Screen button name
 order, and every way of choosing one (the newest, the oldest, the one furthest along) would write a
 driver's tap into a record they did not mean. So the card offers no step at all and says so:
 
-> Several deliveries are in progress. Open DashPilot to record a step.
+> Open DashPilot to record a step
 
-The status line goes too: a card that named one of two orders would be picking one on the driver's
-behalf. The refusal lifts by itself once one of them has been delivered or cancelled.
+VoiceOver hears the longer form, `Several deliveries are in progress. Open DashPilot to record a
+step.` No single status is drawn either: a card that named one of two orders would be picking one on
+the driver's behalf. The refusal lifts by itself once one of them has been delivered or cancelled.
 
 **The timers stay**, and they stay for the same reason Start Delivery does. A step has to know which
 order a tap belongs to, and with two open there is no answer; a clock says which delivery it is
@@ -257,8 +298,9 @@ says whether capture is running right now, and why it is not, is the app's own s
   about it leaves the device. See [Privacy and logging](../architecture/privacy.md).
 - **A Dynamic Island is not assumed.** Every supported device shows the Lock Screen presentation; the
   island is a second reading of the same card on the hardware that has one, and no fact appears only
-  there. Its compact and minimal presentations carry no control at all and are unchanged by the
-  parked pair; the minimal one's single spoken value does gain the parked sentence, because it is the
+  there. Its expanded presentation draws the same header, the orders as far as its smaller region has
+  room, and the same controls in the same order, and no mileage line. Its compact and minimal
+  presentations carry no control at all and are unchanged by the parked pair and by the layout; the minimal one's single spoken value does gain the parked sentence, because it is the
   only line a listener has there.
 - **Nothing about the vehicle.** The card carries no vehicle name, no miles per gallon and no gas
   price. Parking is a statement about whether the vehicle is moving, and it needed none of them.

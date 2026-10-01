@@ -655,8 +655,8 @@ struct ShiftActivityContentTests {
         let quiet = shift.activityContentState(for: .none, asOf: at(5), locale: locale).controls
         #expect(ShiftActivityControl.emphasised(in: quiet) == .startDelivery)
         #expect(
-            ShiftActivityControl.park.isProminent == false,
-            "Parking is bordered for the reason pausing is: the frequent control keeps the emphasis"
+            ShiftActivityControl.emphasised(in: quiet) != .park,
+            "With the workflow off Park never leads, so it never takes the emphasis from the frequent control"
         )
 
         _ = try deliveries.startDelivery(at: at(10))
@@ -665,7 +665,10 @@ struct ShiftActivityContentTests {
             ShiftActivityControl.emphasised(in: carrying) == .deliveryStep(.arriveAtPickup),
             "The order already in the car is what the driver reached for"
         )
-        #expect(carrying.filter(\.isProminent).count == 2, "Both would take it on their own, which is why the list decides")
+        #expect(
+            carrying.filter(\.isProminent).count == 3,
+            "The step, Start Delivery and Park could each take it, which is why the app's order decides"
+        )
         #expect(ShiftActivityControl.emphasised(in: []) == nil)
         #expect(
             ShiftActivityControl.emphasised(in: [.pause, .end]) == nil,

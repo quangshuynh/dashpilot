@@ -138,6 +138,32 @@ nonisolated struct NumberedOffer: Identifiable {
     /// "Delivery 2", "Delivery 2 and Delivery 3", "Delivery 2, Delivery 3 and
     /// Delivery 4". Spoken punctuation, since VoiceOver does not read a comma
     /// as a conjunction.
+    /// Which stops `numbered` shares with the other deliveries of this offer,
+    /// as the driver recorded them. Empty for an offer of one, and for every
+    /// delivery nobody said shared anything.
+    func sharedStops(of numbered: NumberedDelivery) -> SharedStopDescription {
+        SharedStopDescription(of: numbered, among: deliveries)
+    }
+
+    /// `Same pickup and drop-off`, `Same pickup` or `Same drop-off` when
+    /// **every** delivery of this offer shares that stop, or `nil`.
+    ///
+    /// For the heading above the offer's cards, which speaks for the whole
+    /// offer. A stop shared by only some of them is said on those cards
+    /// instead, naming who shares it, because a heading cannot say which.
+    var sharedStopsStatement: String? {
+        func wholeOfferShares(_ kind: SharedStopKind) -> Bool {
+            guard deliveries.count > 1, let first = deliveries.first?.delivery.sharedStopID(kind) else { return false }
+            return deliveries.allSatisfy { $0.delivery.sharedStopID(kind) == first }
+        }
+        switch (wholeOfferShares(.pickup), wholeOfferShares(.dropOff)) {
+        case (true, true): return "Same pickup and drop-off"
+        case (true, false): return SharedStopKind.pickup.title
+        case (false, true): return SharedStopKind.dropOff.title
+        case (false, false): return nil
+        }
+    }
+
     private static func list(_ items: [String]) -> String {
         guard let last = items.last else { return "" }
         guard items.count > 1 else { return last }

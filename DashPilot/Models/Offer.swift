@@ -8,6 +8,9 @@ nonisolated enum OfferError: Error, Equatable {
     /// An offer with no deliveries records an acceptance with no work attached
     /// to it, which is not a thing the driver can have witnessed.
     case deliveryCountNotPositive
+    /// A shared pickup or drop-off was asked for on an offer of one delivery,
+    /// which has nobody to share a stop with.
+    case sharedStopNeedsSeveralDeliveries
     /// An offer was recorded against a shift that has already ended.
     case shiftAlreadyEnded
     /// The acceptance timestamp precedes the shift's own start.

@@ -49,7 +49,7 @@ struct AutomatedPickupStepUndoTests {
         let store = try makeStore()
         let delivery = try store.deliveries.startDelivery(at: at(1))
         let parked = try store.parking.park(at: at(10))
-        let step = try #require(parked.automatedStep)
+        let step = try #require(parked.automatedSteps.first)
 
         let restored = try store.deliveries.undoAutomatedStep(step)
 
@@ -71,7 +71,7 @@ struct AutomatedPickupStepUndoTests {
         let delivery = try store.deliveries.startDelivery(at: at(1))
         _ = try store.parking.park(at: at(10))
         let resumed = try store.parking.resumeDriving(at: at(16))
-        let step = try #require(resumed.automatedStep)
+        let step = try #require(resumed.automatedSteps.first)
 
         let restored = try store.deliveries.undoAutomatedStep(step)
 
@@ -92,7 +92,7 @@ struct AutomatedPickupStepUndoTests {
         let store = try makeStore()
         let delivery = try store.deliveries.startDelivery(at: at(1))
         _ = try store.parking.park(at: at(10))
-        let step = try #require(try store.parking.resumeDriving(at: at(16)).automatedStep)
+        let step = try #require(try store.parking.resumeDriving(at: at(16)).automatedSteps.first)
         try store.deliveries.undoAutomatedStep(step)
 
         try store.deliveries.markPickedUp(delivery, at: at(18), recordedBy: .manual)
@@ -106,7 +106,7 @@ struct AutomatedPickupStepUndoTests {
         let third = try store.deliveries.startDelivery(at: at(1))
         let fourth = try store.deliveries.startDelivery(at: at(2))
         try store.deliveries.markArrivedAtPickup(fourth, at: at(3))
-        let step = try #require(try store.parking.park(at: at(10)).automatedStep)
+        let step = try #require(try store.parking.park(at: at(10)).automatedSteps.first)
         #expect(step.deliveryID == third.id)
 
         try store.deliveries.undoAutomatedStep(step)
@@ -121,7 +121,7 @@ struct AutomatedPickupStepUndoTests {
     func refusesAfterALaterEvent() throws {
         let store = try makeStore()
         let delivery = try store.deliveries.startDelivery(at: at(1))
-        let step = try #require(try store.parking.park(at: at(10)).automatedStep)
+        let step = try #require(try store.parking.park(at: at(10)).automatedSteps.first)
         try store.deliveries.markPickedUp(delivery, at: at(13), recordedBy: .manual)
 
         #expect(throws: DeliveryLifecycleError.invalidAutomatedUndo(.laterEventRecorded)) {
@@ -137,7 +137,7 @@ struct AutomatedPickupStepUndoTests {
             let store = try makeStore()
             let delivery = try store.deliveries.startDelivery(at: at(1))
             _ = try store.parking.park(at: at(10))
-            let step = try #require(try store.parking.resumeDriving(at: at(16)).automatedStep)
+            let step = try #require(try store.parking.resumeDriving(at: at(16)).automatedSteps.first)
             if finish == "delivered" {
                 try store.deliveries.markDelivered(delivery, at: at(30))
             } else {
@@ -156,7 +156,7 @@ struct AutomatedPickupStepUndoTests {
     func refusesTwice() throws {
         let store = try makeStore()
         let delivery = try store.deliveries.startDelivery(at: at(1))
-        let step = try #require(try store.parking.park(at: at(10)).automatedStep)
+        let step = try #require(try store.parking.park(at: at(10)).automatedSteps.first)
         try store.deliveries.undoAutomatedStep(step)
 
         #expect(throws: DeliveryLifecycleError.invalidAutomatedUndo(.stepNoLongerRecorded)) {
@@ -169,7 +169,7 @@ struct AutomatedPickupStepUndoTests {
     func refusesARerecordedEvent() throws {
         let store = try makeStore()
         let delivery = try store.deliveries.startDelivery(at: at(1))
-        let step = try #require(try store.parking.park(at: at(10)).automatedStep)
+        let step = try #require(try store.parking.park(at: at(10)).automatedSteps.first)
         try store.deliveries.undoAutomatedStep(step)
         try store.deliveries.markArrivedAtPickup(delivery, at: at(11))
 
@@ -219,7 +219,7 @@ struct AutomatedPickupStepUndoTests {
         let store = try makeStore()
         let delivery = try store.deliveries.startDelivery(at: at(1))
         let id = delivery.id
-        let step = try #require(try store.parking.park(at: at(10)).automatedStep)
+        let step = try #require(try store.parking.park(at: at(10)).automatedSteps.first)
 
         struct Refused: Error {}
         #expect(throws: DeliveryLifecycleError.self) {
@@ -240,7 +240,7 @@ struct AutomatedPickupStepUndoTests {
     func stepIsEphemeral() throws {
         let store = try makeStore()
         let delivery = try store.deliveries.startDelivery(at: at(1))
-        let step = try #require(try store.parking.park(at: at(10)).automatedStep)
+        let step = try #require(try store.parking.park(at: at(10)).automatedSteps.first)
 
         // Nothing in the schema holds a step or an offer to undo one.
         for entity in ModelContainerFactory.currentSchema.entities {

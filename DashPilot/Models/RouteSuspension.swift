@@ -89,18 +89,45 @@ nonisolated final class RouteSuspension {
     /// its arrival: that delivery may already have had one.
     private(set) var pickupWorkflowDeliveryID: UUID?
 
+    /// The **other** deliveries this parked stretch was for, because the driver
+    /// recorded them as collected at the same pickup as
+    /// ``pickupWorkflowDeliveryID``; empty when there were none.
+    ///
+    /// Written and read exactly as ``pickupWorkflowDeliveryID`` is, in the same
+    /// save that opens the row, and it exists for the same reason: Resume
+    /// Driving acts on **exactly** the deliveries Park chose, after a
+    /// relaunch, a Lock Screen press or a regrouping in the shop. Reading the
+    /// shared pickup again at Resume would let a correction made while parked
+    /// pick up an order Park never recorded arriving.
+    ///
+    /// A separate column rather than a rewrite of the one above, so a stretch
+    /// recorded before v20 keeps meaning what it meant: one delivery, and no
+    /// others. Identifiers, not relationships, for the same reason as that one.
+    /// Empty for every stretch recorded before v20; migration writes nothing.
+    private(set) var pickupWorkflowSharedPickupDeliveryIDs: [UUID] = []
+
     init(
         id: UUID = UUID(),
         shift: Shift,
         startedAt: Date,
         endedAt: Date? = nil,
-        pickupWorkflowDeliveryID: UUID? = nil
+        pickupWorkflowDeliveryID: UUID? = nil,
+        pickupWorkflowSharedPickupDeliveryIDs: [UUID] = []
     ) {
         self.id = id
         self.shift = shift
         self.startedAt = startedAt
         self.endedAt = endedAt
         self.pickupWorkflowDeliveryID = pickupWorkflowDeliveryID
+        self.pickupWorkflowSharedPickupDeliveryIDs = pickupWorkflowSharedPickupDeliveryIDs
+    }
+
+    /// Every delivery this parked stretch was for, the first-numbered first:
+    /// the one Park chose and the others sharing its pickup. Empty when it was
+    /// for none.
+    var pickupWorkflowDeliveryIDs: [UUID] {
+        guard let pickupWorkflowDeliveryID else { return [] }
+        return [pickupWorkflowDeliveryID] + pickupWorkflowSharedPickupDeliveryIDs
     }
 
     /// Whether the driver has not recorded driving again.

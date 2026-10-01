@@ -335,9 +335,11 @@ struct SettingsService {
     /// direction to be wrong in.
     ///
     /// This is the **second** read of a preference that reaches a recorded fact,
-    /// beside ``currentFuelDefaults()``, and its only callers are
-    /// ``ParkVehicleService/park(at:)`` and
-    /// ``ParkVehicleService/resumeDriving(at:)``.
+    /// beside ``currentFuelDefaults()``, at ``ParkVehicleService/park(at:)`` and
+    /// ``ParkVehicleService/resumeDriving(at:)``. One more caller reads it for a
+    /// presentation and records nothing:
+    /// ``ShiftLiveActivityService/content(for:recordedDistance:asOf:locale:context:)``,
+    /// which puts Park Vehicle first on the Live Activity while it is on.
     func pickupWorkflowPreferences() -> PickupWorkflowPreferences {
         ((try? existingSettings()) ?? nil)?.pickupWorkflowPreferences ?? .off
     }

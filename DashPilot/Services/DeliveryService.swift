@@ -249,6 +249,8 @@ nonisolated extension DeliveryLifecycleError: LocalizedError {
             "That tip is not recorded against a delivery, so it cannot be changed."
         case .invalidOffer(.deliveryCountNotPositive):
             "An offer has to contain at least one delivery."
+        case .invalidOffer(.sharedStopNeedsSeveralDeliveries):
+            "A shared pickup or drop-off needs at least two deliveries in the offer."
         case .invalidOffer(.shiftAlreadyEnded):
             "That shift has already ended, so no offer can be recorded against it."
         case .invalidOffer(.acceptedBeforeShiftStart):
@@ -482,12 +484,25 @@ struct DeliveryService {
     /// can be added later from a card, and asking for any of them at the kerb
     /// is the interaction this project designs away.
     ///
+    /// ## Shared stops are the driver's statement
+    ///
+    /// `sharing` records that every delivery of the offer is collected at the
+    /// same pickup, taken to the same drop-off, or both, when the driver chose
+    /// that on the sheet. It is written in the same save as the deliveries, and
+    /// it defaults to nothing: two deliveries of one offer are independent
+    /// unless the driver says otherwise. See ``SharedStopKind``.
+    ///
     /// - Throws: ``DeliveryLifecycleError/noActiveShift``,
     ///   ``DeliveryLifecycleError/shiftPaused``,
-    ///   ``DeliveryLifecycleError/invalidOffer(_:)`` for a count below one, or
+    ///   ``DeliveryLifecycleError/invalidOffer(_:)`` for a count below one or a
+    ///   shared stop on an offer of one, or
     ///   ``DeliveryLifecycleError/storeUnavailable(underlying:)``.
     @discardableResult
-    func startOffer(deliveryCount: Int, at date: Date = .now) throws -> Offer {
+    func startOffer(
+        deliveryCount: Int,
+        sharing: Set<SharedStopKind> = [],
+        at date: Date = .now
+    ) throws -> Offer {
         guard let shift = try activeShift() else {
             AppLog.delivery.notice("Refused to start a delivery: no shift is running")
             throw DeliveryLifecycleError.noActiveShift
@@ -508,7 +523,7 @@ struct DeliveryService {
 
         let recorded: (offer: Offer, deliveries: [Delivery])
         do {
-            recorded = try shift.beginOffer(deliveryCount: deliveryCount, at: acceptedAt)
+            recorded = try shift.beginOffer(deliveryCount: deliveryCount, sharing: sharing, at: acceptedAt)
         } catch let error as OfferError {
             AppLog.delivery.notice("Shift rejected an offer: \(String(describing: error), privacy: .public)")
             throw DeliveryLifecycleError.invalidOffer(error)
@@ -529,11 +544,14 @@ struct DeliveryService {
             throw DeliveryLifecycleError.storeUnavailable(underlying: error)
         }
 
-        // Counts, which are structural. Not when it started, and not which one.
+        // Counts and kinds, which are structural. Not when it started, not
+        // which one, and nothing about where either stop is.
         AppLog.delivery.info(
             """
             Offer started with \(recorded.deliveries.count, privacy: .public) deliveries; \
-            \(shift.activeDeliveries.count, privacy: .public) now active on this shift
+            \(shift.activeDeliveries.count, privacy: .public) now active on this shift; \
+            shared pickup \(sharing.contains(.pickup), privacy: .public), \
+            shared drop-off \(sharing.contains(.dropOff), privacy: .public)
             """
         )
         return recorded.offer
@@ -565,6 +583,58 @@ struct DeliveryService {
         }
         // How, and nothing about which delivery, where, when or how long.
         AppLog.delivery.info("\(provenance.logDescription, privacy: .public)")
+        return recorded
+    }
+
+    // MARK: One pickup event for several deliveries
+
+    /// Records Arrived at Pickup for **every** delivery in `deliveries`, or for
+    /// none of them.
+    ///
+    /// ## What it is for
+    ///
+    /// Park under the pickup workflow, when the delivery it chose shares its
+    /// pickup with others the driver recorded as collected at the same counter.
+    /// One press is one physical arrival, so it is recorded as one act: every
+    /// delivery is judged by the rule its card's own button applies
+    /// (``Delivery/refusal(recording:at:)``) **before any is written**, then all
+    /// are written, then **one** save. A refusal or a failed save leaves the
+    /// store holding none of them, so a shared arrival can never be
+    /// half-recorded.
+    ///
+    /// Each delivery clamps to its own last event exactly as a single step does,
+    /// so no sibling's timeline influences another's.
+    ///
+    /// - Throws: ``DeliveryLifecycleError/deliveryNotOnARunningShift``,
+    ///   ``DeliveryLifecycleError/invalidTransition(_:)`` or
+    ///   ``DeliveryLifecycleError/storeUnavailable(underlying:)``.
+    @discardableResult
+    func markArrivedAtPickup(together deliveries: [Delivery], at date: Date = .now) throws -> [Delivery] {
+        try advance(together: deliveries, to: .arrivedAtPickup, at: date) { delivery, eventDate in
+            try delivery.markArrivedAtPickup(at: eventDate)
+        }
+    }
+
+    /// Records Picked Up for **every** delivery in `deliveries`, or for none of
+    /// them, with the same provenance on each.
+    ///
+    /// Resume Driving's half of ``markArrivedAtPickup(together:at:)``, with the
+    /// same all-or-nothing write for the same reason.
+    ///
+    /// - Throws: as ``markArrivedAtPickup(together:at:)``.
+    @discardableResult
+    func markPickedUp(
+        together deliveries: [Delivery],
+        at date: Date = .now,
+        recordedBy provenance: PickupProvenance
+    ) throws -> [Delivery] {
+        let recorded = try advance(together: deliveries, to: .pickedUp, at: date) { delivery, eventDate in
+            try delivery.markPickedUp(at: eventDate, recordedBy: provenance)
+        }
+        // How, and how many, and nothing about which, where, when or how long.
+        AppLog.delivery.info(
+            "\(provenance.logDescription, privacy: .public) for \(recorded.count, privacy: .public) deliveries together"
+        )
         return recorded
     }
 
@@ -731,20 +801,68 @@ struct DeliveryService {
     ///   ``DeliveryLifecycleError/storeUnavailable(underlying:)``.
     @discardableResult
     func undoAutomatedStep(_ step: AutomatedPickupStep) throws -> DeliveryState {
-        guard let delivery = try delivery(withID: step.deliveryID) else {
-            AppLog.delivery.notice("Refused to undo an automated step: the delivery no longer exists")
-            throw DeliveryLifecycleError.invalidAutomatedUndo(.stepNoLongerRecorded)
-        }
-        try validateShift(of: delivery)
+        try undoAutomatedSteps([step])
+    }
 
-        let restored: DeliveryState
+    /// Takes back **every** event one press of Park or Resume Driving recorded,
+    /// or none of them.
+    ///
+    /// ## Why all or nothing
+    ///
+    /// A press that recorded Arrived at Pickup for two deliveries the driver
+    /// said share a pickup recorded one physical arrival, so its Undo takes back
+    /// one physical arrival: exactly those events, from that press, and no
+    /// other. Every step is judged by ``AutomatedPickupStepUndo`` **before any
+    /// is cleared**, and if any of them is refused (a later event recorded on
+    /// one, a pickup that was not the workflow's, a delivery that has gone)
+    /// the whole Undo is refused with that reason and nothing moves. Taking
+    /// back half would leave the shared arrival half-recorded, which is the
+    /// state the shared write exists to prevent.
+    ///
+    /// It never cascades: no delivery outside `steps`, no other event, and not
+    /// the vehicle.
+    ///
+    /// - Returns: the state the deliveries went back to. One press records one
+    ///   kind of event, so every step of it restores the same state.
+    /// - Throws: as ``undoAutomatedStep(_:)``, and
+    ///   ``AutomatedStepUndoRefusal/stepNoLongerRecorded`` for no steps at all.
+    @discardableResult
+    func undoAutomatedSteps(_ steps: [AutomatedPickupStep]) throws -> DeliveryState {
+        guard !steps.isEmpty else { throw DeliveryLifecycleError.invalidAutomatedUndo(.stepNoLongerRecorded) }
+        var resolved: [(Delivery, AutomatedPickupStep)] = []
+        for step in steps {
+            guard let delivery = try delivery(withID: step.deliveryID) else {
+                AppLog.delivery.notice("Refused to undo an automated step: the delivery no longer exists")
+                throw DeliveryLifecycleError.invalidAutomatedUndo(.stepNoLongerRecorded)
+            }
+            try validateShift(of: delivery)
+            do {
+                // Judged, not applied: the rule derives from the stored record.
+                _ = try AutomatedPickupStepUndo(
+                    undoing: step,
+                    deliveryID: delivery.id,
+                    record: DeliveryLifecycleRecord(delivery),
+                    pickupProvenance: delivery.pickupProvenance
+                )
+            } catch let error as AutomatedStepUndoRefusal {
+                // Nothing has been mutated: every step is judged before any is
+                // cleared.
+                AppLog.delivery.notice(
+                    "Refused to undo an automated step: \(String(describing: error), privacy: .public)"
+                )
+                throw DeliveryLifecycleError.invalidAutomatedUndo(error)
+            }
+            resolved.append((delivery, step))
+        }
+
+        var restored: DeliveryState = .accepted
         do {
-            restored = try delivery.undoAutomatedStep(step)
+            for (delivery, step) in resolved {
+                restored = try delivery.undoAutomatedStep(step)
+            }
         } catch let error as AutomatedStepUndoRefusal {
-            // Nothing has been mutated: the model derives before it clears.
-            AppLog.delivery.notice(
-                "Refused to undo an automated step: \(String(describing: error), privacy: .public)"
-            )
+            // Unreachable after the check above; discarded rather than trusted.
+            context.rollback()
             throw DeliveryLifecycleError.invalidAutomatedUndo(error)
         }
 
@@ -756,10 +874,13 @@ struct DeliveryService {
             throw DeliveryLifecycleError.storeUnavailable(underlying: error)
         }
 
-        // Structural only: which state it went back to. Never which delivery,
-        // never when.
+        // Structural only: which state they went back to and how many. Never
+        // which delivery, never when.
         AppLog.delivery.info(
-            "An automated pickup workflow step was undone to \(restored.rawValue, privacy: .public)"
+            """
+            \(resolved.count, privacy: .public) automated pickup workflow steps were undone to \
+            \(restored.rawValue, privacy: .public)
+            """
         )
         return restored
     }
@@ -1057,6 +1178,54 @@ struct DeliveryService {
         // where it happened or what it paid.
         AppLog.delivery.info("Delivery advanced to \(recorded.rawValue, privacy: .public)")
         return delivery
+    }
+
+    /// Applies one lifecycle event to several named deliveries, as one write.
+    ///
+    /// Every delivery is judged before any is changed, so a refusal mutates
+    /// nothing, in the store or in a model a screen is holding; the one save
+    /// that follows is rolled back whole if the store refuses it.
+    private func advance(
+        together deliveries: [Delivery],
+        to recorded: DeliveryState,
+        at date: Date,
+        applying transition: (Delivery, Date) throws -> Void
+    ) throws -> [Delivery] {
+        for delivery in deliveries { try validateShift(of: delivery) }
+
+        // Each clamps to its own last event, as a single step does.
+        let dated = deliveries.map { ($0, max(date, $0.lastEventAt)) }
+        for (delivery, eventDate) in dated {
+            if let refusal = delivery.refusal(recording: recorded, at: eventDate) {
+                AppLog.delivery.notice(
+                    "Delivery rejected a shared transition: \(String(describing: refusal), privacy: .public)"
+                )
+                throw DeliveryLifecycleError.invalidTransition(refusal)
+            }
+        }
+
+        do {
+            for (delivery, eventDate) in dated { try transition(delivery, eventDate) }
+        } catch let error as DeliveryError {
+            // Unreachable after the check above; discarded rather than trusted.
+            context.rollback()
+            throw DeliveryLifecycleError.invalidTransition(error)
+        }
+
+        do {
+            try commit(context)
+        } catch {
+            // Discards every pending timestamp together: the store must hold all
+            // of a shared event or none of it.
+            context.rollback()
+            AppLog.delivery.error("Failed to persist a shared delivery transition: \(error)")
+            throw DeliveryLifecycleError.storeUnavailable(underlying: error)
+        }
+
+        AppLog.delivery.info(
+            "\(deliveries.count, privacy: .public) deliveries advanced together to \(recorded.rawValue, privacy: .public)"
+        )
+        return deliveries
     }
 
     // MARK: Earnings
