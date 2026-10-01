@@ -360,7 +360,7 @@ import Foundation
 nonisolated enum ExportFormat {
     /// The current format version, written into every export.
     ///
-    /// Not the store's schema version, which is unrelated and currently 19.
+    /// Not the store's schema version, which is unrelated and moves on its own.
     static let version = 6
 
     /// What produced the file. A product name and nothing more — no build, no
