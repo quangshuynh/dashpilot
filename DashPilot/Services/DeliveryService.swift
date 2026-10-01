@@ -66,6 +66,9 @@ nonisolated enum DeliveryLifecycleError: Error {
     case invalidRecovery(DeliveryRecoveryRefusal)
     /// Taking back an event the pickup workflow recorded was refused.
     case invalidAutomatedUndo(AutomatedStepUndoRefusal)
+    /// Taking back a step recorded while parked, together with the driving it
+    /// resumed, was refused.
+    case invalidParkedProgressUndo(ParkedProgressUndoRefusal)
     /// A historical correction was refused by the delivery's own timestamps.
     case invalidCancellation(HistoricalCancellationRefusal)
     /// The domain refused a correction to a completed delivery's recorded
@@ -106,6 +109,7 @@ nonisolated extension DeliveryLifecycleError: Equatable {
         case (.deliveryNotOnAShift, .deliveryNotOnAShift): true
         case let (.invalidRecovery(lhsError), .invalidRecovery(rhsError)): lhsError == rhsError
         case let (.invalidAutomatedUndo(lhsError), .invalidAutomatedUndo(rhsError)): lhsError == rhsError
+        case let (.invalidParkedProgressUndo(lhsError), .invalidParkedProgressUndo(rhsError)): lhsError == rhsError
         case let (.invalidCancellation(lhsError), .invalidCancellation(rhsError)): lhsError == rhsError
         case let (.invalidTimeCorrection(lhsError), .invalidTimeCorrection(rhsError)): lhsError == rhsError
         case let (.invalidTip(lhsError), .invalidTip(rhsError)): lhsError == rhsError
@@ -204,6 +208,20 @@ nonisolated extension DeliveryLifecycleError: LocalizedError {
             """
         case .invalidAutomatedUndo(.notRecordedAutomatically):
             "That pickup was not recorded automatically, so it cannot be undone here."
+        case .invalidParkedProgressUndo(.stepNoLongerRecorded):
+            "That step is no longer recorded as it was, so there is nothing to undo."
+        case .invalidParkedProgressUndo(.laterEventRecorded):
+            """
+            Something was recorded for this delivery after that step, so it cannot be undone \
+            here. Nothing was changed.
+            """
+        case .invalidParkedProgressUndo(.notRecordedByTheDriver):
+            "That pickup was not the one you recorded, so it cannot be undone here."
+        case .invalidParkedProgressUndo(.vehicleStateChanged):
+            """
+            The vehicle or the shift changed after driving resumed, so the step and the driving \
+            were both left as they are.
+            """
         case .invalidRecovery(.notDelivered):
             "That delivery is not recorded as delivered, so there is nothing to reopen."
         case .invalidRecovery(.cancelled):

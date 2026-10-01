@@ -1248,6 +1248,34 @@ extension Shift {
         return suspension
     }
 
+    /// Reopens the parked stretch an automatic Resume Driving closed at
+    /// `closedAt`, for the Undo of the delivery step that resumed it.
+    ///
+    /// **The third writer of a ``RouteSuspension``'s end**, beside
+    /// ``beginRouteSuspension(at:pickupWorkflowDeliveryID:sharingPickupWith:)``
+    /// and ``endOpenRouteSuspension(at:)``, and the narrowest: only on a
+    /// running shift that is not paused and not parked, only the **latest**
+    /// stretch, and only while it still ends at exactly that instant. Anything
+    /// later (parking again, a pause, an end) is a decision the driver made
+    /// since, and is refused rather than rewritten.
+    ///
+    /// - Throws: ``ShiftError/shiftAlreadyEnded``, ``ShiftError/alreadyPaused``,
+    ///   ``ShiftError/alreadyParked``, ``ShiftError/notParked`` when that
+    ///   stretch is not the latest, or ``ShiftError/invalidRouteSuspension(_:)``.
+    @discardableResult
+    func reopenRouteSuspension(_ id: UUID, closedAt: Date) throws -> RouteSuspension {
+        guard endedAt == nil else { throw ShiftError.shiftAlreadyEnded }
+        guard openPause == nil else { throw ShiftError.alreadyPaused }
+        guard openRouteSuspension == nil else { throw ShiftError.alreadyParked }
+        guard let latest = routeSuspensionsInOrder.last, latest.id == id else { throw ShiftError.notParked }
+        do {
+            try latest.reopen(closedAt: closedAt)
+        } catch let error as RouteSuspensionError {
+            throw ShiftError.invalidRouteSuspension(error)
+        }
+        return latest
+    }
+
     /// Closes the open pause.
     ///
     /// - Throws: ``ShiftError/shiftAlreadyEnded``, ``ShiftError/notPaused``, or

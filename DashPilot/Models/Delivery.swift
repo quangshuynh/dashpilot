@@ -494,6 +494,42 @@ nonisolated final class Delivery {
         return undo.restoredState
     }
 
+    /// Takes back a Picked Up or Delivered the driver recorded while parked,
+    /// for the Undo of a step that also resumed driving.
+    ///
+    /// Removes exactly the one timestamp the step wrote (and, for a pickup, the
+    /// provenance written with it), after checking that it is still this
+    /// delivery's latest event at the same instant and, for a pickup, the
+    /// driver's own. The vehicle half is the shift's; see
+    /// ``Shift/reopenRouteSuspension(_:closedAt:)``. A refusal mutates nothing.
+    ///
+    /// The one other place ``pickedUpAt`` is cleared, beside
+    /// ``undoAutomatedStep(_:)``.
+    ///
+    /// - Returns: the state the delivery is now in.
+    /// - Throws: ``ParkedProgressUndoRefusal``.
+    @discardableResult
+    func takeBackParkedProgress(_ action: ParkedProgressAction) throws -> DeliveryState {
+        let record = DeliveryLifecycleRecord(self)
+        switch action.step {
+        case .pickedUp:
+            guard record.pickedUpAt == action.recordedAt else { throw ParkedProgressUndoRefusal.stepNoLongerRecorded }
+            guard record.state == .pickedUp else { throw ParkedProgressUndoRefusal.laterEventRecorded }
+            guard pickupProvenance == .manual else { throw ParkedProgressUndoRefusal.notRecordedByTheDriver }
+            pickedUpAt = nil
+            pickupProvenanceRawValue = nil
+            return state
+        case .delivered:
+            guard record.deliveredAt == action.recordedAt else { throw ParkedProgressUndoRefusal.stepNoLongerRecorded }
+            guard record.state == .delivered else { throw ParkedProgressUndoRefusal.laterEventRecorded }
+            do {
+                return try reopenFromDelivered()
+            } catch {
+                throw ParkedProgressUndoRefusal.stepNoLongerRecorded
+            }
+        }
+    }
+
     // MARK: Correcting an accidental completion
 
     /// Removes the delivered timestamp, returning this delivery to the state its
