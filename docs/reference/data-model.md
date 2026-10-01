@@ -66,7 +66,7 @@ Derived, never stored:
 | `numberedOffers` | The same list paired with the local `Offer 1`, `Offer 2` labels, each carrying its deliveries under their shift-wide numbers |
 | `numberedOffer(containing:)` | The numbered offer a delivery arrived in, or `nil` for one recording none |
 
-`beginOffer(deliveryCount:at:)` is the only thing in the app that creates a delivery, and the only
+`beginOffer(deliveryCount:sharing:at:)` is the only thing in the app that creates a delivery, and the only
 thing that records a new acceptance. It rejects a count below one, an offer on an ended shift, and an
 acceptance before the shift began, and returns the offer and its deliveries for the caller to insert,
 so a refused write leaves nothing behind. There is deliberately no maximum: how much work a driver
@@ -129,6 +129,7 @@ outright and commits once per correction.
 | `startedAt` | `Date` | When the driver recorded parking |
 | `endedAt` | `Date?` | `nil` while the driver has not recorded driving again. An open row is what "parked" means |
 | `shift` | `Shift?` | The shift this belongs to, and **never a delivery**. Optional only because SwiftData models the inverse of a to-many that way |
+| `pickupWorkflowSharedPickupDeliveryIDs` | `[UUID]` | Added by v20, declared empty. The other deliveries this stretch was for because they share `pickupWorkflowDeliveryID`'s pickup, written in the same save and read only by Resume Driving, which acts on exactly these. Empty for every stretch recorded before v20 |
 | `pickupWorkflowDeliveryID` | `UUID?` | Added by v19. The `Delivery.id` this stretch was taken to be the pickup of, under `Pick up orders with Park & Resume`, written in the same save that opens the row and read only by Resume Driving. An identifier, not a relationship. `nil` with the workflow off, with no delivery waiting for its pickup, and for every stretch recorded before v19 |
 
 A row rather than a flag, for the reason `ShiftPause` is one: a boolean could say the vehicle is
@@ -192,6 +193,8 @@ none are kept, because nothing implemented reads them.
 | `offer` | `Offer?` | The accepted offer this delivery arrived in. Optional because SwiftData models a reference that way, and because a pre-v12 store had none until the migration gave each delivery its own. It groups and does not govern: no timestamp, figure, fetch or delete rule reads it |
 | `shift` | `Shift?` | The only place the relationship is declared; `Shift` holds no matching collection. Optional only because SwiftData models a reference that way. The initializer requires a shift. Carries no delete rule, so `ShiftService.deleteCompletedShift(_:)` removes a shift's positions explicitly |
 | `pickupPlace` | `PickupPlace?` | Optional and often absent. A reference, so two deliveries from one place share a row. Nullify on delete |
+| `sharedPickupID` | `UUID?` | Added by v20. An opaque identity the deliveries of one offer share when the driver said they are collected at the **same pickup**. Written only at creation by `beginOffer(deliveryCount:sharing:at:)` and by `Delivery.recordSharedStop(_:among:in:)`, held by two or more deliveries of one offer or by none. Read by Park under the pickup workflow. Never inferred; `nil` for every delivery recorded before v20 |
+| `sharedDropOffID` | `UUID?` | Added by v20. The same for deliveries the driver said go to the **same drop-off**. Independent of `sharedPickupID`, and read by nothing that records an event |
 | `grossEarningsAmount` | `Decimal?` | Private. What this one delivery paid, as the driver typed it. `nil` means no amount recorded, which is not zero. Unrelated to `Shift.grossEarningsAmount` |
 | `expectedEarningsAmount` | `Decimal?` | Private. What the driver expects this delivery to pay, entered while it was active. **Not earnings**: nothing counts it, and it never becomes the column above. `nil` means none recorded, which is not zero |
 | `additionalTips` | `[DeliveryTip]` | Tips received **outside** `grossEarningsAmount`. Cascades on delete, so deleting a shift reaches its deliveries and on to their tips. Empty is the ordinary case |
@@ -456,6 +459,8 @@ The row is created the first time the driver opens Settings. A migration never c
 | 17.0.0 | Adds `DriverSettings.recordsPickupWhenParking`, declared `false`. Lightweight, and nothing is backfilled: no build that wrote a v16 store could ask the question, so every migrated row reads off |
 | 18.0.0 | Adds `Delivery.pickupProvenanceRawValue`. Lightweight, and nothing is backfilled: a v17 store could already hold pickups recorded by Park and holds no trace of which, so every migrated pickup reads as unknown rather than manual |
 | 19.0.0 | Adds `RouteSuspension.pickupWorkflowDeliveryID`, `DriverSettings.usesParkAndResumeForPickups` and `DriverSettings.handlesStackedOrdersInOrder`; removes `DriverSettings.recordsPickupWhenParking`. Lightweight, and nothing is backfilled: no stretch is associated with a delivery by its instants, and the workflow reads off whatever the old switch said |
+
+| 20.0.0 | Adds `Delivery.sharedPickupID`, `Delivery.sharedDropOffID` and `RouteSuspension.pickupWorkflowSharedPickupDeliveryIDs`. Lightweight, and nothing is backfilled: one offer, one pickup place or nearby instants are what two unrelated orders look like too, so every migrated delivery is independent |
 
 Every step but 12.0.0 is a lightweight stage, and none but that one writes a value. See
 [Migrations](../architecture/migrations.md).

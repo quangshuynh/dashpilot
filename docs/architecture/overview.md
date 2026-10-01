@@ -15,7 +15,7 @@ structure is kept flat and explicit; layers are introduced when a concrete probl
 | `Intents` | The App Intents surface: eight short lifecycle actions performed with no screen, over those same services |
 | `App` | SwiftUI entry point, screens and preview fixtures |
 | `Support` | Cross-cutting utilities: logging and launch arguments |
-| `DashPilotActivity` | Value types shared with the widget extension: the Live Activity's snapshot, its control vocabulary and its five intent declarations |
+| `DashPilotActivity` | Shared with the widget extension: the Live Activity's snapshot, its control vocabulary, its layout plan, its card views and its intent declarations |
 | `DashPilotWidgets` | The widget extension, which draws that snapshot and nothing else |
 
 Domain types are deliberately free of SwiftUI and SwiftData so calculations can be tested without a
