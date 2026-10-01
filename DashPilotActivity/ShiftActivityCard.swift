@@ -50,7 +50,6 @@ struct ShiftActivityLockScreenView: View {
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .dynamicTypeSize(...DynamicTypeSize.xLarge)
-        .accessibilityIdentifier("shiftActivityCard")
     }
 }
 
