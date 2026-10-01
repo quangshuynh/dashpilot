@@ -2563,6 +2563,105 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertEqual(child.value as? String, "1")
     }
 
+    /// Resuming after delivery progress is off for a driver who never chose
+    /// it, stands on its own beside the workflow, and the workflow's child says
+    /// on screen why it is unavailable.
+    @MainActor
+    func testResumeAfterProgressSettingIsOffAndIndependent() throws {
+        let app = launchWithEmptyStore()
+        openSettings(in: app)
+
+        let resume = app.switches["resumeAfterProgressToggle"]
+        XCTAssertTrue(scrollTo(resume, in: app))
+        XCTAssertEqual(resume.value as? String, "0", "Off unless the driver turns it on")
+        XCTAssertTrue(resume.label.contains("Resume driving after delivery progress"), resume.label)
+        XCTAssertTrue(resume.isEnabled, "It depends on nothing, so it is usable with the workflow off")
+        XCTAssertTrue(
+            app.switches["stackedOrdersInOrderToggle"].label.contains("Needs Pick up orders with Park & Resume on"),
+            "The disabled child says why: \(app.switches["stackedOrdersInOrderToggle"].label)"
+        )
+
+        setSwitch("resumeAfterProgressToggle", to: true, in: app)
+        XCTAssertEqual(app.switches["pickupWorkflowToggle"].value as? String, "0", "Turning it on turns nothing else on")
+        goBack(in: app)
+
+        openSettings(in: app)
+        XCTAssertTrue(scrollTo(resume, in: app))
+        XCTAssertEqual(resume.value as? String, "1", "Kept across leaving the screen")
+    }
+
+    /// Parked at a pickup with the setting on, the driver's own Picked Up
+    /// resumes driving, says why, and one Undo takes back the pickup and the
+    /// driving together.
+    @MainActor
+    func testPickedUpWhileParkedResumesDrivingAndUndoParksAgain() throws {
+        let app = launchWithEmptyStore()
+        openSettings(in: app)
+        setSwitch("resumeAfterProgressToggle", to: true, in: app)
+        goBack(in: app)
+
+        startShiftAndDelivery(in: app)
+        let action = deliveryButton("deliveryActionButton", containing: "Delivery 1", in: app)
+        XCTAssertTrue(scrollTo(action, in: app))
+        XCTAssertTrue(waitForLabel(action, toContain: "Mark arrived at pickup"))
+        action.tap()
+        XCTAssertTrue(waitForLabel(action, toContain: "Mark order picked up"))
+
+        pressPark(in: app)
+        XCTAssertTrue(app.descendants(matching: .any)["parkedShiftNotice"].waitForExistence(timeout: 5))
+
+        XCTAssertTrue(scrollUntilHittable(action, in: app))
+        action.tap()
+
+        let notice = app.staticTexts["parkedProgressNotice"]
+        XCTAssertTrue(notice.waitForExistence(timeout: 5), "The driver is told what their setting did")
+        XCTAssertTrue(notice.label.contains("Delivery 1 picked up. Driving resumed by your"), notice.label)
+        XCTAssertFalse(notice.label.lowercased().contains("detected"), notice.label)
+        XCTAssertTrue(
+            app.buttons["parkShiftButton"].waitForExistence(timeout: 5),
+            "The vehicle is driving: Park is offered again"
+        )
+        XCTAssertFalse(app.buttons["resumeDrivingButton"].exists)
+
+        let undo = app.buttons["undoParkedProgressButton"]
+        XCTAssertTrue(undo.waitForExistence(timeout: 5))
+        XCTAssertEqual(
+            undo.label,
+            "Undo Picked Up for Delivery 1, and go back to parked. Route recording stops again."
+        )
+        undo.tap()
+
+        XCTAssertTrue(app.buttons["resumeDrivingButton"].waitForExistence(timeout: 5), "Parked again")
+        XCTAssertTrue(waitForLabel(action, toContain: "Mark order picked up"), "And the pickup is taken back")
+        XCTAssertTrue(waitForLabel(notice, toContain: "Undid Picked Up for Delivery 1"), notice.label)
+        XCTAssertFalse(app.buttons["undoParkedProgressButton"].exists, "The offer goes once taken")
+    }
+
+    /// The Delivered Undo leaves after its window without moving the next
+    /// delivery's button: measured on the button's own frame, before and after.
+    @MainActor
+    func testDeliveredUndoLeavingMovesNoDeliveryCard() throws {
+        let app = launchWithActiveDelivery()
+
+        let carrying = deliveryButton("deliveryActionButton", containing: "Delivery 3", in: app)
+        XCTAssertTrue(scrollUntilHittable(carrying, in: app))
+        carrying.tap()
+
+        let banner = app.staticTexts["undoDeliveredBanner"]
+        XCTAssertTrue(banner.waitForExistence(timeout: 5))
+        let next = deliveryButton("deliveryActionButton", containing: "Delivery 2", in: app)
+        XCTAssertTrue(next.waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            waitForCount(app.buttons.matching(identifier: "deliveryActionButton"), toEqual: 1),
+            "Delivery 3's card is gone, so only the movement the Undo causes is left to measure"
+        )
+        let before = next.frame
+
+        XCTAssertTrue(waitForDisappearance(of: banner, timeout: 30), "The Undo leaves after its window")
+        XCTAssertEqual(next.frame, before, "Leaving moved the next delivery's button: \(before) to \(next.frame)")
+        XCTAssertTrue(next.isHittable)
+    }
+
     /// With the workflow off, parking beside a delivery at its pickup parks and
     /// does nothing else, exactly as it did before the workflow existed.
     @MainActor
