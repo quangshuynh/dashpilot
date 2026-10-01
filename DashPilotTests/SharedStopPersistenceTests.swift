@@ -30,19 +30,14 @@ struct SharedStopPersistenceTests {
 
     // MARK: Schema
 
-    /// The plan's own shape, asserted here because v20 is the current version.
-    ///
-    /// The count of versions and stages lives in the suite belonging to
-    /// whichever version is current. It moved here from
-    /// `PickupWorkflowPersistenceTests`, which owned it while v19 was current.
-    @Test("Version 20 is the current version, and it adds no entity")
+    /// The frozen v20's own facts. The plan's counts moved to
+    /// `ParkedProgressPersistenceTests` when v21 became current.
+    @Test("Version 20 is frozen with eleven models and adds no entity")
     func schemaVersion() throws {
         #expect(DashPilotSchemaV20.versionIdentifier == Schema.Version(20, 0, 0))
-        #expect(DashPilotMigrationPlan.schemas.count == 20)
-        #expect(DashPilotMigrationPlan.stages.count == 19)
-        #expect(DashPilotMigrationPlan.schemas.last is DashPilotSchemaV20.Type)
+        #expect(DashPilotSchemaV20.models.count == 11)
 
-        let entities = Set(ModelContainerFactory.currentSchema.entities.map(\.name))
+        let entities = Set(Schema(versionedSchema: DashPilotSchemaV20.self).entities.map(\.name))
         #expect(
             entities == [
                 "Shift", "RouteSample", "RouteSuspension", "Delivery", "PickupPlace", "Expense",
@@ -50,6 +45,8 @@ struct SharedStopPersistenceTests {
             ],
             "v20 moves three columns and no entity"
         )
+        let delivery = try #require(Schema(versionedSchema: DashPilotSchemaV20.self).entities.first { $0.name == "Delivery" })
+        #expect(Set(delivery.properties.map(\.name)).isSuperset(of: ["sharedPickupID", "sharedDropOffID"]))
     }
 
     @Test("A delivery holds two opaque identities and nothing about a customer or a place")
