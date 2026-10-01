@@ -207,4 +207,53 @@ struct ShiftActivityControlPriorityTests {
         #expect(decoded.deliveryCount == nil)
         #expect(!decoded.isShared)
     }
+
+    // MARK: Resume driving after delivery progress
+
+    /// The setting changes **no** control order: Resume Driving leads while
+    /// parked whoever will close the stretch, and once a step has closed it the
+    /// card is exactly the driving card. So it needs no ordering of its own,
+    /// and adds nothing to the card's height.
+    @Test("Parked: Resume Driving leads; a pickup that resumes driving takes it off and leaves the next step first")
+    func automaticResumeReconcilesTheControls() throws {
+        let store = try makeStore(workflow: false)
+        try SettingsService(context: store.context).setResumesDrivingAfterDeliveryProgress(true)
+        let delivery = try store.deliveries.startDelivery(at: at(1))
+        try store.deliveries.markArrivedAtPickup(delivery, at: at(2))
+        _ = try ParkVehicleService(context: store.context).park(at: at(3))
+
+        let parked = store.controls(at: at(4))
+        #expect(parked == [.resumeDriving, .deliveryStep(.pickUp), .startDelivery])
+        #expect(ShiftActivityControl.emphasised(in: parked) == .resumeDriving)
+
+        let result = try DeliveryProgressService(context: store.context).record(.pickedUp, of: delivery, at: at(5))
+        #expect(result.parked == .resumed(step: .pickedUp, deliveryNumbers: [1]))
+
+        let driving = store.content(at: at(6))
+        #expect(driving.controls == [.deliveryStep(.complete), .startDelivery, .park])
+        #expect(!driving.controls.contains(.resumeDriving))
+        #expect(driving.routeSuspendedNotice == nil, "The card no longer says parked")
+        #expect(driving.controls.count <= 4)
+    }
+
+    @Test("Parked with a shared pickup half collected: still parked, still one row, Resume Driving still first")
+    func groupedStopStaysCompact() throws {
+        let store = try makeStore(workflow: false)
+        try SettingsService(context: store.context).setResumesDrivingAfterDeliveryProgress(true)
+        let pair = try store.deliveries.startOffer(deliveryCount: 2, sharing: [.pickup, .dropOff], at: at(1)).deliveriesInOrder
+        for delivery in pair { try store.deliveries.markArrivedAtPickup(delivery, at: at(2)) }
+        _ = try ParkVehicleService(context: store.context).park(at: at(3))
+        #expect(store.content(at: at(4)).activeDeliveryTimers.map(\.title) == ["Deliveries 1 and 2"])
+
+        try DeliveryProgressService(context: store.context).record(.pickedUp, of: pair[0], at: at(5))
+        let half = store.content(at: at(6))
+        #expect(half.controls.first == .resumeDriving)
+        #expect(half.controls.count <= 4)
+        #expect(half.routeSuspendedNotice != nil)
+
+        try DeliveryProgressService(context: store.context).record(.pickedUp, of: pair[1], at: at(7))
+        let done = store.content(at: at(8))
+        #expect(done.activeDeliveryTimers.map(\.title) == ["Deliveries 1 and 2"], "One row again once both match")
+        #expect(!done.controls.contains(.resumeDriving))
+    }
 }

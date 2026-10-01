@@ -32,6 +32,10 @@ struct RootView: View {
     /// Why taking back an automated step was refused, while that is on screen.
     @State private var undoError: DeliveryLifecycleError?
 
+    /// The short-lived line and Undo a Delivered, or a step recorded while
+    /// parked, leaves. See ``TransientUndoBar``.
+    @State private var transientUndo: TransientUndo?
+
     /// Exporting every completed shift.
     @State private var isExportingHistory = false
 
@@ -97,7 +101,7 @@ struct RootView: View {
                                 .fixedSize(horizontal: false, vertical: true)
                                 .accessibilityIdentifier("pausedDeliveryNotice")
                         } else {
-                            DeliveryControlPanel(shift: activeShift)
+                            DeliveryControlPanel(shift: activeShift, transientUndo: $transientUndo)
                         }
                     } header: {
                         Text("Delivery")
@@ -119,6 +123,14 @@ struct RootView: View {
 
                 CurrentWeekHistorySection(week: currentWeek, now: now) {
                     isExportingHistory = true
+                }
+            }
+            // Below the list rather than in it, so arriving and leaving move no
+            // delivery card under a driver's thumb. Only while the shift runs:
+            // a paused or ended shift has nothing it could take back.
+            .safeAreaInset(edge: .bottom) {
+                if let transientUndo, activeShift?.lifecycleState == .running {
+                    TransientUndoBar(undo: transientUndo, perform: takeBackTransientUndo)
                 }
             }
             // The window an automated step can be taken back in, which is the
@@ -265,7 +277,19 @@ struct RootView: View {
             // does not fire for it. This one catches a pause or resume recorded
             // from anywhere, including an App Intent run while this screen is
             // open, without waiting for the next position to be rejected.
-            .onChange(of: activeShift?.lifecycleState) { _, _ in routeCapture.synchronize() }
+            .onChange(of: activeShift?.lifecycleState) { _, _ in
+                routeCapture.synchronize()
+                // A Delivered's Undo belongs to the running shift it was
+                // recorded on; pausing or ending moves past it.
+                transientUndo = nil
+            }
+            .onChange(of: activeShift?.id) { _, _ in transientUndo = nil }
+            // Parking and driving again do not change the lifecycle state, so
+            // neither line above fires for them. This catches a stretch closed
+            // by a delivery step under the driver's resume-after-progress
+            // setting, and one closed from the Lock Screen while this screen
+            // is open, without waiting for the next position to be judged.
+            .onChange(of: activeShift?.isRouteSuspended) { _, _ in routeCapture.synchronize() }
             .onChange(of: locationAuthorization.authorization) { _, _ in routeCapture.synchronize() }
             .alert(
                 "Shift Not Updated",
@@ -399,6 +423,41 @@ struct RootView: View {
         }
         pickupWorkflow = feedback
         // A delivery's state moved, which is what the Lock Screen card shows.
+        liveActivity.reconcile()
+    }
+
+    /// Takes back what the line below the list offers: a Delivered, or a step
+    /// recorded while parked together with the driving it resumed.
+    ///
+    /// The offer goes whatever happens next, so a refusal cannot invite a
+    /// second press; the line then says what was undone, or the alert says why
+    /// not. For the parked case capture is stopped **first**, so positions still
+    /// in memory are written before the ones since the resume are removed, and
+    /// reconciled after, which leaves it stopped when the stretch reopened and
+    /// recording when the Undo was refused.
+    private func takeBackTransientUndo() {
+        guard let undo = transientUndo, let offer = undo.offer else { return }
+        transientUndo?.offer = nil
+        do {
+            switch offer {
+            case let .delivered(deliveryID, _):
+                transientUndo = nil
+                let service = DeliveryService(context: modelContext)
+                guard let delivery = try service.delivery(withID: deliveryID) else {
+                    throw DeliveryLifecycleError.invalidRecovery(.notDelivered)
+                }
+                try service.reopenDelivered(delivery)
+            case let .parkedProgress(action):
+                routeCapture.prepareForRouteSuspension()
+                defer { routeCapture.synchronize() }
+                try DeliveryProgressService(context: modelContext).undo(action)
+                transientUndo = undo.undone(action.undoneNotice)
+            }
+        } catch let error as DeliveryLifecycleError {
+            undoError = error
+        } catch {
+            undoError = .storeUnavailable(underlying: error)
+        }
         liveActivity.reconcile()
     }
 
