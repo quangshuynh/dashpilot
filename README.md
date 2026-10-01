@@ -43,6 +43,8 @@ measure.
   walk around a shop, so it never inflates recorded mileage and never subtracts working time. An
   optional setting, off by default, lets Park mark Arrived at Pickup and Resume Driving mark Picked
   Up, moving deliveries marked Same pickup together, with a short Undo for the delivery steps.
+  Another, also off by default, resumes driving when a Picked Up or Delivered recorded while parked
+  leaves that stop with nothing to do.
 - **Earnings and additional tips.** Optional gross earnings per shift and per delivery, kept as
   independent facts, plus tips received outside the platform's amount, each with its method.
 - **Fuel estimates and vehicle profiles.** Save your vehicles and a gas price. Each shift copies
