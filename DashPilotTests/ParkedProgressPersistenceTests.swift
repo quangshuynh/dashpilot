@@ -141,4 +141,22 @@ struct ParkedProgressPersistenceTests {
         let context = ModelContext(try ModelContainerFactory.makeContainer(at: storeURL))
         #expect(SettingsService(context: context).resumesDrivingAfterDeliveryProgress())
     }
+
+    @Test("The preference is not exported, and the format version does not move")
+    func notExported() throws {
+        let fixture = try ExportFixture()
+        try SettingsService(context: fixture.context).setResumesDrivingAfterDeliveryProgress(true)
+        let shift = try fixture.completedShift(earnings: "100.00")
+        try fixture.delivered(in: shift, acceptedAfter: 300, earnings: "6.25")
+
+        let document = ExportDocument(
+            scope: .shift(shift.id), shifts: [try fixture.exportRecord(of: shift)], summary: nil, exportedAt: ExportFixture.start
+        )
+        let encoder = ExportDocumentEncoder()
+        let json = try #require(String(data: try encoder.json(for: document), encoding: .utf8))
+        for word in ["resumesDriving", "resumeDriving", "deliveryProgress", "afterProgress"] {
+            #expect(!json.contains(word), "Exported \(word)")
+        }
+        #expect(ExportFormat.version == 6)
+    }
 }
