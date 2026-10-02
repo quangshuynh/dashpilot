@@ -146,17 +146,24 @@ struct DeliveryControlPanel: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: DashSpacing.xl) {
             suggestions
             status
 
+            // Each card below a rule of its own, so stacked orders read as
+            // separate stops rather than as one long card.
             ForEach(activeGroups) { group in
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: DashSpacing.xl) {
+                    Divider()
+
                     if group.isGrouped, let offer = group.offer {
                         OfferGroupHeader(offer: offer)
                     }
 
-                    ForEach(group.deliveries) { numbered in
+                    ForEach(Array(group.deliveries.enumerated()), id: \.element.id) { index, numbered in
+                        if index > 0 {
+                            Divider()
+                        }
                         ActiveDeliveryCard(
                             numbered: numbered,
                             offer: group.isGrouped ? group.offer : nil,
@@ -167,12 +174,16 @@ struct DeliveryControlPanel: View {
                 }
             }
 
+            if !activeDeliveries.isEmpty {
+                Divider()
+            }
+
             startControl
             groupedOfferControl
             correctionControl
             recoveryControl
         }
-        .padding(.vertical, 8)
+        .padding(.vertical, DashSpacing.md)
         // The window the immediate undo is offered for, counted in one-second
         // ticks while the line is actually on screen. It restarts with each
         // completion, because the offer names the latest one.
@@ -271,7 +282,7 @@ struct DeliveryControlPanel: View {
     @ViewBuilder
     private var suggestions: some View {
         if !progressSuggestions.isEmpty {
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: DashSpacing.lg) {
                 ForEach(progressSuggestions) { suggestion in
                     DeliveryProgressSuggestionCard(
                         suggestion: suggestion,
@@ -289,18 +300,15 @@ struct DeliveryControlPanel: View {
     private var status: some View {
         let summary = shift.deliverySummary
 
-        VStack(alignment: .leading, spacing: 4) {
-            // A symbol and a phrase, never colour alone: the state has to be
-            // readable in bright sun and to someone who does not see the tint.
-            Label(summary.inProgressStatement, systemImage: activeDeliveries.isEmpty ? "pause.circle" : "shippingbox.fill")
-                .dashFont(.status)
-
-            if !summary.isEmpty {
-                Text(summary.statement)
-                    .dashFont(.body)
-                    .foregroundStyle(.secondary)
-            }
-        }
+        // One line: the counts of finished deliveries are the shift's own
+        // figures, in the panel above, so they are said here only to VoiceOver,
+        // which hears this element on its own.
+        //
+        // A symbol and a phrase, never colour alone: the state has to be
+        // readable in bright sun and to someone who does not see the tint.
+        Label(summary.inProgressStatement, systemImage: activeDeliveries.isEmpty ? "circle.dashed" : "shippingbox.fill")
+            .dashFont(.status)
+            .foregroundStyle(activeDeliveries.isEmpty ? .secondary : .primary)
         .accessibilityElement(children: .combine)
         .accessibilityLabel([summary.inProgressStatement, summary.spokenStatement].joined(separator: ". "))
         .accessibilityIdentifier("deliveryStatus")
@@ -316,6 +324,7 @@ struct DeliveryControlPanel: View {
     private var startControl: some View {
         let button = Button { perform(.start) } label: {
             Text(DeliveryAction.start.title)
+                .dashFont(.control)
                 .frame(maxWidth: .infinity)
         }
         .controlSize(.large)
@@ -636,8 +645,8 @@ private struct DeliveryProgressSuggestionCard: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: DashSpacing.md) {
+            VStack(alignment: .leading, spacing: DashSpacing.xs) {
                 // A symbol and a sentence, never a tint alone: the card has to
                 // be readable in bright sun and to a driver who does not see
                 // the colour.
@@ -670,12 +679,12 @@ private struct DeliveryProgressSuggestionCard: View {
     @ViewBuilder
     private var controls: some View {
         if dynamicTypeSize.isAccessibilitySize {
-            VStack(spacing: 8) {
+            VStack(spacing: DashSpacing.md) {
                 confirmButton
                 dismissButton
             }
         } else {
-            HStack(spacing: 8) {
+            HStack(spacing: DashSpacing.md) {
                 confirmButton
                 dismissButton
             }
@@ -720,7 +729,7 @@ private struct OfferGroupHeader: View {
     let offer: NumberedOffer
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: DashSpacing.xs) {
             Label("\(offer.title) · \(offer.groupStatement)", systemImage: "square.stack.3d.up.fill")
                 .dashFont(.status)
 
@@ -790,6 +799,8 @@ private struct ActiveDeliveryCard: View {
     /// a per-second tick on a screen that already has one.
     private static let clockCadence: TimeInterval = 15
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     var body: some View {
         VStack(alignment: .leading, spacing: DashSpacing.lg) {
             TimelineView(.periodic(from: .now, by: Self.clockCadence)) { context in
@@ -805,12 +816,13 @@ private struct ActiveDeliveryCard: View {
             if let action = delivery.state.nextAction {
                 VStack(alignment: .leading, spacing: DashSpacing.sm) {
                     Text("Next")
-                        .dashFont(.metricLabel)
+                        .dashFont(.eyebrow)
                         .foregroundStyle(.secondary)
                         .accessibilityHidden(true)
 
                     Button(action: advance) {
                         Text(action.title)
+                            .dashFont(.control)
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.borderedProminent)
@@ -834,16 +846,26 @@ private struct ActiveDeliveryCard: View {
         }
     }
 
-    /// Which delivery this is, what state it is in and for how long, and what
-    /// is known about it. Only facts it records: a place and an expected
-    /// amount appear where they were entered and are absent otherwise.
+    /// Which delivery this is, where it is on its route, what state it is in
+    /// and for how long, and what is known about it. Only facts it records: a
+    /// place and an expected amount appear where they were entered and are
+    /// absent otherwise.
+    ///
+    /// The numbered marker and the stop track are DashPilot's route motif and
+    /// carry nothing the words do not: the title names the delivery and the
+    /// state line says where it is. They are there so stacked orders can be
+    /// told apart, and their progress compared, at a glance.
     @ViewBuilder
     private func identity(asOf now: Date) -> some View {
-        VStack(alignment: .leading, spacing: DashSpacing.sm) {
-            HStack(alignment: .firstTextBaseline, spacing: DashSpacing.md) {
+        VStack(alignment: .leading, spacing: DashSpacing.md) {
+            HStack(alignment: .center, spacing: DashSpacing.md) {
+                DashStopMarker(number: numbered.number)
+
                 Text(numbered.title)
                     .dashFont(.title)
                     .fixedSize(horizontal: false, vertical: true)
+
+                Spacer(minLength: DashSpacing.md)
 
                 // The offer's name alone, because the heading above has already
                 // said how many deliveries it held. It is here so a driver
@@ -856,42 +878,49 @@ private struct ActiveDeliveryCard: View {
                 }
             }
 
-            // Which of its siblings the driver said share this delivery's pickup
-            // or drop-off, by name. A driver reading one card between steps can
-            // see which other card will move with it when they park.
-            if let shared = offer?.sharedStops(of: numbered).caption {
-                Label(shared, systemImage: "link")
-                    .dashFont(.supporting)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+            DashStopTrack(state: delivery.state)
 
-            // The state in a symbol and words, and how long it has been the
-            // state, from the delivery's own recorded instant.
-            DashStatusLabel(
-                title: stateLine(asOf: now),
-                symbol: delivery.state.symbolName,
-                tint: .accentColor
-            )
+            VStack(alignment: .leading, spacing: DashSpacing.sm) {
+                // The state in a symbol and words, and how long it has been the
+                // state, from the delivery's own recorded instant.
+                DashStatusLabel(
+                    title: stateLine(asOf: now),
+                    symbol: delivery.state.symbolName,
+                    tint: .accentColor
+                )
 
-            if let place = delivery.pickupPlace {
-                Label(place.displayName, systemImage: "bag")
-                    .dashFont(.body)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            // Named "Expected pay" wherever it is printed, so it is never one
-            // word away from the "Gross earnings" a finished delivery shows.
-            if let expected = delivery.expectedEarnings {
-                LabeledContent("Expected pay") {
-                    Text(expected.formatted(locale: locale)).monospacedDigit()
+                // Which of its siblings the driver said share this delivery's
+                // pickup or drop-off, by name. A driver reading one card between
+                // steps can see which other card will move with it when they
+                // park.
+                if let shared = offer?.sharedStops(of: numbered).caption {
+                    Label(shared, systemImage: "link")
+                        .labelStyle(DashCompactLabelStyle())
+                        .dashFont(.supporting)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                .dashFont(.body)
-                .foregroundStyle(.secondary)
-            }
 
-            Text("Accepted \(delivery.acceptedAt.formatted(date: .omitted, time: .shortened))")
-                .dashFont(.supporting)
-                .foregroundStyle(.secondary)
+                if let place = delivery.pickupPlace {
+                    Label(place.displayName, systemImage: "bag")
+                        .labelStyle(DashCompactLabelStyle())
+                        .dashFont(.body)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                // Named "Expected pay" wherever it is printed, so it is never one
+                // word away from the "Gross earnings" a finished delivery shows.
+                if let expected = delivery.expectedEarnings {
+                    LabeledContent("Expected pay") {
+                        Text(expected.formatted(locale: locale)).monospacedDigit()
+                    }
+                    .dashFont(.body)
+                    .foregroundStyle(.secondary)
+                }
+
+                Text("Accepted \(delivery.acceptedAt.formatted(date: .omitted, time: .shortened))")
+                    .dashFont(.supporting)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 
@@ -907,15 +936,26 @@ private struct ActiveDeliveryCard: View {
 
     /// Details and cancelling, below the step and quieter than it.
     ///
-    /// One control to a line, always. Side by side, two half-width titles came
-    /// out a word to a line at the default size, which is the defect the
-    /// completed delivery's grid was built to fix. Cancelling is a plain
-    /// destructive control that names its delivery and asks for confirmation,
-    /// so it cannot be mistaken for the step above it.
+    /// The two detail controls share a row of two equal cells, a column at
+    /// accessibility sizes, the arrangement the completed delivery's grid
+    /// settled on: each cell is the full target and a title wraps rather than
+    /// shrinking. Cancelling is on a line of its own, a plain destructive
+    /// control that names its delivery and asks for confirmation, so it cannot
+    /// be mistaken for the step above it or for a detail beside it.
     private var secondaryControls: some View {
         VStack(alignment: .leading, spacing: DashSpacing.xs) {
-            pickupPlaceControl
-            expectedEarningsControl
+            LazyVGrid(
+                columns: Array(
+                    repeating: GridItem(.flexible(), spacing: DashSpacing.md, alignment: .leading),
+                    count: dynamicTypeSize.isAccessibilitySize ? 1 : 2
+                ),
+                alignment: .leading,
+                spacing: DashSpacing.xs
+            ) {
+                pickupPlaceControl
+                expectedEarningsControl
+            }
+
             Button("Cancel \(numbered.title)", role: .destructive, action: cancel)
                 .dashFont(.body)
                 .buttonStyle(.borderless)
@@ -941,10 +981,12 @@ private struct ActiveDeliveryCard: View {
                 numbered.expectedEarningsActionTitle(hasExpected: delivery.expectedEarnings != nil),
                 systemImage: delivery.expectedEarnings == nil ? "plus.circle" : "pencil"
             )
+            .labelStyle(DashCompactLabelStyle())
             .dashFont(.body)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
         }
         .buttonStyle(.borderless)
-        .frame(minHeight: 44)
         .contentShape(Rectangle())
         .accessibilityLabel(
             numbered.spokenExpectedEarningsLabel(hasExpected: delivery.expectedEarnings != nil)
@@ -967,10 +1009,12 @@ private struct ActiveDeliveryCard: View {
                 numbered.pickupPlaceActionTitle(hasPlace: delivery.pickupPlace != nil),
                 systemImage: delivery.pickupPlace == nil ? "plus.circle" : "pencil"
             )
+            .labelStyle(DashCompactLabelStyle())
             .dashFont(.body)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
         }
         .buttonStyle(.borderless)
-        .frame(minHeight: 44)
         .contentShape(Rectangle())
         .accessibilityLabel(numbered.spokenPickupPlaceLabel(hasPlace: delivery.pickupPlace != nil))
         .accessibilityIdentifier("pickupPlaceButton")

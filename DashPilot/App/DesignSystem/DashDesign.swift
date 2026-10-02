@@ -51,12 +51,12 @@ enum DashRadius {
 /// on the Live Activity. Each is the third signal after a symbol and a word.
 enum DashStatusTint {
     /// A shift being recorded: the convention for recording.
-    static let running = Color.red
+    static let running = ShiftActivityPalette.running
     /// Working time stopped.
-    static let paused = Color.orange
-    /// The vehicle parked: the parking-sign convention. Blue on the Live
-    /// Activity as well, which is the point of naming it.
-    static let parked = Color.blue
+    static let paused = ShiftActivityPalette.paused
+    /// The vehicle parked: the parking-sign convention. Read from the Live
+    /// Activity's palette, so the app and the Lock Screen cannot drift apart.
+    static let parked = ShiftActivityPalette.parked
     /// A delivery finished.
     static let completed = Color.green
 }
@@ -142,6 +142,9 @@ struct DashStateBanner: View {
 /// VoiceOver hears, so the marker is hidden from assistive technologies.
 struct DashStopMarker: View {
     let number: Int
+    /// A stop no longer on the route, such as a cancelled delivery: drawn in
+    /// the quiet grey rather than the accent.
+    var isMuted = false
 
     @ScaledMetric(relativeTo: .title3) private var diameter: CGFloat = 30
 
@@ -152,7 +155,7 @@ struct DashStopMarker: View {
             .lineLimit(1)
             .minimumScaleFactor(0.5)
             .frame(width: diameter, height: diameter)
-            .background(Circle().fill(Color.accentColor))
+            .background(Circle().fill(isMuted ? Color.secondary : Color.accentColor))
             .accessibilityHidden(true)
     }
 }
@@ -232,6 +235,28 @@ extension DeliveryState {
         case .pickedUp: 2
         case .delivered: 3
         case .cancelled: nil
+        }
+    }
+}
+
+/// A `Label` whose icon sits close to its title rather than in a column of its
+/// own.
+///
+/// The default style reserves a fixed width for the icon, which inside a
+/// half-width grid cell is space taken from the words. Closing the gap gives
+/// each title around fourteen more points to be written on, which is the
+/// difference between `Change Pickup Place` on one line and on two, and it also
+/// makes the pair read as one control rather than as a glyph beside some text.
+///
+/// Aligned on the first baseline, so an icon stays beside the first line of a
+/// title that does wrap instead of drifting into the middle of it.
+struct DashCompactLabelStyle: LabelStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        // Six points: measured, it is what keeps `Change Pickup Place` on one
+        // line in a half-width cell at the default size.
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            configuration.icon
+            configuration.title
         }
     }
 }
