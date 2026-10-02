@@ -102,8 +102,11 @@ nonisolated struct ShiftActivityCardLayout: Equatable, Sendable {
 
         let overflow = timers.count - rows.count
         deliveryRows = rows
-        footnote = needsFootnote ? Self.footnote(overflow: overflow, withheldStep: withheldStep) : nil
-        spokenFootnote = needsFootnote ? Self.spokenFootnote(overflow: overflow, withheldStep: withheldStep) : nil
+        let drawnAny = !rows.isEmpty
+        footnote = needsFootnote ? Self.footnote(overflow: overflow, drawnAny: drawnAny, withheldStep: withheldStep) : nil
+        spokenFootnote = needsFootnote
+            ? Self.spokenFootnote(overflow: overflow, drawnAny: drawnAny, withheldStep: withheldStep)
+            : nil
         showsSecondaryLine = surface == .lockScreen && lines > 0
     }
 
@@ -125,19 +128,23 @@ nonisolated struct ShiftActivityCardLayout: Equatable, Sendable {
         }
     }
 
-    private static func footnote(overflow: Int, withheldStep: Bool) -> String {
+    /// "More" only when some rows were drawn above it: with none, the line is
+    /// the count of every order in progress.
+    private static func footnote(overflow: Int, drawnAny: Bool, withheldStep: Bool) -> String {
+        let count = drawnAny ? "\(overflow) more" : "\(overflow) in progress"
         switch (overflow > 0, withheldStep) {
-        case (true, true): "\(overflow) more · Open DashPilot for steps"
-        case (true, false): "\(overflow) more also active"
-        case (false, _): "Open DashPilot to record a step"
+        case (true, true): return "\(count) · Open DashPilot for steps"
+        case (true, false): return drawnAny ? "\(count) also active" : count
+        case (false, _): return "Open DashPilot to record a step"
         }
     }
 
-    private static func spokenFootnote(overflow: Int, withheldStep: Bool) -> String {
+    private static func spokenFootnote(overflow: Int, drawnAny: Bool, withheldStep: Bool) -> String {
         var sentences: [String] = []
         if overflow > 0 {
             let noun = overflow == 1 ? "delivery" : "deliveries"
-            sentences.append("\(overflow) more \(noun) also active. Open DashPilot for their timers")
+            let count = drawnAny ? "\(overflow) more \(noun) also active" : "\(overflow) \(noun) in progress"
+            sentences.append("\(count). Open DashPilot for their timers")
         }
         if withheldStep {
             sentences.append("Several deliveries are in progress. Open DashPilot to record a step")
