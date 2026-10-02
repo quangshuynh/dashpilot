@@ -732,8 +732,19 @@ struct PeriodSummaryView: View {
                     .accessibilityIdentifier("periodComparisonNotes")
             }
 
+            // A refusal several rows share is printed once, here, instead of
+            // under each of them. Every row still speaks it in its own label.
+            let shared = sharedRefusal(comparison)
+            if let shared {
+                Text(shared)
+                    .dashFont(.body)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityHidden(true)
+            }
+
             ForEach(comparison.entries) { entry in
-                comparisonRow(entry, noun: comparison.periodNoun)
+                comparisonRow(entry, noun: comparison.periodNoun, omitting: shared)
             }
         } header: {
             Text(comparison.title)
@@ -748,7 +759,7 @@ struct PeriodSummaryView: View {
     /// Both figures are printed, not just the difference. A driver has to be
     /// able to see what is being subtracted from what, and a lone `−$25.50`
     /// cannot be checked against anything they remember.
-    private func comparisonRow(_ entry: PeriodComparisonEntry, noun: String) -> some View {
+    private func comparisonRow(_ entry: PeriodComparisonEntry, noun: String, omitting shared: String?) -> some View {
         VStack(alignment: .leading, spacing: DashSpacing.xs) {
             Text(entry.metric.title)
                 .dashFont(.metricLabel)
@@ -758,7 +769,7 @@ struct PeriodSummaryView: View {
                 .dashFont(.emphasis)
                 .monospacedDigit()
                 .fixedSize(horizontal: false, vertical: true)
-            if let change = comparisonChangeStatement(entry, noun: noun) {
+            if let change = comparisonChangeStatement(entry, noun: noun, omitting: shared) {
                 Text(change)
                     .dashFont(.body)
                     .fixedSize(horizontal: false, vertical: true)
@@ -786,13 +797,31 @@ struct PeriodSummaryView: View {
     /// The two reasons that belong to the pair of periods rather than to one
     /// figure — a period that has not finished, records short of their sources —
     /// are stated once above instead of on all ten rows.
-    private func comparisonChangeStatement(_ entry: PeriodComparisonEntry, noun: String) -> String? {
+    private func comparisonChangeStatement(
+        _ entry: PeriodComparisonEntry,
+        noun: String,
+        omitting shared: String? = nil
+    ) -> String? {
         var parts = [entry.changeStatement(locale: locale), entry.percentStatement(locale: locale)]
             .compactMap { $0 }
-        if entry.percentageRefusal?.isStatedOnTheRow == true, let refusal = entry.refusalStatement(noun: noun) {
+        if entry.percentageRefusal?.isStatedOnTheRow == true,
+           let refusal = entry.refusalStatement(noun: noun),
+           refusal != shared {
             parts.append(refusal)
         }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    /// The row refusal two or more rows would each print word for word, or
+    /// `nil`. Printed once above the rows rather than under every one.
+    private func sharedRefusal(_ comparison: PeriodComparison) -> String? {
+        var counts: [String: Int] = [:]
+        for entry in comparison.entries where entry.percentageRefusal?.isStatedOnTheRow == true {
+            if let refusal = entry.refusalStatement(noun: comparison.periodNoun) {
+                counts[refusal, default: 0] += 1
+            }
+        }
+        return counts.filter { $0.value >= 2 }.max { $0.value < $1.value }?.key
     }
 
     /// What is true of this pair of periods, in one paragraph or none.
