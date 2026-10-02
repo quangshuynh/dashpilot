@@ -570,7 +570,7 @@ final class DashPilotUITests: XCTestCase {
         for identifier in ["pauseShiftButton", "endShiftButton"] {
             let button = app.buttons[identifier]
             XCTAssertTrue(scrollUntilHittable(button, in: app, maxSwipes: 15), "\(identifier) is reachable")
-            XCTAssertGreaterThanOrEqual(button.frame.height, 44)
+            XCTAssertGreaterThanOrEqual(onPixelGrid(button.frame.height), 44)
         }
     }
 
@@ -608,7 +608,7 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertLessThan(card.frame.minY, action.frame.minY)
         XCTAssertLessThan(action.frame.minY, cancel.frame.minY, "Cancelling sits below the step, not beside it")
         XCTAssertGreaterThan(action.frame.height, cancel.frame.height - 1, "The step is the dominant control")
-        XCTAssertGreaterThanOrEqual(cancel.frame.height, 44, "A quiet control is still a full-size target")
+        XCTAssertGreaterThanOrEqual(onPixelGrid(cancel.frame.height), 44, "A quiet control is still a full-size target")
         XCTAssertTrue(action.label.contains("Delivery 1"), "The step names its delivery: \(action.label)")
         attachScreenshot("home-one-delivery")
     }
@@ -647,7 +647,7 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertTrue(reminder.label.contains("DashPilot cannot tell where you are"), "Showed: \(reminder.label)")
         XCTAssertTrue(reminder.label.contains("not something it observed"), "Showed: \(reminder.label)")
         let confirm = app.buttons.matching(identifier: "deliverySuggestionActionButton").firstMatch
-        XCTAssertGreaterThanOrEqual(confirm.frame.height, 44)
+        XCTAssertGreaterThanOrEqual(onPixelGrid(confirm.frame.height), 44)
         attachScreenshot("home-reminder")
     }
 
@@ -668,14 +668,14 @@ final class DashPilotUITests: XCTestCase {
             NSPredicate(format: "identifier == %@ AND label CONTAINS %@", "deliveryActionButton", "Delivery 2")
         ).firstMatch
         XCTAssertTrue(scrollUntilHittable(action, in: app, maxSwipes: 25))
-        XCTAssertGreaterThanOrEqual(action.frame.height, 44)
+        XCTAssertGreaterThanOrEqual(onPixelGrid(action.frame.height), 44)
         attachScreenshot("home-delivery-xxxl")
 
         let cancel = app.buttons.matching(
             NSPredicate(format: "identifier == %@ AND label CONTAINS %@", "cancelDeliveryButton", "Delivery 2")
         ).firstMatch
         XCTAssertTrue(scrollUntilHittable(cancel, in: app, maxSwipes: 25))
-        XCTAssertGreaterThanOrEqual(cancel.frame.height, 44)
+        XCTAssertGreaterThanOrEqual(onPixelGrid(cancel.frame.height), 44)
     }
 
     /// Pause a running shift, see the screen say so, and resume it.
@@ -1400,7 +1400,7 @@ final class DashPilotUITests: XCTestCase {
         let summary = app.descendants(matching: .any).matching(identifier: "olderWeekSummary").firstMatch
         XCTAssertTrue(waitForLabel(summary, toContain: "$185.00"), "Showed: \(summary.label)")
         XCTAssertTrue(summary.label.contains("Estimated fuel"))
-        XCTAssertGreaterThan(summary.frame.height, 44, "A summary is never a tiny cell")
+        XCTAssertGreaterThan(onPixelGrid(summary.frame.height), 44, "A summary is never a tiny cell")
 
         let row = olderWeekRows(in: app).firstMatch
         XCTAssertTrue(scrollTo(row, in: app, maxSwipes: 25), "The shifts under it are still reachable")
@@ -1510,7 +1510,7 @@ final class DashPilotUITests: XCTestCase {
         let summary = currentWeekSummary(in: app)
         XCTAssertTrue(scrollUntilHittable(summary, in: app, maxSwipes: 25), "The summary is reachable")
         XCTAssertTrue(waitForLabel(summary, toContain: "Recorded gross earnings"), "Showed: \(summary.label)")
-        XCTAssertGreaterThan(summary.frame.height, 44, "A summary is never a tiny cell")
+        XCTAssertGreaterThan(onPixelGrid(summary.frame.height), 44, "A summary is never a tiny cell")
         attachScreenshot("history-xxxl")
 
         XCTAssertTrue(
@@ -1643,7 +1643,7 @@ final class DashPilotUITests: XCTestCase {
         let vehicle = app.descendants(matching: .any)["shiftDetailFuelVehicle"]
         XCTAssertTrue(scrollUntilHittable(vehicle, in: app, maxSwipes: 40))
         XCTAssertTrue(waitForLabel(vehicle, toContain: "Synthetic Van"), "Showed: \(vehicle.label)")
-        XCTAssertGreaterThanOrEqual(vehicle.frame.height, 44, "The row is not squeezed to fit")
+        XCTAssertGreaterThanOrEqual(onPixelGrid(vehicle.frame.height), 44, "The row is not squeezed to fit")
     }
 
     // MARK: Long histories
@@ -1728,7 +1728,7 @@ final class DashPilotUITests: XCTestCase {
         for index in 0..<min(summaries.count, 3) {
             let summary = summaries.element(boundBy: index)
             if summary.exists, summary.isHittable {
-                XCTAssertGreaterThan(summary.frame.height, 44, "A summary is never a tiny cell")
+                XCTAssertGreaterThan(onPixelGrid(summary.frame.height), 44, "A summary is never a tiny cell")
             }
         }
 
@@ -2771,7 +2771,7 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertTrue(scrollUpUntilHittable(undo, in: app, maxSwipes: 6), "Undo is offered beside what was recorded")
         XCTAssertTrue(undo.label.contains("Undo Arrived at Pickup for Delivery 1"), undo.label)
         XCTAssertTrue(undo.label.contains("The vehicle is still parked"), undo.label)
-        XCTAssertGreaterThanOrEqual(undo.frame.height, 44, "A full-size target")
+        XCTAssertGreaterThanOrEqual(onPixelGrid(undo.frame.height), 44, "A full-size target")
         undo.tap()
 
         assertPickupWorkflowNotice(contains: "Undid Arrived at Pickup for Delivery 1", in: app)
@@ -3612,8 +3612,8 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertEqual(start.label, "Start delivery")
         XCTAssertLessThan(start.frame.minX, several.frame.minX, "One delivery leads, several follows")
         XCTAssertEqual(start.frame.midY, several.frame.midY, accuracy: 4, "Both are one row")
-        XCTAssertGreaterThanOrEqual(start.frame.height, 44)
-        XCTAssertGreaterThanOrEqual(several.frame.height, 44)
+        XCTAssertGreaterThanOrEqual(onPixelGrid(start.frame.height), 44)
+        XCTAssertGreaterThanOrEqual(onPixelGrid(several.frame.height), 44)
         attachScreenshot("home-entry-bar-scrolled")
 
         start.tap()
@@ -4451,7 +4451,7 @@ final class DashPilotUITests: XCTestCase {
         for action in [place, history, earnings, tips, times, correct] {
             XCTAssertTrue(action.isHittable, "Every action is tappable where it is: \(action.label)")
             XCTAssertGreaterThanOrEqual(
-                action.frame.height,
+                onPixelGrid(action.frame.height),
                 44,
                 "An action keeps a standard touch target: \(action.label)"
             )
@@ -7603,7 +7603,7 @@ final class DashPilotUITests: XCTestCase {
         let earnings = reach("periodEarnings")
         XCTAssertTrue(waitForLabel(earnings, toContain: "Recorded gross earnings"), "Showed: \(earnings.label)")
         XCTAssertTrue(earnings.label.contains("1 of 2"), "Partial coverage is spoken with the figure: \(earnings.label)")
-        XCTAssertGreaterThan(earnings.frame.height, 44, "The headline is never a clipped single line")
+        XCTAssertGreaterThan(onPixelGrid(earnings.frame.height), 44, "The headline is never a clipped single line")
         attachScreenshot("period-summary-xxxl")
 
         let rate = reach("periodWorkingHourRate")
@@ -8599,7 +8599,7 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertTrue(earnings.label.contains("$86.25"), "The figure is whole rather than shortened")
         let working = app.descendants(matching: .any)["shiftDetailSummaryWorkingTime"]
         XCTAssertTrue(scrollTo(working, in: app))
-        XCTAssertGreaterThan(working.frame.height, 44, "A stacked figure is never a tiny cell")
+        XCTAssertGreaterThan(onPixelGrid(working.frame.height), 44, "A stacked figure is never a tiny cell")
         attachScreenshot("detail-xxxl")
 
         let mileage = app.descendants(matching: .any)["shiftDetailRecordedMileage"]
@@ -8709,7 +8709,7 @@ final class DashPilotUITests: XCTestCase {
         let summary = app.descendants(matching: .any)["defaultVehicleSummary"]
         XCTAssertTrue(scrollToTop(reaching: summary, in: app), "The default card is at the top")
         XCTAssertTrue(summary.label.contains(name), "The name is whole: \(summary.label)")
-        XCTAssertGreaterThan(summary.frame.height, 44)
+        XCTAssertGreaterThan(onPixelGrid(summary.frame.height), 44)
         attachScreenshot("settings-xxxl")
 
         let row = vehicleRow(containing: name, in: app)
@@ -8990,6 +8990,15 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertTrue(element.waitForExistence(timeout: 5), "The control is on the panel")
         XCTAssertTrue(revealAboveEntryBar(element, in: app), "The control is clear of the bars")
         element.tap()
+    }
+
+    /// A frame dimension rounded to the screen's pixel grid. A list scrolled to
+    /// a fractional offset reports a 44-point control as 43.999999999999886,
+    /// which is the same control on the same pixels; the 44-point minimum is
+    /// asserted on what the screen can draw.
+    @MainActor
+    private func onPixelGrid(_ value: CGFloat) -> CGFloat {
+        (value * 3).rounded() / 3
     }
 
     /// The top of the running shift's pinned delivery-entry bar, or `nil` where
