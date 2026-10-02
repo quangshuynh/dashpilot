@@ -150,7 +150,7 @@ struct DeliveryTimeCorrectionEditor: View {
                     ?? "Those times cannot be recorded for this delivery."
                 DashValidationMessage(message: sentence, identifier: "deliveryTimeCorrectionRefusal")
             } else {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: DashSpacing.sm) {
                     ForEach(derivedFigures) { figure in
                         LabeledContent(figure.label) {
                             Text(figure.value).monospacedDigit()

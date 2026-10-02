@@ -151,7 +151,7 @@ struct ShiftEndCorrectionEditor: View {
                     ?? "That time cannot be recorded as this shift's end."
                 DashValidationMessage(message: sentence, identifier: "shiftEndCorrectionRefusal")
             } else {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: DashSpacing.sm) {
                     Text(durationStatement)
                         .dashFont(.emphasis)
                         .monospacedDigit()

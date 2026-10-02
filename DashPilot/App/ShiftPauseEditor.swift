@@ -145,7 +145,7 @@ struct ShiftPauseEditor: View {
                     ?? "Those times cannot be recorded as a pause."
                 DashValidationMessage(message: sentence, identifier: "shiftPauseEditorRefusal")
             } else {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: DashSpacing.sm) {
                     Text(durationStatement)
                         .dashFont(.emphasis)
                         .monospacedDigit()

@@ -172,7 +172,7 @@ struct DeliveryRecoveryView: View {
     private func deliveryRow(_ candidate: Candidate) -> some View {
         let delivery = candidate.numbered.delivery
 
-        return VStack(alignment: .leading, spacing: 2) {
+        return VStack(alignment: .leading, spacing: DashSpacing.xs) {
             Label(
                 "\(candidate.numbered.title) · \(DeliveryState.delivered.historyDescription)",
                 systemImage: DeliveryState.delivered.symbolName
