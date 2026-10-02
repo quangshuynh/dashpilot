@@ -973,8 +973,19 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertTrue(startButton.waitForExistence(timeout: 10))
         startButton.tap()
 
+        // Nothing on the running panel may read as money. A currency symbol here
+        // would be a figure the shift does not have. The figures are read at the
+        // top, before the list moves.
+        let deliveries = app.descendants(matching: .any)["liveDeliveryCounts"]
+        XCTAssertTrue(deliveries.waitForExistence(timeout: 10))
+        let mileage = app.descendants(matching: .any)["liveRecordedMileage"]
+        XCTAssertTrue(mileage.waitForExistence(timeout: 5))
+        let figures = [deliveries, mileage].map { $0.label + (($0.value as? String) ?? "") }
+
+        // The reason is said with the shift's context below the deliveries, so
+        // it never stands between the timer and Start Delivery.
         let notice = app.descendants(matching: .any)["liveRateNotice"]
-        XCTAssertTrue(notice.waitForExistence(timeout: 10))
+        XCTAssertTrue(reachShiftControl(notice, in: app), "The rate notice is with the shift's context")
         XCTAssertTrue(
             notice.label.contains("still running"),
             "The reason has to name the shift's state, not imply a missing amount: \(notice.label)"
@@ -985,12 +996,7 @@ final class DashPilotUITests: XCTestCase {
             "A running shift cannot carry an amount, so none may be shown"
         )
 
-        // Nothing on the running panel may read as money. A currency symbol here
-        // would be a figure the shift does not have.
-        let deliveries = app.descendants(matching: .any)["liveDeliveryCounts"]
-        XCTAssertTrue(deliveries.waitForExistence(timeout: 5))
-        for element in [notice, deliveries, app.descendants(matching: .any)["liveRecordedMileage"]] {
-            let text = element.label + ((element.value as? String) ?? "")
+        for text in figures + [notice.label] {
             XCTAssertFalse(text.contains("$"), "A running shift states no amount: \(text)")
             XCTAssertFalse(text.contains("/hr"), "A running shift derives no rate: \(text)")
         }
@@ -3577,6 +3583,175 @@ final class DashPilotUITests: XCTestCase {
         )
     }
 
+    // MARK: The pinned delivery entry
+
+    /// Recording a newly accepted order is reachable from wherever Home has
+    /// been scrolled to, and says Add Delivery once one is already in progress.
+    ///
+    /// The bar is in the list's bottom safe area, so it is found without any
+    /// scrolling back, its two controls read wide one first, and each records
+    /// what it says.
+    @MainActor
+    func testDeliveryEntryStaysReachableWhileHomeScrolls() throws {
+        let app = launchWithEmptyStore()
+        app.buttons["startShiftButton"].tap()
+
+        let start = app.buttons["startDeliveryButton"]
+        let several = app.buttons["startOfferButton"]
+        XCTAssertTrue(start.waitForExistence(timeout: 5))
+        for _ in 0..<8 { app.swipeUp() }
+        XCTAssertTrue(
+            app.descendants(matching: .any)["routeCaptureStatus"].exists,
+            "Home was scrolled down to the shift's own context"
+        )
+        XCTAssertTrue(start.isHittable, "Start Delivery is reachable without scrolling back")
+        XCTAssertTrue(several.isHittable, "So is the offer of several")
+        XCTAssertEqual(start.label, "Start delivery")
+        XCTAssertLessThan(start.frame.minX, several.frame.minX, "One delivery leads, several follows")
+        XCTAssertEqual(start.frame.midY, several.frame.midY, accuracy: 4, "Both are one row")
+        XCTAssertGreaterThanOrEqual(start.frame.height, 44)
+        XCTAssertGreaterThanOrEqual(several.frame.height, 44)
+        attachScreenshot("home-entry-bar-scrolled")
+
+        start.tap()
+        assertDeliveriesInProgress("1 delivery in progress", in: app)
+
+        for _ in 0..<8 { app.swipeUp() }
+        XCTAssertTrue(start.isHittable, "With a delivery in progress the control is still there")
+        XCTAssertEqual(start.label, "Add another delivery", "And says it adds one")
+        start.tap()
+        assertDeliveriesInProgress("2 deliveries in progress", in: app)
+    }
+
+    /// Reads the deliveries panel's own count from the top of Home. Cards
+    /// scrolled out of view are not in the hierarchy, so counting their
+    /// buttons from wherever the journey has scrolled to undercounts.
+    @MainActor
+    private func assertDeliveriesInProgress(_ statement: String, in app: XCUIApplication) {
+        let status = app.descendants(matching: .any)["deliveryStatus"]
+        XCTAssertTrue(scrollToTop(reaching: status, in: app), "The deliveries panel is on screen")
+        XCTAssertTrue(waitForLabel(status, toContain: statement), "Showed: \(status.label)")
+    }
+
+    /// The several-delivery sheet keeps Start pinned under its form, names the
+    /// count it will record, keeps both switches usable, and records the offer
+    /// once however fast it is pressed twice.
+    @MainActor
+    func testTheOfferSheetKeepsStartPinnedAndRecordsOnce() throws {
+        let app = launchWithEmptyStore()
+        app.buttons["startShiftButton"].tap()
+        XCTAssertTrue(app.buttons["startDeliveryButton"].waitForExistence(timeout: 5))
+        app.buttons["startOfferButton"].tap()
+
+        let confirm = app.buttons["confirmStartOfferButton"]
+        let stepper = app.steppers["offerDeliveryCountStepper"]
+        let pickup = app.switches["offerSamePickupToggle"]
+        let dropOff = app.switches["offerSameDropOffToggle"]
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        XCTAssertEqual(confirm.label, "Start an offer of 2 deliveries")
+
+        stepper.buttons.element(boundBy: 1).tap()
+        XCTAssertTrue(
+            waitForLabel(confirm, toContain: "Start an offer of 3 deliveries"),
+            "The pinned action follows the count: \(confirm.label)"
+        )
+
+        // The count, then the two switches, then the action, top to bottom,
+        // which is the order a listener moving forward meets them in.
+        XCTAssertLessThan(stepper.frame.minY, pickup.frame.minY)
+        XCTAssertLessThan(pickup.frame.minY, dropOff.frame.minY)
+        XCTAssertLessThan(dropOff.frame.maxY, confirm.frame.minY, "No switch is under the action")
+
+        for _ in 0..<3 { app.swipeUp() }
+        XCTAssertTrue(confirm.isHittable, "Start is reachable with the form scrolled to its end")
+
+        setSwitch("offerSamePickupToggle", to: true, in: app)
+        setSwitch("offerSameDropOffToggle", to: true, in: app)
+        XCTAssertTrue(
+            waitForLabel(confirm, toContain: "same pickup and same drop-off"),
+            "The action says what it will record: \(confirm.label)"
+        )
+        attachScreenshot("offer-sheet-three-shared")
+
+        // Two presses faster than the sheet can leave record one offer.
+        confirm.doubleTap()
+        XCTAssertTrue(waitForDisappearance(of: confirm))
+        XCTAssertTrue(waitForCount(app.buttons.matching(identifier: "deliveryActionButton"), toEqual: 3))
+        XCTAssertEqual(
+            app.descendants(matching: .any).matching(identifier: "offerGroupHeader").count,
+            1,
+            "One offer, not two"
+        )
+        let header = app.descendants(matching: .any)["offerGroupHeader"]
+        XCTAssertTrue(header.label.contains("3 deliveries accepted together"), "Showed: \(header.label)")
+        XCTAssertTrue(header.label.contains("same pickup and drop-off"), "Showed: \(header.label)")
+    }
+
+    /// At the largest accessibility text size the bar still leaves every row
+    /// reachable: the last thing on Home can be scrolled wholly above it, and
+    /// the sheet's switches stay usable above its own pinned action.
+    @MainActor
+    func testTheEntryBarsCoverNothingAtTheLargestTextSize() throws {
+        let app = launchWithEmptyStore(textSize: Self.accessibilityXXXLTextSize)
+        let startShift = app.buttons["startShiftButton"]
+        XCTAssertTrue(startShift.waitForExistence(timeout: 10))
+        startShift.tap()
+
+        let start = app.buttons["startDeliveryButton"]
+        XCTAssertTrue(start.waitForExistence(timeout: 5))
+        let last = app.descendants(matching: .any)["emptyHistoryNotice"]
+        for _ in 0..<25 where !(last.exists && last.isHittable && last.frame.maxY <= start.frame.minY) {
+            app.swipeUp()
+        }
+        XCTAssertTrue(last.exists, "Home's last row was reached")
+        XCTAssertLessThanOrEqual(
+            last.frame.maxY,
+            start.frame.minY,
+            "The last row scrolls wholly above the bar rather than staying under it"
+        )
+        XCTAssertTrue(start.isHittable)
+        attachScreenshot("home-entry-bar-ax5")
+
+        app.buttons["startOfferButton"].tap()
+        let confirm = app.buttons["confirmStartOfferButton"]
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        setSwitch("offerSamePickupToggle", to: true, in: app)
+        let dropOff = app.switches["offerSameDropOffToggle"]
+        setSwitch("offerSameDropOffToggle", to: true, in: app)
+        XCTAssertLessThanOrEqual(dropOff.frame.maxY, confirm.frame.minY, "The switch was used above the action")
+        for _ in 0..<6 { app.swipeUp() }
+        XCTAssertTrue(confirm.isHittable, "Start stays reachable at this size")
+        attachScreenshot("offer-sheet-ax5")
+        confirm.tap()
+        XCTAssertTrue(waitForDisappearance(of: confirm))
+        assertDeliveriesInProgress("2 deliveries in progress", in: app)
+    }
+
+    /// Parked keeps the bar, because an offer can arrive while the vehicle is
+    /// parked; paused removes it, because no delivery can be started then, and
+    /// the deliveries section says why.
+    @MainActor
+    func testTheEntryBarFollowsParkedAndPaused() throws {
+        let app = launchWithEmptyStore()
+        app.buttons["startShiftButton"].tap()
+        let start = app.buttons["startDeliveryButton"]
+        XCTAssertTrue(start.waitForExistence(timeout: 5))
+
+        pressPark(in: app)
+        XCTAssertTrue(start.isHittable, "Parked: an accepted offer can still be recorded")
+        pressResumeDriving(in: app)
+
+        let pause = app.buttons["pauseShiftButton"]
+        XCTAssertTrue(reachShiftControl(pause, in: app))
+        pause.tap()
+        XCTAssertTrue(app.buttons["resumeShiftButton"].waitForExistence(timeout: 5))
+        XCTAssertTrue(waitForDisappearance(of: start), "Paused: nothing offers to start a delivery")
+        XCTAssertTrue(app.descendants(matching: .any)["pausedDeliveryNotice"].exists)
+
+        app.buttons["resumeShiftButton"].tap()
+        XCTAssertTrue(start.waitForExistence(timeout: 5), "Resumed: the bar is back")
+    }
+
     // MARK: Correcting which deliveries arrived together
 
     /// Two offers the driver recorded separately become the one acceptance they
@@ -6114,7 +6289,7 @@ final class DashPilotUITests: XCTestCase {
         // rendered after the amount and the rates would be, so reaching it is
         // what makes their absence a real absence rather than an unrendered row.
         let notice = app.descendants(matching: .any)["liveRateNotice"]
-        XCTAssertTrue(scrollToTop(reaching: notice, in: app), "The shift panel is back on screen")
+        XCTAssertTrue(reachShiftControl(notice, in: app), "The shift's context below the deliveries is on screen")
         XCTAssertEqual(notice.label, "This shift is still running. Rates are worked out once it ends.")
         XCTAssertFalse(
             app.descendants(matching: .any)["liveRecordedGross"].exists,
@@ -8782,10 +8957,58 @@ final class DashPilotUITests: XCTestCase {
         maxSwipes: Int = 10
     ) -> Bool {
         for _ in 0..<maxSwipes {
-            if element.isHittable { return true }
+            if element.isHittable { return revealAboveEntryBar(element, in: app) }
             app.swipeUp()
         }
-        return element.isHittable
+        return element.isHittable && revealAboveEntryBar(element, in: app)
+    }
+
+    /// The top of the running shift's pinned delivery-entry bar, or `nil` where
+    /// none is drawn (no shift, a paused one, or another screen on top).
+    ///
+    /// Read off the bar's own `Start Delivery` button, which is its tallest
+    /// control, less the bar's padding. The bar is in the list's bottom safe
+    /// area, so the list can always be scrolled clear of it, but a row that
+    /// has scrolled partly beneath it is still reported hittable, and a tap at
+    /// its centre lands on the bar: the same trap ``revealAboveBottomBar``
+    /// handles for the Undo line.
+    ///
+    /// The Undo line, while one is offered, sits on the bar and is part of it
+    /// for this purpose: its top is read off its sentence, which is the line's
+    /// tallest part, less the line's padding. A Park line in the shift's panel
+    /// shares one of those identifiers and is ignored unless it happens to sit
+    /// directly on the bar, which only costs an extra drag.
+    @MainActor
+    private func entryBarTop(in app: XCUIApplication) -> CGFloat? {
+        let start = app.buttons["startDeliveryButton"]
+        guard start.exists, start.isHittable else { return nil }
+        var top = start.frame.minY - 8
+        for identifier in ["undoDeliveredBanner", "parkedProgressNotice", "pickupWorkflowNotice"] {
+            for line in app.descendants(matching: .any).matching(identifier: identifier).allElementsBoundByIndex
+            where line.exists {
+                let frame = line.frame
+                if frame.maxY <= top + 4, frame.maxY > top - 160 {
+                    top = min(top, frame.minY - 20)
+                }
+            }
+        }
+        return top
+    }
+
+    /// Drags the list until `element` sits wholly above the delivery-entry bar.
+    /// The bar's own controls, and anything with no bar beneath it, return at
+    /// once and cost one query.
+    @MainActor
+    @discardableResult
+    private func revealAboveEntryBar(_ element: XCUIElement, in app: XCUIApplication) -> Bool {
+        guard !["startDeliveryButton", "startOfferButton"].contains(element.identifier) else { return true }
+        for _ in 0..<5 {
+            guard let top = entryBarTop(in: app), element.exists, element.frame.maxY > top else { return true }
+            let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+            start.press(forDuration: 0.1, thenDragTo: start.withOffset(CGVector(dx: 0, dy: -180)))
+        }
+        guard let top = entryBarTop(in: app) else { return true }
+        return element.frame.maxY <= top
     }
 
     /// Drags the list until `element` sits clear of the line below it.
