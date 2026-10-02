@@ -185,7 +185,7 @@ struct ShiftVehicleCorrectionEditor: View {
             select()
         } label: {
             HStack(alignment: .firstTextBaseline) {
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: DashSpacing.xs) {
                     Text(title)
                         .foregroundStyle(.primary)
                         .fixedSize(horizontal: false, vertical: true)

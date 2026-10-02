@@ -322,6 +322,9 @@ says whether capture is running right now, and why it is not, is the app's own s
   symbol (orange) while paused, and **the parking sign (blue) while parked**, read aloud as the parked
   sentence. That glyph is what a driver sees with another app in front, so a forgotten Resume Driving
   no longer looks like recording.
+  The card's header uses the same three hues, which are the app's own: parked is blue on the Lock
+  Screen, in the island and in the app, never the paused orange. The card's controls are tinted with
+  the app's teal route accent, and End with red.
 - **Nothing about the vehicle.** The card carries no vehicle name, no miles per gallon and no gas
   price. Parking is a statement about whether the vehicle is moving, and it needed none of them.
 

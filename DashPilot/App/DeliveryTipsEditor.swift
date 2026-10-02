@@ -175,7 +175,7 @@ struct DeliveryTipsEditor: View {
                 // reproduced on an idle machine. A named control is also the
                 // better surface: a listener hears what pressing it does rather
                 // than a row that happens to be interactive.
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: DashSpacing.sm) {
                     tipRow(number: index + 1, tip: tip)
                         .accessibilityElement(children: .combine)
                         .accessibilityLabel(spokenTip(number: index + 1, tip: tip))

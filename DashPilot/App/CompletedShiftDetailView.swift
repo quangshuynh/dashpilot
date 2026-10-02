@@ -618,8 +618,8 @@ struct CompletedShiftDetailView: View {
     /// destructive role *and* says the word, and the pause is identified by its
     /// number in text rather than by its position in a list.
     private func pauseRow(_ numbered: NumberedPause) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: DashSpacing.sm) {
+            VStack(alignment: .leading, spacing: DashSpacing.xs) {
                 DashValueRow(title: numbered.title, value: pauseTimes(numbered.pause))
 
                 if let duration = pauseDuration(numbered.pause) {
@@ -643,7 +643,7 @@ struct CompletedShiftDetailView: View {
             .accessibilityLabel(pauseAccessibilityLabel(numbered))
             .accessibilityIdentifier("shiftDetailPauseRow")
 
-            LazyVGrid(columns: pauseActionColumns, alignment: .leading, spacing: 8) {
+            LazyVGrid(columns: pauseActionColumns, alignment: .leading, spacing: DashSpacing.md) {
                 Button {
                     pauseCorrectionMessage = nil
                     pauseBeingEdited = .correcting(numbered)
@@ -671,7 +671,7 @@ struct CompletedShiftDetailView: View {
                 .accessibilityIdentifier("deleteShiftPauseButton")
             }
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, DashSpacing.xs)
     }
 
     /// Two columns, and one at accessibility text sizes, for the reason a
@@ -679,7 +679,7 @@ struct CompletedShiftDetailView: View {
     /// sharing a phone's width leave each enough room to say which pause it
     /// changes.
     private var pauseActionColumns: [GridItem] {
-        let column = GridItem(.flexible(), spacing: 12, alignment: .topLeading)
+        let column = GridItem(.flexible(), spacing: DashSpacing.lg, alignment: .topLeading)
         return Array(repeating: column, count: dynamicTypeSize.isAccessibilitySize ? 1 : 2)
     }
 
@@ -877,7 +877,9 @@ struct CompletedShiftDetailView: View {
 
             netLedger
         } header: {
-            Text("Costs")
+            // Said in the heading, so nothing in the section reads as money
+            // the driver recorded spending.
+            Text("Estimated Costs")
         } footer: {
             Text(costsFooterStatement)
         }
@@ -1041,13 +1043,19 @@ struct CompletedShiftDetailView: View {
                 missingStatement: EstimatedNetUnavailability.earningsNotRecorded.explanation,
                 identifier: "shiftDetailNetRecordedEarnings"
             )
-            ledgerRow(
-                "Estimated fuel cost",
-                spokenAs: "estimated fuel cost, based on recorded mileage",
-                amount: profitability.fuelEstimate.cost.map { -$0 },
-                missingStatement: EstimatedNetUnavailability.fuelNotEstimated.explanation,
-                identifier: "shiftDetailNetEstimatedFuel"
-            )
+            // The fuel line is the subtraction, so it appears only where there
+            // is an amount to subtract: without one, the estimate's own row
+            // above has already said why, and a second "Not available" with
+            // the same sentence would only repeat it.
+            if let cost = profitability.fuelEstimate.cost {
+                ledgerRow(
+                    "Estimated fuel cost",
+                    spokenAs: "estimated fuel cost, based on recorded mileage",
+                    amount: -cost,
+                    missingStatement: EstimatedNetUnavailability.fuelNotEstimated.explanation,
+                    identifier: "shiftDetailNetEstimatedFuel"
+                )
+            }
             netRow(
                 "Estimated net after fuel",
                 spokenAs: "estimated net after fuel",
@@ -1055,13 +1063,17 @@ struct CompletedShiftDetailView: View {
                 isProminent: true,
                 identifier: "shiftDetailEstimatedNetAfterFuel"
             )
-            netRow(
-                "Estimated net per working hour",
-                spokenAs: "estimated net after fuel per working hour",
-                net: profitability.estimatedNetPerWorkingHour,
-                isProminent: false,
-                identifier: "shiftDetailEstimatedNetPerWorkingHour"
-            )
+            // The rate exists only beside a net; where the net is missing the
+            // row above says why, once.
+            if case .available = profitability.estimatedNetAfterFuel {
+                netRow(
+                    "Estimated net per working hour",
+                    spokenAs: "estimated net after fuel per working hour",
+                    net: profitability.estimatedNetPerWorkingHour,
+                    isProminent: false,
+                    identifier: "shiftDetailEstimatedNetPerWorkingHour"
+                )
+            }
 
             if profitability.isRoutePartial, profitability.hasAnyFigure {
                 Text(Self.partialNetStatement)
@@ -1523,16 +1535,28 @@ private struct DeliveryHistoryRow: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: DashSpacing.sm) {
             // The recorded facts, read as one element. The controls below sit
             // deliberately outside it: a button folded into a combined element
             // is not reachable by VoiceOver.
-            VStack(alignment: .leading, spacing: 4) {
-                Label(
-                    "\(numbered.title) · \(delivery.state.historyDescription)",
-                    systemImage: delivery.state.symbolName
-                )
-                .dashFont(.emphasis)
+            VStack(alignment: .leading, spacing: DashSpacing.sm) {
+                // The same numbered stop the running shift showed this
+                // delivery under, muted once it was cancelled; the state is
+                // said in words beside it.
+                // Stacked at accessibility sizes, where beside the marker the
+                // title broke inside its words.
+                let heading = Text("\(numbered.title) · \(delivery.state.historyDescription)")
+                    .dashFont(.emphasis)
+                    .fixedSize(horizontal: false, vertical: true)
+                if dynamicTypeSize.isAccessibilitySize {
+                    DashStopMarker(number: numbered.number, isMuted: delivery.state == .cancelled)
+                    heading
+                } else {
+                    HStack(alignment: .center, spacing: DashSpacing.md) {
+                        DashStopMarker(number: numbered.number, isMuted: delivery.state == .cancelled)
+                        heading
+                    }
+                }
 
                 // Which offer this delivery arrived in, said only where it
                 // arrived with others. It is the one fact about a finished
@@ -1556,6 +1580,7 @@ private struct DeliveryHistoryRow: View {
                 // every delivery would be noise on the ordinary case.
                 if let place = delivery.pickupPlace {
                     Label(place.displayName, systemImage: "bag")
+                        .labelStyle(DashCompactLabelStyle())
                         .dashFont(.body)
                 }
 
@@ -1670,7 +1695,11 @@ private struct DeliveryHistoryRow: View {
             // the record above them. See ``availableActions`` and
             // ``actionColumns``.
             Divider()
-            LazyVGrid(columns: actionColumns, alignment: .leading, spacing: 8) {
+            Text("Edit or correct")
+                .dashFont(.eyebrow)
+                .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
+            LazyVGrid(columns: actionColumns, alignment: .leading, spacing: DashSpacing.md) {
                 ForEach(availableActions) { action in
                     // The identifier is the action's own identity, set here
                     // rather than three times below, so the control a journey
@@ -1684,7 +1713,7 @@ private struct DeliveryHistoryRow: View {
                 DashValidationMessage(message: correctionMessage, identifier: "shiftDetailCorrectionMessage")
             }
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, DashSpacing.xs)
         // An alert rather than a confirmation dialog, for the reason the
         // recovery screen uses one: a dialog is a popover in some layouts, where
         // iOS drops the explicit Cancel button, and a correction that rewrites
@@ -1827,7 +1856,7 @@ private struct DeliveryHistoryRow: View {
     /// here scales a font down, shortens a title or hard-codes a width for one
     /// device: the columns are fractions of whatever width the row is given.
     private var actionColumns: [GridItem] {
-        let column = GridItem(.flexible(), spacing: 12, alignment: .topLeading)
+        let column = GridItem(.flexible(), spacing: DashSpacing.lg, alignment: .topLeading)
         return Array(repeating: column, count: dynamicTypeSize.isAccessibilitySize ? 1 : 2)
     }
 
@@ -2127,26 +2156,6 @@ private enum DeliveryRowAction: String, Identifiable {
     var id: String { rawValue }
 }
 
-/// A `Label` whose icon sits close to its title rather than in a column of its
-/// own.
-///
-/// The default style reserves a fixed width for the icon, which inside a
-/// half-width grid cell is space taken from the words. Closing the gap gives
-/// each title around fourteen more points to be written on, which is the
-/// difference between `Change Pickup Place` on one line and on two, and it also
-/// makes the pair read as one control rather than as a glyph beside some text.
-///
-/// Aligned on the first baseline, so an icon stays beside the first line of a
-/// title that does wrap instead of drifting into the middle of it.
-private struct DeliveryActionLabelStyle: LabelStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
-            configuration.icon
-            configuration.title
-        }
-    }
-}
-
 /// What one of those corrections looks like inside its grid cell.
 ///
 /// It fills the cell rather than sizing to its own title, which is what makes
@@ -2163,7 +2172,7 @@ private struct DeliveryActionLabel: View {
 
     var body: some View {
         Label(title, systemImage: systemImage)
-            .labelStyle(DeliveryActionLabelStyle())
+            .labelStyle(DashCompactLabelStyle())
             .font(.footnote)
             .multilineTextAlignment(.leading)
             // Wraps within the cell and takes the height it needs, rather than

@@ -518,11 +518,13 @@ chosen range is spoken as what it is rather than as a bare pair of dates:
 
 - *"Custom reporting range, Sep 1 – 7, 2026, 7 selected days."*
 
-At the largest text sizes the figures come first and the explanations are short. A qualification a
-figure would mislead without (partial coverage, a rate's paired subset, a partial route, the net's
-caution, an estimate being an estimate, pickups left out) sits in that figure's own row and spoken
-label. Each section's footer keeps only what its figures are not, in a sentence or three, and the
-methodology is here. The period's name takes a row of its own above the two steps at those sizes,
+The screen leads with **Earnings**, then Time, Expenses, Driving, Deliveries, Estimated Fuel and the
+comparison, and gathers the general explanation of each section in one **About These Figures**
+section at the end. A qualification a figure would mislead without (partial coverage, a rate's paired
+subset, a partial route, the net's caution, an estimate being an estimate, pickups left out) stays in
+that figure's own row and spoken label, and Estimated Fuel keeps a one-line caution beside its
+figures; what moved is only the general explanation, so at the largest text sizes no paragraph
+stands between one figure and the next. The methodology is here. The period's name takes a row of its own above the two steps at those sizes,
 so it never breaks inside a word.
 
 Every figure keeps the coverage claim it had at a shorter period length. Reading a

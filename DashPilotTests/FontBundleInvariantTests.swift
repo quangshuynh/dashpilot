@@ -2,15 +2,16 @@ import Foundation
 import Testing
 @testable import DashPilot
 
-/// Where the typeface is shipped, and what adding it must not have disturbed.
+/// That no typeface is shipped, and that removing the one that was disturbed
+/// nothing else.
 ///
-/// Each of these pins a defect a real font commit has carried: fonts added to
-/// the widget extension as well as the app, `UIAppFonts` entries spelled
-/// `.tff`, `NSSupportsLiveActivities` dropped from a hand-edited `Info.plist`,
-/// a second and third family declared beside the one the roles use, and the
-/// extension's embed phase emptied so the app shipped with no Live Activity at
-/// all. None of those fails a build. They are read here off the bundle the app
-/// actually launches with, which is the only place the result is visible.
+/// DashPilot is set in the system face and bundles no font. Each of these pins
+/// a defect a real font commit has carried: fonts added to the widget extension
+/// as well as the app, `NSSupportsLiveActivities` dropped from a hand-edited
+/// `Info.plist`, and the extension's embed phase emptied so the app shipped with
+/// no Live Activity at all. None of those fails a build. They are read here off
+/// the bundle the app actually launches with, which is the only place the result
+/// is visible.
 @Suite("Font bundle invariants")
 struct FontBundleInvariantTests {
     private var info: [String: Any] { Bundle.main.infoDictionary ?? [:] }
@@ -23,27 +24,18 @@ struct FontBundleInvariantTests {
             .flatMap(Bundle.init(url:))
     }
 
-    @Test("Every UIAppFonts entry ends in .ttf, never the .tff a typo produces")
-    func noMisspelledExtensions() throws {
-        let fonts = try #require(info["UIAppFonts"] as? [String])
-        #expect(!fonts.isEmpty)
-        for file in fonts {
-            #expect(!file.lowercased().hasSuffix(".tff"), "Misspelled entry \(file)")
-            #expect((file as NSString).pathExtension == "ttf", "Unexpected entry \(file)")
-        }
+    @Test("The app declares no UIAppFonts, because it bundles no font")
+    func noDeclaredFonts() {
+        #expect(info["UIAppFonts"] == nil)
     }
 
-    @Test("The app bundle ships one custom family, and no other font file")
-    func oneFamilyOnly() throws {
-        let urls = Bundle.main.urls(forResourcesWithExtension: "ttf", subdirectory: nil) ?? []
-        let files = urls.map(\.lastPathComponent).sorted()
-        #expect(
-            files == ["Manrope-Bold.ttf", "Manrope-Medium.ttf", "Manrope-Regular.ttf", "Manrope-SemiBold.ttf"],
-            "Bundled fonts: \(files)"
-        )
-        for family in ["SpaceGrotesk", "DMSans", "IBMPlexSans"] {
-            #expect(!files.contains { $0.hasPrefix(family) }, "\(family) is bundled")
+    @Test("The app bundle ships no font file and no font license")
+    func noFontFiles() {
+        for fileExtension in ["ttf", "otf", "ttc"] {
+            let urls = Bundle.main.urls(forResourcesWithExtension: fileExtension, subdirectory: nil) ?? []
+            #expect(urls.isEmpty, "Bundled fonts: \(urls.map(\.lastPathComponent))")
         }
+        #expect(Bundle.main.url(forResource: "OFL", withExtension: "txt") == nil)
     }
 
     @Test("The widget extension is still embedded, and carries no font")

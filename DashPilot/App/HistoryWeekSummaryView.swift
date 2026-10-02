@@ -107,9 +107,11 @@ struct HistoryWeekSummaryView: View {
                     .fixedSize(horizontal: false, vertical: true)
 
                 // The estimates, only where the week has them, set apart from
-                // every recorded figure above: in a surface of their own, under
-                // a heading that says what they are, so the difference never
-                // rests on position or tint alone. Each keeps its coverage under
+                // every recorded figure above: inside a dashed outline, the way
+                // a map draws a road not travelled, under a heading that says
+                // what they are, so the difference never rests on the outline,
+                // position or tint alone. Not a ledger line under the recorded
+                // figures, so the fuel never reads as a cost the driver paid. Each keeps its coverage under
                 // it, because a partial figure without the count behind it
                 // reads as a claim about the whole week.
                 let estimates = lines.filter { $0.id.basis == .estimated }
@@ -121,7 +123,8 @@ struct HistoryWeekSummaryView: View {
                         } icon: {
                             Image(systemName: "fuelpump")
                         }
-                        .dashFont(.metricLabel)
+                        .labelStyle(DashCompactLabelStyle())
+                        .dashFont(.eyebrow)
                         .foregroundStyle(.secondary)
 
                         ForEach(estimates) { line in
@@ -133,7 +136,7 @@ struct HistoryWeekSummaryView: View {
                             )
                         }
                     }
-                    .dashInsetSurface()
+                    .dashEstimateSurface()
                 }
             } else {
                 Text("Working out this week…")

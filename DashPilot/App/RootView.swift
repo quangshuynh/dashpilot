@@ -25,6 +25,10 @@ struct RootView: View {
 
     @State private var lifecycleError: ShiftLifecycleError?
 
+    /// The running shift's route reading, shared by the panel above the
+    /// deliveries and the controls below them. See ``ActiveRouteReading``.
+    @State private var routeReading = ActiveRouteReading()
+
     /// What the pickup workflow did at the last Park or Resume Driving pressed
     /// in this screen. See ``PickupWorkflowFeedback``.
     @State private var pickupWorkflow: PickupWorkflowFeedback?
@@ -73,10 +77,8 @@ struct RootView: View {
                     if let activeShift {
                         ActiveShiftPanel(
                             shift: activeShift,
-                            captureState: routeCapture.state,
-                            pause: pauseShift,
+                            routeReading: routeReading,
                             resume: resumeShift,
-                            end: endShift,
                             park: park,
                             resumeDriving: resumeDriving,
                             pickupWorkflow: pickupWorkflow.flatMap { $0.describes(activeShift) ? $0 : nil },
@@ -104,14 +106,23 @@ struct RootView: View {
                             DeliveryControlPanel(shift: activeShift, transientUndo: $transientUndo)
                         }
                     } header: {
-                        Text("Delivery")
+                        Text("Deliveries")
                     } footer: {
-                        Text(
-                            """
-                            DashPilot records only what you tap. It is not connected to any delivery \
-                            platform and cannot tell when an order was offered, handed over or received.
-                            """
+                        Text("DashPilot records only what you tap. It is not connected to any delivery platform.")
+                    }
+
+                    // Below the deliveries: Pause and End are tapped once a
+                    // shift, and the vehicle and capture lines are context.
+                    Section {
+                        ActiveShiftControlsPanel(
+                            shift: activeShift,
+                            routeReading: routeReading,
+                            captureState: routeCapture.state,
+                            pause: pauseShift,
+                            end: endShift
                         )
+                    } header: {
+                        Text("Shift")
                     }
                 }
 
@@ -530,6 +541,9 @@ private struct StartShiftPanel: View {
 
             Button(action: start) {
                 Text("Start Shift")
+                    .dashFont(.control)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
@@ -563,7 +577,7 @@ private struct StartShiftPanel: View {
 
             VStack(alignment: .leading, spacing: DashSpacing.xs) {
                 Text("Next shift records")
-                    .dashFont(.metricLabel)
+                    .dashFont(.eyebrow)
                     .foregroundStyle(.secondary)
 
                 Text(vehicle.title)

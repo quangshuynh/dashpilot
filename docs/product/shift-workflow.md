@@ -104,13 +104,12 @@ For a shift that was never paused that is the same figure the timer always showe
 every rate the shift produces divides by, so the figure watched during the shift and the figure read
 afterwards are the same one.
 
-The panel reads top to bottom in the order a driver needs it: which state the shift is in and when
-it started, the working clock as the one large figure, then a row of figures, then the context, then
-the controls:
+The screen reads top to bottom in the order a driver needs it: which state the shift is in, the
+working clock as the one large figure, a row of figures, and Park; then the deliveries, each with its
+next step; and only then the once-a-shift controls and the context:
 
 ```text
-● Shift in Progress
-Started 5:46 PM
+● Shift in Progress                    Started 5:46 PM
 
 2:14:07
 Worked so far
@@ -121,12 +120,23 @@ partial route · 2 capture segments · 1 capture gap
 
 This shift is still running. Rates are worked out once it ends.
 
-2020 Honda Civic · 34 MPG                         Change
-Location tracking active
-
 [ Parked for a Pickup ]
-[ Pause Shift ]  [ End Shift ]
+
+DELIVERIES
+  (2) Delivery 2                                   (each card: marker, track,
+      ●──○┄┄○┄┄○                                    state, Next step)
+      Heading to the pickup · 12 min
+      Next  [ Arrived at Pickup ]
+  [ Start Delivery ]
+
+SHIFT
+  [ Pause Shift ]  [ End Shift ]
+  2020 Honda Civic · 34 MPG                       Change
+  Location tracking active
 ```
+
+Pause and End sit below the deliveries because each is tapped once a shift, while a delivery's next
+step is tapped many times; that keeps the first delivery's step on the first screen.
 
 **The working clock leads, not earnings**, because it is the one figure that exists and moves while a
 shift runs; a running shift cannot record an amount, so an earnings headline would be a permanent
@@ -135,9 +145,11 @@ accessibility text sizes, so no figure is ever shortened to fit beside another. 
 tabular figures so it does not move sideways as it ticks, and it is never scaled down to fit.
 
 **Running, paused and parked each have their own symbol, word and tint**, and the tint is never the
-only signal. Parked is not a third status: a parked shift is still running and still counting working
-time, so it is a notice about the route under a status that still says the shift is in progress.
-Pause (or Resume) and End share one row where they fit and stack where they do not.
+only signal. Paused replaces the status with an orange banner that says working time stopped, with
+Resume Shift directly under it. Parked is not a third status: a parked shift is still running and
+still counting working time, so it is a blue banner about the route under a status that still says
+the shift is in progress, saying working time is still counting, with Resume Driving directly under
+it. Pause and End share one row where they fit and stack where they do not.
 
 The mileage is **recorded** mileage, in the same words and from the same calculation the finished
 shift uses, and it grows only while positions are being accepted. A pause stops it, and resuming
@@ -156,7 +168,7 @@ goal and any comparison with another shift.
 
 ### Which vehicle the shift is using
 
-The last two lines are the vehicle assumptions **this shift recorded when it started**, so a driver
+The vehicle line under Pause and End is the vehicle assumptions **this shift recorded when it started**, so a driver
 with two vehicles who forgot to switch can see it without leaving the screen. It answers *which
 vehicle is this shift using?*; Settings answers a different question, which is what the **next** shift
 will record.
@@ -744,7 +756,7 @@ numbers*.
 | Summary | The recorded amount as the headline, or "No amount recorded", with Add or Edit Earnings; working time and recorded miles under it |
 | Performance | Start and end times, elapsed duration, and, for a shift that was paused, its paused and working durations; delivery active and non-delivery time; all three derived gross rates, or the reason each could not be derived |
 | Driving | Recorded mileage, what qualifies it (a partial route, stretches recorded as parked), capture segments and capture gaps |
-| Costs | The estimated fuel cost over this shift's recorded mileage, the estimated gallons, the vehicle, fuel economy and gas price this shift recorded, Add or Edit Fuel Assumptions, and the estimated net ledger: recorded earnings, the estimated fuel being subtracted, the estimated net after fuel and the estimated net per working hour |
+| Estimated Costs | The estimated fuel cost over this shift's recorded mileage, the estimated gallons, the vehicle, fuel economy and gas price this shift recorded, Add or Edit Fuel Assumptions, and the estimated net ledger: recorded earnings, the estimated fuel being subtracted, the estimated net after fuel and the estimated net per working hour (where there is no estimate, the net says why once and the lines that would repeat it are left out) |
 | Deliveries | How many were completed and cancelled, and what each one recorded, with its own corrections under it |
 | Pauses | Each recorded pause with its times and length, Edit and Delete for each, and Add Missed Pause |
 | Corrections | Correct End Time, and Correct Grouping on a shift with more than one delivery |
@@ -756,7 +768,7 @@ them. The first four sections summarise the shift in a fixed number of lines; th
 the pause list come after them because they grow with the shift. Corrections that act on the whole
 shift are gathered in their own quiet section below every figure they change, and deletion stands
 apart at the foot. A correction that belongs to one delivery or one pause stays on that row, beside
-the fact it changes, under a rule that separates it from the record.
+the fact it changes, under a rule and an `Edit or correct` label that separate it from the record.
 
 A stretch recorded as parked is stated in Driving, in the route's words, and never beside a pause:
 parking stops the route and subtracts nothing from working time, pausing does both.

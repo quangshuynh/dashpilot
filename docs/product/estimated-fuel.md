@@ -202,7 +202,9 @@ figures, the gross rates and the route:
 - then the net, as a ledger in the order the subtraction happens:
   `Recorded earnings`, `Estimated fuel cost` as the amount being subtracted,
   `Estimated net after fuel` (drawn heavier, as the result) and
-  `Estimated net per working hour`
+  `Estimated net per working hour`. Where there is no fuel estimate the net
+  says why once, and the fuel line and the hourly line, which would only repeat
+  it, are left out
 
 The section sits after everything recorded, deliberately. What the driver
 recorded and what the route measured are the trustworthy part of the screen, and

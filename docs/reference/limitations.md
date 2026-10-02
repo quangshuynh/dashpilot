@@ -685,21 +685,9 @@ parking` whose pickups stores may still hold.
 
 ## Appearance
 
-- **Manrope is used on the redesigned screens only.** The root screen's shift, delivery, location,
-  capture and History panels, Older Weeks, the completed-shift detail, Settings and the vehicle
-  editor are set in it. The period summary, export, expenses, pickup places, most correction sheets
-  and the Live Activity still use the system font. Both scale with Dynamic Type, so nothing is
-  unreadable, but the app does not yet look like one family throughout.
-- **The Live Activity keeps the system typeface on purpose.** The widget extension bundles no font,
-  and adding one only for visual consistency was not judged worth a second copy of the files in a
-  second bundle. A device session with the Live Activity on a real Lock Screen is where that should
-  be decided.
-- **The bundled `OFL.txt` is the Google Fonts copy of the Manrope license.** The original Manrope
-  repository named in the font files no longer exists; the license text is committed unchanged from
-  `google/fonts`, and its copyright line (2018, `googlefonts/manrope`) differs from the one in the
-  font files (2019, `sharanda/manrope`). The terms are the same SIL Open Font License 1.1.
-- **Bold Text moves each role one weight heavier, up to Bold.** The heaviest bundled weight is Bold,
-  so a role already set in Bold does not get heavier.
+- **The Live Activity and the app share the system typeface**, but not every token: the card has its
+  own measured layout and does not draw the stop track or the stop markers. See
+  [Shift Live Activity](../product/live-activity.md).
 - **No screen has been judged on a physical iPhone in the new design.** The layouts were checked on
   the simulator at the default size and the largest accessibility size.
 - **History's first shift is below the fold on a phone.** The current week now opens with its own

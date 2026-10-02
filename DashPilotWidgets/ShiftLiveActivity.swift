@@ -86,10 +86,6 @@ struct ShiftLiveActivity: Widget {
     /// Red while recording, orange while paused, blue while parked: never the
     /// recording red for a route that is not being recorded.
     private func tint(for state: ShiftActivityAttributes.ContentState) -> Color {
-        switch state.compactStatus {
-        case .running: .red
-        case .paused: .orange
-        case .parked: .blue
-        }
+        ShiftActivityPalette.tint(for: state.compactStatus)
     }
 }

@@ -12,17 +12,19 @@ import SwiftUI
 /// 12, spacings picked per view), and the one question every screen has to
 /// answer the same way: which figure is the headline, and what is quieter.
 ///
-/// So this holds a spacing scale, one radius, one inset-surface treatment, and a
-/// status vocabulary that never relies on colour alone. Typography lives beside
-/// it in ``DashTypography``. Nothing here hides composition: a view still reads
-/// as a `VStack` of `Text`s with modifiers on them.
+/// So this holds a spacing scale, two radii, the surface treatments, a status
+/// vocabulary that never relies on colour alone, and DashPilot's one motif: a
+/// delivery as a numbered stop on a route. Typography lives beside it in
+/// ``DashTypography``. Nothing here hides composition: a view still reads as a
+/// `VStack` of `Text`s with modifiers on them. The rules are written out in
+/// `docs/development/design-system.md`.
 ///
 /// ## Colour
 ///
-/// Deliberately **not** a brand palette. The accent is the system's, so the app
-/// follows the driver's settings and keeps its contrast in both modes; the only
-/// hues named here are the semantic ones a state already had (recording, paused,
-/// parked, destructive), and each of them travels with a symbol and a word.
+/// One accent, the asset catalog's teal `AccentColor`, for the primary action,
+/// active progress and a selected choice, and nothing decorative. Every other
+/// hue is a status from ``DashStatusTint``, and each travels with a symbol and a
+/// word.
 enum DashSpacing {
     /// Between a figure and the caption that qualifies it.
     static let xs: CGFloat = 2
@@ -34,11 +36,29 @@ enum DashSpacing {
     static let lg: CGFloat = 12
     /// Between the major regions of a panel.
     static let xl: CGFloat = 16
+    /// Between panels that share one list row, such as two delivery cards.
+    static let xxl: CGFloat = 24
 }
 
 enum DashRadius {
-    /// The one corner radius for an inset surface inside a list row.
+    /// Chips and small badges.
+    static let small: CGFloat = 8
+    /// Inset, status and estimate surfaces inside a list row.
     static let surface: CGFloat = 12
+}
+
+/// The status hues, named once so a state reads the same on every screen and
+/// on the Live Activity. Each is the third signal after a symbol and a word.
+enum DashStatusTint {
+    /// A shift being recorded: the convention for recording.
+    static let running = ShiftActivityPalette.running
+    /// Working time stopped.
+    static let paused = ShiftActivityPalette.paused
+    /// The vehicle parked: the parking-sign convention. Read from the Live
+    /// Activity's palette, so the app and the Lock Screen cannot drift apart.
+    static let parked = ShiftActivityPalette.parked
+    /// A delivery finished.
+    static let completed = Color.green
 }
 
 extension View {
@@ -56,6 +76,188 @@ extension View {
         padding(DashSpacing.lg)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(Color(.tertiarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: DashRadius.surface))
+    }
+}
+
+extension View {
+    /// Estimated figures, set apart from recorded ones by a dashed outline and
+    /// no fill: the way a route map draws a road not yet travelled.
+    ///
+    /// The outline is never the only signal. The caller titles the group as an
+    /// estimate in words, and the figures inside say what they are estimated
+    /// from.
+    func dashEstimateSurface() -> some View {
+        padding(DashSpacing.lg)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .overlay {
+                RoundedRectangle(cornerRadius: DashRadius.surface)
+                    .strokeBorder(Color.secondary.opacity(0.6), style: StrokeStyle(lineWidth: 1, dash: [5, 4]))
+                    .accessibilityHidden(true)
+            }
+    }
+}
+
+/// A state that changes what the screen means, set on a surface of its own
+/// tint: paused, parked.
+///
+/// The symbol, the title and the line saying which clock is still running are
+/// the signals; the tinted fill is the fourth. A banner is one accessibility
+/// element unless it holds a control, which the caller places after it.
+struct DashStateBanner: View {
+    let title: String
+    var detail: String?
+    let symbol: String
+    let tint: Color
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: DashSpacing.md) {
+            Image(systemName: symbol)
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(tint)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: DashSpacing.xs) {
+                Text(title)
+                    .dashFont(.status)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let detail {
+                    Text(detail)
+                        .dashFont(.body)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .padding(DashSpacing.lg)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: DashRadius.surface))
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// A delivery's number in a round marker, the way a stop is numbered on a
+/// route. Stacked orders are told apart by their markers before any sentence
+/// is read.
+///
+/// Decorative: the card's title says `Delivery 3` in words and is what
+/// VoiceOver hears, so the marker is hidden from assistive technologies.
+struct DashStopMarker: View {
+    let number: Int
+    /// A stop no longer on the route, such as a cancelled delivery: drawn in
+    /// the quiet grey rather than the accent.
+    var isMuted = false
+
+    @ScaledMetric(relativeTo: .title3) private var diameter: CGFloat = 30
+
+    var body: some View {
+        Text("\(number)")
+            .dashFont(.metric)
+            .foregroundStyle(.white)
+            .lineLimit(1)
+            .minimumScaleFactor(0.5)
+            .frame(width: diameter, height: diameter)
+            .background(Circle().fill(isMuted ? Color.secondary : Color.accentColor))
+            .accessibilityHidden(true)
+    }
+}
+
+/// The four stops of a delivery, on a line: filled where it has been, a ring
+/// where it is now, hollow where it is going, with the road travelled solid and
+/// the road ahead dashed.
+///
+/// It repeats the card's state line for the eye, so it is hidden from
+/// VoiceOver, which hears the state in words. A delivery that is not on the
+/// lifecycle (a cancelled one) draws nothing.
+struct DashStopTrack: View {
+    let state: DeliveryState
+
+    @ScaledMetric(relativeTo: .caption) private var node: CGFloat = 10
+
+    var body: some View {
+        if let reached = state.stopTrackIndex {
+            HStack(spacing: 0) {
+                ForEach(0..<DeliveryState.stopTrackCount, id: \.self) { index in
+                    stop(index, reached: reached)
+                    if index < DeliveryState.stopTrackCount - 1 {
+                        segment(travelled: index < reached)
+                    }
+                }
+            }
+            .frame(maxWidth: 220)
+            .accessibilityHidden(true)
+        }
+    }
+
+    @ViewBuilder
+    private func stop(_ index: Int, reached: Int) -> some View {
+        if index < reached {
+            Circle().fill(Color.accentColor).frame(width: node, height: node)
+        } else if index == reached {
+            Circle()
+                .strokeBorder(Color.accentColor, lineWidth: node * 0.3)
+                .background(Circle().fill(Color.accentColor.opacity(0.25)))
+                .frame(width: node * 1.4, height: node * 1.4)
+        } else {
+            Circle().strokeBorder(Color.secondary.opacity(0.6), lineWidth: 1.5).frame(width: node, height: node)
+        }
+    }
+
+    private func segment(travelled: Bool) -> some View {
+        Line()
+            .stroke(
+                travelled ? Color.accentColor : Color.secondary.opacity(0.6),
+                style: StrokeStyle(lineWidth: travelled ? 2 : 1.5, dash: travelled ? [] : [3, 3])
+            )
+            .frame(height: 2)
+            .frame(maxWidth: .infinity)
+    }
+
+    private struct Line: Shape {
+        func path(in rect: CGRect) -> Path {
+            var path = Path()
+            path.move(to: CGPoint(x: rect.minX, y: rect.midY))
+            path.addLine(to: CGPoint(x: rect.maxX, y: rect.midY))
+            return path
+        }
+    }
+}
+
+extension DeliveryState {
+    /// How many stops the track draws: accepted, at the pickup, picked up,
+    /// delivered.
+    static let stopTrackCount = 4
+
+    /// Which stop of the track this state is at, or `nil` for a state that is
+    /// not on it.
+    var stopTrackIndex: Int? {
+        switch self {
+        case .accepted: 0
+        case .arrivedAtPickup: 1
+        case .pickedUp: 2
+        case .delivered: 3
+        case .cancelled: nil
+        }
+    }
+}
+
+/// A `Label` whose icon sits close to its title rather than in a column of its
+/// own.
+///
+/// The default style reserves a fixed width for the icon, which inside a
+/// half-width grid cell is space taken from the words. Closing the gap gives
+/// each title around fourteen more points to be written on, which is the
+/// difference between `Change Pickup Place` on one line and on two, and it also
+/// makes the pair read as one control rather than as a glyph beside some text.
+///
+/// Aligned on the first baseline, so an icon stays beside the first line of a
+/// title that does wrap instead of drifting into the middle of it.
+struct DashCompactLabelStyle: LabelStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        // Six points: measured, it is what keeps `Change Pickup Place` on one
+        // line in a half-width cell at the default size.
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            configuration.icon
+            configuration.title
+        }
     }
 }
 

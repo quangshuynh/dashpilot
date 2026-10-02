@@ -2,11 +2,10 @@ import SwiftUI
 
 /// Where DashPilot's parts come from, and the licenses they are under.
 ///
-/// Two licenses and they are different on purpose: DashPilot's own source code
-/// is MIT, and the one typeface it bundles, Manrope, is under the SIL Open Font
-/// License 1.1. The OFL asks for its text to travel with the font, so the
-/// license is bundled beside the font files and shown here in full, read from
-/// the bundle rather than typed into the app a second time.
+/// DashPilot's own source code is MIT. Its text is set in the system face,
+/// which iOS provides, so the app bundles no typeface and carries no font
+/// license; the section below says so rather than disappearing, so a driver
+/// who looks for the typeface finds the answer.
 struct AcknowledgementsView: View {
     var body: some View {
         List {
@@ -19,45 +18,21 @@ struct AcknowledgementsView: View {
 
             Section {
                 VStack(alignment: .leading, spacing: DashSpacing.sm) {
-                    Text("Manrope")
+                    Text("San Francisco")
                         .dashFont(.emphasis)
-                    Text("Copyright 2019 The Manrope Project Authors")
+                    Text("The system typeface, provided by iOS. DashPilot bundles no font.")
                         .dashFont(.body)
                         .foregroundStyle(.secondary)
-                    Text("SIL Open Font License, Version 1.1")
-                        .dashFont(.body)
-                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 .accessibilityElement(children: .combine)
-                .accessibilityIdentifier("manropeAcknowledgement")
-
-                if let license = Self.fontLicense {
-                    Text(license)
-                        .font(.system(.caption, design: .monospaced))
-                        .foregroundStyle(.secondary)
-                        .textSelection(.enabled)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .accessibilityIdentifier("manropeLicenseText")
-                } else {
-                    DashNotice(
-                        title: "License text unavailable",
-                        message: "The license file was not found in this build. It is published at openfontlicense.org."
-                    )
-                }
+                .accessibilityIdentifier("typefaceAcknowledgement")
             } header: {
                 Text("Typeface")
-            } footer: {
-                Text("The typeface is bundled unmodified and is not sold on its own.")
             }
         }
         .navigationTitle("Acknowledgements")
         .navigationBarTitleDisplayMode(.inline)
-    }
-
-    /// The bundled `OFL.txt`, or `nil` where the file is missing from the build.
-    private static var fontLicense: String? {
-        Bundle.main.url(forResource: "OFL", withExtension: "txt")
-            .flatMap { try? String(contentsOf: $0, encoding: .utf8) }
     }
 }
 

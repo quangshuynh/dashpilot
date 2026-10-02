@@ -124,7 +124,7 @@ struct CustomRangeSheet: View {
     private var selectionSection: some View {
         Section {
             if let draftPeriod {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: DashSpacing.sm) {
                     Text(draftPeriod.title(asOf: latestSelectableDay, calendar: calendar, locale: locale))
                         .dashFont(.emphasis)
                     Text(draftPeriod.rangeStatement(calendar: calendar, locale: locale))

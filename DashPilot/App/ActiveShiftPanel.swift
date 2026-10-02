@@ -2,9 +2,25 @@ import OSLog
 import SwiftData
 import SwiftUI
 
-/// The shift in progress: whether it is running or paused, how long it has been
-/// worked, what its route has recorded so far, what its deliveries are doing,
-/// and the one or two lifecycle controls that apply.
+/// The open measurement of the running shift's route, shared by the two
+/// panels that read it: the header, which shows the recorded miles, and the
+/// controls below the deliveries, which decide whether the vehicle correction
+/// may still be offered.
+///
+/// Held by ``RootView`` and written only by ``ActiveShiftPanel``'s reading
+/// loop. Observable per property, so only the views that read
+/// ``measurement`` are redrawn when it moves; the root list is not. It is a
+/// faster reading of stored rows, never a stored figure, and is thrown away
+/// with the shift.
+@MainActor
+@Observable
+final class ActiveRouteReading {
+    var measurement: ActiveRouteMeasurement?
+}
+
+/// The head of the shift in progress: what state it is in, how long it has
+/// been worked, what its route has recorded so far, and the one control that
+/// changes the vehicle's state (Park, Resume Driving, or Resume Shift).
 ///
 /// ## What it is for
 ///
@@ -15,31 +31,40 @@ import SwiftUI
 /// requirements are not met is withheld with the reason rather than filled in.
 /// See ``ActiveShiftMetrics``.
 ///
-/// ## The three states
+/// ## Where it sits
 ///
-/// The three states a shift can be in are kept visually distinct rather than
-/// distinguished by a button title. A driver glancing at the phone in a cradle
-/// has to be able to tell a running shift from a paused one without reading:
-/// running is a red recording label with a ticking figure, paused is an orange
-/// pause label with a figure that does not move, and ended is not this screen at
-/// all.
+/// First on the screen, above the deliveries. Pause, End, the vehicle and the
+/// capture status are ``ActiveShiftControlsPanel``, below the deliveries:
+/// they are tapped once a shift or read rarely, and the delivery cards' next
+/// steps are what a driver reaches for between them.
+///
+/// ## The states
+///
+/// Running, paused and parked are kept visually distinct rather than
+/// distinguished by a button title. Running is a red recording label with a
+/// ticking figure. Paused is an orange banner with a pause symbol that says
+/// working time stopped, over a figure that does not move. Parked is a blue
+/// banner with the parking sign that says working time is still counting,
+/// under the running label, over a figure that still ticks. Each banner's own
+/// control (Resume Shift, Resume Driving) sits directly under it.
 ///
 /// ## What it costs
 ///
-/// The route is measured **incrementally**. The panel holds an open
-/// ``ActiveRouteMeasurement`` and extends it with the positions recorded since
-/// the last reading, rather than walking the whole route again; see
-/// ``refreshInterval`` for the cadence and ``ActiveShiftRouteService`` for the
-/// queries. Nothing derived is written to the store.
+/// The route is measured **incrementally**. The panel extends an open
+/// ``ActiveRouteMeasurement`` with the positions recorded since the last
+/// reading, rather than walking the whole route again; see ``refreshInterval``
+/// for the cadence and ``ActiveShiftRouteService`` for the queries. Nothing
+/// derived is written to the store.
 struct ActiveShiftPanel: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.locale) private var locale
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     let shift: Shift
-    let captureState: RouteCaptureState
-    let pause: () -> Void
+    /// The route reading this panel keeps current, shared with
+    /// ``ActiveShiftControlsPanel``.
+    let routeReading: ActiveRouteReading
     let resume: () -> Void
-    let end: () -> Void
     /// Records that the driver has parked and is walking away from the vehicle.
     let park: () -> Void
     /// Records that the driver is driving again.
@@ -71,20 +96,10 @@ struct ActiveShiftPanel: View {
     /// are in `context.md`.
     private static let refreshInterval: TimeInterval = 2
 
-    /// The open measurement of this shift's route.
-    ///
-    /// Held for as long as the panel is on screen and thrown away with it. It is
-    /// a faster reading of stored rows, never a stored figure: when the shift
-    /// ends it is discarded, and the shift's own history row measures the route
-    /// from scratch.
-    @State private var routeMeasurement: ActiveRouteMeasurement?
-
-    /// Whether the vehicle correction sheet is open.
-    ///
-    /// Raised only by the driver tapping `Change`. Nothing presents it on its
-    /// own: a modal that appeared during a shift would be the mid-drive
-    /// interruption this whole surface is designed against.
-    @State private var isCorrectingVehicle = false
+    private var routeMeasurement: ActiveRouteMeasurement? {
+        get { routeReading.measurement }
+        nonmutating set { routeReading.measurement = newValue }
+    }
 
     private var isPaused: Bool { shift.isPaused }
 
@@ -103,11 +118,13 @@ struct ActiveShiftPanel: View {
     var body: some View {
         VStack(alignment: .leading, spacing: DashSpacing.xl) {
             // What state the shift is in, first, because it changes what every
-            // figure below means.
+            // figure below means; then the one control that leaves a paused or
+            // parked state, directly under the banner that names it.
             VStack(alignment: .leading, spacing: DashSpacing.md) {
                 statusRow
                 parkedNotice
                 pickupWorkflowNotice
+                leavingControl
             }
 
             // The one figure that exists and moves while a shift runs. Earnings
@@ -123,15 +140,9 @@ struct ActiveShiftPanel: View {
                 earnings(metrics)
             }
 
-            // Context rather than figures: quieter, and below them.
-            VStack(alignment: .leading, spacing: DashSpacing.md) {
-                vehicleContext(measuring: metrics?.recordedDistance)
-                RouteCaptureStatusView(state: captureState)
-            }
-
-            controls
+            parkControl
         }
-        .padding(.vertical, 8)
+        .padding(.vertical, DashSpacing.md)
         // Reading the store on a cadence rather than with the body. A body is
         // re-evaluated for reasons that have nothing to do with the route — a
         // clock tick, a sibling row, a scroll — and measuring a route on each of
@@ -153,36 +164,57 @@ struct ActiveShiftPanel: View {
         // pause opens a new capture session. Both change what the figure should
         // say now rather than in a couple of seconds.
         .onChange(of: shift.lifecycleState) { _, _ in measureRoute() }
-        .sheet(isPresented: $isCorrectingVehicle) {
-            ShiftVehicleCorrectionEditor(shift: shift)
-        }
     }
 
-    /// Which state the shift is in, when it started, and, while paused, when
-    /// the pause began.
+    /// Which state the shift is in, and when it started.
     ///
-    /// Running and paused each have their own symbol, word and tint; the tint
-    /// is the third signal, never the only one. Parked is **not** a third
+    /// Running is the recording label. Paused is a banner of its own, which
+    /// says the one fact that makes it paused (working time stopped) so the
+    /// difference from parked never rests on its colour. Parked is **not** a
     /// value here, because a parked shift is still running and still counting
-    /// working time: it is the notice under this row, about the route.
+    /// working time: it is the banner under this row, about the route.
+    @ViewBuilder
     private var statusRow: some View {
-        VStack(alignment: .leading, spacing: DashSpacing.xs) {
-            DashStatusLabel(
-                title: isPaused ? ShiftLifecycleState.paused.title : ShiftLifecycleState.running.title,
-                symbol: isPaused ? "pause.circle.fill" : "record.circle",
-                tint: isPaused ? .orange : .red
+        let started = shift.startedAt.formatted(date: .omitted, time: .shortened)
+        if isPaused {
+            let pausedAt = shift.openPause?.startedAt.formatted(date: .omitted, time: .shortened)
+            DashStateBanner(
+                title: ShiftLifecycleState.paused.title,
+                detail: pausedAt.map { "Working time stopped at \($0). Started \(started)." }
+                    ?? "Working time stopped. Started \(started).",
+                symbol: "pause.circle.fill",
+                tint: DashStatusTint.paused
             )
-            .accessibilityIdentifier(isPaused ? "pausedShiftStatus" : "activeShiftStatus")
+            .accessibilityIdentifier("pausedShiftStatus")
+        } else {
+            let status = DashStatusLabel(
+                title: ShiftLifecycleState.running.title,
+                symbol: "record.circle",
+                tint: DashStatusTint.running
+            )
+            .accessibilityIdentifier("activeShiftStatus")
+            let startedText = Text("Started \(started)")
+                .dashFont(.supporting)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
 
-            HStack(spacing: DashSpacing.md) {
-                Text("Started \(shift.startedAt.formatted(date: .omitted, time: .shortened))")
-                if let pausedAt = shift.openPause?.startedAt {
-                    Text("Paused \(pausedAt.formatted(date: .omitted, time: .shortened))")
-                        .accessibilityIdentifier("pausedAtTime")
+            // Beside each other, and stacked at accessibility sizes: there,
+            // side by side broke the status inside its words.
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: DashSpacing.xs) {
+                    status
+                    startedText
+                }
+            } else {
+                // A plain row in which the status keeps priority and wraps
+                // before the time does. `ViewThatFits` here, inside a list row,
+                // drew an empty block with Bold Text on.
+                HStack(alignment: .firstTextBaseline, spacing: DashSpacing.md) {
+                    status.layoutPriority(1)
+                    Spacer(minLength: DashSpacing.md)
+                    startedText
                 }
             }
-            .dashFont(.supporting)
-            .foregroundStyle(.secondary)
         }
     }
 
@@ -266,7 +298,7 @@ struct ActiveShiftPanel: View {
     private func deliveries(_ metrics: ActiveShiftMetrics) -> some View {
         let summary = metrics.deliverySummary
 
-        return HStack(alignment: .top, spacing: DashSpacing.lg) {
+        return DashMetricRow {
             DashMetric(
                 value: "\(summary.completed)",
                 label: "Delivered",
@@ -339,6 +371,201 @@ struct ActiveShiftPanel: View {
         }
     }
 
+    /// What the driver is told while the vehicle is recorded as parked.
+    ///
+    /// Prominent and permanent for as long as the state lasts, because the
+    /// expensive failure of this feature is forgetting to leave it: a driver who
+    /// drives the rest of the shift parked records none of it. The shift's own
+    /// status above still says the shift is running, which is the fact this
+    /// notice must not contradict; what it says is that the **route** is not
+    /// being recorded, and when it stopped.
+    @ViewBuilder
+    private var parkedNotice: some View {
+        if isRouteSuspended, let parkedAt = shift.openRouteSuspension?.startedAt {
+            let time = parkedAt.formatted(date: .omitted, time: .shortened)
+            // A symbol, a word and a tint of its own: parked is not paused,
+            // and the line under the title says the one fact that makes the
+            // difference, which clock is still running.
+            DashStateBanner(
+                title: "Parked · route not recording",
+                detail: "Since \(time). Your shift is still running and working time is still counting.",
+                symbol: "parkingsign.circle.fill",
+                tint: DashStatusTint.parked
+            )
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(
+                """
+                Parked. DashPilot stopped recording your route at \(time). Your shift is still running and \
+                its working time is still counting.
+                """
+            )
+            .accessibilityIdentifier("parkedShiftNotice")
+        }
+    }
+
+    /// What the driver's pickup workflow just recorded, or declined to, at
+    /// Park, below the parked notice. Resume Driving's line is drawn below the
+    /// list by ``TransientUndoBar``, so its leaving moves no delivery card.
+    ///
+    /// A line and not an alert: Park is the tap before a driver walks into a
+    /// shop and Resume the tap before they pull away, and nothing here should
+    /// stand between them and either. A symbol and words carry the result, never
+    /// the tint alone. It names the delivery, because with stacked orders "an
+    /// order" would leave the driver to work out which, and it says the event
+    /// was recorded **automatically when you parked** rather than detected,
+    /// because DashPilot saw nothing: the driver's setting and their tap did it.
+    ///
+    /// Undo is offered beside a recorded event for the same short window the
+    /// app's immediate undo of a Delivered uses, and takes back exactly what
+    /// that press recorded: one delivery's event, or the same event for every
+    /// delivery of a shared pickup, all of them or none. It is its own control
+    /// with its own spoken label, which names what goes back and says the
+    /// vehicle stays as it is.
+    @ViewBuilder
+    private var pickupWorkflowNotice: some View {
+        if let pickupWorkflow {
+            let notice = pickupWorkflow.notice
+            VStack(alignment: .leading, spacing: DashSpacing.md) {
+                Label {
+                    VStack(alignment: .leading, spacing: DashSpacing.xs) {
+                        // Body, not a caption: this says a lifecycle event was
+                        // written, or asks the driver to record one.
+                        Text(notice.title)
+                            .dashFont(.emphasis)
+                        Text(notice.detail)
+                            .dashFont(.body)
+                            .foregroundStyle(.secondary)
+                    }
+                    .fixedSize(horizontal: false, vertical: true)
+                } icon: {
+                    Image(systemName: notice.symbolName)
+                        .foregroundStyle(notice.recordedAnEvent ? Color.accentColor : Color.secondary)
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(notice.spokenLabel)
+                .accessibilityIdentifier("pickupWorkflowNotice")
+
+                if let action = pickupWorkflow.undoableAction {
+                    Button(action: undoPickupWorkflowStep) {
+                        Label("Undo", systemImage: "arrow.uturn.backward")
+                            .frame(minHeight: 44)
+                    }
+                    .buttonStyle(.bordered)
+                    .accessibilityLabel(action.spokenUndoLabel)
+                    .accessibilityIdentifier("undoPickupWorkflowStepButton")
+                }
+            }
+            .dashInsetSurface()
+        }
+    }
+
+    /// The control that leaves a paused or parked state, directly under the
+    /// banner that names it, and prominent: it is the one the driver came back
+    /// to the app to press.
+    @ViewBuilder
+    private var leavingControl: some View {
+        if isPaused {
+            Button(action: resume) {
+                Text("Resume Shift")
+                    .dashFont(.control)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+            .accessibilityIdentifier("resumeShiftButton")
+        } else if isRouteSuspended {
+            Button(action: resumeDriving) {
+                Label("Resume Driving", systemImage: "car.fill")
+                    .dashFont(.control)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+            .accessibilityLabel("Resume driving. DashPilot starts recording your route again.")
+            .accessibilityIdentifier("resumeDrivingButton")
+        }
+    }
+
+    /// Parking, under the figures and above the deliveries, because it is the
+    /// one shift control a driver reaches for several times a shift. Bordered,
+    /// never prominent: the prominent control while a shift runs is a
+    /// delivery's next step, and a driver who never parks should not meet a
+    /// second one.
+    ///
+    /// Withheld while paused rather than refused there: a paused shift records
+    /// no route either, so parking would claim a second reason for a stop the
+    /// driver already has one for.
+    @ViewBuilder
+    private var parkControl: some View {
+        if !isPaused, !isRouteSuspended {
+            Button(action: park) {
+                Label("Parked for a Pickup", systemImage: "parkingsign.circle")
+                    .dashFont(.control)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.large)
+            .accessibilityLabel(
+                """
+                Parked for a pickup. Stops recording your route while you are away from the vehicle. \
+                Your shift keeps running.
+                """
+            )
+            .accessibilityIdentifier("parkShiftButton")
+        }
+    }
+}
+
+/// The shift's own once-a-shift controls and its context, below the
+/// deliveries: Pause or End, the vehicle the shift recorded, and whether the
+/// route is being recorded.
+///
+/// Below the delivery cards because each of these is tapped once a shift or
+/// read rarely, while a card's next step is tapped many times. Nothing here is
+/// prominent. While paused, Resume Shift is in the header under the paused
+/// banner, and only End remains here.
+struct ActiveShiftControlsPanel: View {
+    @Environment(\.locale) private var locale
+
+    let shift: Shift
+    /// The header's route reading, read here only to decide whether the
+    /// vehicle correction may still be offered.
+    let routeReading: ActiveRouteReading
+    let captureState: RouteCaptureState
+    let pause: () -> Void
+    let end: () -> Void
+
+    /// Whether the vehicle correction sheet is open.
+    ///
+    /// Raised only by the driver tapping `Change`. Nothing presents it on its
+    /// own: a modal that appeared during a shift would be the mid-drive
+    /// interruption this whole surface is designed against.
+    @State private var isCorrectingVehicle = false
+
+    private var isPaused: Bool { shift.isPaused }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: DashSpacing.xl) {
+            pauseAndEnd
+
+            // Context rather than controls: quieter, and last.
+            VStack(alignment: .leading, spacing: DashSpacing.md) {
+                vehicleContext(measuring: routeReading.measurement?.recordedDistance)
+                RouteCaptureStatusView(state: captureState)
+            }
+        }
+        .padding(.vertical, DashSpacing.md)
+        .sheet(isPresented: $isCorrectingVehicle) {
+            ShiftVehicleCorrectionEditor(shift: shift)
+        }
+    }
+
     /// Which vehicle assumptions this shift is using.
     ///
     /// ## It reads the shift and never Settings
@@ -354,12 +581,11 @@ struct ActiveShiftPanel: View {
     ///
     /// ## Where it sits, and how quiet it is
     ///
-    /// Below the live figures and above the capture status, which is the part of
-    /// the panel that carries context rather than the part that carries the
-    /// numbers a driver glances at. It is two short lines in caption and
-    /// subheadline type, and the row itself is never a control: the only thing
-    /// tappable here is the small `Change` beside it, and only while the
-    /// correction is allowed.
+    /// Below the deliveries and the shift controls, above the capture status:
+    /// the part of the screen that carries context rather than the numbers a
+    /// driver glances at. It is two short lines, and the row itself is never a
+    /// control: the only thing tappable here is the small `Change` beside it,
+    /// and only while the correction is allowed.
     ///
     /// The gas price is deliberately not here. It is an input to the fuel
     /// estimate a finished shift reports, and the one screen a driver reads
@@ -367,7 +593,7 @@ struct ActiveShiftPanel: View {
     private func vehicleContext(measuring recordedDistance: RouteDistance?) -> some View {
         let context = shift.vehicleContext
 
-        return HStack(alignment: .firstTextBaseline, spacing: 8) {
+        return HStack(alignment: .firstTextBaseline, spacing: DashSpacing.md) {
             // A symbol rather than a "Vehicle" caption, so the row costs one
             // line of height where it has one fact and two where it has both.
             Image(systemName: "car.fill")
@@ -375,7 +601,7 @@ struct ActiveShiftPanel: View {
                 .foregroundStyle(.secondary)
                 .accessibilityHidden(true)
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: DashSpacing.xs) {
                 Text(context.title)
                     .dashFont(.body)
                     // Secondary where nothing was recorded, because an absence
@@ -395,7 +621,7 @@ struct ActiveShiftPanel: View {
             .accessibilityValue(context.spokenValue(locale: locale))
             .accessibilityIdentifier("activeShiftVehicle")
 
-            Spacer(minLength: 8)
+            Spacer(minLength: DashSpacing.md)
 
             if mayCorrectVehicle(measuring: recordedDistance) {
                 changeVehicleButton
@@ -444,166 +670,24 @@ struct ActiveShiftPanel: View {
     }
 
 
-    /// What the driver is told while the vehicle is recorded as parked.
-    ///
-    /// Prominent and permanent for as long as the state lasts, because the
-    /// expensive failure of this feature is forgetting to leave it: a driver who
-    /// drives the rest of the shift parked records none of it. The shift's own
-    /// status above still says the shift is running, which is the fact this
-    /// notice must not contradict; what it says is that the **route** is not
-    /// being recorded, and when it stopped.
-    @ViewBuilder
-    private var parkedNotice: some View {
-        if isRouteSuspended, let parkedAt = shift.openRouteSuspension?.startedAt {
-            VStack(alignment: .leading, spacing: DashSpacing.xs) {
-                // A symbol, a word and a tint of its own: parked is not
-                // paused, and must never look like it.
-                DashStatusLabel(
-                    title: "Parked · route not recording",
-                    symbol: "parkingsign.circle.fill",
-                    tint: .teal
-                )
-
-                Text("Since \(parkedAt.formatted(date: .omitted, time: .shortened)). Your shift is still running.")
-                    .dashFont(.supporting)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel(
-                """
-                Parked. DashPilot stopped recording your route at \
-                \(parkedAt.formatted(date: .omitted, time: .shortened)). Your shift is still running and \
-                its working time is still counting.
-                """
-            )
-            .accessibilityIdentifier("parkedShiftNotice")
-        }
-    }
-
-    /// What the driver's pickup workflow just recorded, or declined to, at
-    /// Park, below the parked notice. Resume Driving's line is drawn below the
-    /// list by ``TransientUndoBar``, so its leaving moves no delivery card.
-    ///
-    /// A line and not an alert: Park is the tap before a driver walks into a
-    /// shop and Resume the tap before they pull away, and nothing here should
-    /// stand between them and either. A symbol and words carry the result, never
-    /// the tint alone. It names the delivery, because with stacked orders "an
-    /// order" would leave the driver to work out which, and it says the event
-    /// was recorded **automatically when you parked** rather than detected,
-    /// because DashPilot saw nothing: the driver's setting and their tap did it.
-    ///
-    /// Undo is offered beside a recorded event for the same short window the
-    /// app's immediate undo of a Delivered uses, and takes back exactly what
-    /// that press recorded: one delivery's event, or the same event for every
-    /// delivery of a shared pickup, all of them or none. It is its own control
-    /// with its own spoken label, which names what goes back and says the
-    /// vehicle stays as it is.
-    @ViewBuilder
-    private var pickupWorkflowNotice: some View {
-        if let pickupWorkflow {
-            let notice = pickupWorkflow.notice
-            VStack(alignment: .leading, spacing: DashSpacing.md) {
-                Label {
-                    VStack(alignment: .leading, spacing: DashSpacing.xs) {
-                        // Body, not a caption: this says a lifecycle event was
-                        // written, or asks the driver to record one.
-                        Text(notice.title)
-                            .dashFont(.emphasis)
-                        Text(notice.detail)
-                            .dashFont(.body)
-                            .foregroundStyle(.secondary)
-                    }
-                    .fixedSize(horizontal: false, vertical: true)
-                } icon: {
-                    Image(systemName: notice.symbolName)
-                        .foregroundStyle(notice.recordedAnEvent ? Color.teal : Color.secondary)
-                }
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel(notice.spokenLabel)
-                .accessibilityIdentifier("pickupWorkflowNotice")
-
-                if let action = pickupWorkflow.undoableAction {
-                    Button(action: undoPickupWorkflowStep) {
-                        Label("Undo", systemImage: "arrow.uturn.backward")
-                            .frame(minHeight: 44)
-                    }
-                    .buttonStyle(.bordered)
-                    .accessibilityLabel(action.spokenUndoLabel)
-                    .accessibilityIdentifier("undoPickupWorkflowStepButton")
-                }
-            }
-            .dashInsetSurface()
-        }
-    }
-
-    /// Pause or Resume, and End.
-    ///
-    /// Resume is the prominent control on a paused shift, because it is the one
-    /// the driver came back to the app to press. Pause is bordered on a running
-    /// shift for the reason End is: the prominent control during a shift is the
-    /// delivery action below, which is tapped many times a shift.
-    @ViewBuilder
-    private var controls: some View {
-        // Above the shift controls, because it is the one a driver reaches for
-        // several times a shift while pausing and ending are tapped once. It is
-        // prominent only while parked: leaving the state is the tap that matters,
-        // and a driver who never parks should not meet a second prominent
-        // control beside their delivery buttons.
-        if isRouteSuspended {
-            Button(action: resumeDriving) {
-                Text("Resume Driving")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-            .accessibilityLabel("Resume driving. DashPilot starts recording your route again.")
-            .accessibilityIdentifier("resumeDrivingButton")
-        } else if !isPaused {
-            // Withheld while paused rather than refused there: a paused shift
-            // records no route either, so parking would claim a second reason
-            // for a stop the driver already has one for.
-            Button(action: park) {
-                Label("Parked for a Pickup", systemImage: "parkingsign.circle")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.large)
-            .accessibilityLabel(
-                """
-                Parked for a pickup. Stops recording your route while you are away from the vehicle. \
-                Your shift keeps running.
-                """
-            )
-            .accessibilityIdentifier("parkShiftButton")
-        }
-
-        pauseAndEnd
-    }
-
-    /// Pause (or Resume) and End, side by side where they fit and stacked at
-    /// accessibility sizes, so neither title is ever shortened.
+    /// Pause and End, side by side where they fit and stacked where they do
+    /// not, so neither title is ever shortened. While paused, End alone.
     ///
     /// End is bordered and red rather than prominent: the prominent control
-    /// during a shift is the delivery action below, which is tapped many times
-    /// a shift, while this one is tapped once. It stays available while paused:
+    /// during a shift is a delivery's next step above, which is tapped many
+    /// times a shift, while this one is tapped once. It stays available while paused:
     /// a driver who has finished has finished, and making them resume a shift
     /// they are not working in order to end it would record work that did not
     /// happen.
     @ViewBuilder
     private var pauseAndEnd: some View {
-        let pauseOrResume = Group {
-            if isPaused {
-                Button(action: resume) {
-                    Text("Resume Shift")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
-                .accessibilityIdentifier("resumeShiftButton")
-            } else {
+        let pauseOrNothing = Group {
+            if !isPaused {
                 Button(action: pause) {
                     Text("Pause Shift")
+                        .dashFont(.control)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered)
@@ -614,6 +698,9 @@ struct ActiveShiftPanel: View {
 
         let endButton = Button(action: end) {
             Text("End Shift")
+                .dashFont(.control)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity)
         }
         .buttonStyle(.bordered)
@@ -623,11 +710,11 @@ struct ActiveShiftPanel: View {
 
         ViewThatFits(in: .horizontal) {
             HStack(spacing: DashSpacing.lg) {
-                pauseOrResume
+                pauseOrNothing
                 endButton
             }
             VStack(spacing: DashSpacing.lg) {
-                pauseOrResume
+                pauseOrNothing
                 endButton
             }
         }
@@ -645,7 +732,7 @@ struct WorkingTimeLabel: View {
     let isPaused: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: DashSpacing.xs) {
             // Never scaled down to fit: at the largest sizes the figure is
             // allowed its full height, and tabular figures keep it from moving
             // sideways as it ticks.
