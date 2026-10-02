@@ -16,7 +16,7 @@ struct LocationAuthorizationPanel: View {
     @Environment(\.openURL) private var openURL
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: DashSpacing.md) {
             Label(title, systemImage: symbol)
                 .dashFont(.status)
                 .foregroundStyle(tint)
@@ -29,7 +29,7 @@ struct LocationAuthorizationPanel: View {
 
             action
         }
-        .padding(.vertical, 8)
+        .padding(.vertical, DashSpacing.sm)
         // A container rather than a combined element: the recovery button has
         // to stay individually reachable.
         .accessibilityElement(children: .contain)
@@ -123,11 +123,7 @@ struct LocationAuthorizationPanel: View {
         case .servicesDisabled:
             "Location Services is off for this device, so no app can use location. Turn it on in Settings, under Privacy & Security."
         case .authorized(_, .full):
-            """
-                DashPilot can use precise location while a shift runs, including in another app or when \
-                the screen is locked. Recording has to be started with DashPilot open. Your route stays on \
-                this device.
-                """
+            "Precise, while a shift runs, also off screen. Recording starts with DashPilot open, and your route stays on this device."
         case .authorized(_, .reduced):
             "DashPilot has approximate location only, which is usually too imprecise to record a useful route. Precise Location can be turned on in Settings."
         case .authorized(_, .unrecognised):

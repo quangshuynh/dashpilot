@@ -19,7 +19,7 @@ struct RouteCaptureStatusView: View {
     let state: RouteCaptureState
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: DashSpacing.xs) {
             Label(title, systemImage: symbol)
                 .dashFont(.status)
                 .foregroundStyle(tint)
@@ -58,10 +58,11 @@ struct RouteCaptureStatusView: View {
 
     private var tint: Color {
         switch state {
-        case .idle, .tracking: .green
+        // Recording the route is the active progress the accent is for.
+        case .idle, .tracking: .accentColor
         case .pausedInBackground: .orange
-        case .shiftPaused: .orange
-        case .routeSuspended: .orange
+        case .shiftPaused: DashStatusTint.paused
+        case .routeSuspended: DashStatusTint.parked
         case .unavailable: .secondary
         }
     }
@@ -69,10 +70,7 @@ struct RouteCaptureStatusView: View {
     private var detail: String? {
         switch state {
         case .idle, .tracking:
-            """
-            Recording continues while you use other apps or the screen is locked. \
-            iOS can still stop it, and it does not restart on its own if DashPilot is closed.
-            """
+            "Continues in other apps and when locked. iOS can still stop it; open DashPilot to restart it."
         case .pausedInBackground:
             "Recording starts when DashPilot is open. Open the app to record the rest of this shift."
         // The paused and parked details say only what the panel above them does

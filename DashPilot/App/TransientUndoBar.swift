@@ -122,10 +122,11 @@ struct TransientUndoBar: View {
             // one element a listener hears, carrying the whole statement; the
             // printed detail is part of it rather than a second stop.
             Image(systemName: undo.symbolName)
+                .foregroundStyle(Color.accentColor)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: DashSpacing.xs) {
                 Text(undo.title)
-                    .dashFont(.body)
+                    .dashFont(.emphasis)
                     .accessibilityLabel(undo.spokenLabel)
                     .accessibilityIdentifier(undo.identifier)
                 if let detail = undo.detail {

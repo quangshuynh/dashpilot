@@ -2210,7 +2210,7 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertFalse(app.buttons["deliveryActionButton"].exists, "A finished delivery has no next step")
 
         // And the shift can now be ended, with the delivery recorded against it.
-        XCTAssertTrue(scrollToTop(reaching: app.buttons["endShiftButton"], in: app))
+        XCTAssertTrue(reachShiftControl(app.buttons["endShiftButton"], in: app))
         app.buttons["endShiftButton"].tap()
         let row = revealHistoryRows(1, in: app).firstMatch
         row.tap()
@@ -2309,7 +2309,7 @@ final class DashPilotUITests: XCTestCase {
         app.activate()
 
         XCTAssertTrue(
-            app.buttons["endShiftButton"].waitForExistence(timeout: 10),
+            app.descendants(matching: .any)["activeShiftStatus"].waitForExistence(timeout: 10),
             "The shift is still running; nothing about returning to the app ends one"
         )
         let carrying = deliveryButton("deliveryActionButton", containing: "Delivery 3", in: app)
@@ -2480,14 +2480,18 @@ final class DashPilotUITests: XCTestCase {
     /// Brings one of the shift's own controls to where a tap lands, from
     /// wherever the journey left the screen.
     ///
-    /// The controls sit above the delivery cards, so a journey that has just
-    /// read a card is below them. It goes to the top unconditionally first, for
+    /// Park and Resume Driving sit above the delivery cards and Pause and End
+    /// below them, so a journey can be on either side. It goes to the top unconditionally first, for
     /// the reason ``scrollToTop(reaching:in:swipes:)`` gives: a `List` reports a
     /// control it has scrolled past as hittable, and a tap on that stale frame
     /// lands on whatever is there now. Then it searches downward.
     @MainActor
     private func reachShiftControl(_ control: XCUIElement, in app: XCUIApplication) -> Bool {
-        scrollToTop(reaching: control, in: app) && scrollUntilHittable(control, in: app)
+        // The top is found by the working clock, which every running or paused
+        // shift draws first: Pause and End sit below the delivery cards, so at
+        // the top they may not be rendered yet.
+        scrollToTop(reaching: app.descendants(matching: .any)["workingTime"], in: app)
+            && scrollUntilHittable(control, in: app)
     }
 
     /// Presses Park on the running shift's panel.
@@ -2654,6 +2658,10 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertTrue(
             waitForCount(app.buttons.matching(identifier: "deliveryActionButton"), toEqual: 1),
             "Delivery 3's card is gone, so only the movement the Undo causes is left to measure"
+        )
+        XCTAssertTrue(
+            next.isHittable || scrollUpUntilHittable(next, in: app, maxSwipes: 6),
+            "The next delivery's step is on screen to be measured"
         )
         let before = next.frame
 
@@ -2902,6 +2910,7 @@ final class DashPilotUITests: XCTestCase {
         let first = deliveryButton("deliveryActionButton", containing: "Delivery 1", in: app)
         XCTAssertTrue(scrollTo(first, in: app))
         XCTAssertTrue(scrollUntilHittable(first, in: app))
+        XCTAssertTrue(revealAboveBottomBar(first, in: app), "The card's step is clear of the Undo line")
         first.tap()
         assertCard("Delivery 1", says: "heading to the customer", in: app)
         assertCard("Delivery 2", says: "waiting at the pickup", in: app)
@@ -3369,7 +3378,7 @@ final class DashPilotUITests: XCTestCase {
         // The panel is read before it is scrolled: `scrollTo` swipes rather than
         // waits, so a journey that starts swiping at a still-launching app can
         // exhaust its swipes before the first card exists.
-        XCTAssertTrue(app.buttons["endShiftButton"].waitForExistence(timeout: 15), "The seeded shift is running")
+        XCTAssertTrue(app.descendants(matching: .any)["activeShiftStatus"].waitForExistence(timeout: 15), "The seeded shift is running")
 
         let heading = app.descendants(matching: .any)["offerGroupHeader"]
         XCTAssertTrue(scrollTo(heading, in: app), "The offer that held two deliveries names itself")
@@ -3412,7 +3421,7 @@ final class DashPilotUITests: XCTestCase {
         // The panel is read before it is scrolled: `scrollTo` swipes rather than
         // waits, so a journey that starts swiping at a still-launching app can
         // exhaust its swipes before the first card exists.
-        XCTAssertTrue(app.buttons["endShiftButton"].waitForExistence(timeout: 15), "The seeded shift is running")
+        XCTAssertTrue(app.descendants(matching: .any)["activeShiftStatus"].waitForExistence(timeout: 15), "The seeded shift is running")
 
         let grouped = app.descendants(matching: .any)
             .matching(
@@ -3454,7 +3463,7 @@ final class DashPilotUITests: XCTestCase {
         // The panel is read before it is scrolled: `scrollTo` swipes rather than
         // waits, so a journey that starts swiping at a still-launching app can
         // exhaust its swipes before the first card exists.
-        XCTAssertTrue(app.buttons["endShiftButton"].waitForExistence(timeout: 15), "The seeded shift is running")
+        XCTAssertTrue(app.descendants(matching: .any)["activeShiftStatus"].waitForExistence(timeout: 15), "The seeded shift is running")
 
         let first = deliveryButton("deliveryActionButton", containing: "Delivery 1", in: app)
         let sibling = deliveryButton("deliveryActionButton", containing: "Delivery 2", in: app)
@@ -3467,7 +3476,7 @@ final class DashPilotUITests: XCTestCase {
         // where the app is relaunched over a running one and the panel is not
         // where an isolated launch leaves it. Going to the top first and
         // swiping down to the card makes the position the same either way.
-        XCTAssertTrue(scrollToTop(reaching: app.buttons["endShiftButton"], in: app))
+        XCTAssertTrue(reachShiftControl(app.buttons["endShiftButton"], in: app))
         XCTAssertTrue(scrollUntilHittable(first, in: app), "The card's own button can be pressed where it is")
         first.tap()
 
@@ -3573,7 +3582,7 @@ final class DashPilotUITests: XCTestCase {
     func testCorrectingGroupingCombinesTwoOffers() throws {
         let app = launchWithStackedOffer()
 
-        XCTAssertTrue(app.buttons["endShiftButton"].waitForExistence(timeout: 15), "The seeded shift is running")
+        XCTAssertTrue(app.descendants(matching: .any)["activeShiftStatus"].waitForExistence(timeout: 15), "The seeded shift is running")
 
         let correct = app.buttons["correctOffersButton"]
         XCTAssertTrue(scrollTo(correct, in: app), "Correction is one control, not a button on every card")
@@ -3634,7 +3643,7 @@ final class DashPilotUITests: XCTestCase {
     func testCorrectingGroupingSeparatesAnOffer() throws {
         let app = launchWithStackedOffer()
 
-        XCTAssertTrue(app.buttons["endShiftButton"].waitForExistence(timeout: 15), "The seeded shift is running")
+        XCTAssertTrue(app.descendants(matching: .any)["activeShiftStatus"].waitForExistence(timeout: 15), "The seeded shift is running")
 
         let correct = app.buttons["correctOffersButton"]
         XCTAssertTrue(scrollTo(correct, in: app))
@@ -3687,7 +3696,7 @@ final class DashPilotUITests: XCTestCase {
     func testSplittingOneDeliveryIntoItsOwnOffer() throws {
         let app = launchWithStackedOffer()
 
-        XCTAssertTrue(app.buttons["endShiftButton"].waitForExistence(timeout: 15), "The seeded shift is running")
+        XCTAssertTrue(app.descendants(matching: .any)["activeShiftStatus"].waitForExistence(timeout: 15), "The seeded shift is running")
 
         let correct = app.buttons["correctOffersButton"]
         XCTAssertTrue(scrollTo(correct, in: app))
@@ -3728,7 +3737,7 @@ final class DashPilotUITests: XCTestCase {
     func testDismissingTheCorrectionSheetChangesNothing() throws {
         let app = launchWithStackedOffer()
 
-        XCTAssertTrue(app.buttons["endShiftButton"].waitForExistence(timeout: 15), "The seeded shift is running")
+        XCTAssertTrue(app.descendants(matching: .any)["activeShiftStatus"].waitForExistence(timeout: 15), "The seeded shift is running")
 
         let correct = app.buttons["correctOffersButton"]
         XCTAssertTrue(scrollTo(correct, in: app))
@@ -3753,7 +3762,7 @@ final class DashPilotUITests: XCTestCase {
     func testCorrectionReadsAnOfferHoldingNoDeliveries() throws {
         let app = launchWithMalformedOffer()
 
-        XCTAssertTrue(app.buttons["endShiftButton"].waitForExistence(timeout: 15), "The seeded shift is running")
+        XCTAssertTrue(app.descendants(matching: .any)["activeShiftStatus"].waitForExistence(timeout: 15), "The seeded shift is running")
 
         let correct = app.buttons["correctOffersButton"]
         XCTAssertTrue(scrollTo(correct, in: app), "The screen opens over an anomalous store")
@@ -3924,7 +3933,7 @@ final class DashPilotUITests: XCTestCase {
     func testReopeningADeliveredDeliveryFromTheShiftsRecord() throws {
         let app = launchWithActiveDelivery()
 
-        XCTAssertTrue(app.buttons["endShiftButton"].waitForExistence(timeout: 15), "The seeded shift is running")
+        XCTAssertTrue(app.descendants(matching: .any)["activeShiftStatus"].waitForExistence(timeout: 15), "The seeded shift is running")
 
         // Nothing was marked delivered in this session, so there is no offer to
         // catch: this is the path for a mistake noticed later.
@@ -4045,7 +4054,8 @@ final class DashPilotUITests: XCTestCase {
         let app = launchWithActiveDelivery()
 
         let endShift = app.buttons["endShiftButton"]
-        XCTAssertTrue(endShift.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.descendants(matching: .any)["activeShiftStatus"].waitForExistence(timeout: 10))
+        XCTAssertTrue(reachShiftControl(endShift, in: app), "End is below the delivery cards")
         endShift.tap()
 
         let plural = app.staticTexts.containing(
@@ -4057,7 +4067,8 @@ final class DashPilotUITests: XCTestCase {
         )
         app.buttons["OK"].tap()
 
-        // Nothing was ended and nothing was silently completed.
+        // Nothing was ended and nothing was silently completed. The journey is
+        // at End, below the cards, so End is what is still in view.
         XCTAssertTrue(app.buttons["endShiftButton"].waitForExistence(timeout: 5), "The shift is still running")
         XCTAssertTrue(rows(in: app).count == 0, "No completed shift appeared in history")
 
@@ -4067,7 +4078,7 @@ final class DashPilotUITests: XCTestCase {
         carrying.tap()
         XCTAssertTrue(waitForCount(app.buttons.matching(identifier: "deliveryActionButton"), toEqual: 1))
 
-        XCTAssertTrue(scrollToTop(reaching: app.buttons["endShiftButton"], in: app))
+        XCTAssertTrue(reachShiftControl(app.buttons["endShiftButton"], in: app))
         app.buttons["endShiftButton"].tap()
         let singular = app.staticTexts.containing(
             NSPredicate(format: "label CONTAINS %@", "A delivery is still in progress")
@@ -4099,7 +4110,7 @@ final class DashPilotUITests: XCTestCase {
         accepted.tap()
 
         XCTAssertTrue(waitForCount(app.buttons.matching(identifier: "deliveryActionButton"), toEqual: 0))
-        XCTAssertTrue(scrollToTop(reaching: app.buttons["endShiftButton"], in: app))
+        XCTAssertTrue(reachShiftControl(app.buttons["endShiftButton"], in: app))
         app.buttons["endShiftButton"].tap()
         XCTAssertTrue(
             scrollUntilHittable(rows(in: app).firstMatch, in: app),
@@ -4141,7 +4152,7 @@ final class DashPilotUITests: XCTestCase {
         // Back up to the shift's own controls, which the delivery cards pushed
         // out of the list's rendered rows, the way the journey above does.
         XCTAssertTrue(waitForCount(app.buttons.matching(identifier: "deliveryActionButton"), toEqual: 0))
-        XCTAssertTrue(scrollToTop(reaching: app.buttons["endShiftButton"], in: app))
+        XCTAssertTrue(reachShiftControl(app.buttons["endShiftButton"], in: app))
         app.buttons["endShiftButton"].tap()
         openFirstShift(in: app)
         let summary = app.descendants(matching: .any)["shiftDetailDeliverySummary"]
@@ -4595,7 +4606,7 @@ final class DashPilotUITests: XCTestCase {
         // reopening, and never this one: while a shift is running a mis-tapped
         // completion is reopened and finished properly.
         let app2 = launchWithActiveDelivery()
-        XCTAssertTrue(app2.buttons["endShiftButton"].waitForExistence(timeout: 15), "The seeded shift is running")
+        XCTAssertTrue(app2.descendants(matching: .any)["activeShiftStatus"].waitForExistence(timeout: 15), "The seeded shift is running")
         XCTAssertTrue(scrollTo(app2.buttons["reopenDeliveryButton"], in: app2), "Reopening is what is offered there")
         XCTAssertFalse(
             app2.buttons["shiftDetailCorrectToCancelledButton"].exists,
@@ -5226,7 +5237,7 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertTrue(startShift.waitForExistence(timeout: 10))
         startShift.tap()
 
-        XCTAssertTrue(app.buttons["endShiftButton"].waitForExistence(timeout: 5), "The shift is running")
+        XCTAssertTrue(app.descendants(matching: .any)["activeShiftStatus"].waitForExistence(timeout: 5), "The shift is running")
         XCTAssertFalse(
             app.buttons["correctShiftEndButton"].exists,
             "A shift with no recorded end has none to correct, and End is what records one"
@@ -5491,7 +5502,7 @@ final class DashPilotUITests: XCTestCase {
     func testDeliveryTimeCorrectionIsNotOfferedOnARunningShift() throws {
         let app = launchWithActiveDelivery()
 
-        XCTAssertTrue(app.buttons["endShiftButton"].waitForExistence(timeout: 10), "The shift is running")
+        XCTAssertTrue(app.descendants(matching: .any)["activeShiftStatus"].waitForExistence(timeout: 10), "The shift is running")
         XCTAssertFalse(
             app.buttons["shiftDetailCorrectDeliveryTimesButton"].exists,
             "A delivery on a running shift has no shift window to be corrected inside"
@@ -6191,7 +6202,7 @@ final class DashPilotUITests: XCTestCase {
         }
 
         let endShift = app.buttons["endShiftButton"]
-        XCTAssertTrue(scrollToTop(reaching: endShift, in: app))
+        XCTAssertTrue(reachShiftControl(endShift, in: app))
         endShift.tap()
         openFirstShift(in: app)
 
@@ -8776,6 +8787,24 @@ final class DashPilotUITests: XCTestCase {
         return element.isHittable
     }
 
+    /// Drags the list until `element` sits clear of the line below it.
+    ///
+    /// ``TransientUndoBar`` floats over the bottom of the list rather than
+    /// pushing it, so that its arriving and leaving move no card. A control
+    /// partly under it is still reported hittable, and a tap at its centre
+    /// lands on the bar. Small drags, so the control is not carried off the top.
+    @MainActor
+    @discardableResult
+    private func revealAboveBottomBar(_ element: XCUIElement, in app: XCUIApplication) -> Bool {
+        let limit = app.windows.firstMatch.frame.maxY * 0.65
+        for _ in 0..<6 {
+            guard element.exists, element.frame.maxY > limit else { break }
+            let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.6))
+            start.press(forDuration: 0.1, thenDragTo: start.withOffset(CGVector(dx: 0, dy: -150)))
+        }
+        return element.isHittable && element.frame.maxY <= limit
+    }
+
     /// Swipes **up** the screen until `element` is somewhere a tap will land on
     /// it, or returns at once if it already is.
     ///
@@ -8923,7 +8952,7 @@ final class DashPilotUITests: XCTestCase {
         }
 
         let endButton = app.buttons["endShiftButton"]
-        XCTAssertTrue(scrollToTop(reaching: endButton, in: app))
+        XCTAssertTrue(reachShiftControl(endButton, in: app))
         XCTAssertFalse(
             app.buttons["shiftDetailDeliveryEarningsButton"].exists,
             "Not even once the delivery has finished, while the shift is still running"
