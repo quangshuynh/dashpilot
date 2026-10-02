@@ -260,6 +260,23 @@ The Lock Screen card and the Dynamic Island share the vocabulary's words, symbol
 (parked is blue there too) but not its implementation: the widget extension has its own measured
 layout, keeps the system face (which is now the app's face as well), and bundles no font.
 
+## Visual validation
+
+Layout is judged on simulator screenshots, not only on passing journeys. Each screen is checked in
+light and dark mode, at the default size and the largest accessibility size, and with Bold Text, for
+truncation, words broken across lines, a title shrinking to a word a line, clipped controls and
+contrast. Things worth knowing from doing it:
+
+- `ViewThatFits` and a lazy grid both mis-measured inside a list row (an empty block with Bold Text;
+  a wrapped title drawn over the line below). Plain stacks that switch at accessibility sizes are
+  used instead.
+- Large control titles wrap rather than truncate, so a delivery's next step is never `Arrived at…`.
+- The Undo line floats over the bottom of the list on purpose, so a card's step can sit under it.
+
+![A running shift with stacked deliveries](../images/screenshots/home-stacked-deliveries.png){ width="240" }
+![A parked shift](../images/screenshots/home-parked.png){ width="240" }
+![A period summary](../images/screenshots/period-summary.png){ width="240" }
+
 ## Testing the layout
 
 Anything added above a list moves the rows below it, and a `List` renders only rows near the

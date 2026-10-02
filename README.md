@@ -23,6 +23,12 @@ DashPilot is for gig and delivery drivers who want a truthful record of their ow
 shift ran, what it paid, how far the recorded route went, and what those facts imply per hour and
 per mile. It replaces a notebook and a spreadsheet, not the delivery app.
 
+<p align="center">
+  <img src="docs/images/screenshots/home-stacked-deliveries.png" alt="A running shift with stacked deliveries, each with its numbered stop, progress track and next step" width="250">
+  <img src="docs/images/screenshots/home-parked.png" alt="A parked shift: the route is not recording and working time is still counting, with Resume Driving under it" width="250">
+  <img src="docs/images/screenshots/period-summary.png" alt="A day's period summary leading with recorded earnings and their coverage" width="250">
+</p>
+
 It is a general driver tool. It has **no integration with DoorDash or any other platform**, never
 observes or automates those apps, and asks the driver for anything a phone cannot legitimately
 measure.

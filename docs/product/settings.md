@@ -207,8 +207,9 @@ recorded by hand is left alone.
 ### Handle stacked orders in order
 
 **Off unless the driver turns it on, and it does nothing while the workflow is off.** It is drawn
-under the workflow switch and is disabled until that switch is on, with `Needs Pick up orders with
-Park & Resume on` under its name while it is; its own answer is kept either way. It is a separate choice because with two or more orders the one Park acts on is chosen by a
+under the workflow switch, marked as depending on it by a turned arrow before its name, and is
+disabled until that switch is on, with `Needs Pick up orders with Park & Resume on` under its name
+while it is; its own answer is kept either way. It is a separate choice because with two or more orders the one Park acts on is chosen by a
 rule rather than being the only one there is, and parking at a customer's door with another order
 still to collect would mark that order `Arrived at Pickup`. Undo is the way back from exactly that.
 
