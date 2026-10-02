@@ -2322,11 +2322,13 @@ final class DashPilotUITests: XCTestCase {
             "Neither delivery was duplicated by the return, and neither was dropped"
         )
 
-        // And the driver can still see whether the route is being recorded.
-        XCTAssertTrue(app.descendants(matching: .any)["routeCaptureStatus"].exists)
+        // And the driver can still see whether the route is being recorded,
+        // on the line below the cards, with the shift's own controls.
+        XCTAssertTrue(scrollTo(app.descendants(matching: .any)["routeCaptureStatus"], in: app))
 
         // The recovered card is a control over the real record, not a redrawn
         // placeholder: advancing it moves that delivery and leaves the other.
+        XCTAssertTrue(scrollUpUntilHittable(carrying, in: app, maxSwipes: 6))
         carrying.tap()
         XCTAssertTrue(
             waitForCount(app.buttons.matching(identifier: "deliveryActionButton"), toEqual: 1),
@@ -3476,7 +3478,8 @@ final class DashPilotUITests: XCTestCase {
         // where the app is relaunched over a running one and the panel is not
         // where an isolated launch leaves it. Going to the top first and
         // swiping down to the card makes the position the same either way.
-        XCTAssertTrue(reachShiftControl(app.buttons["endShiftButton"], in: app))
+        // From the top of the screen, searching down to the card.
+        XCTAssertTrue(scrollToTop(reaching: app.descendants(matching: .any)["activeShiftStatus"], in: app))
         XCTAssertTrue(scrollUntilHittable(first, in: app), "The card's own button can be pressed where it is")
         first.tap()
 
@@ -4963,8 +4966,10 @@ final class DashPilotUITests: XCTestCase {
         let none = app.staticTexts["shiftDetailNoPauses"]
         XCTAssertTrue(scrollTo(none, in: app), "The section says the shift recorded no pause")
         XCTAssertEqual(none.label, "No pauses recorded")
+        // The control is the section's next row, which a list renders only
+        // once it is near the screen.
         XCTAssertTrue(
-            app.buttons["addMissedPauseButton"].exists,
+            scrollTo(app.buttons["addMissedPauseButton"], in: app, maxSwipes: 3),
             "and still offers the one correction a shift with no pauses needs"
         )
         XCTAssertFalse(app.buttons["editShiftPauseButton"].exists, "There is nothing to edit")
@@ -8716,14 +8721,22 @@ final class DashPilotUITests: XCTestCase {
     private func completeAShift(in app: XCUIApplication) {
         let startButton = app.buttons["startShiftButton"]
         XCTAssertTrue(startButton.waitForExistence(timeout: 10))
+        // Back to the top first: returning from a pushed screen keeps the
+        // list where it was, which can leave Start under the navigation bar.
+        XCTAssertTrue(scrollToTop(reaching: startButton, in: app))
         startButton.tap()
 
         let endButton = app.buttons["endShiftButton"]
-        XCTAssertTrue(endButton.waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            app.descendants(matching: .any)["activeShiftStatus"].waitForExistence(timeout: 5),
+            "The shift is running"
+        )
         XCTAssertFalse(
             app.buttons["editShiftEarningsButton"].exists,
             "Earnings entry must not be offered while the driver may be driving"
         )
+        // End is below the delivery section, so it is searched for.
+        XCTAssertTrue(reachShiftControl(endButton, in: app))
         endButton.tap()
 
         assertTheShiftReachedHistory(in: app)
