@@ -3063,8 +3063,14 @@ final class DashPilotUITests: XCTestCase {
 
         let mileage = app.descendants(matching: .any)["shiftDetailRecordedMileage"]
         XCTAssertTrue(scrollTo(mileage, in: app))
+        // Longer than the helper's 5 s, for a measured reason: on CI run
+        // 36916384792 resolving this element in the shift detail's hierarchy
+        // took 4.2 s on the runner, so the wait evaluated its predicate once
+        // and expired while the label already held the figure (the failure
+        // message read it). The figure is measured in a task after the screen
+        // appears; 15 s allows several evaluations at that cost.
         XCTAssertTrue(
-            waitForLabel(mileage, toContain: "4.5 miles recorded"),
+            waitForLabel(mileage, toContain: "4.5 miles recorded", timeout: 15),
             "The two capture sessions, with nothing measured across the stretch parked: \(mileage.label)"
         )
 
@@ -8983,12 +8989,12 @@ final class DashPilotUITests: XCTestCase {
     /// what they display is read from the label — which is also what a VoiceOver
     /// user hears.
     @MainActor
-    private func waitForLabel(_ element: XCUIElement, toContain text: String) -> Bool {
+    private func waitForLabel(_ element: XCUIElement, toContain text: String, timeout: TimeInterval = 5) -> Bool {
         let expectation = XCTNSPredicateExpectation(
             predicate: NSPredicate(format: "label CONTAINS %@", text),
             object: element
         )
-        return XCTWaiter().wait(for: [expectation], timeout: 5) == .completed
+        return XCTWaiter().wait(for: [expectation], timeout: timeout) == .completed
     }
 
     /// The same wait, on an element's spoken **value** rather than its label.
