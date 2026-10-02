@@ -20,10 +20,11 @@ there is nothing to configure, disable or trust.
 - Deletion is local and permanent. A deleted shift is removed from the device's store, and there is
   no copy anywhere else to remove it from.
 - Location permission is requested at the When In Use scope only, and only when the driver taps.
-- **The voice and Shortcuts actions carry no values and are not donated.** None of the eight intents
+- **The voice and Shortcuts actions carry no values and are not donated.** None of the nine intents
   takes a parameter, so nothing dictated is stored and no shortcut, suggestion or tile holds an
-  amount, a place or a position. The seven the shift's Live Activity performs take none either, and
-  they are not discoverable: Siri and Shortcuts already offer those actions, and a second tile would
+  amount, a place or a position. Of the eight the shift's Live Activity performs, only `Delivered N`
+  takes one: the opaque identifier of the delivery the card named, so a stale card records nothing.
+  It is never a name, an amount or a place. They are not discoverable: Siri and Shortcuts already offer those actions, and a second tile would
   be one more place for the vocabulary to drift. DashPilot does not donate performed intents to the system either:
   App Shortcuts are offered from installation, and a donation would additionally feed the system's
   prediction of what a driver does and when. See

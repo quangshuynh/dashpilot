@@ -151,8 +151,8 @@ route capture nor the Live Activity, because both are about a running shift.
 
 ## System surfaces: App Intents
 
-Eight intents (start, end, pause and resume a shift; park the vehicle and drive again; start a
-delivery; record the next delivery event) can be performed by voice, from Shortcuts or from
+Nine intents (start, end, pause and resume a shift; park the vehicle and drive again; start a
+delivery; record the next delivery event; mark the lowest-numbered picked-up delivery delivered) can be performed by voice, from Shortcuts or from
 Spotlight, with the app never coming to the screen.
 Each
 declares `supportedModes` as `.background`, which is where that guarantee lives and what
@@ -176,6 +176,12 @@ is recorded only while **exactly one** delivery is in progress; with more, nothi
 refusal names the count. That is `DeliveryService`'s own principle, where every mutation takes its
 delivery as a parameter and nothing resolves a target internally, applied where there is nobody to
 supply one.
+
+Mark Delivered, and the Live Activity's `Delivered N`, name their step, so they use a second, narrower
+rule, `OrderedDeliveryCompletion`: the lowest-numbered **picked-up** delivery. Only a picked-up delivery
+can take Delivered, so the step can never land on an order still to collect; the generic step keeps
+`UnambiguousDelivery`. The write goes through `DeliveryProgressService`, the card's own path, so the
+parked handling and its Undo are the existing ones.
 
 Two consequences worth stating:
 

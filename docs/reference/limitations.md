@@ -114,6 +114,21 @@ parking` whose pickups stores may still hold.
 - **Nothing was seen on hardware.** The workflow was asked for after a real shift with the earlier
   switch; this one has been exercised on the simulator only.
 
+## Stacked Delivered and a forgotten Resume Driving
+
+- **Mark Delivered and the Lock Screen's `Delivered N` follow the delivery number, not the door.**
+  With two orders picked up, the lower number is recorded first. A driver at Delivery 4's customer
+  first uses the in-app card, or presses twice and corrects the times afterwards. DashPilot does not
+  guess from location.
+- **One press records one delivery, Same drop-off or not.** A pair to one door takes two presses.
+- **No Undo after Siri or the Lock Screen**, as for every off-screen step.
+- **Nothing resumes driving when the vehicle moves.** Speed is not received while parked, because
+  parking stops location updates; see
+  [A forgotten Resume Driving](../architecture/location.md#a-forgotten-resume-driving-and-why-speed-does-not-end-a-parked-stretch).
+  The Dynamic Island's glyph shows the parking sign while parked, and that is the reminder.
+- **Resume Driving from the Lock Screen still records no route until DashPilot is opened**, as
+  before: a capture session can only start in the foreground.
+
 ## Resuming after delivery progress
 
 - **It follows the driver's taps, not the vehicle.** A step recorded while parked resumes driving when

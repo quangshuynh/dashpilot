@@ -57,7 +57,7 @@ measure.
   times, an accidental Delivered, a delivery that was really cancelled, or how deliveries were
   grouped into offers.
 - **Live Activity and App Intents.** The running shift on the Lock Screen and in the Dynamic
-  Island, with its lifecycle controls, and eight short voice or Shortcuts actions that work without
+  Island, with its lifecycle controls, and nine short voice or Shortcuts actions that work without
   opening the app.
 - **Export.** JSON and CSV for one shift, a period or all history, written locally and handed to
   the share sheet.
