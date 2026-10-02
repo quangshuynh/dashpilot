@@ -114,8 +114,8 @@ else. The documentation toolchain (MkDocs) is a build-time dependency only.
 ## Continuous integration
 
 CI builds both test bundles and runs both suites on every pull request and every push to `main`. A
-release should be cut only from a commit whose CI run is green. The job's 180-minute budget had about
-18 minutes to spare on the slowest recent run; see
+release should be cut only from a commit whose CI run is green. The job's budget is 210 minutes,
+about half an hour over the slowest measured run (2h54m); see
 [How long a run takes](testing.md#how-long-a-run-takes-and-the-budget-it-is-given).
 
 ## Before tagging

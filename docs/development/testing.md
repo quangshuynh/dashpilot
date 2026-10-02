@@ -592,14 +592,16 @@ no test is retried to make a run pass.
 
 ### How long a run takes, and the budget it is given
 
-The job's `timeout-minutes` is **180**, and the number is measured rather than chosen for comfort.
+The job's `timeout-minutes` is **210**, and the number is measured rather than chosen for comfort.
 
 The latest measured runs, with 238 to 242 tests, took **2h28m to 2h42m** end to end (runs
 36963445708, 36947255282, 36946410015, 36916384792, 36916358022 and 36963465798): 2 to 4 minutes of
 `build-for-testing`, 5 to 8 of domain tests and 2h17m to 2h26m of UI journeys, about 35 seconds a
-journey on the runner against about 28 locally. The slowest leaves about 18 minutes, which is the
-margin to watch: it is still a ceiling a healthy run stays under, and it is not raised until a run
-that was making progress actually reaches it.
+journey on the runner against about 28 locally. Main's run 37007996270, on the same 242 tests, then
+took **2h54m**, with the UI journeys alone at 2h34m: six minutes inside the previous budget of 180,
+while runs of one tree vary by about a quarter of an hour. That is what raised it to 210, which
+leaves about half an hour over the slowest measured run. It is still a ceiling a healthy run stays
+under, not a target, and it is raised again only by a run that was making progress and reached it.
 
 The figures below are the history that set the number.
 
@@ -613,9 +615,9 @@ at.
 
 Two things follow from this and are worth stating, because a cancelled run reads like a failing one:
 
-- **The budget is a ceiling for a hung run, not a target.** A healthy run finishes inside half of it.
-  If a run reaches 180 minutes, something has stopped making progress and the answer is to read the
-  result bundle, not to raise the number again.
+- **The budget is a ceiling for a hung run, not a target.** A healthy run finishes well inside it.
+  If a run reaches the budget, read the result bundle first: a run that had stopped making progress
+  is a defect to find, and only one that was still passing journeys is evidence for a larger number.
 - **A cancelled run's last log line is not a diagnosis.** Run 35553963157 was cancelled while a
   journey naming `fuelMilesPerGallonField` was on screen, and that journey was not failing; it was
   simply the one the clock landed on. Read the result bundle, which is uploaded on cancellation as
