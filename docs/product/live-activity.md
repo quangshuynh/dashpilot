@@ -113,7 +113,8 @@ rules permit:
 | --- | --- |
 | Running, with no delivery open | **Start Delivery**, **Park Vehicle**, **Pause Shift**, **End Shift** |
 | Running, with exactly one delivery open | That delivery's next step (**Arrived at Pickup**, then **Picked Up**, then **Delivered**), **Start Delivery**, **Park Vehicle** |
-| Running, with two or more deliveries open | **Start Delivery**, **Park Vehicle**, and the reason there is no step |
+| Running, with two or more deliveries open, at least one picked up | **Delivered N** for the lowest-numbered picked-up delivery, **Start Delivery**, **Park Vehicle** |
+| Running, with two or more deliveries open, none picked up | **Start Delivery**, **Park Vehicle**, and the reason there is no step |
 | Parked | **Resume Driving** first, then whatever the row above offers, with **Park Vehicle** replaced |
 | Paused | **Resume Shift**, **End Shift** |
 
@@ -211,9 +212,22 @@ rather than a wrong write.
 
 ### The refusal that is the point
 
-With two orders in the car there is no "the delivery". A Lock Screen button names no particular
+With two orders in the car there is no "the delivery". A "next step" button names no particular
 order, and every way of choosing one (the newest, the oldest, the one furthest along) would write a
-driver's tap into a record they did not mean. So the card offers no step at all and says so:
+driver's tap into a record they did not mean. So the card offers no next step.
+
+**Delivered is the exception, because it names its step.** Only a picked-up order can be delivered,
+so when at least one is, the card offers `Delivered 3`: the lowest-numbered picked-up delivery, by the
+same rule as [Mark Delivered](voice-actions.md#mark-delivered-names-its-step). The number is printed so
+the driver sees which order the press records, and VoiceOver says `Mark delivery 3 delivered`. The
+button carries that delivery's identifier: if the card is out of date when it is pressed, so that the
+rule would now choose another delivery, nothing is recorded and the card is rebuilt. Pressing it again
+offers the next one, and once one delivery is left the card shows that delivery's own step. It takes
+the place a single delivery's step would take, so the card's height and the parked pair's lead are
+unchanged: under the pickup workflow `Park Vehicle` still comes first, and while parked
+`Resume Driving` does. One press records one delivery, Same drop-off or not.
+
+With nothing picked up, the card offers no step at all and says so:
 
 > Open DashPilot to record a step
 
@@ -231,8 +245,8 @@ same rule the spoken step follows, from the same place in the code. See
 order it belongs to, and with two open there is no answer. Starting one has to know nothing about the
 orders already running.
 
-Two deliveries of **one offer** are two deliveries, so they withhold the step exactly as two offers
-do. The card counts deliveries and never offers: it says `2 deliveries in progress` whether they
+Two deliveries of **one offer** are two deliveries, so they withhold the next step exactly as two
+offers do. The card counts deliveries and never offers: it says `2 deliveries in progress` whether they
 arrived in one acceptance or two, and it carries no offer wording at all.
 
 ## The clock counts itself
@@ -304,8 +318,10 @@ says whether capture is running right now, and why it is not, is the app's own s
   island is a second reading of the same card on the hardware that has one, and no fact appears only
   there. Its expanded presentation draws the same header, the orders as far as its smaller region has
   room, and the same controls in the same order, and no mileage line. Its compact and minimal
-  presentations carry no control at all and are unchanged by the parked pair and by the layout; the minimal one's single spoken value does gain the parked sentence, because it is the
-  only line a listener has there.
+  presentations carry no control. Their glyph is the recording dot (red) while driving, the pause
+  symbol (orange) while paused, and **the parking sign (blue) while parked**, read aloud as the parked
+  sentence. That glyph is what a driver sees with another app in front, so a forgotten Resume Driving
+  no longer looks like recording.
 - **Nothing about the vehicle.** The card carries no vehicle name, no miles per gallon and no gas
   price. Parking is a statement about whether the vehicle is moving, and it needed none of them.
 

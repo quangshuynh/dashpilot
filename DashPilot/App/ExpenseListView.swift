@@ -43,9 +43,8 @@ struct ExpenseListView: View {
             } footer: {
                 Text(
                     """
-                    Fuel, parking, tolls, maintenance and supplies you paid for, as you choose to \
-                    record them. DashPilot records no purchase on its own and estimates none, so \
-                    this is only what you enter.
+                    Fuel, parking, tolls, maintenance and supplies you paid for. DashPilot records and \
+                    estimates none on its own, so this is only what you enter.
                     """
                 )
             }

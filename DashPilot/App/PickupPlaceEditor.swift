@@ -135,10 +135,9 @@ struct PickupPlaceEditor: View {
         } footer: {
             Text(
                 """
-                The name you know this pickup by, kept on this device. DashPilot looks nothing up: \
-                there is no address, no map and no connection to any delivery platform. A name that \
-                matches one you have used before — in any capitalisation or spacing — records the \
-                same place rather than a second one.
+                The name you know this pickup by, kept on this device. DashPilot looks nothing up: no \
+                address, no map, no platform. A name matching one you used before, ignoring \
+                capitalisation and spacing, records the same place.
                 """
             )
         }

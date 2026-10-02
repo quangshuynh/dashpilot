@@ -57,9 +57,11 @@ struct ShiftLiveActivity: Widget {
                 ShiftActivityIslandBottom(state: state)
             }
         } compactLeading: {
-            Image(systemName: state.statusSymbolName)
-                .foregroundStyle(state.isPaused ? .orange : .red)
-                .accessibilityLabel(state.statusTitle)
+            // The header's symbol and words, so parked shows the parking sign
+            // rather than the recording dot.
+            Image(systemName: state.headerSymbolName)
+                .foregroundStyle(tint(for: state))
+                .accessibilityLabel(state.spokenHeaderTitle)
         } compactTrailing: {
             // The count of open deliveries rather than a distance. A mileage
             // figure with the word "recorded" trimmed off to fit is exactly the
@@ -73,11 +75,21 @@ struct ShiftLiveActivity: Widget {
             // One glyph, and nothing to read it by. The whole snapshot is the
             // spoken value here, because this is the presentation where a
             // listener has no other line to fall back on.
-            Image(systemName: state.statusSymbolName)
-                .foregroundStyle(state.isPaused ? .orange : .red)
-                .accessibilityLabel(state.statusTitle)
+            Image(systemName: state.headerSymbolName)
+                .foregroundStyle(tint(for: state))
+                .accessibilityLabel(state.spokenHeaderTitle)
                 .accessibilityValue(state.spokenSummary)
         }
-        .keylineTint(state.isPaused ? .orange : .red)
+        .keylineTint(tint(for: state))
+    }
+
+    /// Red while recording, orange while paused, blue while parked: never the
+    /// recording red for a route that is not being recorded.
+    private func tint(for state: ShiftActivityAttributes.ContentState) -> Color {
+        switch state.compactStatus {
+        case .running: .red
+        case .paused: .orange
+        case .parked: .blue
+        }
     }
 }

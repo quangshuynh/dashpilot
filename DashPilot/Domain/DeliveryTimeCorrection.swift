@@ -331,7 +331,7 @@ nonisolated enum DeliveryTimeCorrectionStatement {
     /// demand, so all of them move together and none of them is rewritten.
     static let derivedFiguresMove = """
         Changing these times changes how long this delivery took, how long you waited at the pickup, \
-        what it paid per recorded delivery hour, and how much of the shift was delivery active time.
+        its pay per recorded delivery hour, and the shift's delivery active time.
         """
 
     /// The promise this correction makes about physical route evidence, which is
@@ -341,21 +341,21 @@ nonisolated enum DeliveryTimeCorrectionStatement {
     /// a driver who has just moved a completion back by twenty minutes might
     /// reasonably expect the mileage to have fallen with it, and it has not.
     static let routeIsNotChanged = """
-        Your recorded route and this shift's recorded mileage are not changed. This corrects what \
-        you recorded about the delivery, not where the phone recorded being.
+        Your recorded route and recorded mileage are not changed: this corrects what you recorded \
+        about the delivery, not where the phone was.
         """
 
     /// The promise it makes about everything else on the record.
     static let recordIsOtherwiseUnchanged = """
-        Nothing else moves: the delivery stays finished as it is recorded now, and its pickup place, \
-        the offer it arrived in, what it paid and any tips stay exactly as they are.
+        Nothing else moves: the delivery stays finished, and its pickup place, offer, pay and tips stay \
+        as they are.
         """
 
     /// The rule the driver meets when one of these times collides with another,
     /// said once on the sheet so that a refusal below it reads as the rule
     /// rather than as a failure.
     static let eachTimeIsCorrectedExplicitly = """
-        These times have to stay in the order they happened, and inside this shift. DashPilot never \
-        moves one of them to make room for another, so correct each one you need to.
+        These times have to stay in order and inside this shift. DashPilot never moves one of them to \
+        make room for another, so correct each one you need.
         """
 }

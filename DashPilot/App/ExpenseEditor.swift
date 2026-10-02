@@ -100,9 +100,8 @@ struct ExpenseEditor: View {
         } footer: {
             Text(
                 """
-                What this cost, as you choose to record it. DashPilot sees no purchase of its own: \
-                nothing is read from a card, a receipt or an app, and no cost is estimated from your \
-                mileage.
+                What this cost, as you record it. DashPilot reads no card, receipt or app, and \
+                estimates no cost from your mileage.
                 """
             )
         }
@@ -136,8 +135,8 @@ struct ExpenseEditor: View {
         } footer: {
             Text(
                 """
-                An expense belongs to the date you give it, not to a shift. DashPilot does not attach \
-                costs to shifts or deliveries, and never divides one across your work.
+                An expense belongs to the date you give it, not to a shift. DashPilot never attaches a \
+                cost to a shift or delivery, or divides one across your work.
                 """
             )
         }
@@ -155,9 +154,8 @@ struct ExpenseEditor: View {
         } footer: {
             Text(
                 """
-                A short reminder of which purchase this was, up to \(ExpenseNote.maximumLength) \
-                characters. It stays on this device and is never logged, and it is included in an \
-                export you choose to share.
+                A short reminder of the purchase, up to \(ExpenseNote.maximumLength) characters. It \
+                stays on this device, is never logged, and is included in an export you share.
                 """
             )
         }

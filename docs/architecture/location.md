@@ -198,6 +198,45 @@ while the screen still said tracking. `CoreLocationTrackingProvider.configure(_:
 `pausesLocationUpdatesAutomatically` to `false`, alongside best accuracy, the automotive activity
 type and no distance filter. It is exactly as wrong off screen as on it.
 
+### A forgotten Resume Driving, and why speed does not end a parked stretch
+
+A driver who walks back to the vehicle and drives off without tapping Resume Driving records no
+route until they notice. Resuming automatically above some speed was investigated and **not
+built**. What the code shows:
+
+| Question | Answer |
+| --- | --- |
+| What reaches the app | Timestamp, latitude, longitude and horizontal accuracy. `LocationSample(CLLocation)` discards speed, course and altitude at the provider boundary. |
+| Is speed persisted | No. `RouteSample` has no speed column, and adding one is a schema change with nothing to backfill. |
+| What Park does to updates | `prepareForRouteSuspension()` calls `stopUpdatingLocation()` and clears `allowsBackgroundLocationUpdates`. No position, and so no speed, arrives while parked. |
+| Can updates restart while parked | Only in the foreground. Under When In Use a session cannot begin in the background, which is where a driver with the delivery app in front is. |
+| Observing speed without recording the walk | Only by keeping `CLLocationManager` running at best accuracy through every parked stretch, with background updates on, and discarding the positions. That is the walking track Park exists not to collect, and it keeps the location indicator on inside every shop. |
+| Battery | GPS would run through every pickup wait instead of stopping. Not measured on hardware; the Live Activity's own cost is not measured either. |
+| New permission | None for speed alone. Core Motion activity would need Motion & Fitness authorization, which the project has refused before. |
+| Reliability | Doppler speed is `-1` when invalid and degrades with accuracy: in a car park, a tunnel or a building, and with drift while stationary. Walking quickly, a bicycle or riding as a passenger would read as movement. None of this is measured in the repository. |
+| False resume | A resume opens a new capture session. A wrong one records the walk or a ride as recorded mileage. |
+| Undo | The pieces exist: `DeliveryProgressService.undo` reopens the stretch (`Shift.reopenRouteSuspension`) and deletes positions recorded after it closed in one save. An automatic resume would need a third Undo kind, offered only in the app, after the false mileage had been recorded. |
+| Pause | Not affected: a paused shift is never parked, and pausing closes an open stretch. |
+| Delivery-progress resume | Already closes a stretch from a recorded Picked Up or Delivered. A speed rule would be a second, competing writer. |
+
+The strategies compared:
+
+| Strategy | Verdict |
+| --- | --- |
+| A. Speed threshold | Rejected: no speed arrives while parked, and a single reading is noise-prone |
+| B. Sustained speed | Rejected: same data dependency, plus seconds of walking or riding recorded before it fires |
+| C. Displacement and speed | Rejected: needs the parked track recorded or held |
+| D. Reminder after a parked duration | Deferred: a notification needs a new authorization, and no duration separates a long pickup from a forgotten tap |
+| E. Reminder when the app becomes active | Not needed: the panel already leads with Resume Driving while parked |
+| F. Notification or Live Activity reminder | Partly built, as G |
+| G. Stronger Resume affordance | **Built** |
+| H. Infer from delivery progress | Already exists, as the opt-in Resume driving after delivery progress |
+
+**What was built (G).** The Dynamic Island's compact and minimal glyph, which is what a driver sees
+with another app in front, used the red recording dot whether or not the route was recording. While
+parked it now shows the parking sign, tinted blue, and VoiceOver reads the parked sentence. Nothing
+is recorded, inferred or written; the glyph follows the stored parked state.
+
 ### The acceptance policy
 
 Core Location hands back whatever the hardware produced: cached fixes from minutes ago, positions

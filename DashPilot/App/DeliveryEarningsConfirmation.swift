@@ -119,8 +119,7 @@ struct DeliveryEarningsConfirmation: View {
                     Text(
                         """
                         What \(numbered.title) actually paid. Change it if it differs from what you \
-                        expected. This is the amount DashPilot records, and the only one its totals \
-                        and rates are worked out from.
+                        expected; only this amount counts toward totals and rates.
                         """
                     )
                 }

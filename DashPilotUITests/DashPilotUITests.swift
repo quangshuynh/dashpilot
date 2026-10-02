@@ -3053,6 +3053,51 @@ final class DashPilotUITests: XCTestCase {
         )
     }
 
+    /// Two orders picked up: the card offers Delivered for the lower number
+    /// beside Resume Driving, inside its height, and falls back to the one
+    /// delivery's own step once the first is delivered.
+    @MainActor
+    func testLiveActivityOffersDeliveredInOrderForStackedOrders() throws {
+        let app = launchWithLiveActivityPreview()
+        app.buttons["startShiftButton"].tap()
+        XCTAssertTrue(app.descendants(matching: .any)["liveActivityPreview"].waitForExistence(timeout: 5))
+        startOffer(expectingCards: 2, in: app)
+
+        for name in ["Delivery 1", "Delivery 2"] {
+            let action = deliveryButton("deliveryActionButton", containing: name, in: app)
+            for next in ["Mark order picked up", "Mark delivery completed"] {
+                XCTAssertTrue(scrollUntilHittable(action, in: app))
+                action.tap()
+                XCTAssertTrue(waitForLabel(action, toContain: next), "\(name): \(action.label)")
+            }
+        }
+
+        let card = app.descendants(matching: .any)["liveActivityPreview"]
+        XCTAssertTrue(scrollToTop(reaching: card, in: app))
+        XCTAssertEqual(
+            activityControls(in: app),
+            ["activityControl.nextDelivered", "activityControl.startDelivery", "activityControl.park"]
+        )
+        let delivered = card.buttons["activityControl.nextDelivered"]
+        XCTAssertEqual(delivered.label, "Mark delivery 1 delivered", "The control names the order it records")
+
+        pressPark(in: app)
+        XCTAssertTrue(scrollToTop(reaching: card, in: app))
+        XCTAssertEqual(
+            activityControls(in: app),
+            ["activityControl.resumeDriving", "activityControl.nextDelivered", "activityControl.startDelivery"]
+        )
+        assertInsideTheCard("activityControl.resumeDriving", in: app)
+        assertInsideTheCard("activityControl.nextDelivered", in: app)
+
+        let first = deliveryButton("deliveryActionButton", containing: "Delivery 1", in: app)
+        XCTAssertTrue(scrollUntilHittable(first, in: app))
+        first.tap()
+        XCTAssertTrue(scrollToTop(reaching: card, in: app))
+        XCTAssertTrue(card.buttons["activityControl.deliveryStep"].waitForExistence(timeout: 5))
+        XCTAssertFalse(card.buttons["activityControl.nextDelivered"].exists, "One left: its own step again")
+    }
+
     /// A completed shift that was parked says how much of its short route the
     /// driver asked for, and reports every minute of it as worked.
     @MainActor
@@ -6946,7 +6991,15 @@ final class DashPilotUITests: XCTestCase {
         // then lands nowhere and the wheels stay up, which is how this failed on
         // a CI runner. A coordinate inside the bar is outside the popover either
         // way, and a touch there is what closes it.
-        app.navigationBars.firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        //
+        // The bar is the **sheet's**, the lowest on screen. `firstMatch` was
+        // the presenting screen's bar, which the sheet covers, so where that
+        // point landed depended on the sheet's geometry: CI run 36947255282
+        // tapped (201, 89), the centre of the shift detail's bar behind the
+        // editor, and the wheels stayed up.
+        let bars = app.navigationBars.allElementsBoundByIndex
+        let sheetBar = bars.max { $0.frame.minY < $1.frame.minY } ?? app.navigationBars.firstMatch
+        sheetBar.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         XCTAssertTrue(
             waitForDisappearance(of: app.pickerWheels.firstMatch),
             "The wheels close, so the rest of the form can be reached"

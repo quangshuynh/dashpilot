@@ -162,10 +162,9 @@ struct FuelAssumptionsEditor: View {
     /// the driving DashPilot did not record.
     private var footerStatement: String {
         let common = """
-            DashPilot estimates fuel as recorded miles divided by miles per gallon, priced at this gas \
-            price. Both are your own assumptions, kept on this device and kept with this shift: \
-            entering different figures later does not change any shift you have already recorded. \
-            This is an estimate, not a recorded expense.
+            Fuel is estimated as recorded miles divided by miles per gallon, priced at this gas price. \
+            Both are your assumptions, kept with this shift: entering different figures later changes \
+            no recorded shift. This is an estimate, not a recorded expense.
             """
         guard isSeededFromElsewhere else { return common }
         return """

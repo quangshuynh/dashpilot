@@ -130,8 +130,60 @@ struct ShiftActivityCardLayoutTests {
                     controls: [.resumeDriving, .startDelivery]
                 )
             ),
+            (
+                "two picked up, Delivered offered",
+                state(
+                    timers: [timer(3, "To customer", minutesAgo: 20), timer(4, "To customer", minutesAgo: 18)],
+                    controls: [Self.delivered(3), .startDelivery, .park]
+                )
+            ),
+            (
+                "two picked up, workflow on",
+                state(
+                    timers: [timer(3, "To customer", minutesAgo: 20), timer(4, "To customer", minutesAgo: 18)],
+                    controls: [.park, Self.delivered(3), .startDelivery]
+                )
+            ),
+            (
+                "two picked up, parked",
+                state(
+                    parked: true,
+                    timers: [timer(3, "To customer", minutesAgo: 20), timer(4, "To customer", minutesAgo: 18)],
+                    controls: [.resumeDriving, Self.delivered(3), .startDelivery]
+                )
+            ),
+            (
+                "same drop-off pair, one row, parked",
+                state(
+                    parked: true,
+                    timers: [
+                        ShiftActivityDeliveryTimer(
+                            title: "Deliveries 3 and 4",
+                            stateLabel: "To customer",
+                            startedAt: asOf.addingTimeInterval(-20 * 60),
+                            deliveryCount: 2
+                        )
+                    ],
+                    controls: [.resumeDriving, Self.delivered(3), .startDelivery]
+                )
+            ),
+            (
+                "four in progress, Delivered 12, parked",
+                state(
+                    parked: true,
+                    timers: [
+                        timer(11, "To pickup", minutesAgo: 30), timer(12, "To customer", minutesAgo: 25),
+                        timer(13, "To customer", minutesAgo: 9), timer(14, "At pickup", minutesAgo: 2)
+                    ],
+                    controls: [.resumeDriving, Self.delivered(12), .startDelivery]
+                )
+            ),
             ("paused", state(paused: true, controls: [.resume, .end]))
         ]
+    }
+
+    private static func delivered(_ number: Int) -> ShiftActivityControl {
+        .nextDelivered(number: number, deliveryID: UUID(uuidString: "00000000-0000-0000-0000-00000000000\(number % 10)")!)
     }
 
     /// The card's height at `width` and `size`, laid out by SwiftUI itself.
@@ -235,6 +287,27 @@ struct ShiftActivityCardLayoutTests {
         #expect(pair.footnote == "Open DashPilot to record a step")
     }
 
+    @Test("Stacked with Delivered offered: both rows at the default size, nothing claiming a step is withheld")
+    func stackedWithDelivered() throws {
+        let pair = try #require(states.first { $0.0 == "two picked up, parked" }?.1)
+
+        let standard = ShiftActivityCardLayout(state: pair, surface: .lockScreen, textSize: .standard)
+        #expect(standard.deliveryRows.map(\.title) == ["Delivery 3", "Delivery 4"])
+        #expect(standard.footnote == nil)
+        #expect(standard.controlRows == [[.resumeDriving, Self.delivered(3)], [.startDelivery]])
+
+        // One line at xLarge: no row fits beside its sibling, so the count is
+        // stated, and it does not say "more" over rows that were not drawn.
+        let larger = ShiftActivityCardLayout(state: pair, surface: .lockScreen, textSize: .larger)
+        #expect(larger.deliveryRows.isEmpty)
+        #expect(larger.footnote == "2 in progress")
+        #expect(larger.spokenFootnote == "2 deliveries in progress. Open DashPilot for their timers.")
+
+        let merged = try #require(states.first { $0.0 == "same drop-off pair, one row, parked" }?.1)
+        let one = ShiftActivityCardLayout(state: merged, surface: .lockScreen, textSize: .larger)
+        #expect(one.deliveryRows.map(\.title) == ["Deliveries 3 and 4"], "A merged row still fits at xLarge")
+    }
+
     @Test("The island never draws the mileage line, and draws no order row beside two rows of controls")
     func island() throws {
         for (name, state) in states {
@@ -268,5 +341,23 @@ struct ShiftActivityCardLayoutTests {
         #expect(running.headerTitle == "Shift in Progress")
         let paused = try #require(states.last?.1)
         #expect(paused.headerTitle == "Shift Paused")
+    }
+
+    /// The island's compact and minimal glyph is what a driver sees with
+    /// another app in front. A forgotten Resume Driving must not look like
+    /// recording there.
+    @Test("The island's glyph is the parking sign while parked, never the recording dot")
+    func compactGlyph() throws {
+        let parked = try #require(states.first { $0.0 == "one arrived, parked" }?.1)
+        #expect(parked.compactStatus == .parked)
+        #expect(parked.headerSymbolName != parked.statusSymbolName, "Not the record dot")
+
+        let running = try #require(states.first?.1)
+        #expect(running.compactStatus == .running)
+        #expect(running.headerSymbolName == "record.circle")
+
+        let paused = try #require(states.last?.1)
+        #expect(paused.compactStatus == .paused)
+        #expect(paused.headerSymbolName == "pause.circle.fill")
     }
 }

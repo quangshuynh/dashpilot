@@ -162,7 +162,8 @@ struct AppIntentTests {
             Metadata(ParkVehicleIntent.self),
             Metadata(ResumeDrivingIntent.self),
             Metadata(StartDeliveryIntent.self),
-            Metadata(RecordDeliveryProgressIntent.self)
+            Metadata(RecordDeliveryProgressIntent.self),
+            Metadata(RecordDeliveredIntent.self)
         ]
     }
 
@@ -194,7 +195,8 @@ struct AppIntentTests {
             "Park Vehicle",
             "Resume Driving",
             "Start Delivery",
-            "Record Delivery Progress"
+            "Record Delivery Progress",
+            "Mark Delivered"
         ])
         for intent in everyIntent {
             let description = try #require(intent.description, "\(intent.title) reaches Shortcuts with no explanation")
@@ -345,9 +347,16 @@ struct AppIntentTests {
         #expect(resume.lowercased().contains("open dashpilot"), "A session can only be started in the foreground")
     }
 
-    @Test("Eight shortcuts are offered, and they are the eight lifecycle actions")
+    @Test("Nine shortcuts are offered, and they are the nine lifecycle actions")
     func shortcutsCoverTheLifecycleActionsOnly() {
-        #expect(DashPilotShortcuts.appShortcuts.count == 8)
+        #expect(DashPilotShortcuts.appShortcuts.count == 9)
+    }
+
+    @Test("Mark Delivered's description says which delivery it records and what it leaves alone")
+    func deliveredIntentDescribesItsRule() throws {
+        let description = try #require(Metadata(RecordDeliveredIntent.self).description)
+        #expect(description.contains("lowest-numbered picked-up delivery"))
+        #expect(description.contains("not yet picked up are not changed"))
     }
 
     // MARK: Parking and driving again
@@ -598,13 +607,15 @@ struct AppIntentTests {
         #expect(EndShiftFromActivityIntent.isDiscoverable == false)
         #expect(StartDeliveryFromActivityIntent.isDiscoverable == false)
         #expect(RecordDeliveryProgressFromActivityIntent.isDiscoverable == false)
+        #expect(RecordDeliveredFromActivityIntent.isDiscoverable == false)
+        #expect(RecordDeliveredFromActivityIntent.authenticationPolicy == .alwaysAllowed)
         #expect(ParkVehicleFromActivityIntent.isDiscoverable == false)
         #expect(ResumeDrivingFromActivityIntent.isDiscoverable == false)
 
         #expect(PauseShiftIntent.isDiscoverable, "The spoken action is the discoverable one")
         #expect(ParkVehicleIntent.isDiscoverable, "And it is the one that parks, too")
         #expect(StartDeliveryIntent.isDiscoverable, "And it is the one that starts a delivery, too")
-        #expect(DashPilotShortcuts.appShortcuts.count == 8, "And the shortcut count is unchanged by them")
+        #expect(DashPilotShortcuts.appShortcuts.count == 9, "And the shortcut count is unchanged by them")
     }
 
     // MARK: A shared pickup, from every surface
@@ -716,6 +727,36 @@ struct AppIntentTests {
             let deliveries = try context.fetch(FetchDescriptor<Delivery>())
             #expect(deliveries.count == 2)
             #expect(deliveries.allSatisfy { $0.state == .accepted }, "Neither delivery was advanced")
+        }
+    }
+
+    @Test("The stacked Delivered control records the delivery it names, and nothing for a stale or unreadable one")
+    func activityDeliveredIntent() async throws {
+        try await withStore { context in
+            _ = try await StartShiftIntent().perform()
+            let service = DeliveryService(context: context)
+            let first = try service.startDelivery()
+            let second = try service.startDelivery()
+            for delivery in [first, second] {
+                try service.markArrivedAtPickup(delivery)
+                try service.markPickedUp(delivery)
+            }
+
+            await #expect(throws: IntentLifecycleError.deliveredTargetChanged) {
+                _ = try await RecordDeliveredFromActivityIntent(deliveryID: second.id).perform()
+            }
+            await #expect(throws: ShiftActivityStaleControl.self) {
+                let unreadable = RecordDeliveredFromActivityIntent()
+                unreadable.deliveryID = "not an identifier"
+                _ = try await unreadable.perform()
+            }
+            #expect([first.state, second.state] == [.pickedUp, .pickedUp], "Neither refusal wrote anything")
+
+            _ = try await RecordDeliveredFromActivityIntent(deliveryID: first.id).perform()
+            #expect([first.state, second.state] == [.delivered, .pickedUp])
+
+            _ = try await RecordDeliveredIntent().perform()
+            #expect(second.state == .delivered, "Siri's Mark Delivered records the next one")
         }
     }
 

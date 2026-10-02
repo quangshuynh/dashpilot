@@ -217,8 +217,8 @@ struct DeliveryControlPanel: View {
         } message: { numbered in
             Text(
                 """
-                \(numbered.title) is kept in this shift's history as cancelled, with the times you \
-                already recorded. Nothing is deleted, and your other deliveries are not affected.
+                \(numbered.title) stays in this shift's history as cancelled, with the times already \
+                recorded. Nothing is deleted, and other deliveries are not affected.
                 """
             )
         }

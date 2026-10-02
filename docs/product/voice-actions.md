@@ -1,6 +1,6 @@
 # Voice and system actions
 
-The eight shortest actions in DashPilot can be performed without looking at the phone: by voice, from
+The nine shortest actions in DashPilot can be performed without looking at the phone: by voice, from
 the Shortcuts app, from Spotlight, or from anywhere else iOS offers an App Shortcut. This is the
 driving-safety case the app is designed around. A start time recorded when the driver says so is more
 accurate than one recorded three minutes later, once the phone has been picked up, unlocked and
@@ -21,6 +21,7 @@ every rule that refuses a tap refuses a sentence.
 | Resume Driving | The end of the parked stretch, after which recording begins again as a new recording | No shift is running, or it is not recorded as parked |
 | Start Delivery | One delivery accepted now, in an offer of one, alongside any already running | No shift is running, or the shift is paused |
 | Record Delivery Progress | The next event of the delivery in progress: arrived at the pickup, then picked up, then delivered | No shift is running, no delivery is in progress, or **more than one delivery is in progress** |
+| Mark Delivered | Delivered, for the **lowest-numbered picked-up** delivery | No shift is running, no delivery is in progress, or none is picked up |
 
 Suggested phrases, offered by the system as soon as the app is installed:
 
@@ -32,6 +33,7 @@ Suggested phrases, offered by the system as soon as the app is installed:
 - "Resume driving in DashPilot", "I am driving again in DashPilot"
 - "Start a delivery in DashPilot"
 - "Record delivery progress in DashPilot"
+- "Mark delivered in DashPilot"
 
 None of them opens the app. An action that put a screen in front of the driver would be slower than
 the tap it is meant to replace.
@@ -46,11 +48,27 @@ A spoken "record the next step" has no card. With two deliveries in progress it 
 them, and every way of choosing one (the newest, the oldest, the one furthest along) would write a
 driver's sentence into a record they did not mean. So DashPilot records nothing and says so:
 
-> 2 deliveries are in progress, so DashPilot cannot tell which one you mean. Open DashPilot and
-> record the step on that delivery.
+> 2 deliveries are in progress, so DashPilot cannot tell which one you mean. Open DashPilot to
+> choose, or use Mark Delivered for the lowest-numbered picked-up one.
 
 The refusal lifts by itself. Once one of the two has been delivered or cancelled, the next spoken
 step reaches the one that is left.
+
+### Mark Delivered names its step
+
+`Mark Delivered` says which step, so only a picked-up delivery can take it: an order still to
+collect, at a pickup, or already finished is never changed. Of the picked-up ones it records the
+**lowest delivery number**, the order Park's stacked selection already uses. Say it again for the
+next. With Delivery 3 and Delivery 4 both picked up, the first press records 3 and the second records
+4; the confirmation names which.
+
+One press records one delivery, including deliveries marked
+[Same drop-off](delivery-lifecycle.md#same-pickup-and-same-drop-off). Same drop-off is a statement
+that two orders go to one door, and the driver's own Delivered on the in-app card has always recorded
+one delivery per tap; a grouped completion would be a second meaning for the same press. With
+[Resume driving after delivery progress](settings.md) on, the group still keeps the vehicle parked
+until every member is delivered, because the step goes through the same path the card uses. Nothing
+reads location to guess which customer the driver is at.
 
 `Park Vehicle` and `Resume Driving` are not affected either, and for a different reason: whether the
 vehicle is moving is a fact about the driver and their vehicle rather than about any one order. One
@@ -69,8 +87,9 @@ over them exactly as it is over two separate offers. Recording an offer that hel
 needs a count, which is a number to get right on a screen rather than a sentence said at a junction:
 it is in the app only. See [Offers and deliveries](delivery-lifecycle.md#offers-and-deliveries).
 
-The shift's Live Activity applies the same rule from the same place in the code, and shows it rather
-than only saying it: with two deliveries open the card offers no step control at all. See
+The shift's Live Activity applies the same rules from the same place in the code: with two
+deliveries open the card offers no "next step", and offers `Delivered N` for the lowest-numbered
+picked-up one when there is one. See
 [The shift on the Lock Screen](live-activity.md#the-refusal-that-is-the-point).
 
 ## What the driver hears back
@@ -82,8 +101,7 @@ There is no screen to glance at afterwards, so the confirmation is the whole rep
 - "Shift paused after 2 hours, 30 minutes of working time. Route recording is stopped until you
   resume."
 - "Shift resumed after 45 minutes paused. Open DashPilot to start recording your route again."
-- "Vehicle parked. Route recording is stopped until you resume driving. Your shift is still running
-  and its working time is still counting."
+- "Vehicle parked. Route recording is stopped until you resume driving. Your shift is still running."
 - "Driving again after 25 minutes parked. Open DashPilot to start recording your route again."
 - "Delivery 2 started. 2 deliveries in progress."
 - "Delivery 1 recorded as picked up."
@@ -135,7 +153,7 @@ waits.
 | Anything about location | Nothing about position is asked for or reported here. `Park Vehicle` is a statement the driver makes about their vehicle, not a position DashPilot reads |
 | Reading back a summary, a rate or a total | A figure heard without its coverage and its wording is a figure misread |
 
-None of the eight intents takes a parameter, so nothing a driver says is stored, and no shortcut,
+None of the nine intents takes a parameter, so nothing a driver says is stored, and no shortcut,
 suggestion or tile carries a value.
 
 ## Privacy
@@ -149,13 +167,13 @@ suggestion or tile carries a value.
 - **The log records which action ran and which rule refused it**, and never a timestamp, a count of
   what was said, or anything else. See [Privacy and logging](../architecture/privacy.md).
 
-## The Live Activity's seven controls are these actions again
+## The Live Activity's eight controls are these actions again
 
-Pause, Resume, End, Start Delivery, the delivery step, Park Vehicle and Resume Driving can also be
-pressed on the shift's Lock Screen card. They are declared as separate intents, because a Live
+Pause, Resume, End, Start Delivery, the delivery step, `Delivered N`, Park Vehicle and Resume Driving
+can also be pressed on the shift's Lock Screen card. They are declared as separate intents, because a Live
 Activity button has to be a `LiveActivityIntent` and has to exist in the widget extension, and they
 are **not discoverable**: Siri and the Shortcuts app already offer these actions, and two tiles doing
-the same thing would be two things to learn. The eight discoverable shortcuts are unchanged by
+the same thing would be two things to learn. The nine discoverable shortcuts are unchanged by
 them.
 
 What they are not is a second implementation. Each one calls `IntentLifecycleService`, exactly as the
@@ -164,7 +182,7 @@ sentence. See [The shift on the Lock Screen](live-activity.md).
 
 ## Where the rules live
 
-`IntentLifecycleService` is the only type the eight intents call. It owns no lifecycle logic: it calls
+`IntentLifecycleService` is the only type the nine intents call. It owns no lifecycle logic: it calls
 `ShiftService` and `DeliveryService`, carries their refusals through word for word, and adds the one
 rule above. If a rule there disagreed with the app, the app would be right, so there is no rule there
 to disagree with. See [Architecture overview](../architecture/overview.md#system-surfaces-app-intents).

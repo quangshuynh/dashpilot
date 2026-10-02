@@ -290,6 +290,52 @@ struct IntentLifecycleService {
         return .deliveryEventRecorded(number: number(of: delivery), state: delivery.state, parked: parked)
     }
 
+    /// Records Delivered for the lowest-numbered picked-up delivery in progress.
+    ///
+    /// The explicit Delivered of a surface with no card to tap: Siri's Mark
+    /// Delivered and the Live Activity's stacked Delivered control. The target
+    /// is ``OrderedDeliveryCompletion``'s, so it is never an order that is not
+    /// picked up, and with one delivery in progress it is the delivery
+    /// ``recordDeliveryProgress(at:)`` would choose. The step goes through
+    /// ``DeliveryProgressService``, the card's own path, so the driver's
+    /// setting for resuming after delivery progress applies exactly as it does
+    /// there.
+    ///
+    /// - Parameter expected: the delivery a Lock Screen control was drawn for.
+    ///   When the rule now chooses a different one, the card was out of date and
+    ///   nothing is recorded: a button that said `Delivered 3` never records 4.
+    /// - Throws: ``IntentLifecycleError/noDeliveryInProgress``,
+    ///   ``IntentLifecycleError/noDeliveryPickedUp``,
+    ///   ``IntentLifecycleError/deliveredTargetChanged``, or whichever refusal
+    ///   the services raise.
+    func recordDelivered(at date: Date = .now, expected: UUID? = nil) throws -> IntentLifecycleOutcome {
+        guard let shift = try shiftRefusal({ try ShiftService(context: context).activeShift() }) else {
+            throw IntentLifecycleError.delivery(.noActiveShift)
+        }
+        guard !shift.numberedActiveDeliveries.isEmpty else { throw IntentLifecycleError.noDeliveryInProgress }
+
+        guard let target = OrderedDeliveryCompletion.target(
+            among: shift.numberedActiveDeliveries,
+            number: \.number,
+            state: \.delivery.state
+        ) else {
+            AppLog.intents.notice("Refused Delivered: no delivery in progress is picked up")
+            throw IntentLifecycleError.noDeliveryPickedUp
+        }
+        if let expected, expected != target.id {
+            AppLog.intents.notice("Refused Delivered: the control was drawn for another delivery")
+            throw IntentLifecycleError.deliveredTargetChanged
+        }
+
+        let parked = try deliveryRefusal {
+            try DeliveryProgressService(context: context).record(.delivered, of: target.delivery, at: date)
+        }.parked
+
+        reconcileActivity()
+        AppLog.intents.info("Intent recorded Delivered for the lowest-numbered picked-up delivery")
+        return .deliveryEventRecorded(number: target.number, state: target.delivery.state, parked: parked)
+    }
+
     // MARK: Internals
 
     /// What the interface would call this delivery, or `nil` if its shift

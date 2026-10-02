@@ -123,11 +123,13 @@ nonisolated extension ShiftActivityDeliveryTimer {
 ///   then.
 /// - A running shift with exactly one delivery open also offers that delivery's
 ///   next step, and nothing else.
-/// - A running shift with **two or more** deliveries open offers Start Delivery
-///   and nothing else. That is the ambiguity refusal, unchanged: there is no
-///   step to offer because there is no "the delivery", and Pause and End are
-///   refused by the rule above. What Start Delivery adds does not depend on
-///   which order the driver meant, so it is not part of that refusal.
+/// - A running shift with **two or more** deliveries open offers no "next
+///   step": there is no "the delivery", which is the ambiguity refusal,
+///   unchanged. When at least one of them is picked up it offers **Delivered**
+///   for the lowest-numbered picked-up one, by ``OrderedDeliveryCompletion``,
+///   printed with that number. A Delivered press names its step, so it can only
+///   land on an order that is in the car. Pause and End are refused by the rule
+///   above.
 /// - A paused shift offers Resume and End. Ending a paused shift is permitted
 ///   and closes the pause at the end instant, so refusing it here would be this
 ///   surface inventing a stricter rule than the app's.
@@ -178,6 +180,9 @@ nonisolated enum ShiftActivityContent {
     ///   - deliveryInProgress: the state of the **one** delivery in progress, or
     ///     `nil` when there is none or when there is more than one. Resolved by
     ///     ``UnambiguousDelivery`` rather than by anything here.
+    ///   - nextDelivered: with several deliveries in progress, the number and
+    ///     identifier of the one a Delivered press records, resolved by
+    ///     ``OrderedDeliveryCompletion``; `nil` otherwise.
     ///   - activeDeliveryTimers: one counting anchor per delivery in progress,
     ///     in acceptance order. **Every** open delivery, resolved by nothing:
     ///     a timer names the delivery it belongs to, so unlike a step it needs
@@ -189,12 +194,18 @@ nonisolated enum ShiftActivityContent {
     static func state(
         of metrics: ActiveShiftMetrics,
         deliveryInProgress: DeliveryState?,
+        nextDelivered: (number: Int, id: UUID)? = nil,
         activeDeliveryTimers: [ShiftActivityDeliveryTimer],
         asOf: Date,
         locale: Locale = .autoupdatingCurrent,
         parkLeads: Bool = false
     ) -> ShiftActivityAttributes.ContentState {
-        let step = deliveryInProgress?.nextAction.flatMap(ShiftActivityDeliveryStep.init)
+        // The one delivery's next step, or else Delivered for one of several.
+        // Never both: the second exists only where the first has no answer.
+        let step: ShiftActivityControl? = deliveryInProgress?.nextAction
+            .flatMap(ShiftActivityDeliveryStep.init)
+            .map(ShiftActivityControl.deliveryStep)
+            ?? nextDelivered.map { ShiftActivityControl.nextDelivered(number: $0.number, deliveryID: $0.id) }
 
         return ShiftActivityAttributes.ContentState(
             isPaused: metrics.isPaused,
@@ -223,7 +234,7 @@ nonisolated enum ShiftActivityContent {
     /// nothing is removed to make room for it.
     private static func controls(
         for metrics: ActiveShiftMetrics,
-        nextStep: ShiftActivityDeliveryStep?,
+        nextStep: ShiftActivityControl?,
         parkLeads: Bool
     ) -> [ShiftActivityControl] {
         // A paused shift is never parked, by ``Shift/isRouteSuspended``'s own
@@ -248,8 +259,8 @@ nonisolated enum ShiftActivityContent {
 
         if let nextStep {
             return parkedPairLeads
-                ? [parkedControl, .deliveryStep(nextStep), .startDelivery]
-                : [.deliveryStep(nextStep), .startDelivery, parkedControl]
+                ? [parkedControl, nextStep, .startDelivery]
+                : [nextStep, .startDelivery, parkedControl]
         }
         // Pausing and ending are both refused while any delivery is open, so a
         // running shift that has one and offered no step offers the start and
@@ -291,10 +302,17 @@ extension Shift {
         // `activeDeliveries` already applies, so the delivery a step is
         // resolved for is the same delivery it always was.
         let active = numberedActiveDeliveries
+        let single = UnambiguousDelivery.target(among: active)
+        // Only where the single delivery's step has no answer, so one delivery
+        // keeps the control it always had.
+        let ordered = single == nil
+            ? OrderedDeliveryCompletion.target(among: active, number: \.number, state: \.delivery.state)
+            : nil
 
         return ShiftActivityContent.state(
             of: activeMetrics(for: recordedDistance, asOf: referenceDate),
-            deliveryInProgress: UnambiguousDelivery.target(among: active)?.delivery.state,
+            deliveryInProgress: single?.delivery.state,
+            nextDelivered: ordered.map { ($0.number, $0.id) },
             activeDeliveryTimers: ShiftActivityDeliveryTimer.rows(for: active),
             asOf: referenceDate,
             locale: locale,

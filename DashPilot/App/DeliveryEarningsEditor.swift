@@ -80,9 +80,9 @@ struct DeliveryEarningsEditor: View {
                     } footer: {
                         Text(
                             """
-                            What you recorded expecting \(numbered.title) to pay while it was in \
-                            progress. It is not earnings and no total includes it. Removing it leaves \
-                            whatever you record below untouched.
+                            What you expected \(numbered.title) to pay while it was in progress. It is \
+                            not earnings and no total includes it. Removing it leaves the amount below \
+                            untouched.
                             """
                         )
                     }
@@ -205,16 +205,15 @@ struct DeliveryEarningsEditor: View {
     /// the whole distinction this screen exists to keep.
     private var grossEarningsExplanation: String {
         let shared = """
-            Whatever the platform already included in it, a tip included, is part of this amount: \
-            record a tip separately only if it reached you outside it. It is separate from the amount \
-            recorded for the shift: DashPilot never splits a shift total between deliveries, never \
-            adds one up from them, and does not mind if they differ.
+            Anything the platform already included, a tip included, is part of this amount; record a \
+            tip separately only if it reached you outside it. It is separate from the shift's amount: \
+            DashPilot never splits, adds up or reconciles the two.
             """
 
         if !hasRecordedEarnings, delivery.expectedEarnings != nil {
             return """
-                What the platform paid for this delivery. The field starts from what you expected, so \
-                change it if it differs. Nothing is recorded until you save. \(shared)
+                What the platform paid for this delivery. It starts from what you expected, so change \
+                it if it differs. Nothing is recorded until you save. \(shared)
                 """
         }
         return "What the platform paid for this delivery, as you choose to record it. \(shared)"

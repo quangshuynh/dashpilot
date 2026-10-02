@@ -167,9 +167,8 @@ struct ShiftPauseEditor: View {
         } footer: {
             Text(
                 """
-                DashPilot recorded no route while a shift was paused at the time, and correcting a \
-                pause afterwards does not change the route it recorded: no position is added, moved \
-                or deleted, so this shift's recorded mileage stays exactly as it is.
+                No route was recorded while paused, and correcting a pause never changes the route: no \
+                position is added, moved or deleted, so recorded mileage stays as it is.
                 """
             )
         }
@@ -230,9 +229,8 @@ struct ShiftPauseEditor: View {
         }
         let projected = max(0, elapsed - projectedPausedDuration)
         return """
-        This shift's working time becomes \(DurationText.short(projected)), which is its \
-        \(DurationText.short(elapsed)) less every pause it records. Its elapsed time, its recorded \
-        mileage and the amounts you entered do not change.
+        This shift's working time becomes \(DurationText.short(projected)): \(DurationText.short(elapsed)) less \
+        every pause. Elapsed time, recorded mileage and amounts do not change.
         """
     }
 

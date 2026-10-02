@@ -94,6 +94,11 @@ nonisolated enum ShiftActivityControl: Codable, Hashable, Sendable {
     case resumeDriving
     /// Record the next step of the one delivery in progress.
     case deliveryStep(ShiftActivityDeliveryStep)
+    /// Record Delivered for one of several deliveries in progress: the
+    /// lowest-numbered one that is picked up, chosen by the app. The number is
+    /// printed so the driver sees which order the press records, and the
+    /// identifier travels with the press so a stale card records nothing.
+    case nextDelivered(number: Int, deliveryID: UUID)
 
     /// The printed button label.
     var title: String {
@@ -105,6 +110,7 @@ nonisolated enum ShiftActivityControl: Codable, Hashable, Sendable {
         case .park: "Park Vehicle"
         case .resumeDriving: "Resume Driving"
         case let .deliveryStep(step): step.title
+        case let .nextDelivered(number, _): "Delivered \(number)"
         }
     }
 
@@ -124,6 +130,7 @@ nonisolated enum ShiftActivityControl: Codable, Hashable, Sendable {
         case .park: "Park vehicle"
         case .resumeDriving: "Resume driving"
         case let .deliveryStep(step): step.spokenLabel
+        case let .nextDelivered(number, _): "Mark delivery \(number) delivered"
         }
     }
 
@@ -142,6 +149,7 @@ nonisolated enum ShiftActivityControl: Codable, Hashable, Sendable {
         case .park: "parkingsign.circle.fill"
         case .resumeDriving: "car.fill"
         case let .deliveryStep(step): step.symbolName
+        case .nextDelivered: ShiftActivityDeliveryStep.complete.symbolName
         }
     }
 
@@ -164,7 +172,7 @@ nonisolated enum ShiftActivityControl: Codable, Hashable, Sendable {
     /// route.
     var isProminent: Bool {
         switch self {
-        case .resume, .resumeDriving, .park, .deliveryStep, .startDelivery: true
+        case .resume, .resumeDriving, .park, .deliveryStep, .nextDelivered, .startDelivery: true
         case .pause, .end: false
         }
     }
@@ -180,6 +188,7 @@ nonisolated enum ShiftActivityControl: Codable, Hashable, Sendable {
         case .park: "activityControl.park"
         case .resumeDriving: "activityControl.resumeDriving"
         case .deliveryStep: "activityControl.deliveryStep"
+        case .nextDelivered: "activityControl.nextDelivered"
         }
     }
 

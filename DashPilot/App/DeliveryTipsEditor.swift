@@ -141,9 +141,8 @@ struct DeliveryTipsEditor: View {
         } footer: {
             Text(
                 """
-                A tip belongs here only if it reached you outside what the platform recorded paying \
-                for this delivery. If the platform already included it in that amount, it is part of \
-                it: recording it here as well would count it twice.
+                Record a tip here only if it reached you outside what the platform recorded paying. If \
+                the platform's amount already includes it, recording it here would count it twice.
                 """
             )
         }
@@ -212,8 +211,8 @@ struct DeliveryTipsEditor: View {
                     received none.
                     """
                     : """
-                    Each tip is its own record. Correcting one leaves the others exactly as they \
-                    are, and what the platform paid is never changed by anything on this screen.
+                    Each tip is its own record. Correcting one leaves the others alone, and nothing \
+                    here changes what the platform paid.
                     """
             )
         }
@@ -340,8 +339,7 @@ struct DeliveryTipEntryEditor: View {
                     Text(
                         """
                         What you received on top of what the platform recorded paying for \
-                        \(numbered.title). It has to be more than nothing: a delivery that received \
-                        no tip simply has none recorded.
+                        \(numbered.title). It must be more than zero: no tip means none recorded.
                         """
                     )
                 }

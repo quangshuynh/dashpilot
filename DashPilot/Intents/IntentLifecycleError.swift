@@ -23,6 +23,11 @@ nonisolated enum IntentLifecycleError: Error {
     /// Nothing is recorded and the driver is told which screen can say it
     /// unambiguously.
     case severalDeliveriesInProgress(count: Int)
+    /// Delivered was asked for while no delivery in progress was picked up.
+    case noDeliveryPickedUp
+    /// A Lock Screen Delivered named a delivery that is no longer the one
+    /// ``OrderedDeliveryCompletion`` chooses, because the card was out of date.
+    case deliveredTargetChanged
     /// The local store could not be opened at all, so no service could run.
     case storeUnavailable
 }
@@ -35,6 +40,8 @@ nonisolated extension IntentLifecycleError: Equatable {
         case (.noDeliveryInProgress, .noDeliveryInProgress): true
         case let (.severalDeliveriesInProgress(lhsCount), .severalDeliveriesInProgress(rhsCount)):
             lhsCount == rhsCount
+        case (.noDeliveryPickedUp, .noDeliveryPickedUp): true
+        case (.deliveredTargetChanged, .deliveredTargetChanged): true
         case (.storeUnavailable, .storeUnavailable): true
         default: false
         }
@@ -55,8 +62,12 @@ nonisolated extension IntentLifecycleError: LocalizedError {
             // what DashPilot thinks it is holding.
             """
             \(count) deliveries are in progress, so DashPilot cannot tell which one you mean. \
-            Open DashPilot and record the step on that delivery.
+            Open DashPilot to choose, or use Mark Delivered for the lowest-numbered picked-up one.
             """
+        case .noDeliveryPickedUp:
+            "No delivery in progress is picked up, so nothing was recorded as delivered."
+        case .deliveredTargetChanged:
+            "The Lock Screen was out of date, so nothing was recorded. Check the card and try again."
         case .storeUnavailable:
             "DashPilot could not open its local data store, so nothing was recorded."
         }

@@ -245,12 +245,9 @@ struct CompletedShiftDetailView: View {
         } footer: {
             Text(
                 """
-                Recorded earnings are what you chose to record for this shift. DashPilot is not \
-                connected to any delivery platform, so nothing is imported, and amounts you record \
-                against individual deliveries are separate: this figure is never worked out from \
-                them. A shift with no amount recorded is not the same as one that paid \
-                \(Money.zero.formatted(locale: locale)); removing an amount is offered inside the \
-                editor.
+                What you recorded for this shift. Nothing is imported, and it is never worked out from \
+                the amounts on its deliveries. No amount recorded is not the same as \
+                \(Money.zero.formatted(locale: locale)); remove an amount in the editor.
                 """
             )
         }
@@ -450,12 +447,11 @@ struct CompletedShiftDetailView: View {
     /// shift that was paused.
     private var rateSentence: String {
         """
-        Every rate here is gross: nothing for fuel, wear, insurance or tax is subtracted anywhere \
-        in DashPilot. Per shift hour divides by working time, waiting and repositioning \
-        included. Per active delivery hour divides by the time a recorded delivery was open, \
-        counting deliveries you worked at once only once; it is not a wage. Per recorded mile \
-        divides by recorded miles, which are normally fewer than the miles driven, so it is \
-        normally higher than earnings per mile driven.
+        Every rate is gross: nothing for fuel, wear, insurance or tax is subtracted. Per shift hour \
+        divides by working time, waiting included. Per active delivery hour divides by the time a \
+        delivery was open, counting overlapping deliveries once; it is not a wage. Per recorded mile \
+        divides by recorded miles, usually fewer than miles driven, so it usually reads higher than \
+        per mile driven.
         """
     }
 
@@ -468,23 +464,22 @@ struct CompletedShiftDetailView: View {
         sentences.append(contentsOf: pauseSentences)
         sentences.append(
             """
-            Delivery active time is the part of the shift at least one recorded delivery was open \
-            for, from accepting it until you marked it delivered or cancelled.
+            Delivery active time is the part of the shift at least one delivery was open, from \
+            accepting it until delivered or cancelled.
             """
         )
         if deliveryActiveTime.hasOverlappingDeliveries {
             sentences.append(
                 """
-                Deliveries you worked at the same time are counted once, so this is less than their \
-                durations added together.
+                Deliveries worked at the same time count once, so this is less than their durations \
+                added together.
                 """
             )
         }
         sentences.append(
             """
-            Non-delivery time is the rest of the working time. It is not idle time: it includes \
-            waiting for an offer, repositioning, and any work you did not record. DashPilot does not \
-            know what you were doing during either.
+            Non-delivery time is the rest of working time: waiting for offers, repositioning and \
+            anything you did not record. It is not idle time.
             """
         )
         return sentences
@@ -498,15 +493,12 @@ struct CompletedShiftDetailView: View {
     private var pauseSentences: [String] {
         guard let pausedTime = shift.completedPausedTime, pausedTime.hasPauses else { return [] }
         var sentences = [
-            """
-            Working time is the elapsed time less the time you had the shift paused, and it is what \
-            every hourly rate divides by.
-            """
+            "Working time is elapsed time less paused time. Every hourly rate divides by it."
         ]
         sentences.append(
             """
-            Nothing was recorded while the shift was paused at the time, and the distance between \
-            where you paused and where you resumed is not counted.
+            Nothing was recorded while paused, and the distance between where you paused and resumed \
+            is not counted.
             """
         )
         // Said because this screen can now change a pause after the fact.
@@ -516,9 +508,8 @@ struct CompletedShiftDetailView: View {
         // that were really recorded, or claiming a gap that never happened.
         sentences.append(
             """
-            A pause you corrected or added afterwards does not change the route: no recorded \
-            position is ever added, moved or deleted, so the recorded mileage still covers \
-            everything this shift recorded.
+            Correcting or adding a pause never changes the route: no position is added, moved or \
+            deleted.
             """
         )
         return sentences
@@ -606,10 +597,9 @@ struct CompletedShiftDetailView: View {
         } footer: {
             Text(
                 """
-                Each pause is a stretch you recorded as not working, and together they are what this \
-                shift's working time subtracts. Correcting one changes the working time and the \
-                hourly figures over it; it never changes the shift's own start and end times, the \
-                route recorded during it, or any amount you entered.
+                Each pause is time you recorded as not working, and working time subtracts it. \
+                Correcting one changes working time and the hourly figures, never the shift's start or \
+                end, its route, or any amount.
                 """
             )
         }
@@ -806,10 +796,9 @@ struct CompletedShiftDetailView: View {
         } footer: {
             Text(
                 """
-                A capture segment is an unbroken stretch of recording; a gap is a stretch of the shift \
-                the route does not account for, including before the first recorded position and after \
-                the last. DashPilot leaves the distance across a gap out rather than guessing at it, so \
-                recorded mileage is a floor: the miles driven were this many or more.
+                A capture segment is an unbroken stretch of recording. A gap is time the route does \
+                not cover, including before the first position and after the last. Distance across a \
+                gap is left out, so recorded mileage is a floor: you drove this far or farther.
                 """
             )
         }
@@ -1006,10 +995,7 @@ struct CompletedShiftDetailView: View {
     ///
     /// Written once and read by both the visible caption and the spoken label,
     /// so the eye and the ear are told the same thing.
-    private static let partialFuelStatement = """
-        This route is partial, so more miles were driven than were recorded and more fuel was \
-        used than this estimates.
-        """
+    private static let partialFuelStatement = "This route is partial: more miles were driven and more fuel was used than this estimates."
 
     /// What the estimates on this section are, and are not, in one place.
     ///
@@ -1020,17 +1006,13 @@ struct CompletedShiftDetailView: View {
     private var costsFooterStatement: String {
         """
         Estimated fuel cost is recorded miles divided by your miles per gallon, priced at your gas \
-        price per gallon. Both figures are your own assumptions, recorded with this shift, so \
-        entering different ones later leaves this shift's estimate where it is. Estimated net after \
-        fuel is what you recorded this shift paying, less that estimate, and per working hour divides \
-        by the same working time the gross rate does. An estimate is not a recorded expense: it is \
-        not proof of fuel bought, fuel burned, what this vehicle costs to run, or anything deductible. \
-        Recorded expenses are not part of the net, because DashPilot does not attribute a cost to a \
-        shift; net after recorded expenses is a figure the period summaries carry instead. If you \
-        also recorded a fuel purchase under Expenses, it and this estimate may describe the same \
-        money in two places, and DashPilot never adds or nets the two together. This is not profit, \
-        take-home pay or a tax figure: nothing for wear, insurance, maintenance or tax is subtracted \
-        anywhere in DashPilot.
+        price per gallon. Both are recorded with this shift, so changing your defaults later leaves \
+        this estimate alone. Estimated net after fuel is this shift's recorded earnings less that \
+        estimate; per working hour uses the same working time as the gross rate. An estimate is not a \
+        recorded expense or proof of fuel bought or burned. Recorded expenses are not subtracted here; \
+        the period summaries carry net after recorded expenses. A fuel purchase under Expenses may be \
+        the same money as this estimate, and DashPilot never combines the two. This is not profit, \
+        take-home pay or a tax figure.
         """
     }
 
@@ -1162,10 +1144,7 @@ struct CompletedShiftDetailView: View {
 
     /// What a partial route means for a net, which is the opposite direction to
     /// what it means for the fuel above it.
-    private static let partialNetStatement = """
-        This route is partial, so the estimated fuel is a floor and this net is a ceiling: more \
-        fuel was used than was estimated, so less was left than is shown here.
-        """
+    private static let partialNetStatement = "This route is partial: the estimated fuel is a floor, so this net is a ceiling."
 
     /// One derived rate, or one sentence saying why there is not one.
     ///
@@ -1255,13 +1234,11 @@ struct CompletedShiftDetailView: View {
         } footer: {
             Text(
                 """
-                Every time below was recorded because you tapped a control during the shift. \
-                DashPilot is not connected to any delivery platform and detects nothing on its own, \
-                so a delivery you did not record is not here. Deliveries you worked at the same time \
-                overlap in this list, and their durations are never added together — the shift's \
-                delivery active time counts shared minutes once, and a per-delivery hourly figure \
-                covers only that delivery's own lifecycle. Any amount here is one you recorded \
-                against that delivery; nothing is taken from, or added to, the shift's own amount.
+                Every time below was recorded by a tap during the shift; DashPilot detects nothing on \
+                its own, so a delivery you did not record is not here. Overlapping deliveries are \
+                never added together: delivery active time counts shared minutes once, and a \
+                per-delivery hourly figure covers only that delivery. Amounts here are the ones you \
+                recorded on each delivery, separate from the shift's own amount.
                 """
             )
         }
@@ -1313,10 +1290,9 @@ struct CompletedShiftDetailView: View {
         } footer: {
             Text(
                 """
-                Correcting the end time changes the shift's elapsed and working time and every rate \
-                over them; an earlier end also removes the route recorded after it, which the editor \
-                states before anything is deleted. Correcting grouping changes which deliveries \
-                arrived together and nothing else.
+                Correcting the end time changes elapsed and working time and every rate over them; an \
+                earlier end also removes the route recorded after it, and the editor says so first. \
+                Correcting grouping changes only which deliveries arrived together.
                 """
             )
         }
@@ -1347,10 +1323,9 @@ struct CompletedShiftDetailView: View {
         } footer: {
             Text(
                 """
-                Writes what DashPilot recorded for this shift — its times, its deliveries, the amounts \
-                you typed and its recorded mileage — as a JSON or CSV file on this device, then offers \
-                it to the share sheet. Recorded positions are not included, and nothing is sent \
-                anywhere unless you send it.
+                Saves this shift's times, deliveries, the amounts you typed and its recorded mileage \
+                as a JSON or CSV file on this device, then opens the share sheet. Recorded positions \
+                are not included, and nothing is sent unless you send it.
                 """
             )
         }

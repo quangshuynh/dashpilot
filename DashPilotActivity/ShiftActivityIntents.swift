@@ -1,7 +1,7 @@
 import AppIntents
 import Foundation
 
-/// The seven actions a driver can take from the shift's Live Activity.
+/// The eight actions a driver can take from the shift's Live Activity.
 ///
 /// Named apart from the intents themselves so there is exactly one switch over
 /// them, in ``ShiftActivityIntentBridge``, rather than a lifecycle call buried
@@ -12,6 +12,7 @@ nonisolated enum ShiftActivityAction: String, CaseIterable, Sendable {
     case endShift
     case startDelivery
     case recordDeliveryProgress
+    case recordDelivered
     case parkVehicle
     case resumeDriving
 }
@@ -37,7 +38,7 @@ nonisolated struct ShiftActivityActionUnavailable: Error, CustomLocalizedStringR
 /// rules, and this is where that is enforced rather than merely intended.
 @MainActor
 enum ShiftActivityIntentBridge {
-    static func perform(_ action: ShiftActivityAction) throws {
+    static func perform(_ action: ShiftActivityAction, expectedDelivery: UUID? = nil) throws {
         throw ShiftActivityActionUnavailable()
     }
 }
@@ -61,7 +62,10 @@ enum ShiftActivityIntentBridge {
     /// Screen button has no dialog to say it in, and the surface it updates is
     /// the report. A **refusal** is not discarded: it is thrown, and the
     /// service layer's own sentence is what the driver is shown.
-    static func perform(_ action: ShiftActivityAction) throws {
+    ///
+    /// `expectedDelivery` is the delivery a Delivered control was drawn for,
+    /// and is read by that action only.
+    static func perform(_ action: ShiftActivityAction, expectedDelivery: UUID? = nil) throws {
         let service = try IntentLifecycleService.forIntent()
         switch action {
         case .pauseShift: _ = try service.pauseShift()
@@ -69,6 +73,7 @@ enum ShiftActivityIntentBridge {
         case .endShift: _ = try service.endShift()
         case .startDelivery: _ = try service.startDelivery()
         case .recordDeliveryProgress: _ = try service.recordDeliveryProgress()
+        case .recordDelivered: _ = try service.recordDelivered(expected: expectedDelivery)
         case .parkVehicle: _ = try service.parkVehicle()
         case .resumeDriving: _ = try service.resumeDriving()
         }
@@ -106,9 +111,8 @@ struct PauseShiftFromActivityIntent: LiveActivityIntent {
 
     static let description: IntentDescription? = IntentDescription(
         """
-        Pauses the shift in progress from its Live Activity. Paused time is not counted as working \
-        time, and route recording stops until you resume. A shift with deliveries still in progress \
-        is not paused.
+        Pauses the shift from its Live Activity. Paused time is not counted as working time, and route \
+        recording stops until you resume. Not available while a delivery is in progress.
         """,
         categoryName: "Shift"
     )
@@ -138,8 +142,8 @@ struct ResumeShiftFromActivityIntent: LiveActivityIntent {
 
     static let description: IntentDescription? = IntentDescription(
         """
-        Resumes a paused shift from its Live Activity so its working time counts again. Route \
-        recording begins again when you open DashPilot, as a new recording.
+        Resumes a paused shift from its Live Activity. Route recording begins again when you open \
+        DashPilot.
         """,
         categoryName: "Shift"
     )
@@ -167,10 +171,7 @@ struct EndShiftFromActivityIntent: LiveActivityIntent {
     static let title: LocalizedStringResource = "End Shift from Live Activity"
 
     static let description: IntentDescription? = IntentDescription(
-        """
-        Ends the shift in progress from its Live Activity and records its end time on this device. \
-        A shift with deliveries still in progress is not ended.
-        """,
+        "Ends the shift from its Live Activity. Not available while a delivery is in progress.",
         categoryName: "Shift"
     )
 
@@ -211,9 +212,8 @@ struct StartDeliveryFromActivityIntent: LiveActivityIntent {
 
     static let description: IntentDescription? = IntentDescription(
         """
-        Records that you accepted a delivery on the shift in progress, from its Live Activity. \
-        Deliveries already in progress are not changed. A paused shift records no delivery until \
-        you resume it.
+        Records that you accepted a delivery, from the shift's Live Activity. Deliveries in progress \
+        are not changed. Not available while paused.
         """,
         categoryName: "Delivery"
     )
@@ -244,9 +244,9 @@ struct RecordDeliveryProgressFromActivityIntent: LiveActivityIntent {
 
     static let description: IntentDescription? = IntentDescription(
         """
-        Records the next step of the delivery in progress from the shift's Live Activity: arrived at \
-        the pickup, picked up, then delivered. If more than one delivery is in progress, nothing is \
-        recorded, because the step could belong to either of them.
+        Records the next step of the delivery in progress, from the shift's Live Activity. If more \
+        than one delivery is in progress, nothing is recorded, because the step could belong to \
+        either.
         """,
         categoryName: "Delivery"
     )
@@ -261,6 +261,59 @@ struct RecordDeliveryProgressFromActivityIntent: LiveActivityIntent {
     func perform() async throws -> some IntentResult {
         try ShiftActivityIntentBridge.perform(.recordDeliveryProgress)
         return .result()
+    }
+}
+
+/// Recording Delivered for the lowest-numbered picked-up delivery, from the
+/// Lock Screen, while several deliveries are in progress.
+///
+/// The card offers it as `Delivered 3`, naming the delivery the rule chose when
+/// the card was drawn, and the intent carries that delivery's identifier. If the
+/// rule chooses another by the time it is pressed, the card was out of date and
+/// nothing is recorded. The rule is ``IntentLifecycleService``'s, the same one
+/// Siri's Mark Delivered uses.
+struct RecordDeliveredFromActivityIntent: LiveActivityIntent {
+    static let title: LocalizedStringResource = "Mark Delivered from Live Activity"
+
+    static let description: IntentDescription? = IntentDescription(
+        """
+        Records the delivery named on the shift's Live Activity as delivered. It is the \
+        lowest-numbered picked-up delivery; if that has changed, nothing is recorded.
+        """,
+        categoryName: "Delivery"
+    )
+
+    static let supportedModes: IntentModes = .background
+    static let isDiscoverable = false
+    static let authenticationPolicy = IntentAuthenticationPolicy.alwaysAllowed
+
+    /// The delivery the control was drawn for: an opaque identifier, never a
+    /// name or a place.
+    @Parameter(title: "Delivery")
+    var deliveryID: String
+
+    init() {}
+
+    init(deliveryID: UUID) {
+        self.deliveryID = deliveryID.uuidString
+    }
+
+    @MainActor
+    func perform() async throws -> some IntentResult {
+        // An identifier that does not parse names no delivery, so it is the
+        // stale-card refusal rather than a Delivered for whichever comes first.
+        guard let expected = UUID(uuidString: deliveryID) else {
+            throw ShiftActivityStaleControl()
+        }
+        try ShiftActivityIntentBridge.perform(.recordDelivered, expectedDelivery: expected)
+        return .result()
+    }
+}
+
+/// A Delivered control whose delivery could not be read.
+nonisolated struct ShiftActivityStaleControl: Error, CustomLocalizedStringResourceConvertible {
+    var localizedStringResource: LocalizedStringResource {
+        "The Lock Screen was out of date, so nothing was recorded. Check the card and try again."
     }
 }
 
@@ -291,9 +344,8 @@ struct ParkVehicleFromActivityIntent: LiveActivityIntent {
 
     static let description: IntentDescription? = IntentDescription(
         """
-        Records that you have parked and are away from the vehicle, from the shift's Live Activity. \
-        Route recording stops until you resume driving. Your shift keeps running and its working time \
-        keeps counting.
+        Records that you parked, from the shift's Live Activity. Route recording stops until you \
+        resume driving; your shift keeps running.
         """,
         categoryName: "Shift"
     )
@@ -328,9 +380,9 @@ struct ResumeDrivingFromActivityIntent: LiveActivityIntent {
 
     static let description: IntentDescription? = IntentDescription(
         """
-        Records that you are driving again after parking, from the shift's Live Activity. Route \
-        recording begins again when you open DashPilot, as a new recording: the distance between \
-        where you parked and where you drove off is not counted.
+        Records that you are driving again, from the shift's Live Activity. Route recording begins \
+        again when you open DashPilot; the distance between where you parked and drove off is not \
+        counted.
         """,
         categoryName: "Shift"
     )

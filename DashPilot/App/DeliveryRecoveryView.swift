@@ -252,12 +252,10 @@ struct DeliveryRecoveryView: View {
         Section {
             Text(
                 """
-                Reopening removes the delivered time and nothing else. The delivery becomes one you \
-                are still working, back at the last step you recorded before it, and it appears \
-                again among the cards on the running shift. Everything else stays as it is: the \
-                times you recorded, the pickup place, any expected pay, and any gross earnings you \
-                recorded against it. The shift cannot be ended again until the delivery is \
-                delivered or cancelled.
+                Reopening removes the delivered time and nothing else. The delivery goes back to its \
+                last recorded step and reappears among the running shift's cards. Its times, pickup \
+                place, expected pay and gross earnings stay as they are. The shift cannot end until it \
+                is delivered or cancelled.
                 """
             )
             .dashFont(.body)
@@ -290,9 +288,8 @@ struct DeliveryRecoveryView: View {
         } footer: {
             Text(
                 """
-                A shift cannot end while a delivery is still in progress, so reopening one on a \
-                shift that has finished would leave a delivery nothing could complete. Resume a \
-                paused shift to reopen a delivery in it.
+                A shift cannot end while a delivery is in progress, so a delivery on a finished shift \
+                cannot be reopened. Resume a paused shift to reopen a delivery in it.
                 """
             )
         }

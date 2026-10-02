@@ -175,9 +175,8 @@ struct ShiftEndCorrectionEditor: View {
         } footer: {
             Text(
                 """
-                Correcting the end changes this shift's elapsed and working times and every hourly \
-                figure over them. It never changes when the shift started, what you recorded it \
-                paid, or anything your deliveries recorded.
+                Correcting the end changes elapsed and working time and every hourly figure. It never \
+                changes the start, the amount recorded, or anything your deliveries recorded.
                 """
             )
         }
@@ -207,9 +206,8 @@ struct ShiftEndCorrectionEditor: View {
         guard let recordedEnd = shift.endedAt, draftEnd != recordedEnd else { return nil }
         guard draftEnd < recordedEnd else {
             return """
-            No route or mileage is added for the extra time. DashPilot only counts distance it \
-            actually recorded, so this shift's recorded mileage stays exactly as it is and the \
-            stretch with nothing recorded in it is counted as a gap.
+            No route or mileage is added for the extra time. Recorded mileage stays as it is, and the \
+            unrecorded stretch counts as a gap.
             """
         }
         guard departingPositionCount > 0 else {
@@ -220,9 +218,9 @@ struct ShiftEndCorrectionEditor: View {
         }
         let positions = departingPositionCount == 1 ? "1 recorded position" : "\(departingPositionCount) recorded positions"
         return """
-        \(positions) recorded after that time will be deleted, and this shift's recorded mileage \
-        will be measured again from the positions that remain. The mileage is not reduced by the \
-        same share as the time. You are asked to confirm before anything is deleted.
+        \(positions) recorded after that time will be deleted, and recorded mileage measured again \
+        from what remains: it is not reduced by the same share as the time. You confirm before \
+        anything is deleted.
         """
     }
 

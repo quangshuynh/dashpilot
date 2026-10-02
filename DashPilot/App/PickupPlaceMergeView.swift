@@ -118,10 +118,9 @@ struct PickupPlaceMergeView: View {
         } footer: {
             Text(
                 """
-                Choose the place to keep. Every delivery recorded under \(source.displayName) moves \
-                to it, and \(source.displayName) is then removed. The place you choose keeps its own \
-                name and everything already recorded under it. Places are listed alphabetically; \
-                DashPilot does not guess which two are the same.
+                Choose the place to keep. Every delivery under \(source.displayName) moves to it, and \
+                \(source.displayName) is removed. The place you choose keeps its name and records. \
+                Places are listed alphabetically; DashPilot does not guess which two are the same.
                 """
             )
         }

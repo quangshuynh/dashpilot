@@ -79,9 +79,9 @@ struct NewOfferSheet: View {
                 } footer: {
                     Text(
                         """
-                        How many deliveries you accepted together. Each one is recorded separately and \
-                        takes its own steps, so you can pick one up while another is still waiting. \
-                        You can add a pickup place or expected pay to any of them afterwards.
+                        How many deliveries you accepted together. Each takes its own steps, so you \
+                        can pick one up while another waits. Add a pickup place or expected pay to any \
+                        of them later.
                         """
                     )
                 }
