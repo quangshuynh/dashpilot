@@ -262,7 +262,12 @@ nonisolated extension ShiftActivityAttributes.ContentState {
 
     /// Whether the card carries a step of one delivery in progress.
     private var offersDeliveryStep: Bool {
-        controls.contains { if case .deliveryStep = $0 { true } else { false } }
+        controls.contains {
+            switch $0 {
+            case .deliveryStep, .nextDelivered: true
+            default: false
+            }
+        }
     }
 
     /// The number a Dynamic Island's compact side can fit, and nothing else.

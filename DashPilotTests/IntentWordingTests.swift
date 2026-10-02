@@ -191,6 +191,7 @@ struct IntentWordingTests {
         #expect(ambiguous.hasPrefix("2 deliveries are in progress"), "The count is named rather than left vague")
         #expect(ambiguous.contains("cannot tell which one"))
         #expect(ambiguous.contains("Open DashPilot"), "The refusal names the screen that can say it unambiguously")
+        #expect(ambiguous.contains("Mark Delivered"), "And the spoken action that can record Delivered in order")
 
         let unavailable = try #require(IntentLifecycleError.storeUnavailable.errorDescription)
         #expect(unavailable.contains("nothing was recorded"))

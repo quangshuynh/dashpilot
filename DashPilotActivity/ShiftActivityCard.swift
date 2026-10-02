@@ -330,6 +330,8 @@ struct ShiftActivityControlButton: View {
                 Button(intent: ResumeDrivingFromActivityIntent()) { label }
             case .deliveryStep:
                 Button(intent: RecordDeliveryProgressFromActivityIntent()) { label }
+            case let .nextDelivered(_, deliveryID):
+                Button(intent: RecordDeliveredFromActivityIntent(deliveryID: deliveryID)) { label }
             }
         }
         .buttonStyle(.bordered)
@@ -349,7 +351,7 @@ struct ShiftActivityControlButton: View {
     private var tint: Color {
         switch control {
         case .end: .red
-        case .pause, .resume, .startDelivery, .park, .resumeDriving, .deliveryStep: .accentColor
+        case .pause, .resume, .startDelivery, .park, .resumeDriving, .deliveryStep, .nextDelivered: .accentColor
         }
     }
 }

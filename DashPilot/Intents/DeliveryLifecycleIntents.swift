@@ -61,3 +61,31 @@ struct RecordDeliveryProgressIntent: AppIntent {
         .result(dialog: try IntentLifecycleService.forIntent().recordDeliveryProgress().dialog)
     }
 }
+
+/// Recording Delivered by voice, for the lowest-numbered picked-up delivery.
+///
+/// Unlike ``RecordDeliveryProgressIntent`` it names the step, so it works with
+/// several deliveries in progress: only a picked-up delivery can be delivered,
+/// and of those the lowest number is recorded. Say it again for the next one.
+/// The confirmation names the delivery that was recorded.
+struct RecordDeliveredIntent: AppIntent {
+    static let title: LocalizedStringResource = "Mark Delivered"
+
+    static let description: IntentDescription? = IntentDescription(
+        """
+        Records the lowest-numbered picked-up delivery as delivered. With several picked up, \
+        run it again for the next one. Deliveries not yet picked up are not changed.
+        """,
+        categoryName: "Delivery",
+        searchKeywords: ["delivery", "delivered", "dropped off", "complete"]
+    )
+
+    static let supportedModes: IntentModes = .background
+
+    static let authenticationPolicy = IntentAuthenticationPolicy.alwaysAllowed
+
+    @MainActor
+    func perform() async throws -> some IntentResult & ProvidesDialog {
+        .result(dialog: try IntentLifecycleService.forIntent().recordDelivered().dialog)
+    }
+}

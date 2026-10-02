@@ -114,5 +114,15 @@ nonisolated struct DashPilotShortcuts: AppShortcutsProvider {
             shortTitle: "Record Delivery Progress",
             systemImageName: "checkmark.circle"
         )
+        AppShortcut(
+            intent: RecordDeliveredIntent(),
+            phrases: [
+                "Mark delivered in \(.applicationName)",
+                "Mark my \(.applicationName) delivery delivered",
+                "I delivered an order in \(.applicationName)"
+            ],
+            shortTitle: "Mark Delivered",
+            systemImageName: "checkmark.circle.fill"
+        )
     }
 }
