@@ -746,7 +746,7 @@ struct AppIntentTests {
                 _ = try await RecordDeliveredFromActivityIntent(deliveryID: second.id).perform()
             }
             await #expect(throws: ShiftActivityStaleControl.self) {
-                var unreadable = RecordDeliveredFromActivityIntent()
+                let unreadable = RecordDeliveredFromActivityIntent()
                 unreadable.deliveryID = "not an identifier"
                 _ = try await unreadable.perform()
             }
