@@ -229,7 +229,7 @@ struct ShiftPauseEditor: View {
         }
         let projected = max(0, elapsed - projectedPausedDuration)
         return """
-        Working time becomes \(DurationText.short(projected)): \(DurationText.short(elapsed)) less \
+        This shift's working time becomes \(DurationText.short(projected)): \(DurationText.short(elapsed)) less \
         every pause. Elapsed time, recorded mileage and amounts do not change.
         """
     }
