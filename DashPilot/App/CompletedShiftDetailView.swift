@@ -1543,11 +1543,19 @@ private struct DeliveryHistoryRow: View {
                 // The same numbered stop the running shift showed this
                 // delivery under, muted once it was cancelled; the state is
                 // said in words beside it.
-                HStack(alignment: .center, spacing: DashSpacing.md) {
+                // Stacked at accessibility sizes, where beside the marker the
+                // title broke inside its words.
+                let heading = Text("\(numbered.title) · \(delivery.state.historyDescription)")
+                    .dashFont(.emphasis)
+                    .fixedSize(horizontal: false, vertical: true)
+                if dynamicTypeSize.isAccessibilitySize {
                     DashStopMarker(number: numbered.number, isMuted: delivery.state == .cancelled)
-                    Text("\(numbered.title) · \(delivery.state.historyDescription)")
-                        .dashFont(.emphasis)
-                        .fixedSize(horizontal: false, vertical: true)
+                    heading
+                } else {
+                    HStack(alignment: .center, spacing: DashSpacing.md) {
+                        DashStopMarker(number: numbered.number, isMuted: delivery.state == .cancelled)
+                        heading
+                    }
                 }
 
                 // Which offer this delivery arrived in, said only where it
