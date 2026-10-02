@@ -58,6 +58,7 @@ final class ActiveRouteReading {
 struct ActiveShiftPanel: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.locale) private var locale
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     let shift: Shift
     /// The route reading this panel keeps current, shared with
@@ -186,19 +187,37 @@ struct ActiveShiftPanel: View {
             )
             .accessibilityIdentifier("pausedShiftStatus")
         } else {
-            HStack(alignment: .firstTextBaseline, spacing: DashSpacing.md) {
-                DashStatusLabel(
-                    title: ShiftLifecycleState.running.title,
-                    symbol: "record.circle",
-                    tint: DashStatusTint.running
-                )
-                .accessibilityIdentifier("activeShiftStatus")
+            let status = DashStatusLabel(
+                title: ShiftLifecycleState.running.title,
+                symbol: "record.circle",
+                tint: DashStatusTint.running
+            )
+            .accessibilityIdentifier("activeShiftStatus")
+            let startedText = Text("Started \(started)")
+                .dashFont(.supporting)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
 
-                Spacer(minLength: DashSpacing.md)
-
-                Text("Started \(started)")
-                    .dashFont(.supporting)
-                    .foregroundStyle(.secondary)
+            // Beside each other where both fit whole, stacked where they do
+            // not: at the largest sizes side by side broke the status inside
+            // its words.
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: DashSpacing.xs) {
+                    status
+                    startedText
+                }
+            } else {
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .firstTextBaseline, spacing: DashSpacing.md) {
+                        status.fixedSize()
+                        Spacer(minLength: DashSpacing.md)
+                        startedText.fixedSize()
+                    }
+                    VStack(alignment: .leading, spacing: DashSpacing.xs) {
+                        status
+                        startedText
+                    }
+                }
             }
         }
     }
@@ -283,7 +302,7 @@ struct ActiveShiftPanel: View {
     private func deliveries(_ metrics: ActiveShiftMetrics) -> some View {
         let summary = metrics.deliverySummary
 
-        return HStack(alignment: .top, spacing: DashSpacing.lg) {
+        return DashMetricRow {
             DashMetric(
                 value: "\(summary.completed)",
                 label: "Delivered",
@@ -453,6 +472,8 @@ struct ActiveShiftPanel: View {
             Button(action: resume) {
                 Text("Resume Shift")
                     .dashFont(.control)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
@@ -462,6 +483,8 @@ struct ActiveShiftPanel: View {
             Button(action: resumeDriving) {
                 Label("Resume Driving", systemImage: "car.fill")
                     .dashFont(.control)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
@@ -486,6 +509,8 @@ struct ActiveShiftPanel: View {
             Button(action: park) {
                 Label("Parked for a Pickup", systemImage: "parkingsign.circle")
                     .dashFont(.control)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.bordered)
@@ -665,6 +690,8 @@ struct ActiveShiftControlsPanel: View {
                 Button(action: pause) {
                     Text("Pause Shift")
                         .dashFont(.control)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered)
@@ -676,6 +703,8 @@ struct ActiveShiftControlsPanel: View {
         let endButton = Button(action: end) {
             Text("End Shift")
                 .dashFont(.control)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity)
         }
         .buttonStyle(.bordered)

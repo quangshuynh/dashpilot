@@ -325,6 +325,8 @@ struct DeliveryControlPanel: View {
         let button = Button { perform(.start) } label: {
             Text(DeliveryAction.start.title)
                 .dashFont(.control)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity)
         }
         .controlSize(.large)
@@ -350,7 +352,10 @@ struct DeliveryControlPanel: View {
             isStartingGroupedOffer = true
         } label: {
             Label("Offer With Several Deliveries", systemImage: "square.stack.3d.up")
+                .labelStyle(DashCompactLabelStyle())
                 .dashFont(.body)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .buttonStyle(.borderless)
         .accessibilityLabel("Start an offer containing several deliveries")
@@ -377,7 +382,10 @@ struct DeliveryControlPanel: View {
                 isCorrectingOffers = true
             } label: {
                 Label("Correct Grouping", systemImage: "arrow.triangle.branch")
+                    .labelStyle(DashCompactLabelStyle())
                     .dashFont(.body)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             .buttonStyle(.borderless)
             .accessibilityLabel("Correct which deliveries were accepted together")
@@ -403,7 +411,10 @@ struct DeliveryControlPanel: View {
                 isReopeningDelivery = true
             } label: {
                 Label("Reopen a Delivered Delivery", systemImage: "arrow.uturn.backward.circle")
+                    .labelStyle(DashCompactLabelStyle())
                     .dashFont(.body)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             .buttonStyle(.borderless)
             .accessibilityLabel("Reopen a delivery you marked delivered by mistake")
@@ -821,8 +832,12 @@ private struct ActiveDeliveryCard: View {
                         .accessibilityHidden(true)
 
                     Button(action: advance) {
+                        // Wraps rather than truncating: at the largest sizes
+                        // `Arrived at Pickup` is two lines, never `Arrived at…`.
                         Text(action.title)
                             .dashFont(.control)
+                            .multilineTextAlignment(.center)
+                            .fixedSize(horizontal: false, vertical: true)
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.borderedProminent)
@@ -858,23 +873,34 @@ private struct ActiveDeliveryCard: View {
     @ViewBuilder
     private func identity(asOf now: Date) -> some View {
         VStack(alignment: .leading, spacing: DashSpacing.md) {
-            HStack(alignment: .center, spacing: DashSpacing.md) {
-                DashStopMarker(number: numbered.number)
+            // The offer's name alone, because the heading above has already
+            // said how many deliveries it held. It is here so a driver scrolled
+            // past the heading can still tell which cards belong together.
+            let offerCaption = offer.map {
+                Text($0.title)
+                    .dashFont(.supporting)
+                    .foregroundStyle(.secondary)
+            }
+            let title = Text(numbered.title)
+                .dashFont(.title)
+                .fixedSize(horizontal: false, vertical: true)
 
-                Text(numbered.title)
-                    .dashFont(.title)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                Spacer(minLength: DashSpacing.md)
-
-                // The offer's name alone, because the heading above has already
-                // said how many deliveries it held. It is here so a driver
-                // scrolled past the heading can still tell which cards belong
-                // together.
-                if let offer {
-                    Text(offer.title)
-                        .dashFont(.supporting)
-                        .foregroundStyle(.secondary)
+            // At accessibility sizes the marker and the offer share the first
+            // line and the title has the next one to itself: three things side
+            // by side broke the title inside its word.
+            if dynamicTypeSize.isAccessibilitySize {
+                HStack(alignment: .center, spacing: DashSpacing.md) {
+                    DashStopMarker(number: numbered.number)
+                    Spacer(minLength: DashSpacing.md)
+                    offerCaption
+                }
+                title
+            } else {
+                HStack(alignment: .center, spacing: DashSpacing.md) {
+                    DashStopMarker(number: numbered.number)
+                    title
+                    Spacer(minLength: DashSpacing.md)
+                    offerCaption
                 }
             }
 
@@ -944,19 +970,26 @@ private struct ActiveDeliveryCard: View {
     /// be mistaken for the step above it or for a detail beside it.
     private var secondaryControls: some View {
         VStack(alignment: .leading, spacing: DashSpacing.xs) {
-            LazyVGrid(
-                columns: Array(
-                    repeating: GridItem(.flexible(), spacing: DashSpacing.md, alignment: .leading),
-                    count: dynamicTypeSize.isAccessibilitySize ? 1 : 2
-                ),
-                alignment: .leading,
-                spacing: DashSpacing.xs
-            ) {
-                pickupPlaceControl
-                expectedEarningsControl
+            // A plain stack rather than a lazy grid: inside a list row the
+            // lazy grid measured a wrapped title short at accessibility sizes
+            // and drew it over the line below.
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: DashSpacing.xs) {
+                    pickupPlaceControl
+                    expectedEarningsControl
+                }
+            } else {
+                HStack(alignment: .top, spacing: DashSpacing.md) {
+                    pickupPlaceControl
+                    expectedEarningsControl
+                }
             }
 
-            Button("Cancel \(numbered.title)", role: .destructive, action: cancel)
+            Button(role: .destructive, action: cancel) {
+                Text("Cancel \(numbered.title)")
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
                 .dashFont(.body)
                 .buttonStyle(.borderless)
                 .frame(minHeight: 44)
@@ -983,6 +1016,7 @@ private struct ActiveDeliveryCard: View {
             )
             .labelStyle(DashCompactLabelStyle())
             .dashFont(.body)
+            .multilineTextAlignment(.leading)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
         }
@@ -1011,6 +1045,7 @@ private struct ActiveDeliveryCard: View {
             )
             .labelStyle(DashCompactLabelStyle())
             .dashFont(.body)
+            .multilineTextAlignment(.leading)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
         }

@@ -542,6 +542,8 @@ private struct StartShiftPanel: View {
             Button(action: start) {
                 Text("Start Shift")
                     .dashFont(.control)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
