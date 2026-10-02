@@ -99,6 +99,20 @@ nonisolated extension ShiftActivityAttributes.ContentState {
         return "parkingsign.circle.fill"
     }
 
+    // MARK: The Dynamic Island's glyph
+
+    /// What the island's compact and minimal glyph says: running, paused, or
+    /// parked.
+    ///
+    /// Parked is its own case because those two presentations are what a driver
+    /// sees with another app in front, and a forgotten Resume Driving drawn as
+    /// the red recording dot looks exactly like recording. The parking sign
+    /// says the route is stopped without the driver opening anything.
+    var compactStatus: ShiftActivityCompactStatus {
+        if isPaused { return .paused }
+        return routeSuspendedNotice == nil ? .running : .parked
+    }
+
     // MARK: The card's last line
 
     /// The mileage line and, once any delivery is done, how many:
@@ -294,4 +308,11 @@ nonisolated extension ShiftActivityAttributes.ContentState {
     private static func noun(_ count: Int) -> String {
         count == 1 ? "delivery" : "deliveries"
     }
+}
+
+/// The three states the island's single glyph can show.
+nonisolated enum ShiftActivityCompactStatus: Equatable, Sendable {
+    case running
+    case paused
+    case parked
 }

@@ -342,4 +342,22 @@ struct ShiftActivityCardLayoutTests {
         let paused = try #require(states.last?.1)
         #expect(paused.headerTitle == "Shift Paused")
     }
+
+    /// The island's compact and minimal glyph is what a driver sees with
+    /// another app in front. A forgotten Resume Driving must not look like
+    /// recording there.
+    @Test("The island's glyph is the parking sign while parked, never the recording dot")
+    func compactGlyph() throws {
+        let parked = try #require(states.first { $0.0 == "one arrived, parked" }?.1)
+        #expect(parked.compactStatus == .parked)
+        #expect(parked.headerSymbolName != parked.statusSymbolName, "Not the record dot")
+
+        let running = try #require(states.first?.1)
+        #expect(running.compactStatus == .running)
+        #expect(running.headerSymbolName == "record.circle")
+
+        let paused = try #require(states.last?.1)
+        #expect(paused.compactStatus == .paused)
+        #expect(paused.headerSymbolName == "pause.circle.fill")
+    }
 }
