@@ -143,8 +143,11 @@ struct PeriodSummaryView: View {
                         expensesSection(metrics)
                     }
                 } else {
-                    summarySection(metrics)
+                    // Earnings first: it is the figure the screen is opened
+                    // for, and at the largest text sizes every section above it
+                    // used to cost a screen of scrolling.
                     earningsSection(metrics)
+                    summarySection(metrics)
                     expensesSection(metrics)
                     drivingSection(metrics)
                     deliveriesSection(metrics)
@@ -168,6 +171,12 @@ struct PeriodSummaryView: View {
                 if metrics.hasAnyRecords {
                     exportSection
                 }
+                // What the figures mean, gathered after all of them. Each
+                // figure keeps its own coverage beside it; what moves here is
+                // the general explanation each section used to carry in a
+                // footer, which at the largest text sizes pushed the next
+                // figure a screen further down.
+                explanationsSection(metrics)
             } else {
                 Section {
                     Text("Working out this period…")
@@ -383,9 +392,7 @@ struct PeriodSummaryView: View {
                 identifier: "periodNonDeliveryTime"
             )
         } header: {
-            Text("Summary")
-        } footer: {
-            Text(PeriodSummaryExplanation.summary(periodNoun: unit.stepNoun))
+            Text("Time")
         }
     }
 
@@ -414,8 +421,6 @@ struct PeriodSummaryView: View {
             rateRow(metrics, .perDeliveryActiveHour, identifier: "periodActiveHourRate")
         } header: {
             Text("Earnings")
-        } footer: {
-            Text(earningsExplanation(metrics))
         }
     }
 
@@ -455,8 +460,6 @@ struct PeriodSummaryView: View {
             netRow(metrics)
         } header: {
             Text("Expenses")
-        } footer: {
-            Text(PeriodSummaryExplanation.expenses)
         }
     }
 
@@ -511,7 +514,9 @@ struct PeriodSummaryView: View {
             // above it on position alone.
             Label("Estimated Fuel", systemImage: "fuelpump")
         } footer: {
-            Text(PeriodSummaryExplanation.estimatedFuel)
+            // The one caution that has to stay beside these figures; how they
+            // are worked out is under About These Figures.
+            Text("Estimates, not recorded costs. Never added to your expenses.")
         }
     }
 
@@ -618,8 +623,6 @@ struct PeriodSummaryView: View {
             rateRow(metrics, .perRecordedMile, identifier: "periodPerMileRate")
         } header: {
             Text("Driving")
-        } footer: {
-            Text(PeriodSummaryExplanation.driving)
         }
     }
 
@@ -676,8 +679,6 @@ struct PeriodSummaryView: View {
             }
         } header: {
             Text("Deliveries")
-        } footer: {
-            Text(PeriodSummaryExplanation.deliveries)
         }
     }
 
@@ -881,6 +882,48 @@ struct PeriodSummaryView: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(metrics.spokenRateStatement(kind, locale: locale))
         .accessibilityIdentifier(identifier)
+    }
+
+    /// What each section's figures mean, in the order the sections appear,
+    /// after every figure rather than under each section.
+    ///
+    /// Nothing here is the only place a qualification is stated: coverage,
+    /// partial routes and the estimate caution are beside their figures and in
+    /// their spoken labels. This is the general explanation, kept whole, moved
+    /// so that at the largest text sizes it no longer stands between one
+    /// figure and the next. Only the sections the period actually shows are
+    /// explained.
+    @ViewBuilder
+    private func explanationsSection(_ metrics: PeriodMetrics) -> some View {
+        let notes: [(id: String, title: String, text: String)] = metrics.isEmpty
+            ? (metrics.expenses.hasRecords ? [("expenses", "Expenses", PeriodSummaryExplanation.expenses)] : [])
+            : [
+                ("earnings", "Earnings", earningsExplanation(metrics)),
+                ("time", "Time", PeriodSummaryExplanation.summary(periodNoun: unit.stepNoun)),
+                ("expenses", "Expenses", PeriodSummaryExplanation.expenses),
+                ("driving", "Driving", PeriodSummaryExplanation.driving),
+                ("deliveries", "Deliveries", PeriodSummaryExplanation.deliveries),
+                ("estimatedFuel", "Estimated fuel", PeriodSummaryExplanation.estimatedFuel)
+            ]
+        if !notes.isEmpty {
+            Section {
+                ForEach(notes, id: \.id) { note in
+                    VStack(alignment: .leading, spacing: DashSpacing.xs) {
+                        Text(note.title)
+                            .dashFont(.eyebrow)
+                        Text(note.text)
+                            .dashFont(.body)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(.vertical, DashSpacing.xs)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityIdentifier("periodExplanation.\(note.id)")
+                }
+            } header: {
+                Text("About These Figures")
+            }
+        }
     }
 
     /// What the earnings figures mean, with the sentence about missing amounts
