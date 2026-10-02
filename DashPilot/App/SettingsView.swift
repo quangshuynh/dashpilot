@@ -117,9 +117,7 @@ struct SettingsView: View {
             } else {
                 DashNotice(
                     title: "No vehicle selected",
-                    message: vehicles.isEmpty
-                        ? "Your next shift records no miles per gallon. Add a vehicle below."
-                        : "Your next shift records no miles per gallon. Choose one below.",
+                    message: "Your next shift records no miles per gallon.",
                     symbol: "car"
                 )
                 .accessibilityIdentifier("noDefaultVehicleNotice")
@@ -134,7 +132,7 @@ struct SettingsView: View {
             if vehicles.isEmpty {
                 DashNotice(
                     title: "No vehicles yet",
-                    message: "Add the vehicle you deliver in so its miles per gallon is typed once."
+                    message: "Add the one you deliver in, so its miles per gallon is typed once."
                 )
                 .accessibilityIdentifier("vehiclesEmptyState")
             } else {
@@ -192,13 +190,7 @@ struct SettingsView: View {
         } header: {
             Text("Fuel Defaults")
         } footer: {
-            Text(
-                """
-                What you last paid per gallon, so you type it once. DashPilot looks up no prices and \
-                uses nothing about where you are. A change applies to your next shift, never to one \
-                already worked.
-                """
-            )
+            Text("What you last paid per gallon. A change applies to your next shift, never to one already worked. DashPilot looks up no prices.")
         }
     }
 
@@ -233,6 +225,7 @@ struct SettingsView: View {
 
             Toggle(isOn: handlesStackedOrdersInOrder) {
                 SettingLabel(
+                    isDependent: true,
                     title: "Handle stacked orders in order",
                     detail: workflowOn
                         ? "With several orders, Park works on the lowest-numbered one still to collect."
@@ -266,9 +259,9 @@ struct SettingsView: View {
         } footer: {
             Text(
                 """
-                DashPilot follows these settings and your taps; it does not know where you are. Undo, \
-                shown for a few seconds, takes back what a tap recorded. Pickups Resume Driving records are \
-                left out of typical pickup waits.
+                These act on your taps; DashPilot does not know where you are. Undo, shown for a few \
+                seconds, takes back what a tap recorded. Pickups Resume Driving records are left out of \
+                typical pickup waits.
                 """
             )
         }
@@ -509,18 +502,30 @@ private enum VehicleEditorSubject: Identifiable {
 
 /// A switch's name and the one line saying what it does, read together by
 /// VoiceOver as the switch's label.
+/// A switch's name, what it changes in one line, and, for a switch that
+/// depends on another, a glyph and an indent that say so before the words do.
 private struct SettingLabel: View {
+    /// Whether this switch only works while the one above it is on.
+    var isDependent = false
     let title: String
     let detail: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: DashSpacing.xs) {
-            Text(title)
-                .dashFont(.body)
-            Text(detail)
-                .dashFont(.body)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+        HStack(alignment: .firstTextBaseline, spacing: DashSpacing.md) {
+            if isDependent {
+                Image(systemName: "arrow.turn.down.right")
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+            }
+            VStack(alignment: .leading, spacing: DashSpacing.xs) {
+                Text(title)
+                    .dashFont(.emphasis)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(detail)
+                    .dashFont(.body)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
     }
 }
