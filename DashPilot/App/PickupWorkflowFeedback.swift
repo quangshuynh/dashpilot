@@ -1,7 +1,9 @@
 import Foundation
 
-/// What the pickup workflow did at the last Park or Resume Driving pressed on
-/// the running shift's screen, and whether it can still be taken back.
+/// What the pickup workflow did at the last Park pressed on the running shift's
+/// screen, and whether it can still be taken back. Resume Driving's line is a
+/// ``TransientUndo`` below the list instead, because it leaves after its window
+/// and leaving from here moved every delivery card.
 ///
 /// Screen state rather than a stored fact: the delivery's own timestamps are
 /// the record, and this is only the sentence saying the tap wrote them. It is
@@ -13,7 +15,6 @@ struct PickupWorkflowFeedback: Equatable, Identifiable {
     /// Which press it describes, by the instant the vehicle state was recorded.
     enum Moment: Equatable {
         case parked(at: Date)
-        case resumed(at: Date)
     }
 
     let id = UUID()
@@ -23,17 +24,12 @@ struct PickupWorkflowFeedback: Equatable, Identifiable {
     /// have been, once the window has passed, or when nothing was recorded.
     var undoableAction: AutomatedPickupAction?
 
-    /// Whether it still describes `shift`'s vehicle state.
-    ///
-    /// A Park line belongs to the stretch that began at its instant, and a
-    /// Resume line to a vehicle that is driving again after the stretch that
-    /// ended at its instant.
+    /// Whether it still describes `shift`'s vehicle state: a Park line
+    /// belongs to the stretch that began at its instant.
     func describes(_ shift: Shift) -> Bool {
         switch moment {
         case let .parked(at):
             shift.openRouteSuspension?.startedAt == at
-        case let .resumed(at):
-            !shift.isRouteSuspended && shift.routeSuspensionsInOrder.last?.endedAt == at
         }
     }
 }

@@ -481,9 +481,9 @@ struct ActiveShiftPanel: View {
         }
     }
 
-    /// What the driver's pickup workflow just recorded, or declined to, under
-    /// the state it belongs to: below the parked notice after Park, below the
-    /// shift's status after Resume Driving.
+    /// What the driver's pickup workflow just recorded, or declined to, at
+    /// Park, below the parked notice. Resume Driving's line is drawn below the
+    /// list by ``TransientUndoBar``, so its leaving moves no delivery card.
     ///
     /// A line and not an alert: Park is the tap before a driver walks into a
     /// shop and Resume the tap before they pull away, and nothing here should

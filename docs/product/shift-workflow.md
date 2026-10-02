@@ -287,8 +287,9 @@ by default, and with it off nothing above changes.
 
 Each is one operation behind all three surfaces, so the app's buttons, the spoken actions and the
 Lock Screen's controls behave identically. The vehicle state is recorded first, and always stands;
-the delivery step follows through the delivery's own operation, at the same instant. The panel then
-says so under the shift's status, for example `Delivery 3 marked Arrived at Pickup` with
+the delivery step follows through the delivery's own operation, at the same instant. The app then
+says so, under the parked notice after Park and in a line below the list after Resume Driving (so
+its leaving moves no delivery card), for example `Delivery 3 marked Arrived at Pickup` with
 `Recorded automatically when you parked.` beneath it and an **Undo** beside it for a few seconds. Undo
 takes back that delivery step only: the vehicle stays parked, or driving. There is no confirmation to
 answer first, because the point is fewer taps at a door.

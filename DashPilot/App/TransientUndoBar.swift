@@ -15,6 +15,9 @@ struct TransientUndo: Identifiable {
         case delivered(deliveryID: UUID, spokenLabel: String)
         /// The step recorded while parked and the driving it resumed, together.
         case parkedProgress(ParkedProgressAction)
+        /// What Resume Driving recorded under the pickup workflow; the vehicle
+        /// stays driving.
+        case pickupWorkflow(AutomatedPickupAction)
     }
 
     let id = UUID()
@@ -57,6 +60,30 @@ extension TransientUndo {
             identifier: "parkedProgressNotice",
             offer: action.map(Offer.parkedProgress)
         )
+    }
+
+    /// What Resume Driving recorded under the pickup workflow, with its Undo
+    /// when it recorded a step.
+    ///
+    /// Here rather than under the shift's status, where it used to sit, because
+    /// it leaves after its window and its leaving pulled every delivery card up.
+    static func resumed(_ notice: PickupWorkflowNotice, action: AutomatedPickupAction?) -> Self {
+        TransientUndo(
+            title: notice.title,
+            detail: notice.detail,
+            spokenLabel: notice.spokenLabel,
+            symbolName: notice.symbolName,
+            identifier: "pickupWorkflowNotice",
+            offer: action.map(Offer.pickupWorkflow)
+        )
+    }
+
+    /// Whether the line still means something once the vehicle is parked
+    /// again: only a Delivered's, which is about a delivery. A line about the
+    /// last resume describes a vehicle that is no longer driving.
+    var survivesParking: Bool {
+        guard case .delivered = offer else { return identifier == "undoDeliveredBanner" }
+        return true
     }
 
     /// The same line once its Undo has been taken.
@@ -131,6 +158,7 @@ struct TransientUndoBar: View {
         switch offer {
         case let .delivered(_, label): label
         case let .parkedProgress(action): action.spokenUndoLabel
+        case let .pickupWorkflow(action): action.spokenUndoLabel
         }
     }
 
@@ -138,6 +166,7 @@ struct TransientUndoBar: View {
         switch offer {
         case .delivered: "undoDeliveredButton"
         case .parkedProgress: "undoParkedProgressButton"
+        case .pickupWorkflow: "undoPickupWorkflowStepButton"
         }
     }
 }
