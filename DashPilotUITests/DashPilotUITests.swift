@@ -3053,6 +3053,51 @@ final class DashPilotUITests: XCTestCase {
         )
     }
 
+    /// Two orders picked up: the card offers Delivered for the lower number
+    /// beside Resume Driving, inside its height, and falls back to the one
+    /// delivery's own step once the first is delivered.
+    @MainActor
+    func testLiveActivityOffersDeliveredInOrderForStackedOrders() throws {
+        let app = launchWithLiveActivityPreview()
+        app.buttons["startShiftButton"].tap()
+        XCTAssertTrue(app.descendants(matching: .any)["liveActivityPreview"].waitForExistence(timeout: 5))
+        startOffer(expectingCards: 2, in: app)
+
+        for name in ["Delivery 1", "Delivery 2"] {
+            let action = deliveryButton("deliveryActionButton", containing: name, in: app)
+            for next in ["Mark order picked up", "Mark delivery completed"] {
+                XCTAssertTrue(scrollUntilHittable(action, in: app))
+                action.tap()
+                XCTAssertTrue(waitForLabel(action, toContain: next), "\(name): \(action.label)")
+            }
+        }
+
+        let card = app.descendants(matching: .any)["liveActivityPreview"]
+        XCTAssertTrue(scrollToTop(reaching: card, in: app))
+        XCTAssertEqual(
+            activityControls(in: app),
+            ["activityControl.nextDelivered", "activityControl.startDelivery", "activityControl.park"]
+        )
+        let delivered = card.buttons["activityControl.nextDelivered"]
+        XCTAssertEqual(delivered.label, "Mark delivery 1 delivered", "The control names the order it records")
+
+        pressPark(in: app)
+        XCTAssertTrue(scrollToTop(reaching: card, in: app))
+        XCTAssertEqual(
+            activityControls(in: app),
+            ["activityControl.resumeDriving", "activityControl.nextDelivered", "activityControl.startDelivery"]
+        )
+        assertInsideTheCard("activityControl.resumeDriving", in: app)
+        assertInsideTheCard("activityControl.nextDelivered", in: app)
+
+        let first = deliveryButton("deliveryActionButton", containing: "Delivery 1", in: app)
+        XCTAssertTrue(scrollUntilHittable(first, in: app))
+        first.tap()
+        XCTAssertTrue(scrollToTop(reaching: card, in: app))
+        XCTAssertTrue(card.buttons["activityControl.deliveryStep"].waitForExistence(timeout: 5))
+        XCTAssertFalse(card.buttons["activityControl.nextDelivered"].exists, "One left: its own step again")
+    }
+
     /// A completed shift that was parked says how much of its short route the
     /// driver asked for, and reports every minute of it as worked.
     @MainActor
