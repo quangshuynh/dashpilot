@@ -198,25 +198,21 @@ struct ActiveShiftPanel: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
-            // Beside each other where both fit whole, stacked where they do
-            // not: at the largest sizes side by side broke the status inside
-            // its words.
+            // Beside each other, and stacked at accessibility sizes: there,
+            // side by side broke the status inside its words.
             if dynamicTypeSize.isAccessibilitySize {
                 VStack(alignment: .leading, spacing: DashSpacing.xs) {
                     status
                     startedText
                 }
             } else {
-                ViewThatFits(in: .horizontal) {
-                    HStack(alignment: .firstTextBaseline, spacing: DashSpacing.md) {
-                        status.fixedSize()
-                        Spacer(minLength: DashSpacing.md)
-                        startedText.fixedSize()
-                    }
-                    VStack(alignment: .leading, spacing: DashSpacing.xs) {
-                        status
-                        startedText
-                    }
+                // A plain row in which the status keeps priority and wraps
+                // before the time does. `ViewThatFits` here, inside a list row,
+                // drew an empty block with Bold Text on.
+                HStack(alignment: .firstTextBaseline, spacing: DashSpacing.md) {
+                    status.layoutPriority(1)
+                    Spacer(minLength: DashSpacing.md)
+                    startedText
                 }
             }
         }
