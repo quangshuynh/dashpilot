@@ -115,7 +115,9 @@ struct ShiftActivityHeader: View {
     private func status(_ title: String) -> some View {
         Label(title, systemImage: state.headerSymbolName)
             .font(.caption.weight(.semibold))
-            .foregroundStyle(state.isPaused || state.routeSuspendedNotice != nil ? .orange : .red)
+            // The island's hue for the same state: parked is blue, as in the
+            // app, never the paused orange.
+            .foregroundStyle(ShiftActivityPalette.tint(for: state.compactStatus))
             .lineLimit(1)
     }
 }
@@ -351,7 +353,8 @@ struct ShiftActivityControlButton: View {
     private var tint: Color {
         switch control {
         case .end: .red
-        case .pause, .resume, .startDelivery, .park, .resumeDriving, .deliveryStep, .nextDelivered: .accentColor
+        case .pause, .resume, .startDelivery, .park, .resumeDriving, .deliveryStep, .nextDelivered:
+            ShiftActivityPalette.accent
         }
     }
 }

@@ -1,3 +1,4 @@
+import SwiftUI
 import Testing
 @testable import DashPilot
 
@@ -28,5 +29,17 @@ struct DashDesignTests {
             #expect(state.nextAction != nil, "\(state) offers no next step")
         }
         #expect(DeliveryState.delivered.nextAction == nil)
+    }
+
+    /// The Lock Screen header used the paused orange for a parked shift while
+    /// the island used blue. One palette now draws both, and the app's own
+    /// status tints are read from it.
+    @Test("Parked, paused and running each have their own hue, shared by the app and the Live Activity")
+    func statusHuesAreSharedAndDistinct() {
+        let hues = [ShiftActivityCompactStatus.running, .paused, .parked].map(ShiftActivityPalette.tint(for:))
+        #expect(Set(hues.map { "\($0)" }).count == 3)
+        #expect(DashStatusTint.running == ShiftActivityPalette.tint(for: .running))
+        #expect(DashStatusTint.paused == ShiftActivityPalette.tint(for: .paused))
+        #expect(DashStatusTint.parked == ShiftActivityPalette.tint(for: .parked))
     }
 }
