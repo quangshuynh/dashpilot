@@ -8961,7 +8961,22 @@ final class DashPilotUITests: XCTestCase {
     ) -> Bool {
         for _ in 0..<maxSwipes {
             if element.isHittable { return revealAboveEntryBar(element, in: app) }
-            app.swipeUp()
+            // Already in the list but off screen: move it by the distance it
+            // is away rather than by a whole swipe, which can carry it past
+            // the top, after which a downward search never finds it again.
+            let window = app.windows.firstMatch.frame
+            if element.exists, element.frame.minY > window.midY {
+                let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.6))
+                let distance = min(element.frame.maxY - window.maxY * 0.6 + 24, window.height * 0.45)
+                start.press(
+                    forDuration: 0.1,
+                    thenDragTo: start.withOffset(CGVector(dx: 0, dy: -distance)),
+                    withVelocity: .slow,
+                    thenHoldForDuration: 0.3
+                )
+            } else {
+                app.swipeUp()
+            }
         }
         return element.isHittable && revealAboveEntryBar(element, in: app)
     }
@@ -9020,12 +9035,18 @@ final class DashPilotUITests: XCTestCase {
     @discardableResult
     private func revealAboveEntryBar(_ element: XCUIElement, in app: XCUIApplication) -> Bool {
         guard !["startDeliveryButton", "startOfferButton"].contains(element.identifier) else { return true }
+        // Only where the bar is drawn: elsewhere a control is reached exactly
+        // as it always was, and a large-title bar or a row taller than the
+        // band at the largest text sizes would otherwise be chased back and
+        // forth without ever settling.
+        guard entryBarTop(in: app) != nil else { return true }
         let navigationBar = app.navigationBars.firstMatch
         for _ in 0..<5 {
             guard element.exists else { return false }
             let frame = element.frame
             let top = navigationBar.exists ? navigationBar.frame.maxY : 0
-            let bottom = entryBarTop(in: app) ?? app.windows.firstMatch.frame.maxY
+            guard let bottom = entryBarTop(in: app) else { return true }
+            guard frame.height < bottom - top else { return true }
             let offset: CGFloat
             if frame.maxY > bottom {
                 offset = -min(frame.maxY - bottom + 24, 360)
@@ -9042,9 +9063,10 @@ final class DashPilotUITests: XCTestCase {
                 thenHoldForDuration: 0.3
             )
         }
+        guard let bottom = entryBarTop(in: app) else { return true }
         let frame = element.frame
         let top = navigationBar.exists ? navigationBar.frame.maxY : 0
-        return frame.minY >= top && frame.maxY <= (entryBarTop(in: app) ?? .greatestFiniteMagnitude)
+        return frame.minY >= top && frame.maxY <= bottom
     }
 
     /// Drags the list until `element` sits clear of the line below it.
@@ -9178,9 +9200,52 @@ final class DashPilotUITests: XCTestCase {
     /// summary sits above the rows, so on a phone the first row is below the
     /// fold and a `List` has not rendered it until it is scrolled to.
     private func openFirstShift(in app: XCUIApplication) {
+        // A shift ended a moment ago takes the delivery-entry bar with it, and
+        // the list moves as its bottom inset goes: a row tapped during that
+        // move is tapped where it was. Wait for the bar to go and the row to
+        // stop moving, both conditions rather than a pause.
+        XCTAssertTrue(waitForDisappearance(of: app.buttons["startDeliveryButton"]), "No shift is still running")
         let row = rows(in: app).firstMatch
         XCTAssertTrue(scrollUntilHittable(row, in: app, maxSwipes: 12), "History lists a completed shift")
+        // Wholly on screen, not merely touching it: a row whose frame only
+        // reaches into the home indicator's strip is reported hittable, and the
+        // tap lands below the list (seen in a recording, where the row was not
+        // yet visible when it was tapped).
+        XCTAssertTrue(waitForStillFrame(of: row), "The list has laid out")
+        let limit = app.windows.firstMatch.frame.maxY - 60
+        for _ in 0..<3 where row.frame.maxY > limit {
+            let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.6))
+            start.press(
+                forDuration: 0.1,
+                thenDragTo: start.withOffset(CGVector(dx: 0, dy: -min(row.frame.maxY - limit + 24, 300))),
+                withVelocity: .slow,
+                thenHoldForDuration: 0.3
+            )
+        }
+        XCTAssertTrue(waitForStillFrame(of: row), "The list has settled")
         row.tap()
+    }
+
+    /// Waits until an element's frame has read the same for a whole second of
+    /// consecutive readings, so a tap is not computed against a list that is
+    /// still laying out. Two quick readings were not enough: a list rebuilding
+    /// after a shift ended reported the same stale frame twice, and the row was
+    /// tapped below the screen.
+    @MainActor
+    private func waitForStillFrame(of element: XCUIElement, timeout: TimeInterval = 8) -> Bool {
+        let deadline = Date.now.addingTimeInterval(timeout)
+        var previous = element.frame
+        var stableSince = Date.now
+        while Date.now < deadline {
+            let current = element.frame
+            if current != previous {
+                previous = current
+                stableSince = .now
+            } else if Date.now.timeIntervalSince(stableSince) >= 1, element.isHittable {
+                return true
+            }
+        }
+        return false
     }
 
     @MainActor
