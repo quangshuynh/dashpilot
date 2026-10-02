@@ -2563,6 +2563,7 @@ final class DashPilotUITests: XCTestCase {
         setSwitch("pickupWorkflowToggle", to: true, in: app)
         XCTAssertTrue(waitForEnabled(child, true), "With the workflow on, stacked orders can be chosen")
         setSwitch("stackedOrdersInOrderToggle", to: true, in: app)
+        attachScreenshot("settings-pickup-parking")
 
         setSwitch("pickupWorkflowToggle", to: false, in: app)
         XCTAssertTrue(waitForEnabled(child, false), "And inert again once the workflow is off")
@@ -5734,7 +5735,7 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertTrue(field.waitForExistence(timeout: 5))
         XCTAssertEqual(field.value as? String, "14.75", "The editor opens on the stored amount")
         clear(field, in: app)
-        field.typeText("9.50")
+        enter("9.50", into: field, in: app)
         app.buttons["saveDeliveryEarningsButton"].tap()
 
         XCTAssertTrue(waitForLabel(row, toContain: "$9.50"), "The edited amount replaces the previous one")
@@ -5759,7 +5760,7 @@ final class DashPilotUITests: XCTestCase {
         let field = app.textFields["deliveryEarningsAmountField"]
         XCTAssertTrue(field.waitForExistence(timeout: 5))
         clear(field, in: app)
-        field.typeText("99.99")
+        enter("99.99", into: field, in: app)
         app.buttons["cancelDeliveryEarningsButton"].tap()
 
         XCTAssertTrue(waitForLabel(row, toContain: "$14.75"), "Cancel writes nothing: \(row.label)")
@@ -5918,7 +5919,7 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertTrue(field.waitForExistence(timeout: 5))
         XCTAssertEqual(field.value as? String, "3", "The editor opens on the stored amount")
         clear(field, in: app)
-        field.typeText("4.50")
+        enter("4.50", into: field, in: app)
         app.buttons["saveDeliveryTipButton"].tap()
 
         XCTAssertTrue(
@@ -6088,7 +6089,7 @@ final class DashPilotUITests: XCTestCase {
         let field = app.textFields["deliveryEarningsAmountField"]
         XCTAssertTrue(field.waitForExistence(timeout: 5))
         clear(field, in: app)
-        field.typeText("20.00")
+        enter("20.00", into: field, in: app)
         app.buttons["saveDeliveryEarningsButton"].tap()
 
         XCTAssertTrue(waitForLabel(third, toContain: "$20.00"), "Showed: \(third.label)")
@@ -6212,7 +6213,7 @@ final class DashPilotUITests: XCTestCase {
         let field = app.textFields["deliveryEarningsAmountField"]
         XCTAssertTrue(field.waitForExistence(timeout: 5))
         clear(field, in: app)
-        field.typeText("50.00")
+        enter("50.00", into: field, in: app)
         app.buttons["saveDeliveryEarningsButton"].tap()
 
         XCTAssertTrue(waitForLabel(row, toContain: "$50.00"))
@@ -6571,7 +6572,7 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertTrue(field.waitForExistence(timeout: 5))
         XCTAssertEqual(field.value as? String, Self.noodles, "The editor opens on what was recorded")
         clear(field, in: app)
-        field.typeText(Self.diner)
+        enter(Self.diner, into: field, in: app)
         app.buttons["savePickupPlaceButton"].tap()
 
         XCTAssertTrue(waitForLabel(status, toContain: Self.diner), "Showed: \(status.label)")
@@ -6801,7 +6802,7 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertTrue(field.waitForExistence(timeout: 5))
         XCTAssertEqual(field.value as? String, Self.noodles, "The sheet opens on the recorded spelling")
         clear(field, in: app)
-        field.typeText(Self.renamedNoodles)
+        enter(Self.renamedNoodles, into: field, in: app)
         app.buttons["savePickupPlaceRenameButton"].tap()
 
         XCTAssertTrue(
@@ -6831,7 +6832,7 @@ final class DashPilotUITests: XCTestCase {
         let field = app.textFields["pickupPlaceRenameField"]
         XCTAssertTrue(field.waitForExistence(timeout: 5))
         clear(field, in: app)
-        field.typeText(Self.diner)
+        enter(Self.diner, into: field, in: app)
         app.buttons["savePickupPlaceRenameButton"].tap()
 
         // A `Label` mirrors its identifier onto both the icon and the text, so
@@ -7266,7 +7267,7 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertEqual(economyField.value as? String, "25", "The editor opens on the stored figures")
         XCTAssertEqual(app.textFields["fuelGasPriceField"].value as? String, "3.5")
         clear(economyField, in: app)
-        economyField.typeText("50")
+        enter("50", into: economyField, in: app)
         app.buttons["saveFuelAssumptionsButton"].tap()
 
         XCTAssertTrue(scrollTo(cost, in: app))
@@ -7964,7 +7965,7 @@ final class DashPilotUITests: XCTestCase {
             object: economyField
         )
         XCTAssertEqual(XCTWaiter().wait(for: [focused], timeout: 5), .completed)
-        economyField.typeText("34")
+        enter("34", into: economyField, in: app)
         app.buttons["saveVehicleButton"].tap()
         assertVehicleSheetClosed(in: app)
         goBack(in: app)
@@ -8701,7 +8702,7 @@ final class DashPilotUITests: XCTestCase {
             object: economyField
         )
         XCTAssertEqual(XCTWaiter().wait(for: [focused], timeout: 5), .completed)
-        economyField.typeText("34")
+        enter("34", into: economyField, in: app)
         app.buttons["saveVehicleButton"].tap()
         assertVehicleSheetClosed(in: app)
 
@@ -8837,11 +8838,11 @@ final class DashPilotUITests: XCTestCase {
         let economyField = app.textFields["fuelMilesPerGallonField"]
         XCTAssertTrue(economyField.waitForExistence(timeout: 5))
         clear(economyField, in: app)
-        economyField.typeText(milesPerGallon)
+        enter(milesPerGallon, into: economyField, in: app)
 
         let priceField = app.textFields["fuelGasPriceField"]
         clear(priceField, in: app)
-        priceField.typeText(gasPrice)
+        enter(gasPrice, into: priceField, in: app)
 
         app.buttons["saveFuelAssumptionsButton"].tap()
         XCTAssertTrue(
@@ -9331,11 +9332,26 @@ final class DashPilotUITests: XCTestCase {
         (field.value(forKey: "hasKeyboardFocus") as? Bool) ?? false
     }
 
+    /// Deletes what a field holds, by the rule ``enter(_:into:in:)`` follows:
+    /// tapping a field that already has the keyboard raises the edit menu and
+    /// loses keystrokes, which in CI runs 37007996270 and 37007976466 left
+    /// `34` in the vehicle economy field and made `38` read `3438`.
     @MainActor
     private func clear(_ field: XCUIElement, in app: XCUIApplication) {
-        field.tap()
-        let existing = (field.value as? String) ?? ""
+        XCTAssertTrue(field.waitForExistence(timeout: 5), "The field is on screen")
+        if !hasKeyboardFocus(field) {
+            field.tap()
+            let focused = XCTNSPredicateExpectation(
+                predicate: NSPredicate(format: "hasKeyboardFocus == true"),
+                object: field
+            )
+            XCTAssertEqual(XCTWaiter().wait(for: [focused], timeout: 5), .completed, "The field took the keyboard")
+        }
+        let shown = (field.value as? String) ?? ""
+        let existing = shown == field.placeholderValue ? "" : shown
         field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: existing.count))
+        let cleared = (field.value as? String) ?? ""
+        XCTAssertTrue(cleared.isEmpty || cleared == field.placeholderValue, "The field was emptied: \(cleared)")
     }
 
     /// The sentence of a validation message drawn as a `Label` with a warning
@@ -10263,7 +10279,7 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertTrue(field.waitForExistence(timeout: 5))
         XCTAssertEqual(field.value as? String, "42.1", "The editor opens on what was recorded")
         clear(field, in: app)
-        field.typeText("50.00")
+        enter("50.00", into: field, in: app)
         app.buttons["saveExpenseButton"].tap()
         XCTAssertTrue(app.buttons["saveExpenseButton"].waitForNonExistence(timeout: 5))
 
