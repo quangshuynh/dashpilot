@@ -106,7 +106,9 @@ afterwards are the same one.
 
 The screen reads top to bottom in the order a driver needs it: which state the shift is in, the
 working clock as the one large figure, a row of figures, and Park; then the deliveries, each with its
-next step; and only then the once-a-shift controls and the context:
+next step; and only then the once-a-shift controls and the context. Recording a newly accepted order
+is not in that list at all: it is a bar pinned to the bottom of the screen, reachable from wherever
+the list has been scrolled to:
 
 ```text
 ● Shift in Progress                    Started 5:46 PM
@@ -118,8 +120,6 @@ Worked so far
 Recorded miles      Delivered    In progress
 partial route · 2 capture segments · 1 capture gap
 
-This shift is still running. Rates are worked out once it ends.
-
 [ Parked for a Pickup ]
 
 DELIVERIES
@@ -127,13 +127,23 @@ DELIVERIES
       ●──○┄┄○┄┄○                                    state, Next step)
       Heading to the pickup · 12 min
       Next  [ Arrived at Pickup ]
-  [ Start Delivery ]
 
 SHIFT
   [ Pause Shift ]  [ End Shift ]
+  This shift is still running. Rates are worked out once it ends.
   2020 Honda Civic · 34 MPG                       Change
   Location tracking active
+───────────────────────────────────────────────── (pinned)
+  [ Add Delivery ]                     [ Several ]
 ```
+
+**The entry bar** holds `Start Delivery` (`Add Delivery` once one is in progress) and, narrower
+beside it, `Several` for an offer of more than one delivery. It sits in the screen's bottom safe
+area rather than over the list, so the list is inset by its height and its last row always scrolls
+fully above it. It is the prominent control only when nothing is in progress and the vehicle is not
+parked; otherwise the prominent control is a delivery's next step or Resume Driving, and the bar is
+bordered. It is not shown while the shift is paused, when no delivery can be started, and its text
+stops growing at the first accessibility size so `Start Delivery` stays whole on one row.
 
 Pause and End sit below the deliveries because each is tapped once a shift, while a delivery's next
 step is tapped many times; that keeps the first delivery's step on the first screen.
@@ -160,7 +170,8 @@ explains what a partial route means is on the finished shift's own screen.
 **No earnings and no rates appear on a running shift**, and the screen says why rather than showing
 a dash or a zero. A shift's gross earnings cannot be recorded until it has finished, so every rate
 derived from them is withheld: `This shift is still running. Rates are worked out once it ends.`
-Nothing is worked out from the amounts recorded against individual deliveries, which are a separate
+That sentence is with the shift's context below the deliveries, so it never stands between the clock
+and a delivery's step. Nothing is worked out from the amounts recorded against individual deliveries, which are a separate
 fact and never a shift total.
 
 Still deliberately absent: a map, coordinates, a sample count, an earnings projection, a target, a

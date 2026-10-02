@@ -568,7 +568,7 @@ struct ActiveShiftControlsPanel: View {
 
     /// One rate, and only when there is one.
     ///
-    /// An unavailable rate leaves nothing behind — no dash, no `$0.00` — because
+    /// An unavailable rate leaves nothing behind (no dash, no `$0.00`), because
     /// a rate that could not be derived and a rate of zero are different facts.
     /// The reason is said once, below, rather than three times.
     @ViewBuilder

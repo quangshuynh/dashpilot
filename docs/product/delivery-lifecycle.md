@@ -547,11 +547,15 @@ overlap count their shared minutes once whether or not they share an offer.
 `Start Delivery` is untouched: one tap, one delivery, in an offer of one. The same is true of the
 App Shortcut and the Live Activity button, which both go through the same service call.
 
-Beside it on the running shift is one small secondary control, `Offer With Several Deliveries`. It
-opens a sheet that asks **a count**, and two optional switches, `Same pickup` and `Same drop-off`,
-both off (see [below](#same-pickup-and-same-drop-off)): no pickup place, no amount, no customer and no
-name, because each of those is optional on a delivery and can be added later from its own card. The
-confirm button repeats the number it will record.
+Beside it in the running shift's entry bar is one narrower secondary control, `Several`. It opens
+the `Offer With Several Deliveries` sheet, which asks **a count**, and two optional switches,
+`Same pickup` and `Same drop-off`, both off (see [below](#same-pickup-and-same-drop-off)): no pickup
+place, no amount, no customer and no name, because each of those is optional on a delivery and can be
+added later from its own card. The sheet leads with those three controls, each switch with its
+meaning in one line; `Start N Deliveries` is pinned at its bottom, names the count it will record,
+and stays reachable at every text size while the form scrolls; the longer explanation comes last,
+and VoiceOver hears it as the button's hint. A second press before the sheet has gone records
+nothing, and Cancel records nothing.
 
 The stepper's range is a control's bounds rather than a rule. The model refuses an offer below one
 delivery and caps nothing above it, since how much work a driver accepted is a fact about their work.
@@ -818,10 +822,10 @@ So a driver holding one order waiting at a counter and another already in the ca
 `Arrived at Pickup` on one card and `Delivered` on the other. Neither the lifecycle step nor the
 delivery it applies to is ever chosen from a menu.
 
-`Start Delivery` sits below the cards and is available the whole time the shift runs, because
-accepting another order is ordinary work rather than an exception. It is the prominent control only
-when nothing is in progress; while deliveries are running, the prominent controls are the ones
-advancing them.
+`Start Delivery` is pinned at the bottom of the screen and is available the whole time the shift
+runs, because accepting another order is ordinary work rather than an exception. It is the prominent
+control only when nothing is in progress; while deliveries are running it reads `Add Delivery` and
+is bordered, because the prominent controls are the ones advancing them.
 
 Each card also carries a bordered `Cancel Delivery 2` control — named, never a global "Cancel
 Delivery" that picks its own target — behind a confirmation that repeats which delivery it will end

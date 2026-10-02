@@ -505,6 +505,16 @@ Three lessons are worth repeating when adding journeys:
 - A journey that sets `-UIPreferredContentSizeCategoryName` reaches a screen several times longer
   than the default one: history is below the fold on launch, so the shift row has to be scrolled to
   before it is tapped, and the scrolling helpers need a larger `maxSwipes`.
+- Type with `enter(_:into:in:)`, never `tap()` then `typeText(_:)`. Most editors focus their own
+  field, and tapping a focused field raises iOS's edit menu (AutoFill, Paste) under the finger; the
+  keystrokes sent while it appears are lost. `enter` taps only a field without the keyboard and
+  asserts the field then holds what was typed, so a lost keystroke fails where it happened rather
+  than on a row three steps later.
+- The running shift's delivery entry is a bar pinned in Home's bottom safe area, and an Undo line
+  sits on it. XCUITest reports a control beneath either one hittable and taps the bar instead, so
+  reach a control with `scrollUntilHittable`, which drags it clear of both. Cards scrolled out of
+  view are not in the hierarchy, so count deliveries from the panel's `deliveryStatus` line at the
+  top rather than by counting `deliveryActionButton` from wherever the journey has scrolled to.
 - A `.sheet` attached to a conditionally rendered section goes away with the section. The period
   summary rebuilds its sections whenever it re-measures routes, which dismissed the export sheet
   before it had written anything; the modifier belongs on the `List`.
@@ -583,6 +593,15 @@ no test is retried to make a run pass.
 ### How long a run takes, and the budget it is given
 
 The job's `timeout-minutes` is **180**, and the number is measured rather than chosen for comfort.
+
+The latest measured runs, with 238 to 242 tests, took **2h28m to 2h42m** end to end (runs
+36963445708, 36947255282, 36946410015, 36916384792, 36916358022 and 36963465798): 2 to 4 minutes of
+`build-for-testing`, 5 to 8 of domain tests and 2h17m to 2h26m of UI journeys, about 35 seconds a
+journey on the runner against about 28 locally. The slowest leaves about 18 minutes, which is the
+margin to watch: it is still a ceiling a healthy run stays under, and it is not raised until a run
+that was making progress actually reaches it.
+
+The figures below are the history that set the number.
 
 `main` run 35553963157 was cancelled by an earlier 60-minute budget with the UI journeys still
 executing. It had spent 3m25s on `build-for-testing`, 5m43s on the domain suite and 50m37s on the UI
