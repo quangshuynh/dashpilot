@@ -6991,7 +6991,15 @@ final class DashPilotUITests: XCTestCase {
         // then lands nowhere and the wheels stay up, which is how this failed on
         // a CI runner. A coordinate inside the bar is outside the popover either
         // way, and a touch there is what closes it.
-        app.navigationBars.firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        //
+        // The bar is the **sheet's**, the lowest on screen. `firstMatch` was
+        // the presenting screen's bar, which the sheet covers, so where that
+        // point landed depended on the sheet's geometry: CI run 36947255282
+        // tapped (201, 89), the centre of the shift detail's bar behind the
+        // editor, and the wheels stayed up.
+        let bars = app.navigationBars.allElementsBoundByIndex
+        let sheetBar = bars.max { $0.frame.minY < $1.frame.minY } ?? app.navigationBars.firstMatch
+        sheetBar.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         XCTAssertTrue(
             waitForDisappearance(of: app.pickerWheels.firstMatch),
             "The wheels close, so the rest of the form can be reached"
