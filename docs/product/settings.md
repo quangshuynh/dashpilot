@@ -214,7 +214,8 @@ still to collect would mark that order `Arrived at Pickup`. Undo is the way back
 
 ### Undo
 
-Beside a step the workflow has just recorded, the panel offers **Undo** for the same short window
+Beside a step the workflow has just recorded (under the parked notice after Park, in the line below
+the list after Resume Driving), the app offers **Undo** for the same short window
 the app's immediate undo of a `Delivered` uses (20 seconds on screen). It takes back **exactly what
 that press recorded and nothing else**, one delivery's step or the same step for every delivery of a
 shared pickup, all of them or none: after Park, the delivery goes back to `Accepted` and the vehicle stays

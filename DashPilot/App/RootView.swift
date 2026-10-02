@@ -136,21 +136,16 @@ struct RootView: View {
             // The window an automated step can be taken back in, which is the
             // one the app's immediate undo of a Delivered already keeps, counted
             // in one-second ticks for the reason that one is. Restarted by each
-            // press. When it passes, a Park line stays for as long as the
-            // vehicle is parked, without its Undo, and a Resume line goes: a
-            // sentence about a pickup has nothing left to say to a driver who
-            // is already driving.
+            // Park. When it passes, the Park line stays for as long as the
+            // vehicle is parked, without its Undo. (Resume Driving's line is in
+            // the bar below the list, which keeps its own window.)
             .task(id: pickupWorkflow?.id) {
                 guard pickupWorkflow != nil else { return }
                 for _ in 0..<DeliveryControlPanel.undoSeconds {
                     try? await Task.sleep(for: .seconds(1))
                     guard !Task.isCancelled else { return }
                 }
-                guard let feedback = pickupWorkflow else { return }
-                switch feedback.moment {
-                case .parked: pickupWorkflow?.undoableAction = nil
-                case .resumed: pickupWorkflow = nil
-                }
+                pickupWorkflow?.undoableAction = nil
             }
             .alert(
                 "Step Not Undone",
@@ -371,6 +366,12 @@ struct RootView: View {
         // workflow behaves the same from every surface.
         var result: ParkVehicleResult?
         perform { result = try ParkVehicleService(context: modelContext).park() }
+        // A line about the last resume says nothing about a vehicle parked
+        // again, and its Undo would now be refused. A Delivered's Undo is about
+        // a delivery and stays.
+        if result != nil, transientUndo?.survivesParking == false {
+            transientUndo = nil
+        }
         pickupWorkflow = result.flatMap { result in
             guard let parkedAt = result.shift.openRouteSuspension?.startedAt,
                   let notice = result.pickup.notice else { return nil }
@@ -390,14 +391,14 @@ struct RootView: View {
         // recording a walk.
         var result: ResumeDrivingResult?
         perform { result = try ParkVehicleService(context: modelContext).resumeDriving() }
-        pickupWorkflow = result.flatMap { result in
-            guard let resumedAt = result.shift.routeSuspensionsInOrder.last?.endedAt,
-                  let notice = result.pickup.notice else { return nil }
-            return PickupWorkflowFeedback(
-                moment: .resumed(at: resumedAt),
-                notice: notice,
-                undoableAction: AutomatedPickupAction(result.automatedSteps)
-            )
+        if let result {
+            // The parked line goes with the stretch it described. What Resume
+            // recorded is said below the list, so its leaving after the window
+            // moves no delivery card; see ``TransientUndoBar``.
+            pickupWorkflow = nil
+            if let notice = result.pickup.notice {
+                transientUndo = .resumed(notice, action: AutomatedPickupAction(result.automatedSteps))
+            }
         }
         routeCapture.synchronize()
         liveActivity.reconcile()
@@ -447,6 +448,10 @@ struct RootView: View {
                     throw DeliveryLifecycleError.invalidRecovery(.notDelivered)
                 }
                 try service.reopenDelivered(delivery)
+            case let .pickupWorkflow(action):
+                // The vehicle is not touched: the driver did resume driving.
+                try DeliveryService(context: modelContext).undoAutomatedSteps(action.steps)
+                transientUndo = undo.undone(action.undoneNotice)
             case let .parkedProgress(action):
                 routeCapture.prepareForRouteSuspension()
                 defer { routeCapture.synchronize() }
