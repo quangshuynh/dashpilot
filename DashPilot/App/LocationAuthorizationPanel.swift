@@ -123,7 +123,11 @@ struct LocationAuthorizationPanel: View {
         case .servicesDisabled:
             "Location Services is off for this device, so no app can use location. Turn it on in Settings, under Privacy & Security."
         case .authorized(_, .full):
-            "DashPilot can use precise location while a shift is running, including when you are in another app or the screen is locked. Recording has to be started with DashPilot open. Your route is stored on this device only."
+            """
+                DashPilot can use precise location while a shift runs, including in other apps or with \
+                the screen locked. Recording has to start with DashPilot open. Your route stays on \
+                this device.
+                """
         case .authorized(_, .reduced):
             "DashPilot has approximate location only, which is usually too imprecise to record a useful route. Precise Location can be turned on in Settings."
         case .authorized(_, .unrecognised):

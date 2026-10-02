@@ -82,8 +82,7 @@ There is no screen to glance at afterwards, so the confirmation is the whole rep
 - "Shift paused after 2 hours, 30 minutes of working time. Route recording is stopped until you
   resume."
 - "Shift resumed after 45 minutes paused. Open DashPilot to start recording your route again."
-- "Vehicle parked. Route recording is stopped until you resume driving. Your shift is still running
-  and its working time is still counting."
+- "Vehicle parked. Route recording is stopped until you resume driving. Your shift is still running."
 - "Driving again after 25 minutes parked. Open DashPilot to start recording your route again."
 - "Delivery 2 started. 2 deliveries in progress."
 - "Delivery 1 recorded as picked up."

@@ -93,12 +93,9 @@ struct PickupPlaceRenameView: View {
     /// What a rename changes, and — said outright, because it is the thing a
     /// driver would otherwise be nervous about — what it does not.
     private static let explanation = """
-        The new spelling replaces the old one everywhere this place appears, and a delivery you \
-        record under it later joins this same place. Nothing else changes: every delivery already \
-        recorded here stays here, no recorded time is altered, and the pickup waits at this place \
-        are the same waits afterwards. If the name you type is one another pickup place already \
-        uses, DashPilot says so rather than putting the two together — combining them is Merge, and \
-        it is a separate, deliberate step.
+        The new spelling replaces the old one everywhere, and later deliveries recorded under it join \
+        this place. Recorded deliveries, times and waits do not change. If another place already uses \
+        the name, DashPilot says so instead of combining them; combining is Merge, a separate step.
         """
 
     private func save() {

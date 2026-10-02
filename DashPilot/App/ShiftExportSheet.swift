@@ -135,16 +135,15 @@ struct ShiftExportSheet: View {
         Section {
             Text(
                 """
-                The file is created on this device. DashPilot has no network access and sends nothing \
-                anywhere — where the file goes next is whatever you pick in the share sheet, and once \
-                it is there it is outside DashPilot.
+                The file is created on this device. DashPilot has no network access and sends nothing; \
+                where it goes next is up to you in the share sheet.
                 """
             )
             Text(
                 """
-                It holds what you recorded: shift and delivery times, the amounts you typed, recorded \
-                mileage and the pickup places you named. Recorded positions are not included. It is \
-                not a tax statement and not a record from any delivery platform.
+                It holds what you recorded: shift and delivery times, amounts you typed, recorded \
+                mileage and pickup place names. Recorded positions are not included. It is not a tax \
+                statement or a platform record.
                 """
             )
             Text(expenseStatement)
@@ -165,9 +164,8 @@ struct ShiftExportSheet: View {
         switch (scope, format) {
         case (.shift, _):
             """
-            Expenses you recorded are not in a single shift's file. An expense belongs to a date \
-            rather than to a shift, so DashPilot cannot say which ones were part of this one. Export \
-            a day, week, month or range for costs alongside the work.
+            A single shift's file has no expenses: an expense belongs to a date, not a shift. Export a \
+            day, week, month or range to include costs.
             """
         case (_, .csv):
             """
@@ -176,9 +174,8 @@ struct ShiftExportSheet: View {
             """
         case (_, .json):
             """
-            Expenses you recorded in this period are included, with their notes, and so is what your \
-            recorded gross earnings come to after them. That figure is not profit: costs you did not \
-            record are not in it.
+            Expenses recorded in this period are included with their notes, and so are recorded gross \
+            earnings after them. That figure is not profit: costs you did not record are not in it.
             """
         }
     }

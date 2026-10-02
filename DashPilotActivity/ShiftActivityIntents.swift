@@ -111,9 +111,8 @@ struct PauseShiftFromActivityIntent: LiveActivityIntent {
 
     static let description: IntentDescription? = IntentDescription(
         """
-        Pauses the shift in progress from its Live Activity. Paused time is not counted as working \
-        time, and route recording stops until you resume. A shift with deliveries still in progress \
-        is not paused.
+        Pauses the shift from its Live Activity. Paused time is not counted as working time, and route \
+        recording stops until you resume. Not available while a delivery is in progress.
         """,
         categoryName: "Shift"
     )
@@ -143,8 +142,8 @@ struct ResumeShiftFromActivityIntent: LiveActivityIntent {
 
     static let description: IntentDescription? = IntentDescription(
         """
-        Resumes a paused shift from its Live Activity so its working time counts again. Route \
-        recording begins again when you open DashPilot, as a new recording.
+        Resumes a paused shift from its Live Activity. Route recording begins again when you open \
+        DashPilot.
         """,
         categoryName: "Shift"
     )
@@ -172,10 +171,7 @@ struct EndShiftFromActivityIntent: LiveActivityIntent {
     static let title: LocalizedStringResource = "End Shift from Live Activity"
 
     static let description: IntentDescription? = IntentDescription(
-        """
-        Ends the shift in progress from its Live Activity and records its end time on this device. \
-        A shift with deliveries still in progress is not ended.
-        """,
+        "Ends the shift from its Live Activity. Not available while a delivery is in progress.",
         categoryName: "Shift"
     )
 
@@ -216,9 +212,8 @@ struct StartDeliveryFromActivityIntent: LiveActivityIntent {
 
     static let description: IntentDescription? = IntentDescription(
         """
-        Records that you accepted a delivery on the shift in progress, from its Live Activity. \
-        Deliveries already in progress are not changed. A paused shift records no delivery until \
-        you resume it.
+        Records that you accepted a delivery, from the shift's Live Activity. Deliveries in progress \
+        are not changed. Not available while paused.
         """,
         categoryName: "Delivery"
     )
@@ -249,9 +244,9 @@ struct RecordDeliveryProgressFromActivityIntent: LiveActivityIntent {
 
     static let description: IntentDescription? = IntentDescription(
         """
-        Records the next step of the delivery in progress from the shift's Live Activity: arrived at \
-        the pickup, picked up, then delivered. If more than one delivery is in progress, nothing is \
-        recorded, because the step could belong to either of them.
+        Records the next step of the delivery in progress, from the shift's Live Activity. If more \
+        than one delivery is in progress, nothing is recorded, because the step could belong to \
+        either.
         """,
         categoryName: "Delivery"
     )
@@ -349,9 +344,8 @@ struct ParkVehicleFromActivityIntent: LiveActivityIntent {
 
     static let description: IntentDescription? = IntentDescription(
         """
-        Records that you have parked and are away from the vehicle, from the shift's Live Activity. \
-        Route recording stops until you resume driving. Your shift keeps running and its working time \
-        keeps counting.
+        Records that you parked, from the shift's Live Activity. Route recording stops until you \
+        resume driving; your shift keeps running.
         """,
         categoryName: "Shift"
     )
@@ -386,9 +380,9 @@ struct ResumeDrivingFromActivityIntent: LiveActivityIntent {
 
     static let description: IntentDescription? = IntentDescription(
         """
-        Records that you are driving again after parking, from the shift's Live Activity. Route \
-        recording begins again when you open DashPilot, as a new recording: the distance between \
-        where you parked and where you drove off is not counted.
+        Records that you are driving again, from the shift's Live Activity. Route recording begins \
+        again when you open DashPilot; the distance between where you parked and drove off is not \
+        counted.
         """,
         categoryName: "Shift"
     )

@@ -194,9 +194,9 @@ struct SettingsView: View {
         } footer: {
             Text(
                 """
-                What you last paid for a gallon, kept so you type it once. DashPilot looks up no \
-                prices, knows no stations and uses nothing about where you are. Changing it \
-                changes what your next shift records, and never a shift you have already worked.
+                What you last paid per gallon, so you type it once. DashPilot looks up no prices and \
+                uses nothing about where you are. A change applies to your next shift, never to one \
+                already worked.
                 """
             )
         }
@@ -356,9 +356,8 @@ struct SettingsView: View {
     /// edit or a delete here is not a correction to anything recorded.
     private var vehiclesFooter: String {
         let stability = """
-            The default vehicle's miles per gallon is recorded on each shift when it starts. \
-            Editing or deleting a vehicle changes what your next shift records, and never a shift \
-            you have already worked.
+            Each shift records the default vehicle's miles per gallon when it starts. Editing or \
+            deleting a vehicle changes your next shift, never one already worked.
             """
         if vehicles.isEmpty {
             return stability

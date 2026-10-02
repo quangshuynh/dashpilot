@@ -159,9 +159,9 @@ struct PickupPlaceHistoryView: View {
             removes this one. The deliveries and their recorded times are kept.
             """
         return """
-            Rename changes what this place is called, everywhere. Its deliveries and their recorded \
-            waits are unaffected. \(merge) DashPilot never combines two places on its own — it does \
-            no name matching beyond treating capitalisation and spacing as the same.
+            Rename changes this place's name everywhere; its deliveries and waits are unaffected. \
+            \(merge) DashPilot never combines places on its own, and matches names only by ignoring \
+            capitalisation and spacing.
             """
     }
 
@@ -302,11 +302,9 @@ struct PickupPlaceHistoryView: View {
     /// Said in full rather than implied, because a number on a screen is read as
     /// a forecast unless it says otherwise.
     private static let explanation = """
-        A wait is the time between arriving at a pickup and marking the order picked up, \
-        measured only from those two events. Deliveries that recorded one of them, or \
-        neither, are left out, and so are pickups recorded when you parked. Nothing is \
-        discarded for being unusually long, and none of this predicts how long the next \
-        pickup here will take.
+        A wait is the time from arriving at a pickup to marking the order picked up. Deliveries \
+        missing either event are left out, and so are pickups recorded when you parked. Long waits are \
+        kept, and nothing here predicts the next one.
         """
 }
 

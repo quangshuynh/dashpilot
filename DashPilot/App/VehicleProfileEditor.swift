@@ -70,10 +70,9 @@ struct VehicleProfileEditor: View {
                 } footer: {
                     Text(
                         """
-                        The name is yours to recognise, and the miles per gallon is what DashPilot \
-                        divides a shift's recorded miles by. Both are kept on this device. Shifts \
-                        you have already worked keep the figures they recorded, so changing these \
-                        changes only what your next shift records.
+                        The name is for you; the miles per gallon is what a shift's recorded miles are \
+                        divided by. Both stay on this device. Changes apply to your next shift; shifts \
+                        already worked keep their figures.
                         """
                     )
                 }
@@ -87,9 +86,8 @@ struct VehicleProfileEditor: View {
                     } footer: {
                         Text(
                             """
-                            Removes \(vehicle.name) from this list. Every shift you worked in it keeps its own \
-                            miles per gallon, its estimated fuel and its name, so nothing you have \
-                            recorded changes.
+                            Removes \(vehicle.name) from this list. Shifts worked in it keep their own \
+                            name, miles per gallon and estimated fuel.
                             """
                         )
                     }
@@ -241,10 +239,9 @@ struct CurrentGasPriceEditor: View {
                 } footer: {
                     Text(
                         """
-                        What a gallon costs you now, kept so you type it once. It is recorded on \
-                        each shift when that shift starts, so changing it here changes what your \
-                        next shift records and never a shift you have already worked. DashPilot \
-                        looks up no prices and uses nothing about where you are.
+                        What a gallon costs you now, so you type it once. Each shift records it when \
+                        it starts, so a change applies to your next shift, never to one already \
+                        worked. DashPilot looks up no prices and uses nothing about where you are.
                         """
                     )
                 }

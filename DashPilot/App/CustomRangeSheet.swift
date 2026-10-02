@@ -108,9 +108,8 @@ struct CustomRangeSheet: View {
         } footer: {
             Text(
                 """
-                Both dates are included: a range from the 1st to the 7th covers seven days. Neither can \
-                be later than today — DashPilot summarises shifts you have already finished, and \
-                forecasts nothing.
+                Both dates are included: the 1st to the 7th covers seven days. Neither can be later \
+                than today, because summaries cover finished shifts and forecast nothing.
                 """
             )
         }

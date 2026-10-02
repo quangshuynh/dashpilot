@@ -55,9 +55,8 @@ struct ShiftEarningsEditor: View {
                 } footer: {
                     Text(
                         """
-                        What this shift paid, as you choose to record it. \
-                        DashPilot is not connected to any delivery platform, so nothing is imported \
-                        and nothing is checked — this is your own figure, kept on this device.
+                        What this shift paid, as you record it. Nothing is imported or checked; it is \
+                        your own figure, kept on this device.
                         """
                     )
                 }

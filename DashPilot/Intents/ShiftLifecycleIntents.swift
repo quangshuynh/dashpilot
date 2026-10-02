@@ -17,9 +17,8 @@ struct StartShiftIntent: AppIntent {
 
     static let description: IntentDescription? = IntentDescription(
         """
-        Starts a shift and records its start time on this device. \
-        Route recording begins when you open DashPilot and then continues while you use other \
-        apps, so a shift started this way records no mileage until you open it.
+        Starts a shift and records its start time. Route recording begins when you open DashPilot, so \
+        a shift started this way records no mileage until you open it.
         """,
         categoryName: "Shift",
         searchKeywords: ["shift", "start", "driving", "work"]
@@ -82,9 +81,8 @@ struct PauseShiftIntent: AppIntent {
 
     static let description: IntentDescription? = IntentDescription(
         """
-        Pauses the shift in progress without ending it. Paused time is not counted as working time, \
-        and route recording stops until you resume. A shift with deliveries still in progress is not \
-        paused.
+        Pauses the shift without ending it. Paused time is not counted as working time, and route \
+        recording stops until you resume. Not available while a delivery is in progress.
         """,
         categoryName: "Shift",
         searchKeywords: ["shift", "pause", "break", "stop"]
@@ -111,9 +109,8 @@ struct ResumeShiftIntent: AppIntent {
 
     static let description: IntentDescription? = IntentDescription(
         """
-        Resumes a paused shift so its working time counts again. Route recording begins again when \
-        you open DashPilot, as a new recording: the distance between where you paused and where you \
-        resumed is not counted.
+        Resumes a paused shift. Route recording begins again when you open DashPilot; the distance \
+        between where you paused and resumed is not counted.
         """,
         categoryName: "Shift",
         searchKeywords: ["shift", "resume", "continue", "unpause"]
@@ -151,10 +148,9 @@ struct ParkVehicleIntent: AppIntent {
 
     static let description: IntentDescription? = IntentDescription(
         """
-        Records that you have parked and are away from the vehicle. Route recording stops until you \
-        resume driving, and the distance across the stretch is not counted. Your shift keeps running \
-        and its working time keeps counting. With Pick up orders with Park & Resume on in Settings, it \
-        also marks the delivery you are picking up as Arrived at Pickup.
+        Records that you parked. Route recording stops until you resume driving, and the distance \
+        across the stretch is not counted; your shift keeps running. With Pick up orders with Park & \
+        Resume on, it also marks the delivery you are picking up Arrived at Pickup.
         """,
         categoryName: "Shift",
         searchKeywords: ["park", "parked", "vehicle", "pickup"]
@@ -185,10 +181,9 @@ struct ResumeDrivingIntent: AppIntent {
 
     static let description: IntentDescription? = IntentDescription(
         """
-        Records that you are driving again after parking. Route recording begins again when you open \
-        DashPilot, as a new recording: the distance between where you parked and where you drove off \
-        is not counted. With Pick up orders with Park & Resume on in Settings, it also marks the \
-        delivery Park marked Arrived at Pickup as Picked Up.
+        Records that you are driving again. Route recording begins again when you open DashPilot; the \
+        distance between where you parked and drove off is not counted. With Pick up orders with Park \
+        & Resume on, it also marks Park's delivery Picked Up.
         """,
         categoryName: "Shift",
         searchKeywords: ["driving", "resume", "unpark", "vehicle"]

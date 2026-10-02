@@ -123,8 +123,8 @@ nonisolated enum IntentLifecycleOutcome: Equatable, Sendable {
             // turned it on hears exactly what they always did.
             [
                 """
-                Vehicle parked. Route recording is stopped until you resume driving. \
-                Your shift is still running and its working time is still counting.
+                Vehicle parked. Route recording is stopped until you resume driving. Your shift is \
+                still running.
                 """,
                 pickup.notice?.sentence
             ]
@@ -166,8 +166,8 @@ nonisolated enum IntentLifecycleOutcome: Equatable, Sendable {
     private static func parkedSentence(_ parked: ParkedProgressOutcome) -> String? {
         guard case .resumed = parked else { return parked.notice?.sentence }
         return """
-        Driving resumed by your \(ParkedProgressOutcome.settingName) setting, because nothing is left to \
-        record at this stop. Open DashPilot to start recording your route again.
+        Driving resumed by your \(ParkedProgressOutcome.settingName) setting: nothing is left at this \
+        stop. Open DashPilot to start recording your route again.
         """
     }
 

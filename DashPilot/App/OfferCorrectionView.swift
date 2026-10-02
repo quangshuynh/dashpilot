@@ -196,10 +196,9 @@ struct OfferCorrectionView: View {
             Text(
                 """
                 Correcting grouping only changes which deliveries you recorded as accepted together. \
-                \(OfferCorrectionPlan.unchangedStatement) A delivery keeps every step you recorded \
-                for it, whether or not it has finished, and stays in this shift. An offer left with \
-                no deliveries is removed. Offers are numbered by when you accepted them, so the \
-                numbers may change after a correction.
+                \(OfferCorrectionPlan.unchangedStatement) Every delivery keeps its recorded steps and \
+                stays in this shift. An offer left empty is removed, and offers are renumbered by \
+                acceptance time.
                 """
             )
             .dashFont(.body)

@@ -238,9 +238,8 @@ struct ShiftVehicleCorrectionEditor: View {
 
     private var vehicleFooterStatement: String {
         let common = """
-            This records the vehicle's current name and miles per gallon onto this shift, as a copy. \
-            Renaming or deleting the vehicle afterwards leaves this shift saying what it recorded, \
-            and nothing in Settings is changed.
+            Copies the vehicle's current name and miles per gallon onto this shift. Renaming or \
+            deleting the vehicle later leaves this shift as recorded, and Settings is unchanged.
             """
         guard vehicles.isEmpty else { return common }
         return "Add a vehicle in Settings to choose one here. \(common)"
@@ -248,9 +247,8 @@ struct ShiftVehicleCorrectionEditor: View {
 
     private var priceFooterStatement: String {
         """
-        You can only change this before DashPilot has recorded any driving on this shift, because \
-        changing what a mile is assumed to cost after the miles are recorded would restate them. \
-        Nothing is recorded until you tap Save.
+        Only possible before any driving is recorded on this shift, because a changed assumption would \
+        restate miles already recorded. Nothing is recorded until you tap Save.
         """
     }
 

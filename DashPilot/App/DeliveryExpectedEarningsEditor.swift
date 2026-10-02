@@ -72,9 +72,8 @@ struct DeliveryExpectedEarningsEditor: View {
                 } footer: {
                     Text(
                         """
-                        What you expect \(numbered.title) to pay, as you choose to record it. It is not \
-                        gross earnings: nothing counts it, no total or rate includes it, and it does \
-                        not appear in any summary. DashPilot will offer it back when you mark this \
+                        What you expect \(numbered.title) to pay. It is not gross earnings: no total, \
+                        rate or summary counts it. DashPilot offers it back when you mark this \
                         delivery delivered, so you can record what it actually paid.
                         """
                     )
