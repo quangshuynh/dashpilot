@@ -2206,7 +2206,7 @@ final class DashPilotUITests: XCTestCase {
                 app.buttons["cancelDeliveryButton"].exists,
                 "A delivery in progress can be cancelled"
             )
-            action.tap()
+            tapWithinReach(action, in: app)
         }
 
         let status = app.descendants(matching: .any)["deliveryStatus"]
@@ -2260,7 +2260,7 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertTrue(waitForLabel(status, toContain: "2 deliveries in progress"), "Status: \(status.label)")
 
         // Advancing one leaves the other exactly where it was.
-        second.tap()
+        tapWithinReach(second, in: app)
         XCTAssertTrue(waitForLabel(second, toContain: "Delivery 2. Mark order picked up"))
         XCTAssertEqual(first.label, "Delivery 1. Mark arrived at pickup", "Delivery 1 is untouched")
     }
@@ -2335,7 +2335,7 @@ final class DashPilotUITests: XCTestCase {
         // The recovered card is a control over the real record, not a redrawn
         // placeholder: advancing it moves that delivery and leaves the other.
         XCTAssertTrue(scrollUpUntilHittable(carrying, in: app, maxSwipes: 6))
-        carrying.tap()
+        tapWithinReach(carrying, in: app)
         XCTAssertTrue(
             waitForCount(app.buttons.matching(identifier: "deliveryActionButton"), toEqual: 1),
             "The delivered one leaves the list"
@@ -2616,7 +2616,7 @@ final class DashPilotUITests: XCTestCase {
         let action = deliveryButton("deliveryActionButton", containing: "Delivery 1", in: app)
         XCTAssertTrue(scrollTo(action, in: app))
         XCTAssertTrue(waitForLabel(action, toContain: "Mark arrived at pickup"))
-        action.tap()
+        tapWithinReach(action, in: app)
         XCTAssertTrue(waitForLabel(action, toContain: "Mark order picked up"))
 
         pressPark(in: app)
@@ -2629,8 +2629,10 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertTrue(notice.waitForExistence(timeout: 5), "The driver is told what their setting did")
         XCTAssertTrue(notice.label.contains("Delivery 1 picked up. Driving resumed by your"), notice.label)
         XCTAssertFalse(notice.label.lowercased().contains("detected"), notice.label)
+        // The shift's header is above the card the journey scrolled to, and a
+        // list does not render what is scrolled off its top.
         XCTAssertTrue(
-            app.buttons["parkShiftButton"].waitForExistence(timeout: 5),
+            scrollToTop(reaching: app.buttons["parkShiftButton"], in: app),
             "The vehicle is driving: Park is offered again"
         )
         XCTAssertFalse(app.buttons["resumeDrivingButton"].exists)
@@ -3211,7 +3213,7 @@ final class DashPilotUITests: XCTestCase {
 
         let step = deliveryButton("deliveryActionButton", containing: "Delivery 2", in: app)
         XCTAssertTrue(scrollTo(step, in: app))
-        step.tap()
+        tapWithinReach(step, in: app)
 
         XCTAssertTrue(
             waitForLabel(second, toContain: "Next step, mark order picked up"),
@@ -3312,7 +3314,7 @@ final class DashPilotUITests: XCTestCase {
 
         let confirm = deliveryButton("deliverySuggestionActionButton", containing: "Delivery 2", in: app)
         XCTAssertTrue(confirm.waitForExistence(timeout: 5))
-        confirm.tap()
+        tapWithinReach(confirm, in: app)
 
         // The delivery the reminder named has moved, through the ordinary
         // lifecycle action rather than through anything of the reminder's own.
@@ -3355,7 +3357,7 @@ final class DashPilotUITests: XCTestCase {
             dismiss.label.contains("Nothing is recorded"),
             "The control says aloud that it records nothing: \(dismiss.label)"
         )
-        dismiss.tap()
+        tapWithinReach(dismiss, in: app)
 
         XCTAssertTrue(
             waitForCount(
@@ -3501,7 +3503,7 @@ final class DashPilotUITests: XCTestCase {
 
         // Delivering one of the two leaves the other running, and the heading
         // now says how much of the offer is left rather than disappearing.
-        first.tap()
+        tapWithinReach(first, in: app)
         XCTAssertTrue(
             waitForCount(app.buttons.matching(identifier: "deliveryActionButton"), toEqual: 2),
             "The delivered one leaves the list and the other two stay"
@@ -4208,7 +4210,7 @@ final class DashPilotUITests: XCTestCase {
         let accepted = deliveryButton("deliveryActionButton", containing: "Delivery 2", in: app)
         let carrying = deliveryButton("deliveryActionButton", containing: "Delivery 3", in: app)
         XCTAssertTrue(scrollTo(carrying, in: app))
-        carrying.tap()
+        tapWithinReach(carrying, in: app)
 
         XCTAssertTrue(
             waitForCount(app.buttons.matching(identifier: "deliveryActionButton"), toEqual: 1),
@@ -4253,7 +4255,7 @@ final class DashPilotUITests: XCTestCase {
         // Resolving one of the two is not enough.
         let carrying = deliveryButton("deliveryActionButton", containing: "Delivery 3", in: app)
         XCTAssertTrue(scrollTo(carrying, in: app))
-        carrying.tap()
+        tapWithinReach(carrying, in: app)
         XCTAssertTrue(waitForCount(app.buttons.matching(identifier: "deliveryActionButton"), toEqual: 1))
 
         XCTAssertTrue(reachShiftControl(app.buttons["endShiftButton"], in: app))
@@ -4281,11 +4283,11 @@ final class DashPilotUITests: XCTestCase {
         // Resolving the last one unblocks it.
         let accepted = deliveryButton("deliveryActionButton", containing: "Delivery 2", in: app)
         XCTAssertTrue(scrollTo(accepted, in: app))
-        accepted.tap()
+        tapWithinReach(accepted, in: app)
         XCTAssertTrue(waitForLabel(accepted, toContain: "Mark order picked up"))
-        accepted.tap()
+        tapWithinReach(accepted, in: app)
         XCTAssertTrue(waitForLabel(accepted, toContain: "Mark delivery completed"))
-        accepted.tap()
+        tapWithinReach(accepted, in: app)
 
         XCTAssertTrue(waitForCount(app.buttons.matching(identifier: "deliveryActionButton"), toEqual: 0))
         XCTAssertTrue(reachShiftControl(app.buttons["endShiftButton"], in: app))
@@ -4305,7 +4307,7 @@ final class DashPilotUITests: XCTestCase {
         let cancel = deliveryButton("cancelDeliveryButton", containing: "Delivery 2", in: app)
         XCTAssertTrue(scrollTo(cancel, in: app))
         XCTAssertEqual(cancel.label, "Delivery 2. Cancel this delivery", "The control says which delivery it ends")
-        cancel.tap()
+        tapWithinReach(cancel, in: app)
 
         // The confirmation names it too: with two in progress, "Cancel Delivery"
         // alone would be ambiguous.
@@ -4325,7 +4327,7 @@ final class DashPilotUITests: XCTestCase {
         let carrying = deliveryButton("deliveryActionButton", containing: "Delivery 3", in: app)
         XCTAssertTrue(carrying.exists, "The other delivery is untouched by the cancellation")
         XCTAssertEqual(carrying.label, "Delivery 3. Mark delivery completed")
-        carrying.tap()
+        tapWithinReach(carrying, in: app)
 
         // Back up to the shift's own controls, which the delivery cards pushed
         // out of the list's rendered rows, the way the journey above does.
@@ -6246,7 +6248,7 @@ final class DashPilotUITests: XCTestCase {
             "Nothing is expected until the driver records it: \(card.label)"
         )
 
-        add.tap()
+        tapWithinReach(add, in: app)
         let field = app.textFields["deliveryExpectedEarningsAmountField"]
         XCTAssertTrue(field.waitForExistence(timeout: 5))
         XCTAssertNotEqual(
@@ -6320,14 +6322,14 @@ final class DashPilotUITests: XCTestCase {
         // The step before the last one. The confirmation belongs to the
         // delivered event alone, so picking the order up must raise nothing.
         XCTAssertEqual(action.label, "Delivery 1. Mark order picked up")
-        action.tap()
+        tapWithinReach(action, in: app)
         XCTAssertTrue(waitForLabel(action, toContain: "Mark delivery completed"))
         XCTAssertFalse(
             app.buttons["confirmEarningsRecordButton"].exists,
             "Nothing is asked until the delivery is actually delivered"
         )
 
-        action.tap()
+        tapWithinReach(action, in: app)
 
         let expectedRow = app.descendants(matching: .any)["confirmEarningsExpectedAmount"]
         XCTAssertTrue(expectedRow.waitForExistence(timeout: 5), "The confirmation is raised")
@@ -6377,7 +6379,7 @@ final class DashPilotUITests: XCTestCase {
         let remaining = deliveryButton("deliveryActionButton", containing: "Delivery 2", in: app)
         for expected in ["Mark order picked up", "Mark delivery completed"] {
             XCTAssertTrue(waitForLabel(remaining, toContain: expected), "Showed: \(remaining.label)")
-            remaining.tap()
+            tapWithinReach(remaining, in: app)
         }
 
         let endShift = app.buttons["endShiftButton"]
@@ -6436,7 +6438,7 @@ final class DashPilotUITests: XCTestCase {
 
         for expected in ["Mark order picked up", "Mark delivery completed"] {
             XCTAssertTrue(waitForLabel(action, toContain: expected), "Showed: \(action.label)")
-            action.tap()
+            tapWithinReach(action, in: app)
         }
 
         XCTAssertTrue(
@@ -6454,7 +6456,7 @@ final class DashPilotUITests: XCTestCase {
         // confirmation would take this one instead of the card.
         let change = deliveryButton("expectedEarningsButton", containing: "Delivery 1", in: app)
         XCTAssertTrue(scrollTo(change, in: app))
-        change.tap()
+        tapWithinReach(change, in: app)
         let field = app.textFields["deliveryExpectedEarningsAmountField"]
         XCTAssertTrue(field.waitForExistence(timeout: 5), "The other card's own sheet opens")
         XCTAssertEqual(
@@ -6489,7 +6491,7 @@ final class DashPilotUITests: XCTestCase {
         let pickup = deliveryButton("pickupPlaceButton", containing: "Delivery 1", in: app)
         XCTAssertTrue(scrollTo(pickup, in: app), "The card offers a pickup place control")
         XCTAssertEqual(pickup.label, "Add pickup place for Delivery 1")
-        pickup.tap()
+        tapWithinReach(pickup, in: app)
 
         typePickupPlace(Self.noodles, in: app)
         app.buttons["savePickupPlaceButton"].tap()
@@ -6506,7 +6508,7 @@ final class DashPilotUITests: XCTestCase {
         // And the lifecycle still runs, one tap per event, exactly as before.
         for expected in ["Mark arrived at pickup", "Mark order picked up", "Mark delivery completed"] {
             XCTAssertTrue(waitForLabel(action, toContain: expected), "Showed: \(action.label)")
-            action.tap()
+            tapWithinReach(action, in: app)
         }
         XCTAssertFalse(app.buttons["deliveryActionButton"].exists)
     }
@@ -6520,7 +6522,7 @@ final class DashPilotUITests: XCTestCase {
 
         let first = deliveryButton("pickupPlaceButton", containing: "Delivery 1", in: app)
         XCTAssertTrue(scrollTo(first, in: app))
-        first.tap()
+        tapWithinReach(first, in: app)
         typePickupPlace(Self.noodles, in: app)
         app.buttons["savePickupPlaceButton"].tap()
 
@@ -6530,7 +6532,7 @@ final class DashPilotUITests: XCTestCase {
 
         let second = deliveryButton("pickupPlaceButton", containing: "Delivery 2", in: app)
         XCTAssertTrue(second.waitForExistence(timeout: 5))
-        second.tap()
+        tapWithinReach(second, in: app)
 
         // No keyboard: the place the first delivery named is offered as recent.
         let recent = app.buttons
@@ -6556,7 +6558,7 @@ final class DashPilotUITests: XCTestCase {
 
         let pickup = deliveryButton("pickupPlaceButton", containing: "Delivery 1", in: app)
         XCTAssertTrue(scrollTo(pickup, in: app))
-        pickup.tap()
+        tapWithinReach(pickup, in: app)
         typePickupPlace(Self.noodles, in: app)
         app.buttons["savePickupPlaceButton"].tap()
 
@@ -6564,7 +6566,7 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertTrue(waitForLabel(status, toContain: Self.noodles))
 
         XCTAssertTrue(waitForLabel(pickup, toContain: "Change pickup place"))
-        pickup.tap()
+        tapWithinReach(pickup, in: app)
         let field = app.textFields["pickupPlaceNameField"]
         XCTAssertTrue(field.waitForExistence(timeout: 5))
         XCTAssertEqual(field.value as? String, Self.noodles, "The editor opens on what was recorded")
@@ -6584,17 +6586,17 @@ final class DashPilotUITests: XCTestCase {
 
         let pickup = deliveryButton("pickupPlaceButton", containing: "Delivery 1", in: app)
         XCTAssertTrue(scrollTo(pickup, in: app))
-        pickup.tap()
+        tapWithinReach(pickup, in: app)
         typePickupPlace(Self.noodles, in: app)
         app.buttons["savePickupPlaceButton"].tap()
 
         let action = deliveryButton("deliveryActionButton", containing: "Delivery 1", in: app)
         XCTAssertTrue(waitForLabel(action, toContain: "Mark arrived at pickup"))
-        action.tap()
+        tapWithinReach(action, in: app)
         XCTAssertTrue(waitForLabel(action, toContain: "Mark order picked up"))
 
         XCTAssertTrue(waitForLabel(pickup, toContain: "Change pickup place"))
-        pickup.tap()
+        tapWithinReach(pickup, in: app)
         let remove = app.buttons["removePickupPlaceButton"]
         XCTAssertTrue(remove.waitForExistence(timeout: 5))
         remove.tap()
@@ -8963,6 +8965,17 @@ final class DashPilotUITests: XCTestCase {
         return element.isHittable && revealAboveEntryBar(element, in: app)
     }
 
+    /// Taps a control on the running shift's panel once it is inside the band
+    /// a tap reaches, clear of the navigation bar and of the pinned delivery
+    /// entry. `tap()` alone scrolls a control only until it is on screen, which
+    /// can leave it under the entry bar, and the tap then lands on the bar.
+    @MainActor
+    private func tapWithinReach(_ element: XCUIElement, in app: XCUIApplication) {
+        XCTAssertTrue(element.waitForExistence(timeout: 5), "The control is on the panel")
+        XCTAssertTrue(revealAboveEntryBar(element, in: app), "The control is clear of the bars")
+        element.tap()
+    }
+
     /// The top of the running shift's pinned delivery-entry bar, or `nil` where
     /// none is drawn (no shift, a paused one, or another screen on top).
     ///
@@ -8995,20 +9008,42 @@ final class DashPilotUITests: XCTestCase {
         return top
     }
 
-    /// Drags the list until `element` sits wholly above the delivery-entry bar.
-    /// The bar's own controls, and anything with no bar beneath it, return at
-    /// once and cost one query.
+    /// Drags the list until `element` sits wholly inside the band a tap can
+    /// reach: below the navigation bar and above the delivery-entry bar and any
+    /// Undo line on it. XCUITest reports a control under either edge hittable
+    /// and sends the tap to the bar instead. Each drag moves the list by the
+    /// distance still needed and holds before lifting, so no momentum carries
+    /// the control past the other edge. The bar's own controls, and anything
+    /// already inside the band, return at once.
     @MainActor
     @discardableResult
     private func revealAboveEntryBar(_ element: XCUIElement, in app: XCUIApplication) -> Bool {
         guard !["startDeliveryButton", "startOfferButton"].contains(element.identifier) else { return true }
+        let navigationBar = app.navigationBars.firstMatch
         for _ in 0..<5 {
-            guard let top = entryBarTop(in: app), element.exists, element.frame.maxY > top else { return true }
+            guard element.exists else { return false }
+            let frame = element.frame
+            let top = navigationBar.exists ? navigationBar.frame.maxY : 0
+            let bottom = entryBarTop(in: app) ?? app.windows.firstMatch.frame.maxY
+            let offset: CGFloat
+            if frame.maxY > bottom {
+                offset = -min(frame.maxY - bottom + 24, 360)
+            } else if frame.minY < top {
+                offset = min(top - frame.minY + 24, 360)
+            } else {
+                return true
+            }
             let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
-            start.press(forDuration: 0.1, thenDragTo: start.withOffset(CGVector(dx: 0, dy: -180)))
+            start.press(
+                forDuration: 0.1,
+                thenDragTo: start.withOffset(CGVector(dx: 0, dy: offset)),
+                withVelocity: .slow,
+                thenHoldForDuration: 0.3
+            )
         }
-        guard let top = entryBarTop(in: app) else { return true }
-        return element.frame.maxY <= top
+        let frame = element.frame
+        let top = navigationBar.exists ? navigationBar.frame.maxY : 0
+        return frame.minY >= top && frame.maxY <= (entryBarTop(in: app) ?? .greatestFiniteMagnitude)
     }
 
     /// Drags the list until `element` sits clear of the line below it.
@@ -9172,7 +9207,7 @@ final class DashPilotUITests: XCTestCase {
                 app.buttons["shiftDetailDeliveryTipsButton"].exists,
                 "And neither is tip entry, which is the same typing at the same wheel"
             )
-            action.tap()
+            tapWithinReach(action, in: app)
         }
 
         let endButton = app.buttons["endShiftButton"]
