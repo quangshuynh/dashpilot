@@ -315,10 +315,9 @@ paused or ended. It is offered only in the app.
 
 ## Acknowledgements
 
-`About` → `Acknowledgements` states the two licenses DashPilot ships under: its
-own source code is MIT, and the one typeface it bundles, Manrope, is under the
-SIL Open Font License 1.1, whose full text is bundled beside the font files and
-shown there. See [Building](../development/building.md#the-typeface-and-its-license).
+`About` → `Acknowledgements` states that DashPilot's own source code is MIT, and
+that its text is set in the system typeface, provided by iOS, so the app bundles
+no font. See [Building](../development/building.md#the-typeface).
 
 ## Privacy
 

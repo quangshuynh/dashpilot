@@ -26,19 +26,5 @@
 	-->
 	<key>NSSupportsLiveActivities</key>
 	<true/>
-	<!--
-	  UIAppFonts: Manrope, the one typeface DashPilot's text roles are set in,
-	  bundled with the app and registered at launch; nothing is downloaded.
-	  SIL Open Font License 1.1: Resources/Fonts/OFL.txt, bundled beside the
-	  fonts, with its provenance in Resources/Fonts/LICENSE-Manrope.md.
-	  DashTypography falls back to the system font if a face fails to load.
-	-->
-	<key>UIAppFonts</key>
-	<array>
-		<string>Manrope-Bold.ttf</string>
-		<string>Manrope-Medium.ttf</string>
-		<string>Manrope-Regular.ttf</string>
-		<string>Manrope-SemiBold.ttf</string>
-	</array>
 </dict>
 </plist>
