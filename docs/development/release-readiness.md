@@ -111,6 +111,17 @@ else. The documentation toolchain (MkDocs) is a build-time dependency only.
   restaurants, customers or routes appear in any of them.
 - A release-notes draft is in [Release notes draft](release-notes-draft.md).
 
+The release set, from the complete UI run that validated this branch:
+
+![A running shift with nothing in progress and Start Delivery pinned at the bottom](../images/screenshots/home-active-no-deliveries.png){ width="200" }
+![One delivery in progress, its next step on the card and Add Delivery pinned below](../images/screenshots/home-one-delivery.png){ width="200" }
+![Two stacked deliveries in different states](../images/screenshots/home-stacked-deliveries.png){ width="200" }
+![A parked shift with Resume Driving under the parked banner](../images/screenshots/home-parked.png){ width="200" }
+![The several-delivery sheet: count, Same pickup, Same drop-off and a pinned Start 3 Deliveries](../images/screenshots/offer-sheet-three-shared.png){ width="200" }
+![This week's History with its summary](../images/screenshots/history-current-week.png){ width="200" }
+![A completed shift's detail](../images/screenshots/detail-summary.png){ width="200" }
+![Settings, Pickup & Parking](../images/screenshots/settings-pickup-parking.png){ width="200" }
+
 ## Continuous integration
 
 CI builds both test bundles and runs both suites on every pull request and every push to `main`. A
