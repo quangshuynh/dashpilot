@@ -208,7 +208,8 @@ Parked is blue in the app and on the Live Activity alike.
 | Role | Treatment | Example |
 | --- | --- | --- |
 | Primary | `borderedProminent`, large, full width, accent | Start Shift, a delivery's next step, Resume Driving |
-| Secondary | `bordered`, large, full width | Park for a Pickup, Pause Shift, Start Delivery beside cards |
+| Secondary | `bordered`, large, full width | Park for a Pickup, Pause Shift, Add Delivery beside cards |
+| Pinned | in a bottom safe-area bar with an opaque background and a rule, never an overlay | Home's delivery entry, the offer sheet's Start N Deliveries |
 | Quiet | borderless, body role, 44-point row | Add Pickup Place, Correct Grouping |
 | Destructive | bordered and red for a lifecycle end (End Shift); red text in its own section for a delete; borderless red for a cancel | End Shift, Delete Shift, Cancel Delivery 3 |
 | Workflow progression | Primary, under the `Next` eyebrow, one per delivery | Arrived at Pickup |
@@ -272,6 +273,10 @@ contrast. Things worth knowing from doing it:
   used instead.
 - Large control titles wrap rather than truncate, so a delivery's next step is never `Arrived at…`.
 - The Undo line floats over the bottom of the list on purpose, so a card's step can sit under it.
+- A pinned bar (`safeAreaBar`) insets the list by its height, so the last row always scrolls fully
+  above it. Its background is opaque so a row passing beneath is hidden rather than read through.
+  A journey that taps near the bottom reaches its control with `scrollUntilHittable`, which drags it
+  clear of the bar and any Undo line on it: XCUITest reports a covered control hittable.
 
 ![A running shift with stacked deliveries](../images/screenshots/home-stacked-deliveries.png){ width="240" }
 ![A parked shift](../images/screenshots/home-parked.png){ width="240" }

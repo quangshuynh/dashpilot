@@ -127,6 +127,8 @@ nav:
       - Project structure: development/project-structure.md
       - Design system: development/design-system.md
       - Platform terminology: development/platform-terminology.md
+      - Release readiness: development/release-readiness.md
+      - Release notes draft: development/release-notes-draft.md
   - Reference:
       - Data model: reference/data-model.md
       - Limitations: reference/limitations.md

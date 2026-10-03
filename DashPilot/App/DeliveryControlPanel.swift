@@ -14,10 +14,10 @@ import SwiftUI
 /// delivery a tap belongs to out of an implicit rule. Two active deliveries
 /// means two buttons, each already saying the right thing.
 ///
-/// `Start Delivery` stays available underneath at all times while the shift
-/// runs, because accepting another order is normal work rather than an
-/// exception. Beside it sits the one control for an offer that held more than
-/// one delivery, which records the same kind of work in one write.
+/// Recording another accepted order is not here: it is ``DeliveryEntryBar``,
+/// pinned below the list so it is reachable from wherever the driver has
+/// scrolled, because accepting another order is normal work rather than an
+/// exception and a driver may open the app for nothing else.
 ///
 /// ## Deliveries accepted together are shown together
 ///
@@ -82,9 +82,6 @@ struct DeliveryControlPanel: View {
     /// figure being offered has to be the one the driver entered, not whatever
     /// the store happens to say a moment later.
     @State private var pendingEarningsConfirmation: PendingEarningsConfirmation?
-
-    /// Whether the sheet that records an offer of several deliveries is up.
-    @State private var isStartingGroupedOffer = false
 
     /// Whether the sheet that corrects which deliveries arrived together is up.
     @State private var isCorrectingOffers = false
@@ -178,8 +175,6 @@ struct DeliveryControlPanel: View {
                 Divider()
             }
 
-            startControl
-            groupedOfferControl
             correctionControl
             recoveryControl
         }
@@ -248,12 +243,6 @@ struct DeliveryControlPanel: View {
         .sheet(item: $pendingEarningsConfirmation) { pending in
             DeliveryEarningsConfirmation(numbered: pending.numbered, expected: pending.expected)
         }
-        // Reached only from the secondary control below the start button. The
-        // count it confirms is written through the same path every other
-        // lifecycle action on this screen is.
-        .sheet(isPresented: $isStartingGroupedOffer) {
-            NewOfferSheet { count, sharing in perform(.startOffer(count, sharing: sharing)) }
-        }
         // A review action, reached from one control rather than from a button on
         // every card, and writing nothing until a correction is confirmed inside
         // it.
@@ -312,54 +301,6 @@ struct DeliveryControlPanel: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel([summary.inProgressStatement, summary.spokenStatement].joined(separator: ". "))
         .accessibilityIdentifier("deliveryStatus")
-    }
-
-    /// Starting another delivery, available whenever the shift is running.
-    ///
-    /// Prominent only when nothing is in progress. While deliveries are running,
-    /// the buttons the driver reaches for are the ones advancing them, and two
-    /// competing prominent controls beside a kerb is how the wrong one gets
-    /// tapped.
-    @ViewBuilder
-    private var startControl: some View {
-        let button = Button { perform(.start) } label: {
-            Text(DeliveryAction.start.title)
-                .dashFont(.control)
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity)
-        }
-        .controlSize(.large)
-        .accessibilityLabel(DeliveryAction.start.spokenLabel)
-        .accessibilityIdentifier("startDeliveryButton")
-
-        if activeDeliveries.isEmpty {
-            button.buttonStyle(.borderedProminent)
-        } else {
-            button.buttonStyle(.bordered)
-        }
-    }
-
-    /// Recording an offer that contained more than one delivery.
-    ///
-    /// Deliberately small and secondary, and deliberately never prominent: most
-    /// offers are one delivery, the button above already records those in one
-    /// tap, and two competing prominent controls beside a kerb is how the wrong
-    /// one gets pressed. It opens a sheet rather than acting, because a count is
-    /// a thing to confirm.
-    private var groupedOfferControl: some View {
-        Button {
-            isStartingGroupedOffer = true
-        } label: {
-            Label("Offer With Several Deliveries", systemImage: "square.stack.3d.up")
-                .labelStyle(DashCompactLabelStyle())
-                .dashFont(.body)
-                .multilineTextAlignment(.leading)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .buttonStyle(.borderless)
-        .accessibilityLabel("Start an offer containing several deliveries")
-        .accessibilityIdentifier("startOfferButton")
     }
 
     /// Correcting which deliveries were accepted together.
@@ -431,8 +372,6 @@ struct DeliveryControlPanel: View {
     /// following one. Undoing a completion is ``RootView``'s, which draws the
     /// line that offers it.
     private enum Operation {
-        case start
-        case startOffer(Int, sharing: Set<SharedStopKind>)
         case advance(NumberedDelivery)
         case cancel(NumberedDelivery)
     }
@@ -441,10 +380,6 @@ struct DeliveryControlPanel: View {
         let service = DeliveryService(context: modelContext)
         do {
             switch operation {
-            case .start:
-                try service.startDelivery()
-            case let .startOffer(count, sharing):
-                try service.startOffer(deliveryCount: count, sharing: sharing)
             case let .advance(numbered):
                 // The step is read from the delivery's own state and applied to
                 // that same delivery, so a card can only ever advance itself.

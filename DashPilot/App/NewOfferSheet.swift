@@ -56,10 +56,21 @@ struct NewOfferSheet: View {
     @State private var sharesPickup = false
     @State private var sharesDropOff = false
 
+    /// Set by the first press of the start button, so a second press that
+    /// lands before the sheet has gone records nothing. Two offers from one
+    /// double tap would be a mistake the driver has to find and cancel.
+    @State private var hasStarted = false
+
     /// The most a stepper is a sensible way to say a number. See the note above:
     /// this is the control's range and not the model's.
     private static let range = 2...10
 
+    /// Action first, because this sheet is opened at a kerb with an offer just
+    /// accepted: the count and the two switches lead, the button that records
+    /// them stays at the bottom of the screen however far the form is
+    /// scrolled, and what the switches mean in full is said last. VoiceOver
+    /// reads the count, the switches and the button, and hears the explanation
+    /// as the button's hint.
     var body: some View {
         NavigationStack {
             Form {
@@ -74,53 +85,62 @@ struct NewOfferSheet: View {
                     .accessibilityIdentifier("offerDeliveryCountStepper")
                     .accessibilityLabel("Deliveries in this offer")
                     .accessibilityValue("\(deliveryCount)")
-                } header: {
-                    Text("Deliveries in This Offer")
-                } footer: {
-                    Text(
-                        """
-                        How many deliveries you accepted together. Each takes its own steps, so you \
-                        can pick one up while another waits. Add a pickup place or expected pay to any \
-                        of them later.
-                        """
-                    )
                 }
 
                 Section {
-                    Toggle(isOn: $sharesPickup) {
-                        Text(SharedStopKind.pickup.title)
-                            .dashFont(.body)
-                    }
-                    .accessibilityHint("Turn on only if every delivery in this offer is collected at the same pickup.")
-                    .accessibilityIdentifier("offerSamePickupToggle")
-
-                    Toggle(isOn: $sharesDropOff) {
-                        Text(SharedStopKind.dropOff.title)
-                            .dashFont(.body)
-                    }
-                    .accessibilityHint("Turn on only if every delivery in this offer goes to the same drop-off.")
-                    .accessibilityIdentifier("offerSameDropOffToggle")
+                    DashSettingToggle(
+                        isOn: $sharesPickup,
+                        title: SharedStopKind.pickup.title,
+                        detail: "One pickup stop. Park & Resume, if on, marks them arrived and picked up together.",
+                        hint: "Turn on only if every delivery in this offer is collected at the same pickup.",
+                        identifier: "offerSamePickupToggle"
+                    )
+                    DashSettingToggle(
+                        isOn: $sharesDropOff,
+                        title: SharedStopKind.dropOff.title,
+                        detail: "One drop-off stop. Each is still marked delivered on its own.",
+                        hint: "Turn on only if every delivery in this offer goes to the same drop-off.",
+                        identifier: "offerSameDropOffToggle"
+                    )
                 } header: {
                     Text("Together")
-                } footer: {
-                    Text(
-                        """
-                        Leave these off unless the orders really share it. With Pick up orders with Park & \
-                        Resume on, orders marked Same pickup are marked arrived and picked up together. Same \
-                        drop-off only shows they belong together. DashPilot stores no customer or address.
-                        """
-                    )
                 }
 
                 Section {
-                    Button(action: confirm) {
-                        Text(confirmTitle)
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-                    .accessibilityIdentifier("confirmStartOfferButton")
-                    .accessibilityLabel(confirmSpokenLabel)
+                    Text(Self.explanation)
+                        .dashFont(.supporting)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .listRowBackground(Color.clear)
+                        // Heard as the button's hint instead, so a listener
+                        // meets Start before the explanation rather than after.
+                        .accessibilityHidden(true)
+                }
+            }
+            // The action is pinned below the form in its safe area, so it is
+            // reachable at every text size while the form scrolls, and the
+            // form is inset by its height so the explanation scrolls fully
+            // above it rather than under it.
+            .safeAreaBar(edge: .bottom) {
+                Button(action: confirm) {
+                    Text(confirmTitle)
+                        .dashFont(.control)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .disabled(hasStarted)
+                .accessibilityIdentifier("confirmStartOfferButton")
+                .accessibilityLabel(confirmSpokenLabel)
+                .accessibilityHint(Self.explanation)
+                .padding(.horizontal, DashSpacing.xl)
+                .padding(.vertical, DashSpacing.md)
+                .background {
+                    Color(.systemGroupedBackground)
+                        .ignoresSafeArea(edges: .bottom)
+                        .overlay(alignment: .top) { Divider() }
                 }
             }
             .navigationTitle("Offer With Several Deliveries")
@@ -133,6 +153,14 @@ struct NewOfferSheet: View {
             }
         }
     }
+
+    /// What the switches mean in full, said after the controls: printed under
+    /// the form, and spoken as the button's hint.
+    private static let explanation = """
+        Leave both off unless the orders really share the stop: DashPilot never infers either, and \
+        stores no customer or address. Each delivery takes its own steps, and a pickup place or \
+        expected pay can be added to any of them later.
+        """
 
     /// The button says what it will record, including the number, so the count
     /// is confirmed twice on a screen that may be read in a hurry.
@@ -155,6 +183,8 @@ struct NewOfferSheet: View {
     }
 
     private func confirm() {
+        guard !hasStarted else { return }
+        hasStarted = true
         start(deliveryCount, sharing)
         dismiss()
     }

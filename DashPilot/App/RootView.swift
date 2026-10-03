@@ -144,6 +144,17 @@ struct RootView: View {
                     TransientUndoBar(undo: transientUndo, perform: takeBackTransientUndo)
                 }
             }
+            // Recording a newly accepted order, reachable from wherever the
+            // list has been scrolled to. A safe-area bar rather than an overlay:
+            // the list is inset by its height, so the last row scrolls fully
+            // above it and nothing stays hidden underneath. Applied after the
+            // Undo line, so the bar is at the very bottom and the line sits on
+            // it. Not drawn while paused, when no delivery can be started.
+            .safeAreaBar(edge: .bottom) {
+                if let activeShift, activeShift.lifecycleState == .running {
+                    DeliveryEntryBar(shift: activeShift)
+                }
+            }
             // The window an automated step can be taken back in, which is the
             // one the app's immediate undo of a Delivered already keeps, counted
             // in one-second ticks for the reason that one is. Restarted by each

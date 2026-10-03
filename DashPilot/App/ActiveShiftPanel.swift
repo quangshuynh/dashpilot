@@ -19,8 +19,10 @@ final class ActiveRouteReading {
 }
 
 /// The head of the shift in progress: what state it is in, how long it has
-/// been worked, what its route has recorded so far, and the one control that
-/// changes the vehicle's state (Park, Resume Driving, or Resume Shift).
+/// been worked, what its route and deliveries have recorded so far, and the
+/// one control that changes the vehicle's state (Park, Resume Driving, or
+/// Resume Shift). The shift's earnings and rates are below the deliveries, in
+/// ``ActiveShiftControlsPanel``.
 ///
 /// ## What it is for
 ///
@@ -132,12 +134,16 @@ struct ActiveShiftPanel: View {
             // headline of earnings would be a permanent absence.
             workingTime
 
+            // The figures a driver glances at. What the shift's earnings and
+            // rates are, which while it runs is the sentence saying there are
+            // none yet, is read below the deliveries with the shift's other
+            // context, so it never stands between this panel and Start
+            // Delivery.
             if let metrics {
                 DashMetricRow {
                     recordedMileage(metrics)
                     deliveries(metrics)
                 }
-                earnings(metrics)
             }
 
             parkControl
@@ -312,65 +318,6 @@ struct ActiveShiftPanel: View {
         .accessibilityIdentifier("liveDeliveryCounts")
     }
 
-    /// The amount recorded for the shift and the rates derived from it, or the
-    /// one sentence saying why there are none yet.
-    ///
-    /// Every branch here is the existing rule, not a relaxed one. A shift's
-    /// gross earnings cannot be recorded until it has finished, so in practice a
-    /// running shift shows the sentence; the figures are rendered from
-    /// ``ShiftMetrics`` all the same, so that the panel states whatever the data
-    /// actually supports rather than a hard-coded absence. Nothing is inferred
-    /// from the amounts recorded against individual deliveries: those are a
-    /// separate fact, and adding them up would read every delivery with no
-    /// amount as one that paid nothing.
-    @ViewBuilder
-    private func earnings(_ metrics: ActiveShiftMetrics) -> some View {
-        if let gross = metrics.grossEarnings {
-            LabeledContent("Recorded") {
-                Text(gross.formatted(locale: locale)).monospacedDigit()
-            }
-            .dashFont(.body)
-            .accessibilityLabel("Recorded gross earnings")
-            .accessibilityIdentifier("liveRecordedGross")
-        }
-
-        rateRow("Per working hour", spokenAs: "gross earnings per working hour", rate: metrics.rates.grossPerWorkingHour)
-        rateRow(
-            "Per active delivery hour",
-            spokenAs: "gross earnings per active delivery hour",
-            rate: metrics.rates.grossPerDeliveryActiveHour
-        )
-        rateRow(
-            "Per recorded mile",
-            spokenAs: "gross earnings per recorded mile",
-            rate: metrics.rates.grossPerRecordedMile
-        )
-
-        if let notice = metrics.rateNotice {
-            Text(notice)
-                .dashFont(.supporting)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-                .accessibilityIdentifier("liveRateNotice")
-        }
-    }
-
-    /// One rate, and only when there is one.
-    ///
-    /// An unavailable rate leaves nothing behind — no dash, no `$0.00` — because
-    /// a rate that could not be derived and a rate of zero are different facts.
-    /// The reason is said once, below, rather than three times.
-    @ViewBuilder
-    private func rateRow(_ title: String, spokenAs spokenTitle: String, rate: ShiftRate) -> some View {
-        if let amount = rate.amount {
-            LabeledContent(title) {
-                Text(amount.formatted(locale: locale)).monospacedDigit()
-            }
-            .dashFont(.body)
-            .accessibilityLabel(spokenTitle)
-        }
-    }
-
     /// What the driver is told while the vehicle is recorded as parked.
     ///
     /// Prominent and permanent for as long as the state lasts, because the
@@ -523,8 +470,9 @@ struct ActiveShiftPanel: View {
 }
 
 /// The shift's own once-a-shift controls and its context, below the
-/// deliveries: Pause or End, the vehicle the shift recorded, and whether the
-/// route is being recorded.
+/// deliveries: Pause or End, what the shift's earnings and rates are (while it
+/// runs, why there are none yet), the vehicle the shift recorded, and whether
+/// the route is being recorded.
 ///
 /// Below the delivery cards because each of these is tapped once a shift or
 /// read rarely, while a card's next step is tapped many times. Nothing here is
@@ -550,12 +498,21 @@ struct ActiveShiftControlsPanel: View {
 
     private var isPaused: Bool { shift.isPaused }
 
+    /// The header's reading, as the shift's figures. `nil` until the route has
+    /// been read once, for the reason ``ActiveShiftPanel`` gives.
+    private var metrics: ActiveShiftMetrics? {
+        routeReading.measurement.map { shift.activeMetrics(for: $0.recordedDistance, asOf: .now) }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: DashSpacing.xl) {
             pauseAndEnd
 
             // Context rather than controls: quieter, and last.
             VStack(alignment: .leading, spacing: DashSpacing.md) {
+                if let metrics {
+                    earnings(metrics)
+                }
                 vehicleContext(measuring: routeReading.measurement?.recordedDistance)
                 RouteCaptureStatusView(state: captureState)
             }
@@ -563,6 +520,65 @@ struct ActiveShiftControlsPanel: View {
         .padding(.vertical, DashSpacing.md)
         .sheet(isPresented: $isCorrectingVehicle) {
             ShiftVehicleCorrectionEditor(shift: shift)
+        }
+    }
+
+    /// The amount recorded for the shift and the rates derived from it, or the
+    /// one sentence saying why there are none yet.
+    ///
+    /// Every branch here is the existing rule, not a relaxed one. A shift's
+    /// gross earnings cannot be recorded until it has finished, so in practice a
+    /// running shift shows the sentence; the figures are rendered from
+    /// ``ShiftMetrics`` all the same, so that the panel states whatever the data
+    /// actually supports rather than a hard-coded absence. Nothing is inferred
+    /// from the amounts recorded against individual deliveries: those are a
+    /// separate fact, and adding them up would read every delivery with no
+    /// amount as one that paid nothing.
+    @ViewBuilder
+    private func earnings(_ metrics: ActiveShiftMetrics) -> some View {
+        if let gross = metrics.grossEarnings {
+            LabeledContent("Recorded") {
+                Text(gross.formatted(locale: locale)).monospacedDigit()
+            }
+            .dashFont(.body)
+            .accessibilityLabel("Recorded gross earnings")
+            .accessibilityIdentifier("liveRecordedGross")
+        }
+
+        rateRow("Per working hour", spokenAs: "gross earnings per working hour", rate: metrics.rates.grossPerWorkingHour)
+        rateRow(
+            "Per active delivery hour",
+            spokenAs: "gross earnings per active delivery hour",
+            rate: metrics.rates.grossPerDeliveryActiveHour
+        )
+        rateRow(
+            "Per recorded mile",
+            spokenAs: "gross earnings per recorded mile",
+            rate: metrics.rates.grossPerRecordedMile
+        )
+
+        if let notice = metrics.rateNotice {
+            Text(notice)
+                .dashFont(.supporting)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("liveRateNotice")
+        }
+    }
+
+    /// One rate, and only when there is one.
+    ///
+    /// An unavailable rate leaves nothing behind (no dash, no `$0.00`), because
+    /// a rate that could not be derived and a rate of zero are different facts.
+    /// The reason is said once, below, rather than three times.
+    @ViewBuilder
+    private func rateRow(_ title: String, spokenAs spokenTitle: String, rate: ShiftRate) -> some View {
+        if let amount = rate.amount {
+            LabeledContent(title) {
+                Text(amount.formatted(locale: locale)).monospacedDigit()
+            }
+            .dashFont(.body)
+            .accessibilityLabel(spokenTitle)
         }
     }
 
