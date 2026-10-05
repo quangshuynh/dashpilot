@@ -8494,6 +8494,53 @@ final class DashPilotUITests: XCTestCase {
         )
     }
 
+    // MARK: Target hourly earnings
+
+    /// A target set in Settings is what the next shift is compared with, and
+    /// moving it afterwards leaves that shift compared with the target it
+    /// started with. The comparison's wording, band and rounding are
+    /// `HourlyTargetComparisonTests`'; the snapshot is what only the whole app
+    /// can show.
+    @MainActor
+    func testATargetIsComparedWithTheShiftsThatStartedUnderIt() throws {
+        let app = launchWithEmptyStore()
+
+        func setTarget(_ amount: String) {
+            openSettings(in: app)
+            let row = app.descendants(matching: .any)["hourlyTargetRow"]
+            XCTAssertTrue(scrollUntilHittable(row, in: app))
+            row.tap()
+            let field = app.textFields["hourlyTargetField"]
+            XCTAssertTrue(field.waitForExistence(timeout: 5))
+            clear(field, in: app)
+            enter(amount, into: field, in: app)
+            app.buttons["saveHourlyTargetButton"].tap()
+            XCTAssertTrue(waitForDisappearance(of: field))
+            XCTAssertTrue(waitForLabelValue(row, toEqual: "$\(amount) per working hour"), "Showed: \(String(describing: row.value))")
+            goBack(in: app)
+        }
+
+        setTarget("25.00")
+        completeAShift(in: app)
+        openFirstShift(in: app)
+        app.buttons["editShiftEarningsButton"].tap()
+        type("80.00", into: app)
+        app.buttons["saveEarningsButton"].tap()
+
+        // A shift of seconds paid $80.00 is far above $25.00 an hour.
+        let target = app.descendants(matching: .any)["shiftDetailHourlyTarget"]
+        XCTAssertTrue(scrollTo(target, in: app))
+        XCTAssertTrue(waitForLabel(target, toContain: "Above target"), "Showed: \(target.label)")
+        XCTAssertTrue(target.label.contains("target of $25.00 a working hour"), "Showed: \(target.label)")
+        goBack(in: app)
+
+        // Moving the default reclassifies nothing already worked.
+        setTarget("30.00")
+        openFirstShift(in: app)
+        XCTAssertTrue(scrollTo(target, in: app))
+        XCTAssertTrue(target.label.contains("target of $25.00 a working hour"), "Showed: \(target.label)")
+    }
+
     // MARK: The completed shift's hierarchy
 
     /// A finished shift leads with what it paid, then how long and how far, and
