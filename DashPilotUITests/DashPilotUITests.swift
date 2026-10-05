@@ -49,6 +49,9 @@ final class DashPilotUITests: XCTestCase {
     /// Must match `LaunchArgument.seededOlderWeeksOnly`, for the same reason.
     private static let seededOlderWeeksOnlyArgument = "-dashpilot-seeded-older-weeks-only"
 
+    /// Must match `LaunchArgument.seededFinishedDelivery`, for the same reason.
+    private static let seededFinishedDeliveryArgument = "-dashpilot-seeded-finished-delivery"
+
     /// About two and a half years of synthetic work; see
     /// `LaunchArgument.seededLongHistory` for its shape.
     private static let seededLongHistoryArgument = "-dashpilot-seeded-long-history"
@@ -58,6 +61,19 @@ final class DashPilotUITests: XCTestCase {
 
     /// Must match `LaunchArgument.simulatedRoute`, for the same reason.
     private static let simulatedRouteArgument = "-dashpilot-simulated-route"
+
+    /// How long a journey waits for a condition it has caused, such as a row
+    /// reading Selected after a tap.
+    ///
+    /// A wait returns the moment its condition holds, so this costs a passing
+    /// run nothing; it only decides how long a failing one looks. It was 5 s,
+    /// and CI run 37088082650 showed why that is too short on a loaded runner:
+    /// in `testChangingSettingsMidShiftLeavesTheRunningShiftsVehicleAlone` one
+    /// query took 5.3 s and one tap 8.8 s, the recording shows the vehicle
+    /// selected before the wait began, and the 5-second wait still expired
+    /// after a single stale evaluation. 15 s is three of the slowest measured
+    /// snapshots, not a sleep.
+    static let conditionTimeout: TimeInterval = 15
 
     /// The largest accessibility text size iOS offers, as UIKit names it.
     private static let accessibilityXXXLTextSize = "UICTContentSizeCategoryAccessibilityXXXL"
@@ -304,6 +320,17 @@ final class DashPilotUITests: XCTestCase {
     private func launchWithLateEndHistory() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments.append(Self.seededLateEndHistoryArgument)
+        launchInPortrait(app)
+        return app
+    }
+
+    /// Launches against one finished shift holding one delivered, unpaid
+    /// delivery: the state ``completeAShiftWithADelivery(in:)`` reaches by
+    /// driving the interface, without the minute it costs.
+    @MainActor
+    private func launchWithFinishedDelivery() -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments.append(Self.seededFinishedDeliveryArgument)
         launchInPortrait(app)
         return app
     }
@@ -1862,19 +1889,43 @@ final class DashPilotUITests: XCTestCase {
         )
     }
 
-    /// A completed shift with earnings and a measured route shows the rates over
-    /// elapsed time and over recorded mileage, each saying what it divides by.
-    /// The third, over delivery active time, has its own journey below.
+    /// A completed shift's detail, read top to bottom: its durations told apart
+    /// in words, overlapping deliveries counted once, each rate naming what it
+    /// divides by, and a route with a gap called partial.
+    ///
+    /// The fixture's three deliveries run 5–30, 40–60 and 50–80 minutes into a
+    /// three-hour shift, so the union is 65 minutes where their durations sum
+    /// to 75; $86.25 over 65 minutes is $79.62, where 75 would give $69.00. Four
+    /// journeys used to open this shift to read one section each; the
+    /// arithmetic is pinned in `DeliveryActiveTimeTests` and `ShiftMetricsTests`,
+    /// and what this reads is that the screen states it.
     @MainActor
-    func testDetailShowsBothDerivedRates() throws {
+    func testTheRecordedShiftsDetailStatesItsTimesRatesAndRoute() throws {
         let app = launchWithSeededHistory()
+
+        let row = rows(in: app).firstMatch
+        XCTAssertTrue(scrollUntilHittable(row, in: app))
+        XCTAssertTrue(
+            row.label.contains("more miles were driven than were recorded"),
+            "The row says the route is partial: \(row.label)"
+        )
         openFirstShift(in: app)
 
-        // The hourly figure is asserted exactly because it comes from the
-        // fixture's timestamps ($86.25 over three hours); the per-mile figure is
-        // asserted by its wording only, because its denominator comes from
-        // measuring synthetic coordinates and pinning its cents would test the
-        // haversine, not the screen.
+        let active = app.descendants(matching: .any)["shiftDetailDeliveryActiveTime"]
+        XCTAssertTrue(active.waitForExistence(timeout: 5))
+        XCTAssertTrue(active.label.contains("delivery active time"), "Showed: \(active.label)")
+        XCTAssertTrue(active.label.contains("1 hour"), "The union is 65 minutes: \(active.label)")
+        XCTAssertTrue(active.label.contains("5 minutes"))
+        XCTAssertFalse(active.label.contains("15 minutes"), "Summed durations would give 1 hour 15: \(active.label)")
+
+        let nonDelivery = app.descendants(matching: .any)["shiftDetailNonDeliveryTime"]
+        XCTAssertTrue(nonDelivery.exists)
+        XCTAssertTrue(nonDelivery.label.contains("non-delivery time"), "Not called idle: \(nonDelivery.label)")
+        XCTAssertTrue(nonDelivery.label.contains("1 hour"))
+        XCTAssertTrue(nonDelivery.label.contains("55 minutes"), "Three hours less 65 minutes: \(nonDelivery.label)")
+        let elapsed = app.descendants(matching: .any)["shiftDetailDuration"]
+        XCTAssertTrue(elapsed.label.contains("elapsed shift time"), "\(elapsed.label)")
+
         let hourly = app.descendants(matching: .any)["shiftDetailHourlyRate"]
         XCTAssertTrue(scrollTo(hourly, in: app), "The performance section should be reachable")
         XCTAssertTrue(
@@ -1882,194 +1933,73 @@ final class DashPilotUITests: XCTestCase {
             "The hourly rate divides by the whole elapsed shift: \(hourly.label)"
         )
 
-        // Two rows further down, under the delivery active times, so it is
-        // scrolled to rather than assumed rendered with the hourly figure.
+        let activeRate = app.descendants(matching: .any)["shiftDetailActiveHourlyRate"]
+        XCTAssertTrue(scrollTo(activeRate, in: app))
+        XCTAssertTrue(
+            activeRate.label.contains("$79.62 gross earnings per delivery active hour"),
+            "The denominator is the union of the overlapping deliveries: \(activeRate.label)"
+        )
+        XCTAssertFalse(activeRate.label.contains("$69.00"))
+        for overclaim in ["wage", "true hourly", "net", "working", "driving"] {
+            XCTAssertFalse(activeRate.label.lowercased().contains(overclaim), "Not \(overclaim): \(activeRate.label)")
+        }
+
+        // The per-mile figure is asserted by its wording only: its denominator
+        // comes from measuring synthetic coordinates.
         let perMile = app.descendants(matching: .any)["shiftDetailPerMileRate"]
         XCTAssertTrue(scrollTo(perMile, in: app))
-        XCTAssertTrue(
-            perMile.label.contains("gross earnings per recorded mile"),
-            "The per-mile rate must say which miles it divides by: \(perMile.label)"
-        )
-        XCTAssertFalse(
-            perMile.label.contains("per mile driven"),
-            "A bare per-mile claim would present recorded mileage as the mileage driven: \(perMile.label)"
-        )
-    }
-
-    /// A completed shift states how much of it a delivery was active for, and
-    /// what is left over — with overlapping deliveries counted once.
-    ///
-    /// The fixture's three deliveries run 5–30, 40–60 and 50–80 minutes into a
-    /// three-hour shift. Two of them overlap, so the union is 65 minutes where
-    /// their durations sum to 75.
-    @MainActor
-    func testDetailShowsDeliveryActiveAndNonDeliveryTime() throws {
-        let app = launchWithSeededHistory()
-        openFirstShift(in: app)
-
-        let active = app.descendants(matching: .any)["shiftDetailDeliveryActiveTime"]
-        XCTAssertTrue(active.waitForExistence(timeout: 5))
-        XCTAssertTrue(
-            active.label.contains("delivery active time"),
-            "VoiceOver must hear which duration this is: \(active.label)"
-        )
-        XCTAssertTrue(active.label.contains("1 hour"), "The union is 65 minutes: \(active.label)")
-        XCTAssertTrue(active.label.contains("5 minutes"))
-        XCTAssertFalse(
-            active.label.contains("15 minutes"),
-            "Adding the overlapping deliveries' durations would give 1 hour 15: \(active.label)"
-        )
-
-        let nonDelivery = app.descendants(matching: .any)["shiftDetailNonDeliveryTime"]
-        XCTAssertTrue(nonDelivery.exists)
-        XCTAssertTrue(
-            nonDelivery.label.contains("non-delivery time"),
-            "The rest of the shift is named for what it is, not called idle: \(nonDelivery.label)"
-        )
-        XCTAssertTrue(nonDelivery.label.contains("1 hour"))
-        XCTAssertTrue(nonDelivery.label.contains("55 minutes"), "Three hours less 65 minutes: \(nonDelivery.label)")
-
-        // The three durations are told apart in words, not by position.
-        let elapsed = app.descendants(matching: .any)["shiftDetailDuration"]
-        XCTAssertTrue(elapsed.label.contains("elapsed shift time"), "\(elapsed.label)")
-    }
-
-    /// The active-hour rate divides by the unioned active time, not by the sum
-    /// of the deliveries' durations.
-    ///
-    /// $86.25 over 65 minutes is $79.62. Over the 75 minutes the same three
-    /// deliveries add up to it would be $69.00, which is the mistake this rate
-    /// exists to avoid.
-    @MainActor
-    func testDetailActiveHourRateDividesByTheUnionedTime() throws {
-        let app = launchWithSeededHistory()
-        openFirstShift(in: app)
-
-        let rate = app.descendants(matching: .any)["shiftDetailActiveHourlyRate"]
-        XCTAssertTrue(scrollTo(rate, in: app), "The performance section should be reachable")
-        XCTAssertTrue(
-            rate.label.contains("$79.62 gross earnings per delivery active hour"),
-            "The denominator is the union of the overlapping deliveries: \(rate.label)"
-        )
-        XCTAssertFalse(
-            rate.label.contains("$69.00"),
-            "Summing the deliveries' durations would understate the rate: \(rate.label)"
-        )
-
-        // It remains gross earnings, and it never claims to measure work.
-        for overclaim in ["wage", "true hourly", "net", "working", "driving"] {
-            XCTAssertFalse(
-                rate.label.lowercased().contains(overclaim),
-                "The rate must not be described as \(overclaim): \(rate.label)"
-            )
-        }
-    }
-
-    /// A shift that recorded no deliveries shows no active time and no
-    /// active-hour rate, rather than zero minutes and a rate divided by nothing.
-    @MainActor
-    func testShiftWithoutDeliveriesInventsNoActiveTime() throws {
-        let app = launchWithSeededHistory()
-        let history = revealHistoryRows(2, in: app)
-
-        history.element(boundBy: 1).tap()
-
-        let elapsed = app.descendants(matching: .any)["shiftDetailDuration"]
-        XCTAssertTrue(elapsed.waitForExistence(timeout: 5), "The shift still has an elapsed duration")
-        XCTAssertFalse(
-            app.descendants(matching: .any)["shiftDetailDeliveryActiveTime"].exists,
-            "No deliveries recorded is not zero minutes of delivery active time"
-        )
-        XCTAssertFalse(app.descendants(matching: .any)["shiftDetailNonDeliveryTime"].exists)
-
-        let rate = app.descendants(matching: .any)["shiftDetailActiveHourlyRate"]
-        XCTAssertTrue(scrollTo(rate, in: app))
-        XCTAssertTrue(
-            rate.label.contains("No gross earnings per delivery active hour"),
-            "An absent rate is stated as absent: \(rate.label)"
-        )
-        XCTAssertFalse(rate.label.contains("$"), "Nothing may stand in for the rate: \(rate.label)")
-    }
-
-    /// A route with known gaps is marked partial, and the detail screen says
-    /// what the gaps are.
-    @MainActor
-    func testDetailExplainsRouteQuality() throws {
-        let app = launchWithSeededHistory()
-
-        let row = rows(in: app).firstMatch
-        XCTAssertTrue(scrollUntilHittable(row, in: app))
-        XCTAssertTrue(
-            row.label.contains("more miles were driven than were recorded"),
-            "The row still says the route is partial: \(row.label)"
-        )
-
-        row.tap()
+        XCTAssertTrue(perMile.label.contains("gross earnings per recorded mile"), "Showed: \(perMile.label)")
+        XCTAssertFalse(perMile.label.contains("per mile driven"), "Showed: \(perMile.label)")
 
         let mileage = app.descendants(matching: .any)["shiftDetailRecordedMileage"]
         XCTAssertTrue(scrollTo(mileage, in: app), "The route section should be reachable")
-        XCTAssertTrue(
-            mileage.label.contains("Partial route"),
-            "Detail states partiality in plain language: \(mileage.label)"
-        )
-        XCTAssertFalse(
-            mileage.label.contains("Coverage"),
-            "Nothing may claim a coverage percentage: \(mileage.label)"
-        )
-
-        // The fixture is two capture sessions with a gap in between, which is
-        // what makes the route partial in the first place.
+        XCTAssertTrue(mileage.label.contains("Partial route"), "Showed: \(mileage.label)")
+        XCTAssertFalse(mileage.label.contains("Coverage"), "No coverage percentage: \(mileage.label)")
         let segments = app.descendants(matching: .any)["shiftDetailCaptureSegments"]
-        XCTAssertTrue(scrollTo(segments, in: app), "The route section's counts should be reachable")
+        XCTAssertTrue(scrollTo(segments, in: app))
         XCTAssertEqual(segments.label, "2 capture segments")
-        XCTAssertTrue(
-            app.descendants(matching: .any)["shiftDetailCaptureGaps"].label.contains("capture gap"),
-            "Detail counts the gaps the mileage excluded"
-        )
+        XCTAssertTrue(app.descendants(matching: .any)["shiftDetailCaptureGaps"].label.contains("capture gap"))
     }
 
-    /// A shift with nothing measurable in its route shows no counts at all,
-    /// rather than counts of zero.
+    /// A completed shift that recorded no amount, no delivery and no route
+    /// invents none of them: no rate of zero, no active time of zero minutes,
+    /// no distance of zero and no counts of nothing. Each absence is stated.
+    ///
+    /// Three journeys used to open this shift for one absence each.
     @MainActor
-    func testDetailInventsNoRouteInformation() throws {
+    func testAShiftThatRecordedNothingInventsNoFigures() throws {
         let app = launchWithSeededHistory()
         let history = revealHistoryRows(2, in: app)
 
-        history.element(boundBy: 1).tap()
+        let withoutEarnings = history.element(boundBy: 1)
+        XCTAssertFalse(withoutEarnings.label.contains("gross earnings per"), "Showed: \(withoutEarnings.label)")
+        XCTAssertFalse(withoutEarnings.label.contains("$0.00"))
+        withoutEarnings.tap()
 
-        // Driving sits under the summary and the performance figures, so it is
-        // scrolled to rather than expected on arrival.
+        let elapsed = app.descendants(matching: .any)["shiftDetailDuration"]
+        XCTAssertTrue(elapsed.waitForExistence(timeout: 5), "The shift still has an elapsed duration")
+        XCTAssertFalse(app.descendants(matching: .any)["shiftDetailDeliveryActiveTime"].exists)
+        XCTAssertFalse(app.descendants(matching: .any)["shiftDetailNonDeliveryTime"].exists)
+
+        let hourly = app.descendants(matching: .any)["shiftDetailHourlyRate"]
+        XCTAssertTrue(scrollTo(hourly, in: app))
+        XCTAssertTrue(hourly.label.contains("Add what this shift paid"), "Showed: \(hourly.label)")
+        XCTAssertFalse(hourly.label.contains("$0.00"))
+
+        let activeRate = app.descendants(matching: .any)["shiftDetailActiveHourlyRate"]
+        XCTAssertTrue(scrollTo(activeRate, in: app))
+        XCTAssertTrue(
+            activeRate.label.contains("No gross earnings per delivery active hour"),
+            "An absent rate is stated as absent: \(activeRate.label)"
+        )
+        XCTAssertFalse(activeRate.label.contains("$"), "Showed: \(activeRate.label)")
+
         let mileage = app.descendants(matching: .any)["shiftDetailRecordedMileage"]
         XCTAssertTrue(scrollTo(mileage, in: app))
         XCTAssertTrue(mileage.label.contains("No route recorded"))
         XCTAssertFalse(mileage.label.contains("0.0"), "An unmeasurable route is not a distance of zero")
         XCTAssertFalse(app.descendants(matching: .any)["shiftDetailCaptureSegments"].exists)
         XCTAssertFalse(app.descendants(matching: .any)["shiftDetailCaptureGaps"].exists)
-    }
-
-    /// A shift with no amount recorded is told why it has no rates, rather than
-    /// being shown rates of zero.
-    @MainActor
-    func testDetailExplainsRatesItCannotDerive() throws {
-        let app = launchWithSeededHistory()
-        let history = revealHistoryRows(2, in: app)
-
-        let withoutEarnings = history.element(boundBy: 1)
-        XCTAssertFalse(
-            withoutEarnings.label.contains("gross earnings per"),
-            "No amount recorded means no rate on the row: \(withoutEarnings.label)"
-        )
-        XCTAssertFalse(withoutEarnings.label.contains("$0.00"))
-
-        withoutEarnings.tap()
-
-        let hourly = app.descendants(matching: .any)["shiftDetailHourlyRate"]
-        XCTAssertTrue(scrollTo(hourly, in: app))
-        XCTAssertTrue(
-            hourly.label.contains("Add what this shift paid"),
-            "Detail explains the absent rate instead of showing zero: \(hourly.label)"
-        )
-        XCTAssertFalse(hourly.label.contains("$0.00"))
     }
 
     // MARK: Earnings, from detail
@@ -2118,8 +2048,7 @@ final class DashPilotUITests: XCTestCase {
     /// An amount that cannot be read is refused, and refusing it changes nothing.
     @MainActor
     func testInvalidEarningsAreNotSaved() throws {
-        let app = launchWithEmptyStore()
-        completeAShift(in: app)
+        let app = launchWithFinishedDelivery()
         openFirstShift(in: app)
 
         app.buttons["editShiftEarningsButton"].tap()
@@ -2148,8 +2077,7 @@ final class DashPilotUITests: XCTestCase {
     /// per-mile one.
     @MainActor
     func testEarningsWithoutARouteShowNoPerMileRate() throws {
-        let app = launchWithEmptyStore()
-        completeAShift(in: app)
+        let app = launchWithFinishedDelivery()
         openFirstShift(in: app)
 
         app.buttons["editShiftEarningsButton"].tap()
@@ -4037,30 +3965,6 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertTrue(corrected.label.contains("Accepted to delivered"))
     }
 
-    /// A shift with a single delivery has no grouping to correct, and says so by
-    /// offering nothing.
-    @MainActor
-    func testCorrectionIsNotOfferedForASingleDelivery() throws {
-        let app = launchWithEmptyStore()
-        app.buttons["startShiftButton"].tap()
-
-        XCTAssertTrue(app.buttons["startDeliveryButton"].waitForExistence(timeout: 5))
-        XCTAssertFalse(app.buttons["correctOffersButton"].exists, "Nothing is recorded, so nothing can be regrouped")
-
-        app.buttons["startDeliveryButton"].tap()
-        XCTAssertTrue(
-            waitForCount(app.buttons.matching(identifier: "deliveryActionButton"), toEqual: 1)
-        )
-        XCTAssertFalse(app.buttons["correctOffersButton"].exists, "One delivery is not a grouping")
-
-        XCTAssertTrue(scrollToTop(reaching: app.buttons["startDeliveryButton"], in: app))
-        app.buttons["startDeliveryButton"].tap()
-        XCTAssertTrue(
-            waitForCount(app.buttons.matching(identifier: "deliveryActionButton"), toEqual: 2)
-        )
-        XCTAssertTrue(scrollTo(app.buttons["correctOffersButton"], in: app), "Two deliveries can be regrouped")
-    }
-
     // MARK: Taking back a delivery marked delivered by mistake
 
     /// The offer to undo appears the moment a delivery is marked delivered, says
@@ -4181,25 +4085,6 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertFalse(
             app.buttons["reopenDeliveryButton"].exists,
             "The control goes with the last delivered delivery it could act on"
-        )
-    }
-
-    /// A shift that has recorded no completion offers no way back from one.
-    @MainActor
-    func testRecoveryIsNotOfferedWithoutADeliveredDelivery() throws {
-        let app = launchWithEmptyStore()
-        app.buttons["startShiftButton"].tap()
-
-        XCTAssertTrue(app.buttons["startDeliveryButton"].waitForExistence(timeout: 5))
-        XCTAssertFalse(app.buttons["reopenDeliveryButton"].exists, "Nothing is recorded, so nothing can be reopened")
-
-        app.buttons["startDeliveryButton"].tap()
-        XCTAssertTrue(
-            waitForCount(app.buttons.matching(identifier: "deliveryActionButton"), toEqual: 1)
-        )
-        XCTAssertFalse(
-            app.buttons["reopenDeliveryButton"].exists,
-            "A delivery in progress has a card of its own; this is not the control for it"
         )
     }
 
@@ -5154,21 +5039,33 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertFalse(app.buttons["deleteShiftPauseButton"].exists, "and nothing to delete")
     }
 
-    /// None of it is offered while a shift is running, which is where the driver
-    /// may be at a wheel.
+    /// What a running shift does **not** offer, checked through the states one
+    /// shift passes through, in one launch.
+    ///
+    /// Five journeys used to launch an empty store each to assert one absence
+    /// apiece: no pause correction, no end correction, no export, no reopening
+    /// and no regrouping while a shift runs. Each absence is a rule a driver at
+    /// a wheel depends on, and each is cheap to read on a screen the journey is
+    /// already on, so they share this launch. The one positive case stays: two
+    /// deliveries are a grouping and do offer the correction.
     @MainActor
-    func testPauseCorrectionIsNotOfferedOnARunningShift() throws {
+    func testARunningShiftOffersOnlyWhatItsStateAllows() throws {
         let app = launchWithEmptyStore()
 
-        let startShift = app.buttons["startShiftButton"]
-        XCTAssertTrue(startShift.waitForExistence(timeout: 10))
-        startShift.tap()
+        let start = app.buttons["startShiftButton"]
+        XCTAssertTrue(start.waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["exportAllHistoryButton"].exists, "No completed shift, so no history export")
+        start.tap()
 
         XCTAssertTrue(app.buttons["pauseShiftButton"].waitForExistence(timeout: 5), "The shift is running")
-        for identifier in ["editShiftPauseButton", "deleteShiftPauseButton", "addMissedPauseButton"] {
+        let neverWhileRunning = [
+            "editShiftPauseButton", "deleteShiftPauseButton", "addMissedPauseButton",
+            "correctShiftEndButton", "exportShiftButton", "exportAllHistoryButton",
+            "reopenDeliveryButton", "correctOffersButton"
+        ]
+        for identifier in neverWhileRunning {
             XCTAssertFalse(app.buttons[identifier].exists, "\(identifier) is not offered on a running shift")
         }
-
         app.buttons["pauseShiftButton"].tap()
         XCTAssertTrue(app.buttons["resumeShiftButton"].waitForExistence(timeout: 5), "and now it is paused")
         for identifier in ["editShiftPauseButton", "deleteShiftPauseButton", "addMissedPauseButton"] {
@@ -5177,6 +5074,22 @@ final class DashPilotUITests: XCTestCase {
                 "\(identifier) is not offered on a paused shift either: the open pause is Resume's and End's"
             )
         }
+        app.buttons["resumeShiftButton"].tap()
+
+        let startDelivery = app.buttons["startDeliveryButton"]
+        XCTAssertTrue(startDelivery.waitForExistence(timeout: 5))
+        startDelivery.tap()
+        XCTAssertTrue(waitForCount(app.buttons.matching(identifier: "deliveryActionButton"), toEqual: 1))
+        XCTAssertFalse(
+            app.buttons["reopenDeliveryButton"].exists,
+            "A delivery in progress has a card of its own; nothing delivered can be reopened"
+        )
+        XCTAssertFalse(app.buttons["correctOffersButton"].exists, "One delivery is not a grouping")
+
+        XCTAssertTrue(scrollToTop(reaching: startDelivery, in: app))
+        startDelivery.tap()
+        XCTAssertTrue(waitForCount(app.buttons.matching(identifier: "deliveryActionButton"), toEqual: 2))
+        XCTAssertTrue(scrollTo(app.buttons["correctOffersButton"], in: app), "Two deliveries can be regrouped")
     }
 
     // MARK: Correcting a shift's end time
@@ -5407,23 +5320,6 @@ final class DashPilotUITests: XCTestCase {
             mileage.label,
             mileageBefore,
             "Not one metre was invented for the stretch the shift gained"
-        )
-    }
-
-    /// The correction is not offered while a shift is running, which is where
-    /// the driver may be at a wheel.
-    @MainActor
-    func testEndCorrectionIsNotOfferedOnARunningShift() throws {
-        let app = launchWithEmptyStore()
-
-        let startShift = app.buttons["startShiftButton"]
-        XCTAssertTrue(startShift.waitForExistence(timeout: 10))
-        startShift.tap()
-
-        XCTAssertTrue(app.descendants(matching: .any)["activeShiftStatus"].waitForExistence(timeout: 5), "The shift is running")
-        XCTAssertFalse(
-            app.buttons["correctShiftEndButton"].exists,
-            "A shift with no recorded end has none to correct, and End is what records one"
         )
     }
 
@@ -5745,8 +5641,7 @@ final class DashPilotUITests: XCTestCase {
     /// Cancelling an edit writes nothing, leaving the amount as it was.
     @MainActor
     func testCancellingADeliveryEarningsEditKeepsTheAmount() throws {
-        let app = launchWithEmptyStore()
-        completeAShiftWithADelivery(in: app)
+        let app = launchWithFinishedDelivery()
         openFirstShift(in: app)
 
         let row = deliveryRow(containing: "Delivery 1, delivered", in: app)
@@ -5771,8 +5666,7 @@ final class DashPilotUITests: XCTestCase {
     /// recorded zero.
     @MainActor
     func testRemovesDeliveryEarnings() throws {
-        let app = launchWithEmptyStore()
-        completeAShiftWithADelivery(in: app)
+        let app = launchWithFinishedDelivery()
         openFirstShift(in: app)
 
         let row = deliveryRow(containing: "Delivery 1, delivered", in: app)
@@ -5860,8 +5754,7 @@ final class DashPilotUITests: XCTestCase {
     /// all three of them.
     @MainActor
     func testADeliveryCanHoldSeveralAdditionalTips() throws {
-        let app = launchWithEmptyStore()
-        completeAShiftWithADelivery(in: app)
+        let app = launchWithFinishedDelivery()
         openFirstShift(in: app)
 
         let row = deliveryRow(containing: "Delivery 1, delivered", in: app)
@@ -5899,8 +5792,7 @@ final class DashPilotUITests: XCTestCase {
     /// while leaving the platform amount exactly as it was.
     @MainActor
     func testEditsAndRemovesAnAdditionalTip() throws {
-        let app = launchWithEmptyStore()
-        completeAShiftWithADelivery(in: app)
+        let app = launchWithFinishedDelivery()
         openFirstShift(in: app)
 
         let row = deliveryRow(containing: "Delivery 1, delivered", in: app)
@@ -5955,8 +5847,7 @@ final class DashPilotUITests: XCTestCase {
     /// recorded.
     @MainActor
     func testATipOfNothingIsRefused() throws {
-        let app = launchWithEmptyStore()
-        completeAShiftWithADelivery(in: app)
+        let app = launchWithFinishedDelivery()
         openFirstShift(in: app)
 
         let row = deliveryRow(containing: "Delivery 1, delivered", in: app)
@@ -5988,8 +5879,7 @@ final class DashPilotUITests: XCTestCase {
     /// rather than showing the tips as what it earned.
     @MainActor
     func testTipsWithoutAPlatformAmountStateNoTotal() throws {
-        let app = launchWithEmptyStore()
-        completeAShiftWithADelivery(in: app)
+        let app = launchWithFinishedDelivery()
         openFirstShift(in: app)
 
         let row = deliveryRow(containing: "Delivery 1, delivered", in: app)
@@ -6021,8 +5911,7 @@ final class DashPilotUITests: XCTestCase {
     /// invited to add them into the platform amount a second time.
     @MainActor
     func testTheEarningsEditorSaysTheTipsAreAlreadyRecorded() throws {
-        let app = launchWithEmptyStore()
-        completeAShiftWithADelivery(in: app)
+        let app = launchWithFinishedDelivery()
         openFirstShift(in: app)
 
         let row = deliveryRow(containing: "Delivery 1, delivered", in: app)
@@ -7541,34 +7430,6 @@ final class DashPilotUITests: XCTestCase {
 
     // MARK: Period estimated fuel
 
-    /// A period states its estimated fuel with the coverage behind it, and never
-    /// as though the covered shifts were the whole period.
-    @MainActor
-    func testPeriodEstimatedFuelStatesItsCoverage() throws {
-        let app = launchWithPeriodSummary()
-        openPeriodSummary(in: app)
-
-        let fuel = app.descendants(matching: .any)["periodEstimatedFuel"]
-        XCTAssertTrue(scrollTo(fuel, in: app, maxSwipes: 14), "The period says what it is estimated to have spent")
-        XCTAssertTrue(
-            waitForLabel(fuel, toContain: "Estimated fuel"),
-            "Showed: \(fuel.label)"
-        )
-        XCTAssertTrue(fuel.label.contains("$"), "And it states an amount: \(fuel.label)")
-
-        // The fixture covers one of the day's two completed shifts, and the
-        // counts are part of the spoken sentence rather than a caption beside
-        // it.
-        XCTAssertTrue(
-            fuel.label.contains("1 of 2 completed shifts"),
-            "The subset is stated rather than presented as the period: \(fuel.label)"
-        )
-        XCTAssertTrue(
-            fuel.label.contains("recorded miles"),
-            "And how much of the driving is behind it: \(fuel.label)"
-        )
-    }
-
     /// At the largest accessibility text size the period's figures stack
     /// rather than truncate, each is reachable whole, and each still carries
     /// the qualification that keeps it honest.
@@ -7619,47 +7480,6 @@ final class DashPilotUITests: XCTestCase {
         let fuel = reach("periodEstimatedFuel")
         XCTAssertTrue(fuel.label.contains("1 of 2 completed shifts"), "Its coverage survives: \(fuel.label)")
         XCTAssertTrue(fuel.label.localizedCaseInsensitiveContains("estimate"), "And it is an estimate: \(fuel.label)")
-    }
-
-    /// The estimated net is worked out over the shifts that record both halves,
-    /// says so, and is kept apart from the net after recorded expenses.
-    @MainActor
-    func testPeriodEstimatedNetIsSeparateFromRecordedExpenses() throws {
-        let app = launchWithPeriodSummary()
-        openPeriodSummary(in: app)
-
-        // The recorded net first, because it sits above the estimated section and
-        // `scrollTo` only walks downwards. The two are different figures over
-        // different inputs, and neither has the other taken off it.
-        let recordedNet = app.descendants(matching: .any)["periodNetAfterExpenses"]
-        XCTAssertTrue(scrollTo(recordedNet, in: app, maxSwipes: 14))
-        XCTAssertTrue(
-            waitForLabel(recordedNet, toContain: "$37.65"),
-            "Net after recorded expenses is unchanged by the estimate: \(recordedNet.label)"
-        )
-        XCTAssertFalse(
-            recordedNet.label.contains("estimated fuel"),
-            "The recorded net does not quietly include an estimate: \(recordedNet.label)"
-        )
-
-        let net = app.descendants(matching: .any)["periodEstimatedNetAfterFuel"]
-        XCTAssertTrue(scrollTo(net, in: app, maxSwipes: 14))
-        XCTAssertTrue(
-            waitForLabel(net, toContain: "Estimated net after fuel"),
-            "Showed: \(net.label)"
-        )
-        XCTAssertTrue(
-            net.label.contains("1 of 2 shifts"),
-            "A partial-coverage net says which shifts it is: \(net.label)"
-        )
-        XCTAssertTrue(
-            net.label.contains("not this period's earnings less this period's fuel"),
-            "And refuses to be read as the period's: \(net.label)"
-        )
-        XCTAssertTrue(
-            net.label.contains("never added together"),
-            "The overlap with a recorded fuel expense is stated: \(net.label)"
-        )
     }
 
     /// The comparison declares no period more profitable on an estimate.
@@ -8522,9 +8342,8 @@ final class DashPilotUITests: XCTestCase {
         let existing = (field.value as? String) ?? ""
         field.doubleTap()
         field.typeText(text)
-        XCTAssertEqual(
-            field.value as? String,
-            text,
+        XCTAssertTrue(
+            waitForFieldValue(field, toEqual: text),
             "The field should hold what was typed, not \(existing) with it prepended or appended"
         )
     }
@@ -9398,7 +9217,30 @@ final class DashPilotUITests: XCTestCase {
         let shown = (field.value as? String) ?? ""
         let before = shown == field.placeholderValue ? "" : shown
         field.typeText(text)
-        XCTAssertEqual(field.value as? String, before + text, "Every keystroke reached the field")
+        XCTAssertTrue(
+            waitForFieldValue(field, toEqual: before + text),
+            "Every keystroke reached the field: \((field.value as? String) ?? "")"
+        )
+    }
+
+    /// Waits for a text field to hold `expected`, where an empty expectation
+    /// also accepts the placeholder an empty field reports as its value.
+    ///
+    /// A condition rather than one read, because keystrokes are still being
+    /// delivered when `typeText` returns on a loaded host. CI run 37088088371
+    /// failed `testChangesAPickupPlace` reading `Now` out of a field whose
+    /// result-bundle recording shows it emptied a moment later: the deletes had
+    /// all arrived, the assertion had simply looked first.
+    @MainActor
+    private func waitForFieldValue(_ field: XCUIElement, toEqual expected: String) -> Bool {
+        let predicate = NSPredicate { object, _ in
+            guard let element = object as? XCUIElement else { return false }
+            let value = (element.value as? String) ?? ""
+            if expected.isEmpty { return value.isEmpty || value == element.placeholderValue }
+            return value == expected
+        }
+        let expectation = XCTNSPredicateExpectation(predicate: predicate, object: field)
+        return XCTWaiter().wait(for: [expectation], timeout: Self.conditionTimeout) == .completed
     }
 
     @MainActor
@@ -9424,8 +9266,10 @@ final class DashPilotUITests: XCTestCase {
         let shown = (field.value as? String) ?? ""
         let existing = shown == field.placeholderValue ? "" : shown
         field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: existing.count))
-        let cleared = (field.value as? String) ?? ""
-        XCTAssertTrue(cleared.isEmpty || cleared == field.placeholderValue, "The field was emptied: \(cleared)")
+        XCTAssertTrue(
+            waitForFieldValue(field, toEqual: ""),
+            "The field was emptied: \((field.value as? String) ?? "")"
+        )
     }
 
     /// The sentence of a validation message drawn as a `Label` with a warning
@@ -9447,7 +9291,11 @@ final class DashPilotUITests: XCTestCase {
     /// what they display is read from the label — which is also what a VoiceOver
     /// user hears.
     @MainActor
-    private func waitForLabel(_ element: XCUIElement, toContain text: String, timeout: TimeInterval = 5) -> Bool {
+    private func waitForLabel(
+        _ element: XCUIElement,
+        toContain text: String,
+        timeout: TimeInterval = DashPilotUITests.conditionTimeout
+    ) -> Bool {
         let expectation = XCTNSPredicateExpectation(
             predicate: NSPredicate(format: "label CONTAINS %@", text),
             object: element
@@ -9466,7 +9314,7 @@ final class DashPilotUITests: XCTestCase {
             predicate: NSPredicate(format: "value == %@", text),
             object: element
         )
-        return XCTWaiter().wait(for: [expectation], timeout: 5) == .completed
+        return XCTWaiter().wait(for: [expectation], timeout: Self.conditionTimeout) == .completed
     }
 
     @MainActor
@@ -9475,7 +9323,7 @@ final class DashPilotUITests: XCTestCase {
             predicate: NSPredicate(format: "count == %d", count),
             object: query
         )
-        return XCTWaiter().wait(for: [expectation], timeout: 5) == .completed
+        return XCTWaiter().wait(for: [expectation], timeout: Self.conditionTimeout) == .completed
     }
 
     // MARK: Period summaries
@@ -9519,112 +9367,106 @@ final class DashPilotUITests: XCTestCase {
         picker.buttons[title].tap()
     }
 
-    /// The week's earnings are the sum of the amounts recorded on its shifts,
-    /// and the screen says how many shifts that was.
+    /// One day's summary, read top to bottom: every figure states the coverage
+    /// behind it, and none claims more than its records.
+    ///
+    /// Eight journeys used to launch this fixture to read one figure each. The
+    /// arithmetic behind every number is pinned in `PeriodMetricsTests`,
+    /// `PeriodExpenseMetricsTests` and `PeriodFuelMetricsTests`; what only the
+    /// screen can show is that each figure reaches it with its wording and its
+    /// counts, which one pass down the list reads in the order it is drawn.
     @MainActor
-    func testWeekSummaryShowsRecordedEarningsAndTheirCoverage() throws {
-        let app = launchWithPeriodSummary()
-        openPeriodSummary(in: app)
-        selectPeriod("Week", in: app)
-
-        let earnings = app.descendants(matching: .any)["periodEarnings"]
-        XCTAssertTrue(earnings.waitForExistence(timeout: 5))
-        XCTAssertTrue(
-            waitForLabel(earnings, toContain: "$206.25"),
-            "The week totals the two recorded amounts: \(earnings.label)"
-        )
-        XCTAssertTrue(
-            earnings.label.contains("2 of 3 completed shifts"),
-            "And says how many shifts answered: \(earnings.label)"
-        )
-    }
-
-    /// The subtotal is never presented as though every shift had answered.
-    @MainActor
-    func testPartialEarningsCoverageIsStatedRatherThanImplied() throws {
+    func testTheDaySummaryStatesEachFigureWithItsCoverage() throws {
         let app = launchWithPeriodSummary()
         openPeriodSummary(in: app)
 
+        // Earnings: a subtotal, called recorded, with the shifts behind it, and
+        // untouched by the expenses recorded beside it.
         let earnings = app.descendants(matching: .any)["periodEarnings"]
         XCTAssertTrue(earnings.waitForExistence(timeout: 5))
-        XCTAssertTrue(waitForLabel(earnings, toContain: "$86.25"))
+        XCTAssertTrue(waitForLabel(earnings, toContain: "$86.25"), "Showed: \(earnings.label)")
         XCTAssertTrue(
             earnings.label.contains("1 of 2 completed shifts"),
-            "The day's third shift has no amount, and the screen says so: \(earnings.label)"
+            "The day's other shift has no amount, and the screen says so: \(earnings.label)"
         )
         XCTAssertTrue(
             earnings.label.contains("Recorded gross earnings"),
             "A subtotal is called recorded, never the day's earnings: \(earnings.label)"
         )
-    }
+        XCTAssertFalse(earnings.label.contains("$37.65"), "The net is a separate figure, in its own section")
 
-    /// A period's mileage is a floor, and the partial routes behind it stay
-    /// visible rather than being averaged into a clean-looking total.
-    @MainActor
-    func testPeriodMileageSurfacesPartialRouteCoverage() throws {
-        let app = launchWithPeriodSummary()
-        openPeriodSummary(in: app)
+        // Recorded expenses and the net after them, which is not profit.
+        let expenses = app.descendants(matching: .any)["periodExpenses"]
+        XCTAssertTrue(scrollTo(expenses, in: app), "The summary reports what the day cost")
+        XCTAssertTrue(waitForLabel(expenses, toContain: "$48.60"), "Showed: \(expenses.label)")
+        XCTAssertTrue(expenses.label.contains("2 recorded expenses"), "Showed: \(expenses.label)")
+        let categories = app.descendants(matching: .any).matching(identifier: "periodExpenseCategory")
+        XCTAssertEqual(categories.count, 2, "Fuel and parking, and no category with nothing in it")
 
+        let net = app.descendants(matching: .any)["periodNetAfterExpenses"]
+        XCTAssertTrue(scrollTo(net, in: app))
+        XCTAssertTrue(waitForLabel(net, toContain: "$37.65"), "$86.25 less $48.60: \(net.label)")
+        XCTAssertTrue(net.label.contains("net after recorded expenses"), "Showed: \(net.label)")
+        XCTAssertTrue(net.label.contains("1 of 2 shifts"), "The earnings half is a subtotal: \(net.label)")
+        XCTAssertTrue(net.label.contains("not profit"), "And the figure states what it is not: \(net.label)")
+        XCTAssertFalse(net.label.contains("estimated fuel"), "No estimate is folded in: \(net.label)")
+
+        // Mileage is a floor, and the rate over it names its paired subset.
         let mileage = app.descendants(matching: .any)["periodMileage"]
-        XCTAssertTrue(scrollTo(mileage, in: app))
-        XCTAssertTrue(
-            mileage.label.contains("Recorded mileage"),
-            "Mileage is recorded, not driven: \(mileage.label)"
-        )
+        XCTAssertTrue(scrollTo(mileage, in: app, maxSwipes: 14))
+        XCTAssertTrue(mileage.label.contains("Recorded mileage"), "Showed: \(mileage.label)")
         XCTAssertTrue(
             mileage.label.contains("1 of 2 completed shifts"),
             "The shift with no route is counted, not treated as zero miles: \(mileage.label)"
         )
-        XCTAssertTrue(
-            mileage.label.contains("partial route capture"),
-            "And the partial route behind the figure is stated: \(mileage.label)"
-        )
-        XCTAssertFalse(
-            mileage.label.lowercased().contains("driven"),
-            "The figure itself must not claim miles driven: \(mileage.label)"
-        )
-    }
-
-    /// The rate divides one paired subset of shifts, and says which.
-    @MainActor
-    func testPeriodPerMileRateStatesThePairedSubsetItUsed() throws {
-        let app = launchWithPeriodSummary()
-        openPeriodSummary(in: app)
+        XCTAssertTrue(mileage.label.contains("partial route capture"), "Showed: \(mileage.label)")
+        XCTAssertFalse(mileage.label.lowercased().contains("driven"), "Showed: \(mileage.label)")
 
         let rate = app.descendants(matching: .any)["periodPerMileRate"]
-        XCTAssertTrue(scrollTo(rate, in: app))
-        XCTAssertTrue(
-            rate.label.contains("gross earnings per recorded mile"),
-            "The rate names what it divides: \(rate.label)"
-        )
+        XCTAssertTrue(scrollTo(rate, in: app, maxSwipes: 14))
+        XCTAssertTrue(rate.label.contains("gross earnings per recorded mile"), "Showed: \(rate.label)")
         XCTAssertTrue(
             rate.label.contains("1 of 2 shifts with both earnings and a measurable route"),
             "Only the shift carrying both halves is behind it: \(rate.label)"
         )
+
+        // The estimates, after every recorded figure, each with its coverage.
+        let fuel = app.descendants(matching: .any)["periodEstimatedFuel"]
+        XCTAssertTrue(scrollTo(fuel, in: app, maxSwipes: 14))
+        XCTAssertTrue(waitForLabel(fuel, toContain: "Estimated fuel"), "Showed: \(fuel.label)")
+        XCTAssertTrue(fuel.label.contains("$"), "And it states an amount: \(fuel.label)")
+        XCTAssertTrue(fuel.label.contains("1 of 2 completed shifts"), "Showed: \(fuel.label)")
+        XCTAssertTrue(fuel.label.contains("recorded miles"), "Showed: \(fuel.label)")
+
+        let estimatedNet = app.descendants(matching: .any)["periodEstimatedNetAfterFuel"]
+        XCTAssertTrue(scrollTo(estimatedNet, in: app, maxSwipes: 14))
+        XCTAssertTrue(waitForLabel(estimatedNet, toContain: "Estimated net after fuel"), "Showed: \(estimatedNet.label)")
+        XCTAssertTrue(estimatedNet.label.contains("1 of 2 shifts"), "Showed: \(estimatedNet.label)")
+        XCTAssertTrue(
+            estimatedNet.label.contains("not this period's earnings less this period's fuel"),
+            "And refuses to be read as the period's: \(estimatedNet.label)"
+        )
+        XCTAssertTrue(estimatedNet.label.contains("never added together"), "Showed: \(estimatedNet.label)")
     }
 
-    /// The median is the middle of the individual pickups recorded in the
-    /// period, shown with the number of them behind it.
+    /// The week's earnings total its recorded amounts with their coverage, and
+    /// its pickup wait is a median of individual pickups with their count.
     @MainActor
-    func testWeeklyPickupWaitShowsMedianAndSampleCount() throws {
+    func testTheWeekSummaryStatesItsEarningsAndPickupWaitWithTheirBasis() throws {
         let app = launchWithPeriodSummary()
         openPeriodSummary(in: app)
         selectPeriod("Week", in: app)
 
+        let earnings = app.descendants(matching: .any)["periodEarnings"]
+        XCTAssertTrue(earnings.waitForExistence(timeout: 5))
+        XCTAssertTrue(waitForLabel(earnings, toContain: "$206.25"), "Showed: \(earnings.label)")
+        XCTAssertTrue(earnings.label.contains("2 of 3 completed shifts"), "Showed: \(earnings.label)")
+
         let wait = app.descendants(matching: .any)["periodPickupWait"]
         XCTAssertTrue(scrollTo(wait, in: app))
-        XCTAssertTrue(
-            waitForLabel(wait, toContain: "Median recorded pickup wait"),
-            "Showed: \(wait.label)"
-        )
-        XCTAssertTrue(
-            wait.label.contains("5 recorded pickups"),
-            "The week's five recorded waits are the median's basis: \(wait.label)"
-        )
-        XCTAssertFalse(
-            wait.label.lowercased().contains("typical"),
-            "A period median is not offered as a typical wait: \(wait.label)"
-        )
+        XCTAssertTrue(waitForLabel(wait, toContain: "Median recorded pickup wait"), "Showed: \(wait.label)")
+        XCTAssertTrue(wait.label.contains("5 recorded pickups"), "Showed: \(wait.label)")
+        XCTAssertFalse(wait.label.lowercased().contains("typical"), "Showed: \(wait.label)")
     }
 
     /// A period nobody drove in shows a sentence, not a grid of zeroes.
@@ -10006,30 +9848,6 @@ final class DashPilotUITests: XCTestCase {
         )
     }
 
-    /// A running shift offers no export anywhere: not on the shift panel, and
-    /// not through a history export that does not exist yet.
-    @MainActor
-    func testRunningShiftHasNoExportControl() throws {
-        let app = launchWithEmptyStore()
-
-        let start = app.buttons["startShiftButton"]
-        XCTAssertTrue(start.waitForExistence(timeout: 10))
-        // Before starting: no completed shift, so no history export either.
-        XCTAssertFalse(app.buttons["exportAllHistoryButton"].exists)
-
-        start.tap()
-        XCTAssertTrue(app.buttons["endShiftButton"].waitForExistence(timeout: 5))
-
-        XCTAssertFalse(
-            app.buttons["exportShiftButton"].exists,
-            "A running shift is not history and offers no export"
-        )
-        XCTAssertFalse(
-            app.buttons["exportAllHistoryButton"].exists,
-            "And it does not put anything exportable into history"
-        )
-    }
-
     // MARK: Month and chosen ranges
 
     /// The number a period's summary reports, or `nil` if it is showing an
@@ -10367,71 +10185,6 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any)["expensesEmptyState"].waitForExistence(timeout: 5))
     }
 
-    /// A day's recorded costs, their categories, and what the recorded earnings
-    /// come to after them.
-    @MainActor
-    func testPeriodSummaryShowsRecordedExpensesAndTheNetAfterThem() throws {
-        let app = launchWithPeriodSummary()
-        openPeriodSummary(in: app)
-
-        let expenses = app.descendants(matching: .any)["periodExpenses"]
-        XCTAssertTrue(scrollTo(expenses, in: app), "The summary reports what the day cost")
-        XCTAssertTrue(
-            waitForLabel(expenses, toContain: "$48.60"),
-            "The two costs recorded today, added up: \(expenses.label)"
-        )
-        XCTAssertTrue(
-            expenses.label.contains("2 recorded expenses"),
-            "With the count of records behind it: \(expenses.label)"
-        )
-
-        let categories = app.descendants(matching: .any).matching(identifier: "periodExpenseCategory")
-        XCTAssertEqual(categories.count, 2, "Fuel and parking, and no category with nothing in it")
-
-        let net = app.descendants(matching: .any)["periodNetAfterExpenses"]
-        XCTAssertTrue(scrollTo(net, in: app))
-        XCTAssertTrue(
-            waitForLabel(net, toContain: "$37.65"),
-            "$86.25 recorded, less $48.60 recorded: \(net.label)"
-        )
-    }
-
-    /// The net figure never presents itself as profit, and never without the
-    /// counts behind both of its halves.
-    @MainActor
-    func testNetAfterExpensesIsNotCalledProfit() throws {
-        let app = launchWithPeriodSummary()
-        openPeriodSummary(in: app)
-
-        let net = app.descendants(matching: .any)["periodNetAfterExpenses"]
-        XCTAssertTrue(scrollTo(net, in: app))
-        XCTAssertTrue(waitForLabel(net, toContain: "net after recorded expenses"))
-        XCTAssertTrue(
-            net.label.contains("1 of 2 shifts"),
-            "The earnings half is a subtotal, and says so: \(net.label)"
-        )
-        XCTAssertTrue(
-            net.label.contains("not profit"),
-            "And the figure states what it is not: \(net.label)"
-        )
-    }
-
-    /// Recording costs changes nothing about the gross figures beside them.
-    @MainActor
-    func testExpensesLeaveTheGrossFiguresAlone() throws {
-        let app = launchWithPeriodSummary()
-        openPeriodSummary(in: app)
-
-        let earnings = app.descendants(matching: .any)["periodEarnings"]
-        XCTAssertTrue(earnings.waitForExistence(timeout: 5))
-        XCTAssertTrue(
-            waitForLabel(earnings, toContain: "$86.25"),
-            "Gross earnings are still the amounts recorded on the shifts: \(earnings.label)"
-        )
-        XCTAssertTrue(earnings.label.contains("Recorded gross earnings"))
-        XCTAssertFalse(earnings.label.contains("$37.65"), "The net is a separate figure, in its own section")
-    }
-
     /// A cost recorded on a day with no shift is still that day's record.
     @MainActor
     func testExpenseOnADayWithoutAShiftIsStillSummarised() throws {
@@ -10557,12 +10310,5 @@ final class DashPilotUITests: XCTestCase {
             text.contains("started with dashpilot open"),
             "The limit of this scope is the thing a driver can be caught by: \(text)"
         )
-    }
-
-    @MainActor
-    func testLaunchPerformance() throws {
-        measure(metrics: [XCTApplicationLaunchMetric()]) {
-            XCUIApplication().launch()
-        }
     }
 }

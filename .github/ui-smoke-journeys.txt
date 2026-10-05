@@ -1,0 +1,56 @@
+# The UI journeys every pull request and push runs, one test name per line.
+#
+# Chosen as the critical paths a driver's day depends on: a shift from start
+# to end, a delivery through its lifecycle, stacked work, parking, the pickup
+# workflow, grouping corrections, history and its detail, the corrections
+# made afterwards, export, settings, and the largest text size. Everything
+# else in DashPilotUITests runs in ui-regression.yml on main, weekly, before a
+# release tag and on demand. A name here that no journey has fails the domain
+# suite (ContinuousIntegrationWorkflowTests), so the list cannot rot silently.
+#
+# Add a journey here only when a regression in it would stop a driver working
+# and nothing faster would catch it. The selection rules are in
+# docs/development/testing.md.
+
+# Launch and the shift
+testLaunchesIntoShiftScreen
+testStartsAndEndsAShift
+testPausesAndResumesAShift
+testActiveShiftHomeAtTheLargestTextSize
+testRecordedMileageGrowsWhileAShiftIsRecording
+testARunningShiftOffersOnlyWhatItsStateAllows
+
+# Deliveries, stacked work and recovery
+testRecordsADeliveryThroughItsLifecycle
+testStartsASecondDeliveryWhileTheFirstIsRunning
+testRecoversEveryActiveDeliveryOnLaunch
+testStartingAnOfferOfTwoRecordsTwoDeliveries
+testTheOfferSheetKeepsStartPinnedAndRecordsOnce
+testUndoingADeliveryMarkedDeliveredByMistake
+testActiveDeliveriesBlockEndingTheShift
+
+# Parking, the pickup workflow and shared stops
+testParkingStopsTheRouteAndLeavesTheShiftRunning
+testResumingDrivingStartsRecordingAgain
+testParkAndResumePickUpTheOneDelivery
+testAnOfferIsIndependentUnlessMarkedSamePickupAndDropOff
+testCorrectingGroupingCombinesTwoOffers
+testLiveActivityLeadsWithParkOnlyUnderTheWorkflow
+
+# History, detail and corrections afterwards
+testHistoryShowsThisWeekOnly
+testOlderWeeksAreGroupedAndReachable
+testOpensTheDetailOfTheTappedShift
+testAddsAndEditsEarningsFromDetail
+testAddsAnAdditionalTipToAFinishedDelivery
+testDeletesACompletedShift
+
+# Summaries and export
+testTheDaySummaryStatesEachFigureWithItsCoverage
+testCompletedShiftExportsJSON
+testExportsAllHistory
+
+# Settings, pickup places and expenses
+testCreatesEditsAndSelectsVehicles
+testAssignsAPickupPlaceToARunningDelivery
+testRecordsAnExpense

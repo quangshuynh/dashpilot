@@ -1386,6 +1386,36 @@ enum PreviewSupport {
         return container
     }
 
+    /// One finished shift in the current week holding one delivered delivery,
+    /// with no amount, tip, pickup place or route anywhere.
+    ///
+    /// The shape a driver reaches by starting a shift, recording one delivery
+    /// through every step and ending it, which is what the earnings and tip
+    /// journeys need and what two of them still do by hand. The shift runs from
+    /// the history anchor for an hour; the delivery is accepted 10 minutes in,
+    /// arrives at 15, is picked up at 20 and delivered at 35. Debug builds
+    /// only, and in memory.
+    static func seededFinishedDeliveryContainer(
+        referenceDate: Date = historyWeekReference()
+    ) throws -> ModelContainer {
+        let container = try ModelContainerFactory.makeInMemoryContainer()
+        let context = ModelContext(container)
+        func at(_ minutes: Double) -> Date { referenceDate.addingTimeInterval(minutes * 60) }
+
+        let shift = Shift(startedAt: referenceDate)
+        context.insert(shift)
+
+        let delivery = insertedDelivery(on: shift, acceptedAt: at(10), in: context)
+        try? delivery.markArrivedAtPickup(at: at(15))
+        try? delivery.markPickedUp(at: at(20))
+        try? delivery.markDelivered(at: at(35))
+        context.insert(delivery)
+
+        try? shift.end(at: at(60))
+        try context.save()
+        return container
+    }
+
     /// Three capture sessions of ten positions each, twenty seconds and 400 m
     /// apart, beginning 30 minutes, 3 hours 5 minutes and 3 hours 25 minutes
     /// into the shift.

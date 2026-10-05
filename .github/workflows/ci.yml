@@ -1,7 +1,13 @@
 name: CI
 
-# Builds DashPilot for an iOS simulator and runs both test targets. No signing,
+# Builds DashPilot for an iOS simulator, runs the whole domain suite and the
+# curated UI smoke journeys listed in .github/ui-smoke-journeys.txt. No signing,
 # no archive, no Apple Developer account and no third-party CI service.
+#
+# The complete UI suite is not run here. It took 2h17m to 2h34m of a 2h28m to
+# 2h54m job on every pull request (runs 36963445708 to 37088088371), which made
+# feedback on a change slower than the change. It runs in ui-regression.yml on
+# main, weekly, on release tags and on demand, unchanged in what it covers.
 
 on:
   push:
@@ -21,21 +27,12 @@ jobs:
   build-and-test:
     name: Build and test on iOS Simulator
     runs-on: macos-26
-    # The budget covers a whole run of both suites on a virtualised runner, and
-    # it is measured rather than guessed. With 238 to 242 tests, runs
-    # 36963445708, 36947255282, 36946410015, 36916384792, 36916358022 and
-    # 36963465798 took 2h28m to 2h42m end to end: 2 to 4 minutes of
-    # build-for-testing, 5 to 8 minutes of domain tests and 2h17m to 2h26m of
-    # UI journeys (about 35 seconds a journey on the runner, against about 28 on
-    # a local host). Then main's run 37007996270, on the same 242 tests, took
-    # 2h54m, with UI journeys alone at 2h34m: six minutes inside the previous
-    # 180, with runs on one tree varying by about a quarter of an hour. 210
-    # minutes leaves about half an hour over the slowest measured run, without
-    # approaching the 6-hour cap a GitHub-hosted job has. It is a
-    # ceiling for a hung run, not a target, and it has to be measured again as
-    # journeys are added. The upload step below still runs when it is reached,
-    # which an earlier cancelled run (35553963157) demonstrated.
-    timeout-minutes: 210
+    # 2 to 4 minutes of build-for-testing and 5 to 8 of domain tests were
+    # measured on this runner; the smoke journeys are about 35 seconds each
+    # there, so about 20 minutes. 75 leaves room for a slow image without
+    # approaching the full suite's budget. A ceiling for a hung run, not a
+    # target.
+    timeout-minutes: 75
     env:
       XCODE_PROJECT: DashPilot.xcodeproj
       XCODE_SCHEME: DashPilot
@@ -44,91 +41,8 @@ jobs:
       - name: Check out the repository
         uses: actions/checkout@v7
 
-      - name: Select an Xcode that has the required iOS SDK
-        run: |
-          set -euo pipefail
-
-          required="$(awk -F' = ' '/IPHONEOS_DEPLOYMENT_TARGET/ { gsub(/[; ]/, "", $2); print $2; exit }' "$XCODE_PROJECT/project.pbxproj")"
-          if [ -z "$required" ]; then
-            echo "Could not read IPHONEOS_DEPLOYMENT_TARGET from the project." >&2
-            exit 1
-          fi
-          echo "Project deployment target: iOS $required"
-
-          # True when $1 >= $2, comparing dotted versions.
-          version_ge() { [ "$(printf '%s\n%s\n' "$2" "$1" | sort -V | head -n 1)" = "$2" ]; }
-
-          best_app=""
-          best_sdk=""
-          for app in /Applications/Xcode*.app; do
-            settings="$app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator.sdk/SDKSettings.plist"
-            [ -f "$settings" ] || continue
-            sdk="$(/usr/libexec/PlistBuddy -c 'Print :Version' "$settings" 2>/dev/null || true)"
-            [ -n "$sdk" ] || continue
-            echo "  $app has iOS Simulator SDK $sdk"
-            version_ge "$sdk" "$required" || continue
-            if [ -z "$best_sdk" ] || version_ge "$sdk" "$best_sdk"; then
-              best_app="$app"
-              best_sdk="$sdk"
-            fi
-          done
-
-          if [ -z "$best_app" ]; then
-            echo "No installed Xcode provides an iOS Simulator SDK of at least $required." >&2
-            exit 1
-          fi
-
-          echo "Using $best_app (iOS Simulator SDK $best_sdk)"
-          echo "DEVELOPER_DIR=$best_app/Contents/Developer" >> "$GITHUB_ENV"
-          echo "REQUIRED_IOS_VERSION=$required" >> "$GITHUB_ENV"
-
-      - name: Show tool versions
-        run: |
-          set -euo pipefail
-          sw_vers
-          xcodebuild -version
-          swift --version
-          xcrun simctl list runtimes ios
-
-      - name: Choose an available iPhone simulator
-        run: |
-          set -euo pipefail
-          xcrun simctl list devices available --json > /tmp/simulators.json
-          python3 - <<'PY' >> "$GITHUB_ENV"
-          import json, os, re
-
-          required = tuple(int(part) for part in os.environ["REQUIRED_IOS_VERSION"].split("."))
-          devices = json.load(open("/tmp/simulators.json"))["devices"]
-
-          candidates = []
-          for runtime, entries in devices.items():
-              match = re.search(r"SimRuntime\.iOS-([0-9-]+)$", runtime)
-              if not match:
-                  continue
-              version = tuple(int(part) for part in match.group(1).split("-"))
-              if version < required:
-                  continue
-              for device in entries:
-                  if device.get("isAvailable") and device["name"].startswith("iPhone"):
-                      candidates.append((version, device["name"], device["udid"]))
-
-          if not candidates:
-              raise SystemExit(
-                  f"No available iPhone simulator on iOS {'.'.join(map(str, required))} or newer."
-              )
-
-          # Newest runtime first, then a plain "iPhone <n>" over a variant, then a
-          # stable order by name, so the same runner image always picks the same
-          # device without the workflow naming one.
-          def preference(candidate):
-              version, name, _ = candidate
-              return (version, 1 if re.fullmatch(r"iPhone \d+", name) else 0, name)
-
-          candidates.sort(key=preference, reverse=True)
-          version, name, udid = candidates[0]
-          print(f"SIMULATOR_NAME={name} (iOS {'.'.join(map(str, version))})")
-          print(f"SIMULATOR_ID={udid}")
-          PY
+      - name: Prepare an iOS simulator
+        uses: ./.github/actions/prepare-simulator
 
       - name: Report the selected simulator
         run: echo "Building against $SIMULATOR_NAME ($SIMULATOR_ID)"
@@ -159,18 +73,33 @@ jobs:
             -only-testing:DashPilotTests \
             -resultBundlePath TestResults-Domain.xcresult
 
-      - name: Run the UI journeys (DashPilotUITests)
+      - name: Run the UI smoke journeys (DashPilotUITests)
         run: |
           set -euo pipefail
 
           rm -rf TestResults-UI.xcresult
+
+          # One -only-testing per listed journey; comments and blank lines are
+          # ignored. An empty selection would run every journey, so refuse it.
+          selection=()
+          while IFS= read -r journey; do
+            journey="${journey%%#*}"
+            journey="$(echo "$journey" | tr -d '[:space:]')"
+            [ -n "$journey" ] || continue
+            selection+=("-only-testing:DashPilotUITests/DashPilotUITests/$journey")
+          done < .github/ui-smoke-journeys.txt
+          if [ "${#selection[@]}" -eq 0 ]; then
+            echo "The smoke list selected no journeys." >&2
+            exit 1
+          fi
+          echo "Running ${#selection[@]} smoke journeys."
 
           xcodebuild test-without-building \
             -project "$XCODE_PROJECT" \
             -scheme "$XCODE_SCHEME" \
             -destination "platform=iOS Simulator,id=$SIMULATOR_ID" \
             -derivedDataPath DerivedData \
-            -only-testing:DashPilotUITests \
+            "${selection[@]}" \
             -parallel-testing-enabled NO \
             -resultBundlePath TestResults-UI.xcresult
 

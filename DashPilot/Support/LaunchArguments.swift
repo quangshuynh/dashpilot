@@ -203,6 +203,18 @@ nonisolated enum LaunchArgument {
     /// memory, so it can never touch a real store.
     static let seededLateDeliveryHistory = "-dashpilot-seeded-late-delivery-history"
 
+    /// Runs against a throwaway store holding one finished shift in the current
+    /// week, with one delivered delivery that records no amount, no tip, no
+    /// pickup place and no route.
+    ///
+    /// It is the state the earnings and tip journeys used to reach by driving a
+    /// whole shift through the interface first: about 40 seconds a journey on a
+    /// local host and 70 to 98 on a CI runner, before the first assertion about
+    /// what they test. Two journeys still drive it end to end, and assert that
+    /// no amount or tip can be entered while the shift runs; the rest start
+    /// here. Every time is invented. Debug builds only, and in memory.
+    static let seededFinishedDelivery = "-dashpilot-seeded-finished-delivery"
+
     /// Runs against a throwaway store holding completed shifts in three
     /// different weeks: one in the current one, one in the week before it and
     /// two in the week three back.
@@ -313,6 +325,7 @@ nonisolated enum LaunchArgument {
         seededParkedHistory,
         seededLateEndHistory,
         seededLateDeliveryHistory,
+        seededFinishedDelivery,
         seededOlderWeeks,
         seededOlderWeeksOnly,
         seededLongHistory
