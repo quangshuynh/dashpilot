@@ -206,6 +206,7 @@ struct ShiftService {
         let shift = Shift(startedAt: date)
         context.insert(shift)
         let recordedDefaults = recordStartingFuelDefaults(on: shift)
+        let recordedTarget = recordStartingHourlyTarget(on: shift)
         do {
             try context.save()
         } catch {
@@ -215,7 +216,12 @@ struct ShiftService {
             throw ShiftLifecycleError.storeUnavailable(underlying: error)
         }
 
-        AppLog.shift.info("Shift started, fuel defaults recorded: \(recordedDefaults, privacy: .public)")
+        AppLog.shift.info(
+            """
+            Shift started, fuel defaults recorded: \(recordedDefaults, privacy: .public), \
+            target recorded: \(recordedTarget, privacy: .public)
+            """
+        )
         return shift
     }
 
@@ -250,6 +256,26 @@ struct ShiftService {
         } catch {
             AppLog.fuel.error(
                 "Could not record the starting fuel defaults: \(String(describing: error), privacy: .public)"
+            )
+            return false
+        }
+    }
+
+    /// Copies the driver's target hourly earnings onto a shift that has just
+    /// been created, and reports whether there was one to copy.
+    ///
+    /// At the start for the reason the fuel defaults are: the benchmark a shift
+    /// is compared with is the one that was set while it was worked, and a
+    /// target moved later must not reclassify it. A start is **never refused**
+    /// over it; a refusal is logged structurally and the shift records none.
+    private func recordStartingHourlyTarget(on shift: Shift) -> Bool {
+        guard let target = SettingsService(context: context).hourlyTarget() else { return false }
+        do {
+            try shift.recordStartingHourlyTarget(target)
+            return true
+        } catch {
+            AppLog.shift.error(
+                "Could not record the starting target: \(String(describing: error), privacy: .public)"
             )
             return false
         }

@@ -4289,11 +4289,353 @@ enum DashPilotSchemaV20: VersionedSchema {
 /// anything resuming the route for them. So every migrated row reads **off**,
 /// and nothing recorded is touched.
 ///
-/// This version reuses the file-scope models rather than freezing copies,
-/// because it *is* the current shape. It gets frozen copies of its own the first
-/// time v22 moves them on, exactly as v20 did above.
+/// **Frozen** by v22, with copies of all eleven of its models below: v22 moves
+/// the shift and the driver settings, and a version whose models were the
+/// file-scope types would describe v22's shape under v21's number.
 enum DashPilotSchemaV21: VersionedSchema {
     static var versionIdentifier: Schema.Version { Schema.Version(21, 0, 0) }
+
+    static var models: [any PersistentModel.Type] {
+        [
+            Shift.self,
+            RouteSample.self,
+            RouteSuspension.self,
+            Delivery.self,
+            PickupPlace.self,
+            Expense.self,
+            ShiftPause.self,
+            Offer.self,
+            DeliveryTip.self,
+            VehicleProfile.self,
+            DriverSettings.self
+        ]
+    }
+
+    /// The v21 shift, and one of the two shapes v22 moves: no target hourly
+    /// earnings recorded.
+    @Model
+    nonisolated final class Shift {
+        @Attribute(.unique) private(set) var id: UUID
+        private(set) var startedAt: Date
+        private(set) var endedAt: Date?
+
+        @Relationship(deleteRule: .cascade, inverse: \Delivery.shift)
+        private(set) var deliveries: [Delivery] = []
+
+        @Relationship(deleteRule: .cascade, inverse: \ShiftPause.shift)
+        private(set) var pauses: [ShiftPause] = []
+
+        @Relationship(deleteRule: .cascade, inverse: \Offer.shift)
+        private(set) var offers: [Offer] = []
+
+        @Relationship(deleteRule: .cascade, inverse: \RouteSuspension.shift)
+        private(set) var routeSuspensions: [RouteSuspension] = []
+
+        private(set) var grossEarningsAmount: Decimal?
+
+        private(set) var fuelMilesPerGallonValue: Decimal?
+
+        private(set) var fuelGasPricePerGallonAmount: Decimal?
+
+        private(set) var fuelVehicleName: String?
+
+        init(
+            id: UUID = UUID(),
+            startedAt: Date,
+            endedAt: Date? = nil,
+            grossEarningsAmount: Decimal? = nil,
+            fuelMilesPerGallonValue: Decimal? = nil,
+            fuelGasPricePerGallonAmount: Decimal? = nil,
+            fuelVehicleName: String? = nil
+        ) {
+            self.id = id
+            self.startedAt = startedAt
+            self.endedAt = endedAt
+            self.grossEarningsAmount = grossEarningsAmount
+            self.fuelMilesPerGallonValue = fuelMilesPerGallonValue
+            self.fuelGasPricePerGallonAmount = fuelGasPricePerGallonAmount
+            self.fuelVehicleName = fuelVehicleName
+        }
+    }
+
+    /// The v21 route sample, unchanged by v22.
+    @Model
+    nonisolated final class RouteSample {
+        private(set) var timestamp: Date
+        private(set) var latitude: Double
+        private(set) var longitude: Double
+        private(set) var horizontalAccuracy: Double
+        private(set) var captureSessionID: UUID?
+        private(set) var shift: Shift?
+
+        init(
+            shift: Shift,
+            timestamp: Date,
+            latitude: Double,
+            longitude: Double,
+            horizontalAccuracy: Double,
+            captureSessionID: UUID?
+        ) {
+            self.timestamp = timestamp
+            self.latitude = latitude
+            self.longitude = longitude
+            self.horizontalAccuracy = horizontalAccuracy
+            self.captureSessionID = captureSessionID
+            self.shift = shift
+        }
+    }
+
+    /// The v20 delivery, with its two shared-stop identities; unchanged by v21.
+    @Model
+    nonisolated final class Delivery {
+        @Attribute(.unique) private(set) var id: UUID
+        private(set) var acceptedAt: Date
+        private(set) var arrivedAtPickupAt: Date?
+        private(set) var pickedUpAt: Date?
+        private(set) var pickupProvenanceRawValue: String?
+        private(set) var deliveredAt: Date?
+        private(set) var cancelledAt: Date?
+        private(set) var shift: Shift?
+        private(set) var offer: Offer?
+        private(set) var pickupPlace: PickupPlace?
+        private(set) var grossEarningsAmount: Decimal?
+        private(set) var expectedEarningsAmount: Decimal?
+        private(set) var sharedPickupID: UUID?
+        private(set) var sharedDropOffID: UUID?
+
+        @Relationship(deleteRule: .cascade, inverse: \DeliveryTip.delivery)
+        private(set) var additionalTips: [DeliveryTip] = []
+
+        init(
+            id: UUID = UUID(),
+            shift: Shift,
+            offer: Offer? = nil,
+            acceptedAt: Date,
+            arrivedAtPickupAt: Date? = nil,
+            pickedUpAt: Date? = nil,
+            pickupProvenanceRawValue: String? = nil,
+            deliveredAt: Date? = nil,
+            cancelledAt: Date? = nil,
+            pickupPlace: PickupPlace? = nil,
+            grossEarningsAmount: Decimal? = nil,
+            expectedEarningsAmount: Decimal? = nil,
+            sharedPickupID: UUID? = nil,
+            sharedDropOffID: UUID? = nil
+        ) {
+            self.id = id
+            self.acceptedAt = acceptedAt
+            self.arrivedAtPickupAt = arrivedAtPickupAt
+            self.pickedUpAt = pickedUpAt
+            self.pickupProvenanceRawValue = pickupProvenanceRawValue
+            self.deliveredAt = deliveredAt
+            self.cancelledAt = cancelledAt
+            self.shift = shift
+            self.offer = offer
+            self.pickupPlace = pickupPlace
+            self.grossEarningsAmount = grossEarningsAmount
+            self.expectedEarningsAmount = expectedEarningsAmount
+            self.sharedPickupID = sharedPickupID
+            self.sharedDropOffID = sharedDropOffID
+        }
+    }
+
+    /// The v21 delivery tip, unchanged by v22.
+    @Model
+    nonisolated final class DeliveryTip {
+        @Attribute(.unique) private(set) var id: UUID
+        private(set) var amountValue: Decimal
+        private(set) var methodRawValue: String
+        private(set) var recordedAt: Date
+        private(set) var delivery: Delivery?
+
+        init(
+            id: UUID = UUID(),
+            delivery: Delivery,
+            amountValue: Decimal,
+            methodRawValue: String,
+            recordedAt: Date
+        ) {
+            self.id = id
+            self.amountValue = amountValue
+            self.methodRawValue = methodRawValue
+            self.recordedAt = recordedAt
+            self.delivery = delivery
+        }
+    }
+
+    /// The v21 offer, unchanged by v22.
+    @Model
+    nonisolated final class Offer {
+        @Attribute(.unique) private(set) var id: UUID
+        private(set) var acceptedAt: Date
+        private(set) var shift: Shift?
+
+        @Relationship(deleteRule: .cascade, inverse: \Delivery.offer)
+        private(set) var deliveries: [Delivery] = []
+
+        init(id: UUID = UUID(), shift: Shift, acceptedAt: Date) {
+            self.id = id
+            self.acceptedAt = acceptedAt
+            self.shift = shift
+        }
+    }
+
+    /// The v21 pickup place, unchanged by v22.
+    @Model
+    nonisolated final class PickupPlace {
+        @Attribute(.unique) private(set) var id: UUID
+        private(set) var displayName: String
+        private(set) var normalizedName: String
+        private(set) var createdAt: Date
+
+        @Relationship(deleteRule: .nullify, inverse: \Delivery.pickupPlace)
+        private(set) var deliveries: [Delivery] = []
+
+        init(id: UUID = UUID(), displayName: String, normalizedName: String, createdAt: Date) {
+            self.id = id
+            self.displayName = displayName
+            self.normalizedName = normalizedName
+            self.createdAt = createdAt
+        }
+    }
+
+    /// The v21 expense, unchanged by v22.
+    @Model
+    nonisolated final class Expense {
+        @Attribute(.unique) private(set) var id: UUID
+        private(set) var occurredAt: Date
+        private(set) var amountValue: Decimal
+        private(set) var categoryRawValue: String
+        private(set) var note: String?
+
+        init(
+            id: UUID = UUID(),
+            occurredAt: Date,
+            amountValue: Decimal,
+            categoryRawValue: String,
+            note: String? = nil
+        ) {
+            self.id = id
+            self.occurredAt = occurredAt
+            self.amountValue = amountValue
+            self.categoryRawValue = categoryRawValue
+            self.note = note
+        }
+    }
+
+    /// The v21 shift pause, unchanged by v22.
+    @Model
+    nonisolated final class ShiftPause {
+        @Attribute(.unique) private(set) var id: UUID
+        private(set) var startedAt: Date
+        private(set) var endedAt: Date?
+        private(set) var shift: Shift?
+
+        init(id: UUID = UUID(), shift: Shift, startedAt: Date, endedAt: Date? = nil) {
+            self.id = id
+            self.startedAt = startedAt
+            self.endedAt = endedAt
+            self.shift = shift
+        }
+    }
+
+    /// The v20 route suspension, with the deliveries sharing its pickup; unchanged by v21.
+    @Model
+    nonisolated final class RouteSuspension {
+        @Attribute(.unique) private(set) var id: UUID
+        private(set) var startedAt: Date
+        private(set) var endedAt: Date?
+        private(set) var shift: Shift?
+        private(set) var pickupWorkflowDeliveryID: UUID?
+        private(set) var pickupWorkflowSharedPickupDeliveryIDs: [UUID] = []
+
+        init(
+            id: UUID = UUID(),
+            shift: Shift,
+            startedAt: Date,
+            endedAt: Date? = nil,
+            pickupWorkflowDeliveryID: UUID? = nil,
+            pickupWorkflowSharedPickupDeliveryIDs: [UUID] = []
+        ) {
+            self.id = id
+            self.shift = shift
+            self.startedAt = startedAt
+            self.endedAt = endedAt
+            self.pickupWorkflowDeliveryID = pickupWorkflowDeliveryID
+            self.pickupWorkflowSharedPickupDeliveryIDs = pickupWorkflowSharedPickupDeliveryIDs
+        }
+    }
+
+    /// The v21 vehicle profile, unchanged by v22.
+    @Model
+    nonisolated final class VehicleProfile {
+        @Attribute(.unique) private(set) var id: UUID
+        private(set) var name: String
+        private(set) var milesPerGallonValue: Decimal
+        private(set) var createdAt: Date
+
+        init(id: UUID = UUID(), name: String, milesPerGallonValue: Decimal, createdAt: Date) {
+            self.id = id
+            self.name = name
+            self.milesPerGallonValue = milesPerGallonValue
+            self.createdAt = createdAt
+        }
+    }
+
+    /// The v21 driver settings, and the other shape v22 moves: no target hourly
+    /// earnings.
+    @Model
+    nonisolated final class DriverSettings {
+        @Attribute(.unique) private(set) var id: UUID
+        private(set) var gasPricePerGallonAmount: Decimal?
+        private(set) var selectedVehicleID: UUID?
+        private(set) var usesParkAndResumeForPickups: Bool = false
+        private(set) var handlesStackedOrdersInOrder: Bool = false
+        private(set) var resumesDrivingAfterDeliveryProgress: Bool = false
+
+        init(
+            id: UUID,
+            gasPricePerGallonAmount: Decimal? = nil,
+            selectedVehicleID: UUID? = nil,
+            usesParkAndResumeForPickups: Bool = false,
+            handlesStackedOrdersInOrder: Bool = false,
+            resumesDrivingAfterDeliveryProgress: Bool = false
+        ) {
+            self.id = id
+            self.gasPricePerGallonAmount = gasPricePerGallonAmount
+            self.selectedVehicleID = selectedVehicleID
+            self.usesParkAndResumeForPickups = usesParkAndResumeForPickups
+            self.handlesStackedOrdersInOrder = handlesStackedOrdersInOrder
+            self.resumesDrivingAfterDeliveryProgress = resumesDrivingAfterDeliveryProgress
+        }
+    }
+}
+
+/// Version 22 of the persisted schema: an optional target hourly earnings,
+/// held by the driver's settings as the default for the next shift and copied
+/// onto each shift when it starts.
+///
+/// ## Why a snapshot on the shift
+///
+/// The target is a benchmark a shift is compared with, and a driver who moves
+/// it from `$25.00` to `$30.00` has not restated what last week's shifts were
+/// aiming at. So it is copied when a shift starts, exactly as the fuel
+/// defaults are, and a shift keeps the target it was worked under. Changing
+/// Settings changes the next shift and nothing recorded.
+///
+/// ## Why this migrates lightweight, and why every column is empty
+///
+/// Two optional `Decimal` columns and **nothing truthful to write**. No store
+/// written before v22 holds a target, and inventing one for a shift that never
+/// had one would compare old work against a figure chosen later, which is the
+/// reclassification the snapshot exists to prevent. Every migrated shift and
+/// settings row reads `nil`: no target, which is not a target of `$0.00`.
+///
+/// This version reuses the file-scope models rather than freezing copies,
+/// because it *is* the current shape. It gets frozen copies of its own the first
+/// time v23 moves them on, as v21 did above.
+enum DashPilotSchemaV22: VersionedSchema {
+    static var versionIdentifier: Schema.Version { Schema.Version(22, 0, 0) }
 
     static var models: [any PersistentModel.Type] {
         [
@@ -4340,7 +4682,8 @@ enum DashPilotMigrationPlan: SchemaMigrationPlan {
             DashPilotSchemaV18.self,
             DashPilotSchemaV19.self,
             DashPilotSchemaV20.self,
-            DashPilotSchemaV21.self
+            DashPilotSchemaV21.self,
+            DashPilotSchemaV22.self
         ]
     }
 
@@ -4348,7 +4691,7 @@ enum DashPilotMigrationPlan: SchemaMigrationPlan {
         [
             v1ToV2, v2ToV3, v3ToV4, v4ToV5, v5ToV6, v6ToV7, v7ToV8, v8ToV9, v9ToV10, v10ToV11, v11ToV12,
             v12ToV13, v13ToV14, v14ToV15, v15ToV16, v16ToV17, v17ToV18, v18ToV19, v19ToV20,
-            v20ToV21
+            v20ToV21, v21ToV22
         ]
     }
 
@@ -4814,5 +5157,16 @@ enum DashPilotMigrationPlan: SchemaMigrationPlan {
     static let v20ToV21 = MigrationStage.lightweight(
         fromVersion: DashPilotSchemaV20.self,
         toVersion: DashPilotSchemaV21.self
+    )
+
+    /// V21 → V22 is lightweight.
+    ///
+    /// Nothing to backfill. The tempting stage would give every migrated shift
+    /// the driver's first target, or a target of zero, and both would compare
+    /// work against a benchmark nobody chose for it. Every migrated shift and
+    /// settings row reads `nil`.
+    static let v21ToV22 = MigrationStage.lightweight(
+        fromVersion: DashPilotSchemaV21.self,
+        toVersion: DashPilotSchemaV22.self
     )
 }

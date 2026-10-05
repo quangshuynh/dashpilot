@@ -405,6 +405,7 @@ struct CompletedShiftDetailView: View {
                     rate: metrics.grossPerWorkingHour,
                     identifier: "shiftDetailHourlyRate"
                 )
+                hourlyTargetRow(metrics)
                 rateRow(
                     "Per active delivery hour",
                     spokenAs: "gross earnings per delivery active hour",
@@ -1182,6 +1183,44 @@ struct CompletedShiftDetailView: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(rateAccessibilityLabel(spokenTitle: spokenTitle, rate: rate))
         .accessibilityIdentifier(identifier)
+    }
+
+    /// The rate above against the target this shift recorded when it started,
+    /// or nothing for a shift that recorded no target.
+    ///
+    /// Directly under the rate it is about, quieter than it, with the standing
+    /// said in words and a symbol so it never rests on colour. A shift with a
+    /// target and no rate says so rather than reading as below it.
+    @ViewBuilder
+    private func hourlyTargetRow(_ metrics: ShiftMetrics) -> some View {
+        if let target = shift.hourlyTarget {
+            Group {
+                if let comparison = HourlyTargetComparison(rate: metrics.grossPerWorkingHour.amount, target: target) {
+                    Label {
+                        VStack(alignment: .leading, spacing: DashSpacing.xs) {
+                            Text(comparison.standing.title)
+                                .dashFont(.emphasis)
+                            Text(comparison.statement(locale: locale))
+                                .dashFont(.supporting)
+                                .foregroundStyle(.secondary)
+                                .monospacedDigit()
+                        }
+                        .fixedSize(horizontal: false, vertical: true)
+                    } icon: {
+                        Image(systemName: comparison.standing.symbolName)
+                            .foregroundStyle(Color.accentColor)
+                    }
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(comparison.spokenStatement(locale: locale))
+                } else {
+                    Text("Your target for this shift was \(target.formatted(locale: locale)) a working hour. There is no rate to compare it with.")
+                        .dashFont(.supporting)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .accessibilityIdentifier("shiftDetailHourlyTarget")
+        }
     }
 
     private func rateAccessibilityLabel(spokenTitle: String, rate: ShiftRate) -> String {

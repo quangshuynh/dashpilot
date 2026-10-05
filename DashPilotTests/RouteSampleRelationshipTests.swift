@@ -97,7 +97,7 @@ struct RouteSampleRelationshipTests {
             properties == [
                 "id", "startedAt", "endedAt", "deliveries", "offers", "pauses", "routeSuspensions",
                 "grossEarningsAmount", "fuelMilesPerGallonValue", "fuelGasPricePerGallonAmount",
-                "fuelVehicleName"
+                "fuelVehicleName", "targetGrossPerWorkingHourAmount"
             ],
             """
             The one collection the shift gained since is `routeSuspensions`, which holds at most a \

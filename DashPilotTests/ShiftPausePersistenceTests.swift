@@ -68,7 +68,8 @@ struct ShiftPausePersistenceTests {
         #expect(
             attributes == [
                 "id", "startedAt", "endedAt", "grossEarningsAmount",
-                "fuelMilesPerGallonValue", "fuelGasPricePerGallonAmount", "fuelVehicleName"
+                "fuelMilesPerGallonValue", "fuelGasPricePerGallonAmount", "fuelVehicleName",
+                "targetGrossPerWorkingHourAmount"
             ]
         )
         #expect(shift.relationships.map(\.name).contains("pauses"))

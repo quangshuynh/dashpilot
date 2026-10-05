@@ -418,6 +418,18 @@ struct PeriodSummaryView: View {
             .accessibilityIdentifier("periodEarnings")
 
             rateRow(metrics, .perWorkingHour, identifier: "periodWorkingHourRate")
+            // How the shifts stood against their own targets, under the rate
+            // they are about, and only when some shift had a target.
+            if let statement = metrics.hourlyTarget.statement {
+                Label(statement, systemImage: "target")
+                    .labelStyle(DashCompactLabelStyle())
+                    .dashFont(.supporting)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(metrics.hourlyTarget.spokenStatement ?? statement)
+                    .accessibilityIdentifier("periodHourlyTarget")
+            }
             rateRow(metrics, .perDeliveryActiveHour, identifier: "periodActiveHourRate")
         } header: {
             Text("Earnings")

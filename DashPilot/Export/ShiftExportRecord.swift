@@ -172,6 +172,12 @@ nonisolated struct ShiftExportRecord: Equatable, Sendable, Codable {
     /// Gross earnings per **working** hour, so a driver who paused mid-shift is
     /// not reported as having earned less per hour for pausing.
     let grossPerWorkingHour: ExportAmount?
+
+    /// The target gross earnings per working hour this shift recorded when it
+    /// started, or `null` when it recorded none. A personal benchmark the
+    /// driver chose, never earnings and never zero for "no target". JSON only,
+    /// and additive: a reader that does not know it loses nothing.
+    let targetGrossPerWorkingHour: ExportAmount?
     let grossPerDeliveryActiveHour: ExportAmount?
 
     /// Gross earnings per **recorded** mile. The denominator is what the route
@@ -190,7 +196,7 @@ nonisolated struct ShiftExportRecord: Equatable, Sendable, Codable {
         case currencyCode, grossEarnings, route
         case fuelMilesPerGallon, fuelGasPricePerGallon, fuelVehicleName
         case deliveryActiveSeconds, nonDeliverySeconds
-        case grossPerWorkingHour, grossPerDeliveryActiveHour, grossPerRecordedMile
+        case grossPerWorkingHour, targetGrossPerWorkingHour, grossPerDeliveryActiveHour, grossPerRecordedMile
         case deliveredCount, cancelledCount, deliveries
     }
 
@@ -213,6 +219,7 @@ nonisolated struct ShiftExportRecord: Equatable, Sendable, Codable {
         try container.encodeAlways(deliveryActiveSeconds, forKey: .deliveryActiveSeconds)
         try container.encodeAlways(nonDeliverySeconds, forKey: .nonDeliverySeconds)
         try container.encodeAlways(grossPerWorkingHour, forKey: .grossPerWorkingHour)
+        try container.encodeAlways(targetGrossPerWorkingHour, forKey: .targetGrossPerWorkingHour)
         try container.encodeAlways(grossPerDeliveryActiveHour, forKey: .grossPerDeliveryActiveHour)
         try container.encodeAlways(grossPerRecordedMile, forKey: .grossPerRecordedMile)
         try container.encode(deliveredCount, forKey: .deliveredCount)

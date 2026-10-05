@@ -77,7 +77,7 @@ struct DeliveryOfferPersistenceTests {
                 == [
                     "id", "startedAt", "endedAt", "deliveries", "offers", "pauses", "routeSuspensions",
                     "grossEarningsAmount", "fuelMilesPerGallonValue", "fuelGasPricePerGallonAmount",
-                    "fuelVehicleName"
+                    "fuelVehicleName", "targetGrossPerWorkingHourAmount"
                 ]
         )
     }

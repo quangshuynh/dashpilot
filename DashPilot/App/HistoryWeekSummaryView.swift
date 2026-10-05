@@ -94,6 +94,15 @@ struct HistoryWeekSummaryView: View {
                         ForEach(rates) { line in
                             DashValueRow(title: line.title, value: line.value, detail: line.detail)
                         }
+                        // Each shift against the target it started with, only
+                        // in a week where some shift had one.
+                        if let target = summary.metrics.hourlyTarget.statement {
+                            Label(target, systemImage: "target")
+                                .labelStyle(DashCompactLabelStyle())
+                                .dashFont(.supporting)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                     }
                 }
 

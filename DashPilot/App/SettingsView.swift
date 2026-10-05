@@ -40,6 +40,7 @@ struct SettingsView: View {
 
     @State private var editingVehicle: VehicleEditorSubject?
     @State private var isEditingGasPrice = false
+    @State private var isEditingTarget = false
     @State private var failure: String?
 
     private var settings: DriverSettings? { settingsRows.first }
@@ -62,6 +63,7 @@ struct SettingsView: View {
             defaultVehicleSection
             vehiclesSection
             fuelSection
+            targetSection
             pickupWorkflowSection
             aboutSection
         }
@@ -72,6 +74,9 @@ struct SettingsView: View {
         }
         .sheet(isPresented: $isEditingGasPrice) {
             CurrentGasPriceEditor()
+        }
+        .sheet(isPresented: $isEditingTarget) {
+            HourlyTargetEditor()
         }
         .alert(
             "Setting Not Changed",
@@ -191,6 +196,44 @@ struct SettingsView: View {
             Text("Fuel Defaults")
         } footer: {
             Text("What you last paid per gallon. A change applies to your next shift, never to one already worked. DashPilot looks up no prices.")
+        }
+    }
+
+    /// The driver's own benchmark for gross earnings per working hour, which
+    /// the next shift records when it starts.
+    ///
+    /// `Not set` when there is none, never `$0.00`: no target is not a target
+    /// of nothing, and a shift started without one is compared with nothing.
+    private var targetSection: some View {
+        let target = settings?.hourlyTarget
+        return Section {
+            Button {
+                isEditingTarget = true
+            } label: {
+                DashValueRow(
+                    title: "Target hourly earnings",
+                    value: target.map { "\($0.formatted(locale: locale)) / working hour" } ?? "Not set",
+                    detail: "Recorded on your next shift",
+                    isFigure: target != nil
+                )
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Target hourly earnings")
+            .accessibilityValue(target.map { "\($0.formatted(locale: locale)) per working hour" } ?? "Not set")
+            .accessibilityHint("Changes what your next shift is compared with. Shifts you have already worked keep their own.")
+            .accessibilityAddTraits(.isButton)
+            .accessibilityIdentifier("hourlyTargetRow")
+        } header: {
+            Text("Personal Target")
+        } footer: {
+            Text(
+                """
+                Optional. Finished shifts compare their gross earnings per working hour with the \
+                target they started with. It is your benchmark, not what a shift should pay.
+                """
+            )
         }
     }
 

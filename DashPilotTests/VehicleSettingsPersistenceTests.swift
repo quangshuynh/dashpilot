@@ -80,9 +80,12 @@ struct VehicleSettingsPersistenceTests {
                 == [
                     "id", "gasPricePerGallonAmount", "selectedVehicleID",
                     "usesParkAndResumeForPickups", "handlesStackedOrdersInOrder",
-                    "resumesDrivingAfterDeliveryProgress"
+                    "resumesDrivingAfterDeliveryProgress", "targetGrossPerWorkingHourAmount"
                 ],
-            "v19's two pickup workflow answers and v21's resume answer are the preferences that are a behaviour"
+            """
+            v19's two pickup workflow answers and v21's resume answer are the preferences that are a \
+            behaviour; v22's target is a default the next shift copies, like the gas price
+            """
         )
     }
 

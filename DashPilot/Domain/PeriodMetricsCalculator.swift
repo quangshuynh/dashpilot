@@ -81,6 +81,14 @@ nonisolated struct PeriodShiftRecord: Equatable, Sendable {
     /// The denominator of the delivery-earnings coverage.
     let terminalDeliveryCount: Int
 
+    /// Whether the shift recorded a target hourly earnings when it started.
+    let hasHourlyTarget: Bool
+
+    /// The shift's own rate against its own target, or `nil` when either is
+    /// missing. Already compared, by ``HourlyTargetComparison``, so a period
+    /// counts standings rather than working out a second rate.
+    let hourlyTargetComparison: HourlyTargetComparison?
+
     init(
         startedAt: Date,
         isCompleted: Bool = true,
@@ -93,7 +101,9 @@ nonisolated struct PeriodShiftRecord: Equatable, Sendable {
         pickupPlaceIDs: Set<UUID> = [],
         recordedDeliveryEarnings: [Money] = [],
         terminalDeliveryCount: Int = 0,
-        fuelEstimate: FuelEstimate = .unavailable(.milesPerGallonNotRecorded)
+        fuelEstimate: FuelEstimate = .unavailable(.milesPerGallonNotRecorded),
+        hasHourlyTarget: Bool = false,
+        hourlyTargetComparison: HourlyTargetComparison? = nil
     ) {
         self.startedAt = startedAt
         self.isCompleted = isCompleted
@@ -107,6 +117,8 @@ nonisolated struct PeriodShiftRecord: Equatable, Sendable {
         self.recordedDeliveryEarnings = recordedDeliveryEarnings
         self.terminalDeliveryCount = terminalDeliveryCount
         self.fuelEstimate = fuelEstimate
+        self.hasHourlyTarget = hasHourlyTarget
+        self.hourlyTargetComparison = hourlyTargetComparison
     }
 
     /// The shift's working time, but only when it is a usable measurement.
@@ -280,7 +292,12 @@ nonisolated struct PeriodMetricsCalculator: Equatable, Sendable {
             // *that* which also recorded an amount. Neither is assumed to be the
             // period, which is the whole point of both types.
             fuel: Self.fuel(of: shifts),
-            estimatedNetAfterFuel: Self.estimatedNet(of: shifts)
+            estimatedNetAfterFuel: Self.estimatedNet(of: shifts),
+            hourlyTarget: PeriodHourlyTargetSummary(
+                withTarget: shifts.filter(\.hasHourlyTarget).count,
+                compared: shifts.filter { $0.hourlyTargetComparison != nil }.count,
+                atOrAbove: shifts.filter { $0.hourlyTargetComparison.map { $0.standing != .below } == true }.count
+            )
         )
     }
 
@@ -492,7 +509,11 @@ extension Shift {
             // The shift's own estimate, over the route measurement the caller
             // already has. Nothing here reads a current default: a finished
             // shift is estimated under the pair it recorded.
-            fuelEstimate: fuelEstimate(for: recordedDistance)
+            fuelEstimate: fuelEstimate(for: recordedDistance),
+            hasHourlyTarget: hourlyTarget != nil,
+            // The shift's own rate, by the one definition, against the target
+            // it recorded. Nothing here reads the current setting.
+            hourlyTargetComparison: hourlyTargetComparison(for: recordedDistance)
         )
     }
 }
