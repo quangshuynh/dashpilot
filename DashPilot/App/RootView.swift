@@ -43,6 +43,9 @@ struct RootView: View {
     /// Exporting every completed shift.
     @State private var isExportingHistory = false
 
+    /// The welcome, shown once to a new driver. See ``OnboardingPolicy``.
+    @State private var isShowingOnboarding = false
+
     /// What "now" is, for deciding which Monday-to-Sunday week History is
     /// showing.
     ///
@@ -228,10 +231,17 @@ struct RootView: View {
             .sheet(isPresented: $isExportingHistory) {
                 ShiftExportSheet(scope: .allHistory)
             }
+            .fullScreenCover(isPresented: $isShowingOnboarding) {
+                OnboardingView(context: .firstLaunch) {
+                    OnboardingRecord.markCompleted()
+                    isShowingOnboarding = false
+                }
+            }
             // A shift that was still running when the app was terminated is
             // still running now, so capture resumes here rather than waiting for
             // the driver to touch anything.
             .task {
+                decideOnboarding()
                 routeCapture.synchronize()
                 // A shift that was still running when the app was terminated is
                 // still running now, and the activity it had may or may not have
@@ -317,6 +327,17 @@ struct RootView: View {
             } message: { error in
                 Text(error.errorDescription ?? "The shift could not be updated.")
             }
+        }
+    }
+
+    /// Shows the welcome to a new driver, records it as seen for a driver who
+    /// already has history, and does nothing otherwise. The count reads no row.
+    private func decideOnboarding() {
+        let hasShifts = ((try? modelContext.fetchCount(FetchDescriptor<Shift>())) ?? 0) > 0
+        switch OnboardingRecord.launchDecision(hasRecordedShifts: hasShifts) {
+        case .present: isShowingOnboarding = true
+        case .recordAsSeen: OnboardingRecord.markCompleted()
+        case .none: break
         }
     }
 

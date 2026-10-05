@@ -55,3 +55,7 @@ testExportsAllHistory
 testCreatesEditsAndSelectsVehicles
 testAssignsAPickupPlaceToARunningDelivery
 testRecordsAnExpense
+
+# The welcome
+testFirstLaunchShowsTheWelcomeOnceAndFinishingItPersists
+testTheWelcomeReopensFromSettingsAtTheLargestTextSize

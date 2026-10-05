@@ -41,6 +41,7 @@ struct SettingsView: View {
     @State private var editingVehicle: VehicleEditorSubject?
     @State private var isEditingGasPrice = false
     @State private var isEditingTarget = false
+    @State private var isShowingWelcome = false
     @State private var failure: String?
 
     private var settings: DriverSettings? { settingsRows.first }
@@ -357,6 +358,20 @@ struct SettingsView: View {
     /// Where DashPilot's parts come from, and the licenses they are under.
     private var aboutSection: some View {
         Section {
+            Button {
+                isShowingWelcome = true
+            } label: {
+                Label("Welcome to DashPilot", systemImage: "hand.wave")
+                    .dashFont(.body)
+                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                    .contentShape(Rectangle())
+            }
+            .accessibilityHint("Opens the introduction you saw when you first started DashPilot.")
+            .accessibilityIdentifier("reopenOnboardingButton")
+            .fullScreenCover(isPresented: $isShowingWelcome) {
+                OnboardingView(context: .revisit) { isShowingWelcome = false }
+            }
+
             NavigationLink {
                 AcknowledgementsView()
             } label: {

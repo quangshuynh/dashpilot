@@ -49,6 +49,17 @@ final class DashPilotUITests: XCTestCase {
     /// Must match `LaunchArgument.seededOlderWeeksOnly`, for the same reason.
     private static let seededOlderWeeksOnlyArgument = "-dashpilot-seeded-older-weeks-only"
 
+    /// Must match `OnboardingRecord.fresh`: forget the welcome was finished and
+    /// let it show over a throwaway store.
+    private static let onboardingFreshArgument = "-dashpilot-onboarding-fresh"
+
+    /// Must match `OnboardingRecord.observe`: let it show over a throwaway
+    /// store without forgetting.
+    private static let onboardingObserveArgument = "-dashpilot-onboarding-observe"
+
+    /// Must match `OnboardingRecord.completed`.
+    private static let onboardingCompletedArgument = "-dashpilot-onboarding-completed"
+
     /// Must match `LaunchArgument.seededFinishedDelivery`, for the same reason.
     private static let seededFinishedDeliveryArgument = "-dashpilot-seeded-finished-delivery"
 
@@ -430,10 +441,84 @@ final class DashPilotUITests: XCTestCase {
     @MainActor
     func testLaunchesIntoShiftScreen() throws {
         let app = XCUIApplication()
+        // The real store, so the welcome would show on a fresh simulator; this
+        // journey is about the store opening, so the welcome counts as seen.
+        app.launchArguments.append(Self.onboardingCompletedArgument)
         launchInPortrait(app)
 
         XCTAssertTrue(app.navigationBars["DashPilot"].waitForExistence(timeout: 10))
         XCTAssertFalse(app.staticTexts["Local Data Unavailable"].exists)
+    }
+
+    // MARK: The welcome
+
+    /// A first launch opens on the welcome, which steps through four screens
+    /// and closes on Start Using DashPilot; a relaunch does not show it again.
+    ///
+    /// Copy and artwork are not asserted line by line: what a journey can
+    /// prove is that a new driver meets it, can finish it, and is not met by it
+    /// twice. When it is shown is `OnboardingPolicyTests`'.
+    @MainActor
+    func testFirstLaunchShowsTheWelcomeOnceAndFinishingItPersists() throws {
+        let app = XCUIApplication()
+        app.launchArguments += [Self.inMemoryStoreArgument, Self.onboardingFreshArgument]
+        launchInPortrait(app)
+
+        let step = app.staticTexts["onboardingStep"]
+        XCTAssertTrue(step.waitForExistence(timeout: 10), "A new driver is welcomed")
+        XCTAssertEqual(step.label, "Step 1 of 4", "The step is said in words")
+        XCTAssertFalse(app.buttons["startShiftButton"].isHittable, "The welcome is in front of the shift screen")
+
+        let next = app.buttons["nextOnboardingButton"]
+        XCTAssertEqual(next.label, "Get Started")
+        for page in 2...4 {
+            next.tap()
+            XCTAssertTrue(waitForLabel(step, toContain: "Step \(page) of 4"))
+        }
+        XCTAssertTrue(app.buttons["onboardingBackButton"].exists, "A driver can go back")
+        XCTAssertFalse(app.buttons["skipOnboardingButton"].exists, "The last screen has its own way out")
+
+        let finish = app.buttons["finishOnboardingButton"]
+        XCTAssertEqual(finish.label, "Start Using DashPilot")
+        XCTAssertGreaterThanOrEqual(onPixelGrid(finish.frame.height), 44)
+        finish.tap()
+        XCTAssertTrue(app.buttons["startShiftButton"].waitForExistence(timeout: 5))
+        XCTAssertTrue(waitForDisappearance(of: step))
+
+        // Relaunched without forgetting: the welcome stays finished.
+        app.terminate()
+        let again = XCUIApplication()
+        again.launchArguments += [Self.inMemoryStoreArgument, Self.onboardingObserveArgument]
+        launchInPortrait(again)
+        XCTAssertTrue(again.buttons["startShiftButton"].waitForExistence(timeout: 10))
+        XCTAssertFalse(again.staticTexts["onboardingStep"].exists, "Shown once, not on every launch")
+    }
+
+    /// The welcome reopens from Settings, reads at the largest text size with
+    /// its controls whole and reachable, and closes back to Settings.
+    @MainActor
+    func testTheWelcomeReopensFromSettingsAtTheLargestTextSize() throws {
+        let app = launchWithEmptyStore(textSize: Self.accessibilityXXXLTextSize)
+        XCTAssertFalse(app.staticTexts["onboardingStep"].exists, "Not shown over a throwaway store unasked")
+
+        openSettings(in: app)
+        let reopen = app.buttons["reopenOnboardingButton"]
+        XCTAssertTrue(scrollUntilHittable(reopen, in: app, maxSwipes: 20))
+        reopen.tap()
+
+        let title = app.staticTexts.matching(identifier: "onboardingTitle").firstMatch
+        XCTAssertTrue(title.waitForExistence(timeout: 5))
+        XCTAssertEqual(app.staticTexts["onboardingStep"].label, "Step 1 of 4")
+        let next = app.buttons["nextOnboardingButton"]
+        XCTAssertTrue(next.isHittable, "The primary control is reachable at the largest size")
+        XCTAssertGreaterThanOrEqual(onPixelGrid(next.frame.height), 44)
+        attachScreenshot("onboarding-largest-text")
+
+        let close = app.buttons["skipOnboardingButton"]
+        XCTAssertEqual(close.label, "Close", "Reopened, it closes rather than skips")
+        XCTAssertGreaterThanOrEqual(onPixelGrid(close.frame.height), 44)
+        close.tap()
+        XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 5))
     }
 
     /// Start a shift, see it running, end it, and find it in history.
