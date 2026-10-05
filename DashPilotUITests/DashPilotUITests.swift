@@ -2855,6 +2855,67 @@ final class DashPilotUITests: XCTestCase {
         assertCard("Delivery 2", says: "waiting at the pickup", in: app)
     }
 
+    /// The real correction from October 3 2026: two deliveries started one at a
+    /// time, so two offers, turn out to share a pickup. Edit Stack marks them
+    /// without cancelling, recreating or advancing either, and takes it back.
+    ///
+    /// The combinations (larger stacks, finished members, relaunch, Park) are in
+    /// `StackEditTests`; this proves the control is where a driver at a counter
+    /// finds it and that both cards say what was recorded.
+    @MainActor
+    func testEditStackMarksSeparateDeliveriesSamePickupWithoutRecreatingThem() throws {
+        let app = launchWithActiveDelivery()
+
+        let edit = app.buttons["editStackButton"]
+        XCTAssertTrue(scrollUntilHittable(edit, in: app), "Offered while two deliveries are in progress")
+        edit.tap()
+
+        func row(_ name: String) -> XCUIElement {
+            app.buttons.matching(NSPredicate(format: "identifier == %@ AND label BEGINSWITH %@", "stackDeliveryRow", name))
+                .firstMatch
+        }
+        XCTAssertTrue(row("Delivery 2").waitForExistence(timeout: 5))
+        XCTAssertEqual(
+            app.buttons.matching(identifier: "stackDeliveryRow").count, 2,
+            "Only the deliveries in progress; Delivery 1 has been delivered"
+        )
+        let markPickup = app.buttons["markSamePickupButton"]
+        XCTAssertFalse(markPickup.isEnabled, "Nothing chosen yet")
+        row("Delivery 2").tap()
+        XCTAssertFalse(markPickup.isEnabled, "One delivery shares a stop with nobody")
+        row("Delivery 3").tap()
+        XCTAssertEqual(row("Delivery 3").value as? String, "Chosen")
+        XCTAssertTrue(markPickup.isEnabled)
+        markPickup.tap()
+
+        let message = app.descendants(matching: .any)["stackEditMessage"]
+        XCTAssertTrue(waitForLabel(message, toContain: "Delivery 2 and Delivery 3 marked same pickup"), "Showed: \(message.label)")
+        XCTAssertTrue(waitForLabel(row("Delivery 2"), toContain: "same pickup as Delivery 3"))
+        app.buttons["doneEditingStackButton"].tap()
+        XCTAssertTrue(waitForDisappearance(of: markPickup))
+
+        // Both cards say it, and neither moved: still two deliveries, still the
+        // steps they had.
+        let second = deliveryCard("Delivery 2", in: app)
+        XCTAssertTrue(scrollTo(second, in: app))
+        XCTAssertTrue(waitForLabel(second, toContain: "same pickup as Delivery 3"), "Showed: \(second.label)")
+        XCTAssertTrue(second.label.contains("Next step, mark arrived at pickup"), "No arrival was recorded: \(second.label)")
+        let third = deliveryCard("Delivery 3", in: app)
+        XCTAssertTrue(scrollTo(third, in: app))
+        XCTAssertTrue(third.label.contains("same pickup as Delivery 2"), "Showed: \(third.label)")
+        XCTAssertTrue(third.label.contains("Next step, mark delivery completed"), "Showed: \(third.label)")
+
+        // Taken back the same way.
+        XCTAssertTrue(scrollUntilHittable(edit, in: app))
+        edit.tap()
+        XCTAssertTrue(row("Delivery 2").waitForExistence(timeout: 5))
+        row("Delivery 2").tap()
+        app.buttons["separatePickupButton"].tap()
+        XCTAssertTrue(waitForLabel(message, toContain: "no longer marked same pickup"), "Showed: \(message.label)")
+        XCTAssertFalse(row("Delivery 3").label.contains("same pickup"), "A pair left with one shares nothing")
+        app.buttons["doneEditingStackButton"].tap()
+    }
+
     /// Part of an offer is marked Same pickup in Correct Grouping; one delivery
     /// alone cannot be saved, and the third stays independent.
     @MainActor

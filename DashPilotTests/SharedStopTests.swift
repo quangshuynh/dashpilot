@@ -4,7 +4,7 @@ import Testing
 @testable import DashPilot
 
 /// Deliveries the driver recorded as sharing a pickup or a drop-off: only when
-/// they said so, only within one offer, and never moving anything else.
+/// they said so, within one shift, and never moving anything else.
 ///
 /// Every refused-save case reads the store through a **fresh context**, the
 /// convention every rollback suite here follows.
@@ -138,7 +138,7 @@ struct SharedStopTests {
         #expect(Set(stored.map(\.sharedPickupID)) == Set(before))
     }
 
-    @Test("A delivery from another offer cannot join a shared stop")
+    @Test("The offer screen names only its own offer's deliveries")
     func outsideTheOffer() throws {
         let context = try makeContext()
         let service = DeliveryService(context: context)
@@ -200,8 +200,13 @@ struct SharedStopTests {
 
     // MARK: Membership corrections keep the invariant
 
-    @Test("Moving a delivery out leaves its shared stops behind, and a pair left with one member dissolves")
-    func movingOutDissolves() throws {
+    // A stop is a fact about where work was collected or taken, not about
+    // which acceptance it arrived in, so correcting membership moves membership
+    // and nothing else. Before shared stops became shift-scoped these three
+    // corrections dissolved them; see `SharedStopRegrouping`.
+
+    @Test("Moving a delivery to another offer keeps the stops it shares")
+    func movingOutKeepsStops() throws {
         let context = try makeContext()
         let service = DeliveryService(context: context)
         // Accepted first, so it could truthfully have contained the one moving.
@@ -209,34 +214,40 @@ struct SharedStopTests {
         let offer = try service.startOffer(deliveryCount: 2, sharing: [.pickup, .dropOff], at: at(2))
         let moving = offer.deliveriesInOrder[1]
         let staying = offer.deliveriesInOrder[0]
+        let pickup = staying.sharedPickupID
+        let dropOff = staying.sharedDropOffID
 
         try OfferCorrectionService(context: context).move(moving, into: earlier)
 
-        #expect(moving.sharedPickupID == nil && moving.sharedDropOffID == nil, "No claim is carried into another offer")
-        #expect(staying.sharedPickupID == nil && staying.sharedDropOffID == nil, "One delivery shares with nobody")
+        #expect(moving.offer?.id == earlier.id)
+        #expect(moving.sharedPickupID == pickup && staying.sharedPickupID == pickup, "Still one pickup")
+        #expect(moving.sharedDropOffID == dropOff && staying.sharedDropOffID == dropOff, "Still one drop-off")
     }
 
-    @Test("Splitting two of a group of three together keeps them sharing, and the one left behind dissolves")
-    func splittingKeepsWholeGroups() throws {
+    @Test("Splitting part of a group into its own offer keeps the whole group sharing")
+    func splittingKeepsGroups() throws {
         let context = try makeContext()
         let offer = try DeliveryService(context: context).startOffer(deliveryCount: 3, sharing: [.pickup], at: at(1))
         let ordered = offer.deliveriesInOrder
+        let identity = ordered[0].sharedPickupID
 
         try OfferCorrectionService(context: context).split([ordered[1], ordered[2]])
 
-        #expect(ordered[1].sharedPickupID != nil)
-        #expect(ordered[1].sharedPickupID == ordered[2].sharedPickupID)
-        #expect(ordered[0].sharedPickupID == nil)
+        #expect(identity != nil)
+        #expect(ordered.allSatisfy { $0.sharedPickupID == identity })
     }
 
-    @Test("Separating an offer clears every shared stop in it")
-    func separatingClears() throws {
+    @Test("Separating an offer keeps the stops its deliveries share")
+    func separatingKeepsStops() throws {
         let context = try makeContext()
         let offer = try DeliveryService(context: context).startOffer(deliveryCount: 2, sharing: [.pickup], at: at(1))
 
         try OfferCorrectionService(context: context).separate(offer)
 
-        #expect(try context.fetch(FetchDescriptor<Delivery>()).allSatisfy { $0.sharedPickupID == nil })
+        let fresh = try ModelContext(context.container).fetch(FetchDescriptor<Delivery>())
+        #expect(Set(fresh.map(\.offer?.id)).count == 2, "Two offers now")
+        #expect(Set(fresh.compactMap(\.sharedPickupID)).count == 1, "Still collected at one pickup")
+        #expect(fresh.allSatisfy { $0.sharedPickupID != nil })
     }
 
     @Test("Merging two offers keeps each group whole")

@@ -1386,6 +1386,22 @@ enum PreviewSupport {
         return container
     }
 
+    /// The stack editor over the active-delivery fixture: two deliveries in
+    /// progress, recorded as two separate offers.
+    @MainActor
+    static func stackEditor() -> some View {
+        let container = activeDeliveryContainer()
+        let shift = (try? container.mainContext.fetch(FetchDescriptor<Shift>()))?.first
+        return Group {
+            if let shift {
+                StackEditorView(shift: shift)
+            } else {
+                Text("No synthetic shift")
+            }
+        }
+        .modelContainer(container)
+    }
+
     /// One finished shift in the current week holding one delivered delivery,
     /// with no amount, tip, pickup place or route anywhere.
     ///

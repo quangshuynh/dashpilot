@@ -86,6 +86,10 @@ struct DeliveryControlPanel: View {
     /// Whether the sheet that corrects which deliveries arrived together is up.
     @State private var isCorrectingOffers = false
 
+    /// Whether the sheet that marks which deliveries in progress share a stop
+    /// is up.
+    @State private var isEditingStack = false
+
     /// Whether the sheet that reopens a delivery marked delivered by mistake is
     /// up.
     @State private var isReopeningDelivery = false
@@ -175,6 +179,7 @@ struct DeliveryControlPanel: View {
                 Divider()
             }
 
+            stackControl
             correctionControl
             recoveryControl
         }
@@ -249,6 +254,12 @@ struct DeliveryControlPanel: View {
         .sheet(isPresented: $isCorrectingOffers) {
             OfferCorrectionView(shift: shift)
         }
+        // The same kind of review action, for the stack in progress: which
+        // deliveries share a pickup or a drop-off, across offers. Each action
+        // inside writes identities only.
+        .sheet(isPresented: $isEditingStack) {
+            StackEditorView(shift: shift)
+        }
         // The deliberate way back from a mis-tap, for the driver who did not
         // catch the offer above. Like the correction sheet, it writes nothing
         // until a reopening is confirmed inside it.
@@ -301,6 +312,32 @@ struct DeliveryControlPanel: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel([summary.inProgressStatement, summary.spokenStatement].joined(separator: ". "))
         .accessibilityIdentifier("deliveryStatus")
+    }
+
+    /// Marking which deliveries in progress share a pickup or a drop-off.
+    ///
+    /// Shown only while two or more deliveries are in progress, because that
+    /// is the stack it edits. Small and secondary, above Correct Grouping: it is
+    /// the correction a driver reaches for at a counter (two orders started one
+    /// at a time turn out to be collected together), and it replaces cancelling
+    /// and recreating them. It records no lifecycle event, so nothing it does
+    /// can advance a delivery by mistake.
+    @ViewBuilder
+    private var stackControl: some View {
+        if activeDeliveries.count > 1 {
+            Button {
+                isEditingStack = true
+            } label: {
+                Label("Edit Stack", systemImage: "link")
+                    .labelStyle(DashCompactLabelStyle())
+                    .dashFont(.body)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .buttonStyle(.borderless)
+            .accessibilityLabel("Edit stack: mark which deliveries in progress share a pickup or drop-off")
+            .accessibilityIdentifier("editStackButton")
+        }
     }
 
     /// Correcting which deliveries were accepted together.
@@ -854,7 +891,7 @@ private struct ActiveDeliveryCard: View {
                 // pickup or drop-off, by name. A driver reading one card between
                 // steps can see which other card will move with it when they
                 // park.
-                if let shared = offer?.sharedStops(of: numbered).caption {
+                if let shared = numbered.sharedStops.caption {
                     Label(shared, systemImage: "link")
                         .labelStyle(DashCompactLabelStyle())
                         .dashFont(.supporting)
@@ -1024,7 +1061,7 @@ private struct ActiveDeliveryCard: View {
         }
         // Right after the grouping it refines: which of those siblings share a
         // stop with this one, as the driver recorded it.
-        if let shared = offer?.sharedStops(of: numbered).spokenCaption {
+        if let shared = numbered.sharedStops.spokenCaption {
             spoken += ". \(shared)"
         }
         if let expected = delivery.expectedEarnings {

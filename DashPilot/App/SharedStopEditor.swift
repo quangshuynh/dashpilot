@@ -78,7 +78,12 @@ struct SharedStopEditor: View {
                     DashValidationMessage(message: message, identifier: "sharedStopsMessage")
                 }
             } footer: {
-                Text("Choose two or more, or none. DashPilot stores no customer, address or place for this.")
+                Text(
+                    """
+                    Choose two or more, or none. DashPilot stores no customer, address or place for this. \
+                    Deliveries of different offers are marked with Edit Stack while the shift runs.
+                    """
+                )
             }
         }
         .navigationTitle("Same Pickup or Drop-off")
@@ -140,9 +145,12 @@ struct SharedStopEditor: View {
     private func save() {
         let deliveries = Dictionary(uniqueKeysWithValues: offer.deliveries.map { ($0.id, $0.delivery) })
         do {
+            func chosen(_ selection: Set<UUID>) -> [Delivery] {
+                offer.deliveries.filter { selection.contains($0.id) }.compactMap { deliveries[$0.id] }
+            }
             try OfferCorrectionService(context: modelContext).recordSharedStops(
-                pickup: offer.deliveries.filter { pickup.contains($0.id) }.compactMap { deliveries[$0.id] },
-                dropOff: offer.deliveries.filter { dropOff.contains($0.id) }.compactMap { deliveries[$0.id] },
+                pickup: pickup == recordedPickup ? nil : chosen(pickup),
+                dropOff: dropOff == recordedDropOff ? nil : chosen(dropOff),
                 in: offer.offer
             )
             saved()

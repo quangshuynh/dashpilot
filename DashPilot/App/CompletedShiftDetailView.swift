@@ -1568,7 +1568,7 @@ private struct DeliveryHistoryRow: View {
                 }
 
                 // Which of those the driver recorded as sharing a stop with it.
-                if let shared = offer?.sharedStops(of: numbered).caption {
+                if let shared = numbered.sharedStops.caption {
                     Label(shared, systemImage: "link")
                         .dashFont(.supporting)
                         .foregroundStyle(.secondary)
@@ -2016,7 +2016,7 @@ private struct DeliveryHistoryRow: View {
         if let grouping = offer?.spokenGrouping(of: numbered) {
             sentences.append(grouping)
         }
-        if let shared = offer?.sharedStops(of: numbered).spokenCaption {
+        if let shared = numbered.sharedStops.spokenCaption {
             sentences.append(shared)
         }
         // The place is spoken as it is written. The key it is matched by is
