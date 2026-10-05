@@ -349,11 +349,18 @@ extension Shift {
     ///
     /// An empty array is returned for a shift that is not in a store, which is
     /// a shift with no recorded route because nothing could have recorded one.
+    /// Fetched by the relationship's own key rather than by the shift's `id`
+    /// attribute. Comparing `shift.id` makes the store read the joined shift row
+    /// for every position it holds, so one route's fetch grew with the whole
+    /// history: measured on an on-disk store, 30 ms at a month of work and
+    /// 116 ms at six months for the same 1,500-position route, against 22 ms
+    /// and 44 ms by key (`HistoryFetchScopeMeasurementTests.routeFetchProbe`).
+    /// The walk over the positions is 3.5 ms either way. Same rows, same order.
     func routeSamples() -> [RouteSample] {
         guard let modelContext else { return [] }
-        let shiftID = id
+        let shiftKey = persistentModelID
         let descriptor = FetchDescriptor<RouteSample>(
-            predicate: #Predicate { $0.shift?.id == shiftID },
+            predicate: #Predicate { $0.shift?.persistentModelID == shiftKey },
             sortBy: [
                 SortDescriptor(\.timestamp),
                 SortDescriptor(\.latitude),
@@ -377,10 +384,10 @@ extension Shift {
     /// route does not load one.
     var routeSampleCount: Int {
         guard let modelContext else { return 0 }
-        let shiftID = id
+        let shiftKey = persistentModelID
         do {
             return try modelContext.fetchCount(
-                FetchDescriptor<RouteSample>(predicate: #Predicate { $0.shift?.id == shiftID })
+                FetchDescriptor<RouteSample>(predicate: #Predicate { $0.shift?.persistentModelID == shiftKey })
             )
         } catch {
             AppLog.routeCapture.error("Could not count a shift's stored route: \(error)")
@@ -406,9 +413,9 @@ extension Shift {
     /// where a count is being shown rather than where rows are being deleted.
     func routeSamples(after boundary: Date) -> [RouteSample] {
         guard let modelContext else { return [] }
-        let shiftID = id
+        let shiftKey = persistentModelID
         let descriptor = FetchDescriptor<RouteSample>(
-            predicate: #Predicate { $0.shift?.id == shiftID && $0.timestamp > boundary },
+            predicate: #Predicate { $0.shift?.persistentModelID == shiftKey && $0.timestamp > boundary },
             sortBy: [
                 SortDescriptor(\.timestamp),
                 SortDescriptor(\.latitude),
@@ -432,11 +439,11 @@ extension Shift {
     /// load a route to do it.
     func routeSampleCount(after boundary: Date) -> Int {
         guard let modelContext else { return 0 }
-        let shiftID = id
+        let shiftKey = persistentModelID
         do {
             return try modelContext.fetchCount(
                 FetchDescriptor<RouteSample>(
-                    predicate: #Predicate { $0.shift?.id == shiftID && $0.timestamp > boundary }
+                    predicate: #Predicate { $0.shift?.persistentModelID == shiftKey && $0.timestamp > boundary }
                 )
             )
         } catch {

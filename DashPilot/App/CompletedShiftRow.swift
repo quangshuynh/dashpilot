@@ -22,12 +22,16 @@ import SwiftUI
 struct CompletedShiftRow: View {
     let shift: Shift
 
-    /// Measured when the row appears rather than inside `body`.
-    ///
-    /// A shift's route can hold thousands of positions, and a view's body is
-    /// re-evaluated whenever the list redraws. Nothing is cached in the store —
-    /// the number is still derived from the route every time the row is built.
-    @State private var recordedDistance: RouteDistance?
+    /// The distance the week's summary measured for this shift, off the main
+    /// actor, or `nil` while that is still being worked out. History's rows
+    /// never measure their own routes: on a long store that cost about 120 ms
+    /// of main actor per row (see ``HistoryFetchScope/weekPresentation(of:shiftIDs:in:)``).
+    /// Until it arrives the row shows what needs no route.
+    var measuredDistance: RouteDistance?
+
+    /// Derived from the route every time the week is measured; nothing is
+    /// cached in the store.
+    private var recordedDistance: RouteDistance? { measuredDistance }
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.locale) private var locale
@@ -51,7 +55,6 @@ struct CompletedShiftRow: View {
             }
         }
         .padding(.vertical, DashSpacing.sm)
-        .task(id: shift.id) { recordedDistance = shift.recordedDistance() }
         // One element so VoiceOver reads the shift as a shift rather than three
         // unrelated fragments, with an explicit label because the abbreviations
         // that read well — "mi", "/hr", "·" — are poor to hear.

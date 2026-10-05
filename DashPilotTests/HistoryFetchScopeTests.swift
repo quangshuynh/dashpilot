@@ -266,4 +266,60 @@ struct HistoryFetchScopeTests {
         #expect(afterDeletion.completedShiftCount == 1)
         #expect(afterDeletion.metrics.recordedGrossEarnings == Money(minorUnits: 8_000))
     }
+
+    @Test("A week's one off-main pass gives each row exactly the distance its own route measures")
+    func weekPresentationMeasuresEachRouteOnce() throws {
+        let monday = try date(2026, 9, 14, 9)
+        let routed = Shift(startedAt: monday)
+        context.insert(routed)
+        let session = UUID()
+        for step in 0..<20 {
+            context.insert(
+                RouteSample(
+                    shift: routed,
+                    timestamp: monday.addingTimeInterval(Double(step) * 10 + 60),
+                    latitude: 40 + Double(step) * 0.001,
+                    longitude: -75,
+                    horizontalAccuracy: 10,
+                    captureSessionID: session
+                )
+            )
+        }
+        try routed.end(at: monday.addingTimeInterval(3_600))
+        let unrouted = try completedShift(at: try date(2026, 9, 15, 9))
+        try context.save()
+
+        let week = try week(monday)
+        let presentation = HistoryFetchScope.weekPresentation(of: week, shiftIDs: [routed.id, unrouted.id], in: container)
+
+        #expect(presentation.distances[routed.id] == routed.recordedDistance())
+        #expect(presentation.distances[routed.id]?.isMeasured == true)
+        #expect(presentation.distances[unrouted.id] == unrouted.recordedDistance(), "No route is a distance of none, not zero")
+        #expect(presentation.summary == HistoryFetchScope.weekSummary(of: week, shiftIDs: [routed.id, unrouted.id], in: container))
+    }
+
+    @Test("A shift's route is fetched whole and in order by the relationship's key, and no other shift's position joins it")
+    func routeFetchByKey() throws {
+        let start = try date(2026, 9, 14, 9)
+        let mine = Shift(startedAt: start), other = Shift(startedAt: start.addingTimeInterval(7_200))
+        context.insert(mine)
+        context.insert(other)
+        for (index, shift) in [mine, other, mine, other, mine].enumerated() {
+            context.insert(
+                RouteSample(
+                    shift: shift,
+                    timestamp: start.addingTimeInterval(Double(5 - index) * 10),
+                    latitude: 40, longitude: -75, horizontalAccuracy: 10, captureSessionID: UUID()
+                )
+            )
+        }
+        try context.save()
+
+        let samples = mine.routeSamples()
+        #expect(samples.count == 3)
+        #expect(samples.allSatisfy { $0.shift?.id == mine.id })
+        #expect(samples.map(\.timestamp) == samples.map(\.timestamp).sorted())
+        #expect(mine.routeSampleCount == 3)
+        #expect(mine.routeSamples(after: start.addingTimeInterval(25)).count == 2, "Its own 30 s and 50 s, not the other shift's 40 s")
+    }
 }

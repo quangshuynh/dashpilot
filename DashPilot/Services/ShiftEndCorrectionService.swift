@@ -337,11 +337,11 @@ struct ShiftEndCorrectionService {
     /// is deleted.
     private func routeSamples(of shift: Shift, after boundary: Date?) throws -> [RouteSample] {
         guard let boundary else { return [] }
-        let shiftID = shift.id
+        let shiftKey = shift.persistentModelID
         do {
             return try context.fetch(
                 FetchDescriptor<RouteSample>(
-                    predicate: #Predicate { $0.shift?.id == shiftID && $0.timestamp > boundary }
+                    predicate: #Predicate { $0.shift?.persistentModelID == shiftKey && $0.timestamp > boundary }
                 )
             )
         } catch {

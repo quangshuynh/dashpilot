@@ -13,19 +13,27 @@ import SwiftUI
 /// anything, and a shift opens the same detail screen it opens from the current
 /// week.
 ///
-/// ## What it costs to show
+/// ## What it costs to show, measured
 ///
 /// Opening it is the one place History reads more than a week, and that is the
 /// driver asking for it. It fetches the completed shifts **outside** the current
 /// week through ``HistoryFetchScope/otherWeeks(_:)`` and groups them with the
 /// same ``HistoryWeek/partition(_:by:asOf:calendar:)`` the app has always used,
-/// once per body. Measured on an on-disk store holding five years of work, that
-/// is about 100 ms on arrival; a `List` then materialises only the sections near
-/// the viewport, and each week measures its own routes only when it appears.
-/// That was judged cheap enough not to page: a cursor, a fetch limit and a rule
-/// for what a partially loaded week means are not worth building for a cost paid
-/// once, on an explicit tap. `HistoryFetchScopeMeasurementTests` is where to
-/// look again if stores grow past that.
+/// once per body: about 20 ms on an on-disk store holding six months of work
+/// with full routes, and about 100 ms at five years.
+///
+/// What made it lag as weeks accumulated (reported from a real device on
+/// October 3 2026) was not that: each row measured its own route **on the main
+/// actor** as it scrolled into view, by a fetch whose cost grew with every
+/// position the store held, about 120 ms a row at six months, and the week
+/// summary above measured the same routes again. A week now measures its routes
+/// once, off the main actor, through
+/// ``HistoryFetchScope/weekPresentation(of:shiftIDs:in:)``, and hands each row
+/// its distance; the fetch itself is by the relationship's key. The list is
+/// still not paged: entry stays tens of milliseconds where the rows were whole
+/// seconds, and a cursor would add a rule for what a partly loaded week means
+/// without addressing the measured cost. `HistoryFetchScopeMeasurementTests` is
+/// where to look again if stores grow past that.
 struct OlderHistoryWeeksView: View {
     @Environment(\.calendar) private var calendar
     @Environment(\.scenePhase) private var scenePhase
@@ -86,52 +94,12 @@ private struct OlderHistoryWeeksList: View {
             }
 
             ForEach(weeks) { group in
-                Section {
-                    // Before the rows, because the question a driver opens this
-                    // screen with is "how did that week go" and the answer
-                    // should not have to be assembled by opening six shifts.
-                    // It is a row of the section rather than part of the
-                    // heading so that the dates stay one line, which is what
-                    // keeps the list from being pushed down a screenful.
-                    HistoryWeekSummaryView(
-                        week: group.week,
-                        shifts: group.elements,
-                        spokenWeekTitle: spokenHeading(for: group.week)
-                    )
-
-                    ForEach(group.elements) { shift in
-                        // A link to the screen rather than to the value the root
-                        // pushes by. A `navigationDestination(for:)` belongs to
-                        // the view that declares it, and this screen is itself
-                        // pushed onto that stack, so a value-based link here
-                        // finds no destination and a row tap does nothing. The
-                        // destination is the same view either way.
-                        NavigationLink {
-                            CompletedShiftDetailView(shift: shift)
-                        } label: {
-                            CompletedShiftRow(shift: shift)
-                        }
-                        .accessibilityIdentifier("olderWeekShiftRow")
-                    }
-                } header: {
-                    // The dates the week covers, out of the heading's own
-                    // uppercasing, which makes an abbreviated month harder to
-                    // read than it needs to be. A driver scrolling this screen
-                    // is looking for a week, so the dates are the heading rather
-                    // than a caption under one.
-                    // In the emphasis role and the primary colour, so where
-                    // one week ends and the next begins is the most obvious
-                    // thing on a screen of weeks.
-                    Text(heading(for: group.week))
-                        .dashFont(.emphasis)
-                        .foregroundStyle(.primary)
-                        .textCase(nil)
-                        .accessibilityLabel(spokenHeading(for: group.week))
-                        .accessibilityIdentifier("olderWeekHeader")
-                } footer: {
-                    Text(shiftCount(group.elements.count))
-                        .dashFont(.supporting)
-                }
+                OlderWeekSection(
+                    group: group,
+                    heading: heading(for: group.week),
+                    spokenHeading: spokenHeading(for: group.week),
+                    shiftCount: shiftCount(group.elements.count)
+                )
             }
         }
     }
@@ -154,6 +122,62 @@ private struct OlderHistoryWeeksList: View {
 
     private func shiftCount(_ count: Int) -> String {
         count == 1 ? "1 completed shift" : "\(count) completed shifts"
+    }
+}
+
+/// One older week: its summary, then its shifts, under the dates it covers.
+///
+/// A view of its own so the distances the summary measures off the main actor
+/// can be held per week and handed to that week's rows, which then never
+/// measure their own routes as they scroll into view.
+private struct OlderWeekSection: View {
+    let group: HistoryWeekGroup<Shift>
+    let heading: String
+    let spokenHeading: String
+    let shiftCount: String
+
+    @State private var distances: [UUID: RouteDistance] = [:]
+
+    var body: some View {
+        Section {
+            // Before the rows, because the question a driver opens this
+            // screen with is "how did that week go" and the answer should not
+            // have to be assembled by opening six shifts. It is a row of the
+            // section rather than part of the heading so that the dates stay
+            // one line.
+            HistoryWeekSummaryView(
+                week: group.week,
+                shifts: group.elements,
+                spokenWeekTitle: spokenHeading,
+                measured: { distances = $0 }
+            )
+
+            ForEach(group.elements) { shift in
+                // A link to the screen rather than to the value the root
+                // pushes by: a `navigationDestination(for:)` belongs to the view
+                // that declares it, and this screen is itself pushed onto that
+                // stack, so a value-based link here finds no destination.
+                NavigationLink {
+                    CompletedShiftDetailView(shift: shift)
+                } label: {
+                    CompletedShiftRow(shift: shift, measuredDistance: distances[shift.id])
+                }
+                .accessibilityIdentifier("olderWeekShiftRow")
+            }
+        } header: {
+            // The dates the week covers, out of the heading's own uppercasing,
+            // in the emphasis role so where one week ends and the next begins
+            // is the most obvious thing on a screen of weeks.
+            Text(heading)
+                .dashFont(.emphasis)
+                .foregroundStyle(.primary)
+                .textCase(nil)
+                .accessibilityLabel(spokenHeading)
+                .accessibilityIdentifier("olderWeekHeader")
+        } footer: {
+            Text(shiftCount)
+                .dashFont(.supporting)
+        }
     }
 }
 

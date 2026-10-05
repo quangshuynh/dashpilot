@@ -151,6 +151,129 @@ struct HistoryFetchScopeMeasurementTests {
         )
     }
 
+    /// What Older Weeks costs, phase by phase, with routes the size a real
+    /// shift records, as a store grows.
+    ///
+    /// Written after a driver reported, on October 3 2026, that Older Weeks
+    /// became very laggy as weeks accumulated. The screen's work is reproduced
+    /// on the actor the screen does it on. Before the change each row measured
+    /// its own route on the main actor as it appeared (one row's route on main,
+    /// below, is that cost); after it, a week's routes are measured once, off
+    /// the main actor, by ``HistoryFetchScope/weekPresentation(of:shiftIDs:in:)``,
+    /// and the main actor pays for the entry fetch and each visible week's
+    /// revision hash. A screenful is about eight rows and three week sections.
+    ///
+    /// Measured before (row route on main, `shift.id` predicate) on the iPhone 17
+    /// simulator: 39, 69 and 121 ms a row at one, three and six months, so a
+    /// first screen cost 335, 582 and 1,004 ms of main actor and scrolling every
+    /// row once 1.9, 10.0 and 36.2 s.
+    @Test("Older Weeks cost by phase, with routes")
+    func olderWeeksCostByPhase() throws {
+        let positions = Self.realisticPositionsPerShift
+        Report.line("")
+        Report.line("## Older Weeks by phase, \(positions) positions a shift, on-disk store")
+        Report.line("")
+        Report.line(
+            "| History | older shifts | entry: fetch + partition ms | one week's revision on main ms "
+                + "| one route if measured on main ms | one week's routes and summary, off main ms "
+                + "| main-actor work, first screen (entry + 3 revisions) ms "
+                + "| main-actor work, scrolling every week once ms |"
+        )
+        Report.line("| --- | --- | --- | --- | --- | --- | --- | --- |")
+
+        for (name, weeks) in [("1 month", 5), ("3 months", 13), ("6 months", 26)] {
+            let store = try SeededStore(weeks: weeks, now: now, calendar: calendar, positionsPerShift: positions)
+            defer { store.tearDown() }
+            let row = try measureOlderWeeks(store)
+            let weekCount = max(1, row.shifts / Self.shiftsPerWeek)
+            Report.line(
+                "| \(name) | \(row.shifts) | \(ms(row.entry)) | \(ms(row.revision)) | \(ms(row.rowRoute)) "
+                    + "| \(ms(row.weekSummary)) | \(ms(row.entry + row.revision * 3)) "
+                    + "| \(ms(row.entry + row.revision * weekCount)) |"
+            )
+        }
+    }
+
+    /// Where one row's route time goes, and whether it grows with the store
+    /// because of the fetch or because of the walk.
+    @Test("One shift's route: fetch by the shift's id, by its key, and the walk")
+    func routeFetchProbe() throws {
+        Report.line("")
+        Report.line("## One shift's route, \(Self.realisticPositionsPerShift) positions, by store size")
+        Report.line("")
+        Report.line("| History | stored positions | fetch by shift.id ms | fetch by relationship key ms | walk ms |")
+        Report.line("| --- | --- | --- | --- | --- |")
+        for (name, weeks) in [("1 month", 5), ("6 months", 26)] {
+            let store = try SeededStore(weeks: weeks, now: now, calendar: calendar, positionsPerShift: Self.realisticPositionsPerShift)
+            defer { store.tearDown() }
+            let clock = ContinuousClock()
+            var byID: [Duration] = [], byKey: [Duration] = [], walks: [Duration] = []
+            var total = 0
+            for _ in 0..<Self.repeats {
+                let context = ModelContext(store.container)
+                total = try context.fetchCount(FetchDescriptor<RouteSample>())
+                let shift = try #require(try context.fetch(HistoryFetchScope.otherWeeks(HistoryWeek(containing: now, calendar: calendar))).first)
+                let shiftID = shift.id
+                var samples: [RouteSample] = []
+                byID.append(try clock.measure {
+                    samples = try context.fetch(FetchDescriptor<RouteSample>(predicate: #Predicate { $0.shift?.id == shiftID }))
+                })
+                let fresh = ModelContext(store.container)
+                let key = shift.persistentModelID
+                var keyed: [RouteSample] = []
+                byKey.append(try clock.measure {
+                    keyed = try fresh.fetch(FetchDescriptor<RouteSample>(predicate: #Predicate { $0.shift?.persistentModelID == key }))
+                })
+                #expect(keyed.count == samples.count)
+                let points = samples.map(\.routePoint)
+                walks.append(clock.measure { _ = RouteMileageCalculator().distance(of: points, covering: shift.completedWindow) })
+            }
+            Report.line("| \(name) | \(total) | \(ms(median(byID))) | \(ms(median(byKey))) | \(ms(median(walks))) |")
+        }
+    }
+
+    /// A four-hour shift with a position accepted about every ten seconds:
+    /// what the filter keeps from a phone in a cradle at city speeds.
+    static let realisticPositionsPerShift = 1_500
+
+    private struct OlderWeeksRow {
+        var shifts = 0
+        var entry: Duration = .zero
+        var rowRoute: Duration = .zero
+        var revision: Duration = .zero
+        var weekSummary: Duration = .zero
+    }
+
+    private func measureOlderWeeks(_ store: SeededStore) throws -> OlderWeeksRow {
+        let clock = ContinuousClock()
+        var row = OlderWeeksRow()
+        var entries: [Duration] = [], routes: [Duration] = [], revisions: [Duration] = [], summaries: [Duration] = []
+        let week = try #require(HistoryWeek(containing: now, calendar: calendar))
+
+        for _ in 0..<Self.repeats {
+            let context = ModelContext(store.container)
+            var groups: [HistoryWeekGroup<Shift>] = []
+            entries.append(try clock.measure {
+                let others = try context.fetch(HistoryFetchScope.otherWeeks(week))
+                groups = HistoryWeek.partition(others, by: \.startedAt, asOf: now, calendar: calendar)?.otherWeeks ?? []
+            })
+            row.shifts = groups.reduce(0) { $0 + $1.elements.count }
+            let first = try #require(groups.first)
+            let shift = try #require(first.elements.first)
+            routes.append(clock.measure { _ = shift.recordedDistance() })
+            revisions.append(clock.measure { _ = HistoryWeekRevision(first.elements) })
+            let ids = first.elements.map(\.id)
+            summaries.append(clock.measure {
+                _ = HistoryFetchScope.weekPresentation(of: first.week, shiftIDs: ids, in: store.container)
+            })
+        }
+        row.entry = median(entries)
+        row.rowRoute = median(routes)
+        row.revision = median(revisions)
+        row.weekSummary = median(summaries)
+        return row
+    }
+
     // MARK: Measuring
 
     private struct Row {
