@@ -40,8 +40,8 @@ measure.
 - **Delivery lifecycle.** One large control per delivery for accepted, arrived at pickup, picked
   up, delivered or cancelled, with a live clock for each delivery in progress.
 - **Stacked deliveries.** Several deliveries can run at once, grouped by the offer they arrived in,
-  and marked Same pickup or Same drop-off only when the driver says so. Overlapping time is counted
-  once, never summed.
+  and marked Same pickup or Same drop-off only when the driver says so, including mid-shift from
+  Edit Stack without cancelling anything. Overlapping time is counted once, never summed.
 - **Route and recorded mileage.** Route capture runs with the shift, including off screen, and a
   single filtering policy decides which positions count. Mileage is measured only across what was
   captured continuously.
@@ -52,7 +52,8 @@ measure.
   Another, also off by default, resumes driving when a Picked Up or Delivered recorded while parked
   leaves that stop with nothing to do.
 - **Earnings and additional tips.** Optional gross earnings per shift and per delivery, kept as
-  independent facts, plus tips received outside the platform's amount, each with its method.
+  independent facts, plus tips received outside the platform's amount, each with its method. An
+  optional hourly target is compared with each shift's own rate, against the target it started with.
 - **Fuel estimates and vehicle profiles.** Save your vehicles and a gas price. Each shift copies
   the assumptions when it starts, and its fuel cost is estimated over its own recorded miles.
 - **Weekly history and profitability.** History shows the current week, with every earlier week a

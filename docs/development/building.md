@@ -105,11 +105,12 @@ ignored by Git and must never be committed.
 
 ## Continuous integration
 
-Two workflows cover the app and the documentation:
+Three workflows cover the app and two the documentation:
 
 | Workflow | Trigger | What it does |
 | --- | --- | --- |
-| `ci.yml` | Pull requests, pushes to `main` | Builds the app and both test bundles for an iOS simulator on a GitHub-hosted macOS runner, then runs the domain suite and the UI journeys as separate steps |
+| `ci.yml` | Pull requests, pushes to `main` | Builds the app and both test bundles for an iOS simulator on a GitHub-hosted macOS runner, then runs the whole domain suite and the curated UI smoke journeys as separate steps |
+| `ui-regression.yml` | Pushes to `main`, a weekly schedule, `v*` tags, manual dispatch | Builds the same way, then runs every UI journey |
 | `docs-check.yml` | Pull requests touching `docs/`, `mkdocs.yml`, `requirements-docs.txt`, the README or itself | Runs `mkdocs build --strict` on Ubuntu. It validates only and never deploys |
 | `docs.yml` | Pushes to `main` touching documentation, and manual dispatch | Builds the site and deploys it to GitHub Pages through the Actions artifact |
 

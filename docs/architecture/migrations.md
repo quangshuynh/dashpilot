@@ -27,16 +27,21 @@ rather than a store reset.
 | 17.0.0 | Adds `DriverSettings.recordsPickupWhenParking`, a `Bool` declared `false`, holding whether pressing Park may also record a pickup. Backfills nothing; every migrated row reads off |
 | 18.0.0 | Adds `Delivery.pickupProvenanceRawValue`, an optional `String` holding how a pickup was recorded. Backfills nothing; every migrated pickup reads as unknown |
 | 19.0.0 | Adds `RouteSuspension.pickupWorkflowDeliveryID`, an optional `UUID` naming the delivery a parked stretch was for, and `DriverSettings.usesParkAndResumeForPickups` and `handlesStackedOrdersInOrder`, two `Bool`s declared `false`; removes `DriverSettings.recordsPickupWhenParking`. Backfills nothing; the workflow reads off and no stretch is associated |
-| 20.0.0 | Adds `Delivery.sharedPickupID` and `Delivery.sharedDropOffID`, optional `UUID`s the deliveries of one offer share when the driver said they are collected at the same pickup or go to the same drop-off, and `RouteSuspension.pickupWorkflowSharedPickupDeliveryIDs`, a `[UUID]` declared empty, naming the other deliveries a parked stretch was for. Backfills nothing; every migrated delivery is independent |
+| 20.0.0 | Adds `Delivery.sharedPickupID` and `Delivery.sharedDropOffID`, optional `UUID`s deliveries share when the driver said they are collected at the same pickup or go to the same drop-off, and `RouteSuspension.pickupWorkflowSharedPickupDeliveryIDs`, a `[UUID]` declared empty, naming the other deliveries a parked stretch was for. Backfills nothing; every migrated delivery is independent |
 
 | 21.0.0 | Adds `DriverSettings.resumesDrivingAfterDeliveryProgress`, a `Bool` declared `false`. Backfills nothing; every migrated driver has it off |
+| 22.0.0 | Adds `Shift.targetGrossPerWorkingHourAmount` and `DriverSettings.targetGrossPerWorkingHourAmount`, two optional `Decimal`s holding a shift's own target hourly earnings and the default the next shift copies. Backfills nothing; no migrated shift has a target |
 
-The current version is **v21**. Field-level detail is on [Data model](../reference/data-model.md).
+The current version is **v22**. Field-level detail is on [Data model](../reference/data-model.md).
 
-`DashPilotSchemaV1` through `DashPilotSchemaV20` hold frozen copies of their models rather than
+`DashPilotSchemaV1` through `DashPilotSchemaV21` hold frozen copies of their models rather than
 reusing the file-scope types, which have moved on. The plan then describes where a store is coming
 from as truthfully as where it is going, and the copies are never used at runtime outside
 migration.
+
+`DashPilotSchemaV21` was frozen in the interval that added v22, with copies of all eleven of its
+models. v22 moves the shift and the settings row, and reusing the file-scope types under v21 would
+describe every v21 store as one whose shifts could already record a target.
 
 `DashPilotSchemaV20` was frozen in the interval that added v21, with copies of all eleven of its
 models. v21 moves only the settings row, and reusing the file-scope types under v20 would describe
@@ -480,3 +485,21 @@ it on for a driver who already uses Park and Resume for pickups, and that driver
 Resume recording steps, not to DashPilot restarting their route after a step of their own. So every
 migrated driver has it off, and no delivery, parked stretch or route moves. See
 [Resume driving after delivery progress](../product/settings.md#resume-driving-after-delivery-progress).
+
+### v21 to v22
+
+Two columns, applied lightweight, and **nothing written**.
+
+`Shift.targetGrossPerWorkingHourAmount` is the target a shift is compared with, copied from the
+settings row when the shift starts, exactly as the fuel defaults are, so moving the target later
+reclassifies no shift already worked. `DriverSettings.targetGrossPerWorkingHourAmount` is that
+default. The tempting backfill gives every migrated shift the driver's first target, or a target of
+zero; both would compare work with a benchmark nobody chose for it. So every migrated shift and row
+reads `nil`, which is **no target**, never `$0.00`. See
+[Target hourly earnings](../product/settings.md#target-hourly-earnings).
+
+The same version records one change that needed no column. Since v20 a shared stop's identity was
+held only within one offer; it may now be held by deliveries of different offers of one shift, said
+from Edit Stack. The stored shape is the same opaque `UUID`, so nothing migrates, and every existing
+group was already within one offer and is still valid.
+

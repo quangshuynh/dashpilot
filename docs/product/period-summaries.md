@@ -230,6 +230,15 @@ with it. No rate is ever fabricated as zero or infinity.
 The numerator is always the **shift** amount, for all three rates. Per-delivery
 amounts never enter one.
 
+### Against your target
+
+When any shift in the period recorded a [target hourly earnings](earnings-and-metrics.md#a-personal-target),
+a line under the per-working-hour rate counts how those shifts stood against **their own** targets:
+`At or near target on 8 of 12 shifts`, with `· 2 without a rate` when some had a target and no
+earnings. It is a count of shifts, never the period's rate against a target, because shifts can carry
+different targets and a period rate is not any shift's. A period in which no shift had a target says
+nothing about targets. History's weekly summaries carry the same line.
+
 ## Recorded expenses, and the net after them
 
 A period also reports the operating costs the driver recorded in it, selected by

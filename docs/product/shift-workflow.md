@@ -745,6 +745,17 @@ completed shifts), the root screen's refresh went from about 175 to 220 ms to ab
 Older Weeks costs about 80 to 100 ms once. **Export All History still reads the whole store** through
 its own fetch, never the screen's.
 
+**Rows never measure their routes on the main actor.** Each week, the current one and every older
+one, measures its shifts' routes once, off the main actor, for its summary, and hands each row its
+recorded distance from the same pass. Before this, every row measured its own route on the main
+actor as it scrolled into view, by a fetch whose cost grew with every position the store held, and
+the summary measured the same routes again: on a simulator store holding six months of full shifts
+that was about 120 ms a row, a second for the first screen of Older Weeks and over half a minute to
+scroll every row once. A driver reported Older Weeks lagging on a real device on October 3, 2026.
+After the change the same first screen costs about 60 ms of main-actor work and scrolling every week
+about a quarter of a second; a row shows its mileage line a moment after its week appears.
+`HistoryFetchScopeMeasurementTests` reproduces both.
+
 **Nothing is deleted, archived or aged out.** This is what is shown where, and nothing else: every
 completed shift is still in the store, still exported, still counted by every period summary, and
 still one tap from its own detail screen. A shift that leaves the current week at Monday midnight

@@ -85,11 +85,10 @@ parking` whose pickups stores may still hold.
   nothing checks that they were. Two orders for one customer from two restaurants should be marked
   `Same drop-off` only, or parking at the first marks the second arrived. Undo takes back the whole
   press.
-- **A shared stop is held within one offer.** An add-on offer accepted later for the same pickup
-  or the same customer cannot join a group from an earlier offer without combining the two offers,
-  which would misstate the acceptance. The offer sheet's switches apply to the whole offer; a subset
-  is said in `Correct Grouping`, and only one shared pickup and one shared drop-off per offer can be
-  said there.
+- **Edit Stack corrects deliveries in progress only.** A finished delivery keeps the stops it
+  shares and can be corrected only within its own offer, from `Correct Grouping`; a stop shared by
+  deliveries of two offers of a finished shift cannot be changed there. Only one shared pickup and
+  one shared drop-off per offer can be said on that offer screen.
 - **Resume Driving records nothing for a stretch parked before the workflow existed**, or one parked
   with the workflow off, because such a stretch was not for any delivery.
 - **Undo lasts a few seconds, in the app that pressed it, and not across a relaunch.** Siri, Shortcuts
@@ -707,18 +706,22 @@ parking` whose pickups stores may still hold.
   each labelled with its own dates.
 - **Older Weeks reads every older shift when it is opened.** The root screen reads only the current
   week and a count, but the Older Weeks screen fetches every completed shift outside the week and
-  groups them, about 80 to 100 ms once on a synthetic store holding five years of work. That was
-  judged cheap enough for a screen the driver asks for, so there is no paging, no fetch limit and no
-  cursor. While it is open, a save anywhere in the store (a running shift's route, say) makes it read
-  them again.
+  groups them: about 20 ms at six months of synthetic work with full routes and about 100 ms at five
+  years. There is no paging, because the measured lag was elsewhere (each row measuring its route on
+  the main actor); while the screen is open, a save anywhere in the store (a running shift's route,
+  say) makes it read them again. Measured on the simulator, not yet on a device.
+- **A shift's row shows its mileage once its week has been measured.** Rows take their recorded
+  distance from the week's one pass over its routes, off the main actor, so for a moment after a week
+  scrolls into view its rows show the date, time and amount without the mileage line.
 - **A shift with a wrong date is filed by that date.** DashPilot does not detect a device clock that
   was wrong when a shift was recorded. A shift stored with a date in a future week is listed under
   Older Weeks rather than in the current one, which keeps it reachable but is the wrong heading for
   it. A shift's **end** can be corrected; its start cannot, and the start is what decides which week,
   day and period the shift belongs to.
-- **A week's summary measures every shift in that week.** The figures are worked out off the main
-  actor when the week scrolls into view, so the list keeps scrolling, but about half a second of work
-  per week of ordinary shifts is still done, nothing is cached, and it is done again each time the
+- **A week's summary measures every shift in that week.** The figures, and the rows' distances, are
+  worked out off the main actor when the week scrolls into view, so the list keeps scrolling, but
+  about a second of work per week of twelve full shifts at six months of history is still done
+  (the route fetch grows with the store), nothing is cached, and it is done again each time the
   week's section is built.
 - **No vehicle is named for a week.** A week can hold shifts worked in different vehicles, and a
   name is a label a shift recorded rather than an identity, so the weekly summary neither lists nor

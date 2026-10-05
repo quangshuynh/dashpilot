@@ -652,22 +652,42 @@ as itself.
 
 ### Saying it
 
-On the offer sheet, the two switches apply to **every delivery of the offer**. For part of an offer
-(two of three to one door), or to take it back, `Correct Grouping` has a `Same Pickup or Drop-off`
-screen for each offer of several deliveries: choose two or more deliveries for each, or none. One on
-its own cannot be saved, because one delivery shares a stop with nobody. Both answers are written
-together when Save is pressed.
+On the offer sheet, the two switches apply to **every delivery of the offer**.
 
-A shared stop is held **within one offer**. Moving a delivery to another offer leaves its shared
-stops behind, and a pair left with one delivery stops sharing; combining two offers keeps each group
-whole. Correcting it moves no lifecycle event, place, amount or offer, so it is allowed on a running
-shift, while parked, and on a finished one. A change made while parked affects the **next** Park:
-Resume Driving acts on the deliveries Park stored.
+While a shift is running and two or more deliveries are in progress, **`Edit Stack`**, a small
+control under the delivery cards, corrects it for the deliveries in progress, **whichever offers they
+were recorded in**. Choose the deliveries, then `Mark Same Pickup` or `Mark Same Drop-off`; choose
+one or more and `Not Same Pickup` or `Not Same Drop-off` to take it back. Each action is saved as it
+is pressed and says what it recorded.
+
+This is the correction for what happened on a real shift: two orders started one at a time, and only
+once parked did the driver see they were collected at one counter. Before it, the only way to say so
+was to cancel both and record them again as one offer, which threw away their acceptance times.
+
+- **Nothing else moves.** No delivery is cancelled, recreated or renumbered, no offer changes, no
+  lifecycle event is recorded and no amount moves. Marking a delivery that was already picked up as
+  sharing a pickup says where it was collected; it records nothing for the other one.
+- **Marking is additive.** A stop is one place, so if Delivery 1 and Delivery 2 share a pickup and
+  the driver marks Delivery 2 and Delivery 3 the same, all three share it. Taking a delivery out is
+  said explicitly, with `Not Same Pickup`, and a pair left with one delivery stops sharing.
+- **Finished deliveries keep what they share.** Only deliveries in progress can be chosen, and a
+  finished delivery in a group stays in it.
+- **A change while parked affects the next Park.** Resume Driving acts on the deliveries Park stored.
+
+For a finished shift, or part of one offer (two of three to one door), `Correct Grouping` has a
+`Same Pickup or Drop-off` screen for each offer of several deliveries: choose two or more, or none.
+One on its own cannot be saved, because one delivery shares a stop with nobody.
+
+A shared stop belongs to **the shift**, and is a fact about stops rather than about acceptance: two
+offers can share a pickup, as an add-on order at the same counter does. Moving a delivery between
+offers, splitting or combining offers therefore keeps the stops it shares. Correcting any of it moves
+no lifecycle event, place, amount or offer, so it is allowed on a running shift, while parked, and on
+a finished one.
 
 ### Seeing it
 
 A heading over an offer whose deliveries all share a stop says so (`Same pickup and drop-off`). Each
-card names the siblings it shares a stop with, `Same pickup and drop-off as Delivery 4`, and
+card names the deliveries it shares a stop with, from any offer of the shift, `Same pickup and drop-off as Delivery 4`, and
 VoiceOver hears it as something the driver recorded: *You recorded it as the same pickup and drop-off
 as Delivery 4*. A completed shift's history says the same. On the
 [Live Activity](live-activity.md#how-long-a-delivery-has-been-open), deliveries sharing a stop, in
