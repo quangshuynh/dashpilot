@@ -3032,6 +3032,11 @@ final class DashPilotUITests: XCTestCase {
         let shift = rows(in: app).firstMatch
         XCTAssertTrue(scrollTo(shift, in: app, maxSwipes: 15), "A completed shift is listed, further down")
         XCTAssertTrue(scrollUntilHittable(shift, in: app, maxSwipes: 5))
+        // At this size the row arrives at the very foot of the screen, and a
+        // local run's recording shows it tapped there while still sliding up:
+        // the tap opened nothing. Settled wholly on screen first, as
+        // `openFirstShift` does for the same reason.
+        settleWhollyOnScreen(shift, in: app)
         shift.tap()
 
         let earnings = app.descendants(matching: .any)["shiftDetailEarnings"]
@@ -3822,7 +3827,7 @@ final class DashPilotUITests: XCTestCase {
         correct.tap()
         let alert = app.alerts.firstMatch
         XCTAssertTrue(alert.waitForExistence(timeout: 5), "Confirmed before anything is written")
-        alert.buttons["Cancel"].tap()
+        dismiss(alert, tapping: "Cancel")
         XCTAssertTrue(deliveryRow(containing: "Delivery 1, delivered", in: app).waitForExistence(timeout: 5))
         XCTAssertFalse(deliveryRow(containing: "Delivery 1, cancelled", in: app).exists, "Dismissing wrote nothing")
 
@@ -3957,7 +3962,7 @@ final class DashPilotUITests: XCTestCase {
         delete.tap()
         let alert = app.alerts.firstMatch
         XCTAssertTrue(alert.waitForExistence(timeout: 5))
-        alert.buttons["Cancel"].tap()
+        dismiss(alert, tapping: "Cancel")
         XCTAssertTrue(pauseRow(containing: "Pause 1", in: app).label.contains("30 minutes"), "Backing out keeps it")
 
         XCTAssertTrue(scrollUntilHittable(delete, in: app))
@@ -4061,7 +4066,7 @@ final class DashPilotUITests: XCTestCase {
         app.buttons["shiftEndCorrectionSaveButton"].tap()
         let confirm = app.buttons["confirmShiftEndCorrectionButton"].firstMatch
         XCTAssertTrue(confirm.waitForExistence(timeout: 5), "Destroying recorded route is confirmed first")
-        app.alerts.buttons["Cancel"].tap()
+        dismiss(app.alerts.firstMatch, tapping: "Cancel")
         XCTAssertTrue(summary.waitForExistence(timeout: 5), "Declined, the sheet stays with the chosen time")
         app.buttons["shiftEndCorrectionSaveButton"].tap()
         XCTAssertTrue(confirm.waitForExistence(timeout: 5))
@@ -6249,8 +6254,32 @@ final class DashPilotUITests: XCTestCase {
         )
     }
 
+    /// Answers an app alert with one of its buttons and waits for it to close.
+    ///
+    /// The screen behind an alert stays in the hierarchy while the alert is up,
+    /// so a journey that goes on to read or scroll that screen proves nothing
+    /// about the alert having gone. In CI run 37418449153
+    /// `testCorrectingAHistoricalCompletionToACancellation` tapped Cancel (the
+    /// recording shows the button take the press), the row behind still
+    /// "existed", and the journey failed ten drags later on a control the
+    /// alert was still covering. Waiting here names the step that went wrong.
     @MainActor
-    private func waitForDisappearance(of element: XCUIElement, timeout: TimeInterval = 5) -> Bool {
+    private func dismiss(_ alert: XCUIElement, tapping title: String) {
+        alert.buttons[title].firstMatch.tap()
+        XCTAssertTrue(waitForDisappearance(of: alert), "The alert closes on \(title)")
+    }
+
+    /// Waits for `element` to be gone, returning the moment it is.
+    ///
+    /// It waits ``conditionTimeout`` for the reason every other condition here
+    /// does. It was 5 s, and CI run 37418449153 showed the same failure that
+    /// constant was raised for: right after a launch,
+    /// `testACompletedShiftsDeliveriesPlacesAndGrouping` asked whether the
+    /// delivery-entry bar was gone, the first snapshot took 4.2 s and its retry
+    /// 5.7 s more, and the wait expired with the recording showing Home, no
+    /// shift running and no bar from the first frame to the last.
+    @MainActor
+    private func waitForDisappearance(of element: XCUIElement, timeout: TimeInterval = conditionTimeout) -> Bool {
         let expectation = XCTNSPredicateExpectation(
             predicate: NSPredicate(format: "exists == false"),
             object: element

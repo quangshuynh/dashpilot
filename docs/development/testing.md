@@ -560,6 +560,11 @@ while runs of one tree vary by about a quarter of an hour. That is what raised i
 leaves about half an hour over the slowest measured run. It is still a ceiling a healthy run stays
 under, not a target, and it is raised again only by a run that was making progress and reached it.
 
+The first `ui-regression.yml` run over the 82 audited journeys (run 37418449153, two journeys red)
+spent **97.7 minutes** in XCTest and **101.4 minutes** in the whole test step. The budget stays at
+210 until an all-green run gives a measurement to size it from, with headroom for the variance
+above.
+
 The figures below are the history that set the number.
 
 `main` run 35553963157 was cancelled by an earlier 60-minute budget with the UI journeys still
