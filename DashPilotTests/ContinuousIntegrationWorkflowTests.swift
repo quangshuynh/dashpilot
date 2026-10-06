@@ -119,16 +119,31 @@ struct ContinuousIntegrationWorkflowTests {
         #expect(try pullRequestWorkflow().contains("TestResults-Domain.xcresult"))
     }
 
+    /// The whole UI suite stays a suite of journeys only the interface can
+    /// check. A behaviour the domain suite can pin belongs there; the audit
+    /// that brought the suite to this size, and the rules for adding to it, are
+    /// in docs/development/ui-suite-audit.md. Raise the ceiling deliberately,
+    /// not to make room.
+    @Test("The UI suite stays below its ceiling")
+    func uiSuiteStaysSmall() throws {
+        let source = try #require(CIWorkflow.contents(of: CIWorkflow.uiTestSourceURL))
+        let suite = source.components(separatedBy: "    func test").count - 1
+        #expect(suite > 0)
+        #expect(suite <= 90, "\(suite) UI journeys")
+    }
+
     /// Every listed journey exists, none is listed twice, and the list stays a
-    /// smoke list. A renamed journey left in the list would otherwise make
+    /// smoke list: at most 30 journeys and at most half the suite. A renamed journey left in the list would otherwise make
     /// `-only-testing` select nothing for it and pass without running it.
     @Test("The smoke list names real journeys, once each, and stays short")
     func smokeListIsValid() throws {
         let journeys = try #require(CIWorkflow.smokeJourneys())
         let source = try #require(CIWorkflow.contents(of: CIWorkflow.uiTestSourceURL))
 
+        let suite = source.components(separatedBy: "    func test").count - 1
         #expect(journeys.count >= 10)
-        #expect(journeys.count <= 45)
+        #expect(journeys.count <= 30)
+        #expect(journeys.count * 2 <= suite, "The smoke tier is the critical half of the suite at most")
         #expect(Set(journeys).count == journeys.count, "A journey is listed twice")
         for journey in journeys {
             #expect(journey.hasPrefix("test"), "\(journey) is not a test name")

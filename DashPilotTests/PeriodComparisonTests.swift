@@ -879,4 +879,20 @@ struct PeriodComparisonTests {
         #expect(entry.difference == .money(try money("20.00")))
         #expect(entry.percentChange == 20)
     }
+
+    /// The comparison declares no period more profitable on an estimate: no
+    /// metric it can compare is a fuel cost, an estimated net or anything else
+    /// derived from an assumed price, in its identifier, its printed title or
+    /// what VoiceOver hears.
+    @Test("No estimated figure is ever compared between two periods")
+    func noEstimatedFigureIsCompared() {
+        for metric in PeriodComparisonMetric.allMetrics {
+            for text in [metric.id, metric.title, metric.spokenTitle] {
+                let lowered = text.lowercased()
+                #expect(!lowered.contains("fuel"), "\(text)")
+                #expect(!lowered.contains("estimat"), "\(text)")
+                #expect(!lowered.contains("net"), "\(text)")
+            }
+        }
+    }
 }

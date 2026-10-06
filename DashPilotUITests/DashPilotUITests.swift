@@ -554,49 +554,886 @@ final class DashPilotUITests: XCTestCase {
 
     // MARK: Home
 
-    /// Before a shift, the panel says what starting now would record, and the
-    /// control that starts it is on the first screen.
+    /// Which vehicle a shift records, before and after Start: Home says what
+    /// the next shift would record, says only the half that is known, follows
+    /// Settings until a shift starts, and from the tap the running shift reads
+    /// its own snapshot, which a later selection or correction of the profile
+    /// does not move, even across leaving the app.
+    ///
+    /// Was seven journeys, each adding the same vehicle. The snapshot rules are
+    /// `ShiftVehicleContextTests` and `RecordedShiftVehicleTests`, including a
+    /// shift started with no vehicle at all.
     @MainActor
-    func testPreShiftHomeLeadsWithWhatTheNextShiftRecords() throws {
+    func testHomeNamesTheNextShiftsVehicleAndTheShiftKeepsItsOwn() throws {
         let app = launchWithEmptyStore()
+
+        // A price with no vehicle: the known half, and no 0 MPG.
+        openSettings(in: app)
+        setCurrentGasPrice("3.29", in: app)
+        goBack(in: app)
+        let next = app.descendants(matching: .any)["nextShiftVehicle"]
+        XCTAssertTrue(next.waitForExistence(timeout: 5))
+        XCTAssertEqual(next.label, "Next shift vehicle")
+        XCTAssertTrue(
+            waitForLabelValue(next, toEqual: "No vehicle selected for the next shift, gas $3.29 per gallon"),
+            "Showed: \(String(describing: next.value))"
+        )
 
         openSettings(in: app)
         addVehicle(named: "2020 Honda Civic", milesPerGallon: "34", in: app)
-        setCurrentGasPrice("3.29", in: app)
         goBack(in: app)
-
-        let vehicle = app.descendants(matching: .any)["nextShiftVehicle"]
-        XCTAssertTrue(vehicle.waitForExistence(timeout: 5))
         XCTAssertTrue(
-            waitForLabelValue(vehicle, toEqual: "2020 Honda Civic, 34 miles per gallon, gas $3.29 per gallon"),
-            "Showed: \(String(describing: vehicle.value))"
+            waitForLabelValue(next, toEqual: "2020 Honda Civic, 34 miles per gallon, gas $3.29 per gallon"),
+            "Showed: \(String(describing: next.value))"
         )
         let start = app.buttons["startShiftButton"]
         XCTAssertTrue(start.isHittable, "Start Shift is on the first screen, not below the fold")
-        XCTAssertLessThan(vehicle.frame.minY, start.frame.minY, "What will be recorded comes before the control")
+        XCTAssertLessThan(next.frame.minY, start.frame.minY, "What will be recorded comes before the control")
+        XCTAssertFalse(app.descendants(matching: .any)["activeShiftVehicle"].exists)
         attachScreenshot("home-pre-shift")
+
+        // No shift yet, so a change in Settings is a change to the next one.
+        openSettings(in: app)
+        addVehicle(named: "2012 Toyota Camry", milesPerGallon: "28", in: app)
+        let camry = vehicleRow(containing: "2012 Toyota Camry", in: app)
+        XCTAssertTrue(scrollUntilHittable(camry, in: app))
+        camry.tap()
+        XCTAssertTrue(waitForLabel(vehicleRow(containing: "2012 Toyota Camry", in: app), toContain: "Selected"))
+        goBack(in: app)
+        XCTAssertTrue(
+            waitForLabelValue(next, toEqual: "2012 Toyota Camry, 28 miles per gallon, gas $3.29 per gallon"),
+            "Home follows the selection while no shift has recorded one: \(String(describing: next.value))"
+        )
+
+        // From the tap, the shift's own snapshot.
+        start.tap()
+        let running = app.descendants(matching: .any)["activeShiftVehicle"]
+        XCTAssertTrue(scrollTo(running, in: app))
+        XCTAssertEqual(running.label, "Shift vehicle")
+        XCTAssertEqual(running.value as? String, "2012 Toyota Camry, 28 miles per gallon", "What Home said is what was recorded")
+        XCTAssertFalse(next.exists, "The next shift's row leaves with the Start Shift control")
+
+        openSettings(in: app)
+        let civic = vehicleRow(containing: "2020 Honda Civic", in: app)
+        XCTAssertTrue(scrollUntilHittable(civic, in: app))
+        civic.tap()
+        XCTAssertTrue(waitForLabel(vehicleRow(containing: "2020 Honda Civic", in: app), toContain: "Selected"))
+        let edit = app.buttons["Edit 2012 Toyota Camry"]
+        XCTAssertTrue(scrollUntilHittable(edit, in: app))
+        edit.tap()
+        let economyField = app.textFields["vehicleMilesPerGallonField"]
+        XCTAssertTrue(economyField.waitForExistence(timeout: 5))
+        replaceTappedField(economyField, with: "41", in: app)
+        app.buttons["saveVehicleButton"].tap()
+        assertVehicleSheetClosed(in: app)
+        goBack(in: app)
+
+        XCTAssertTrue(scrollTo(running, in: app))
+        XCTAssertEqual(
+            running.value as? String,
+            "2012 Toyota Camry, 28 miles per gallon",
+            "The shift is worked under what it recorded, not under what is selected now"
+        )
+        XCUIDevice.shared.press(.home)
+        app.activate()
+        let returned = app.descendants(matching: .any)["activeShiftVehicle"]
+        XCTAssertTrue(scrollTo(returned, in: app))
+        XCTAssertEqual(returned.value as? String, "2012 Toyota Camry, 28 miles per gallon")
+        XCTAssertFalse(app.descendants(matching: .any)["nextShiftVehicle"].exists)
     }
 
-    /// With nothing selected the panel says so and still starts a shift.
+    /// A shift started in the wrong vehicle is corrected before any driving:
+    /// the sheet saves nothing until something is chosen, cancelling records
+    /// nothing, the choice survives leaving the app, and Settings is untouched.
+    ///
+    /// Was two journeys. The rules are `RunningShiftFuelCorrectionTests`.
     @MainActor
-    func testPreShiftHomeWithNoVehicleNeverBlocksTheStart() throws {
+    func testCorrectingTheRunningShiftsVehicle() throws {
         let app = launchWithEmptyStore()
+        openSettings(in: app)
+        addVehicle(named: "2020 Honda Civic", milesPerGallon: "34", in: app)
+        addVehicle(named: "2012 Toyota Camry", milesPerGallon: "28", in: app)
+        goBack(in: app)
 
-        let vehicle = app.descendants(matching: .any)["nextShiftVehicle"]
-        XCTAssertTrue(vehicle.waitForExistence(timeout: 5))
-        XCTAssertTrue(waitForLabelValue(vehicle, toEqual: "No vehicle selected for the next shift"))
-        XCTAssertFalse(vehicle.label.contains("0 MPG") || vehicle.label.contains("$0.00"))
+        let startShift = app.buttons["startShiftButton"]
+        XCTAssertTrue(startShift.waitForExistence(timeout: 10))
+        startShift.tap()
+        let vehicle = app.descendants(matching: .any)["activeShiftVehicle"]
+        XCTAssertTrue(scrollTo(vehicle, in: app))
+        XCTAssertEqual(vehicle.value as? String, "2020 Honda Civic, 34 miles per gallon", "The first vehicle added is selected")
 
-        app.buttons["startShiftButton"].tap()
-        XCTAssertTrue(app.buttons["endShiftButton"].waitForExistence(timeout: 5), "Nothing blocks the start")
+        let change = app.buttons["changeShiftVehicleButton"]
+        let save = app.buttons["saveShiftVehicleButton"]
+        let camry = app.descendants(matching: .any)
+            .matching(identifier: "correctionVehicleRow")
+            .containing(NSPredicate(format: "label CONTAINS %@", "2012 Toyota Camry"))
+            .firstMatch
+
+        XCTAssertTrue(scrollUntilHittable(change, in: app), "Correction is offered before any driving")
+        change.tap()
+        XCTAssertTrue(camry.waitForExistence(timeout: 5))
+        camry.tap()
+        app.buttons["cancelShiftVehicleButton"].tap()
+        XCTAssertTrue(scrollTo(vehicle, in: app))
+        XCTAssertEqual(vehicle.value as? String, "2020 Honda Civic, 34 miles per gallon", "Choosing a row is not recording it")
+
+        XCTAssertTrue(scrollUntilHittable(change, in: app))
+        change.tap()
+        XCTAssertTrue(save.waitForExistence(timeout: 5))
+        XCTAssertFalse(save.isEnabled, "Saving the choices already recorded would report a change nobody made")
+        XCTAssertTrue(camry.waitForExistence(timeout: 5))
+        camry.tap()
+        XCTAssertTrue(waitForLabel(camry, toContain: "Chosen"), "The mark is said, not only drawn: \(camry.label)")
+        XCTAssertTrue(save.isEnabled)
+        save.tap()
+
+        let corrected = app.descendants(matching: .any)["activeShiftVehicle"]
+        XCTAssertTrue(scrollTo(corrected, in: app))
+        XCTAssertTrue(
+            waitForLabelValue(corrected, toEqual: "2012 Toyota Camry, 28 miles per gallon"),
+            "Showed: \(String(describing: corrected.value))"
+        )
+        XCUIDevice.shared.press(.home)
+        app.activate()
+        let returned = app.descendants(matching: .any)["activeShiftVehicle"]
+        XCTAssertTrue(scrollTo(returned, in: app))
+        XCTAssertEqual(returned.value as? String, "2012 Toyota Camry, 28 miles per gallon")
+
+        openSettings(in: app)
+        let civicRow = vehicleRow(containing: "2020 Honda Civic", in: app)
+        XCTAssertTrue(civicRow.waitForExistence(timeout: 5))
+        XCTAssertTrue(civicRow.label.contains("Selected"), "The selection is still the driver's own: \(civicRow.label)")
+        XCTAssertTrue(civicRow.label.contains("34 miles per gallon"), "And the profile is unchanged")
+        XCTAssertTrue(vehicleRow(containing: "2012 Toyota Camry", in: app).label.contains("28 miles per gallon"))
     }
 
-    /// The running shift reads top to bottom: its state, the working clock,
-    /// the figures, the vehicle, then the controls.
+    /// At the largest accessibility text size a long vehicle name is entered
+    /// through the editor's own focus, and wraps whole on the Settings card, in
+    /// the list and on Home, with Start Shift still reachable.
+    ///
+    /// Was two journeys entering the same name at the same size.
     @MainActor
-    func testActiveShiftHomeLeadsWithStateThenTheWorkingClock() throws {
+    func testALongVehicleNameAtTheLargestTextSize() throws {
+        let app = launchWithEmptyStore(textSize: Self.accessibilityXXXLTextSize)
+        let name = "2020 Honda Civic Hatchback Sport Touring"
+        openSettings(in: app)
+
+        let add = app.buttons["addVehicleButton"]
+        XCTAssertTrue(scrollUntilHittable(add, in: app, maxSwipes: 20))
+        add.tap()
+        let nameField = app.textFields["vehicleNameField"]
+        XCTAssertTrue(nameField.waitForExistence(timeout: 5))
+        enter(name, into: nameField, in: app)
+
+        // At this size the wrapped name pushes the economy field under the
+        // keyboard, where a synthesized tap does not focus it. Saving without
+        // an economy is refused, and the refusal focuses that field and scrolls
+        // it into view itself.
+        app.buttons["saveVehicleButton"].tap()
+        XCTAssertTrue(validationMessage("vehicleValidationMessage", in: app).waitForExistence(timeout: 5))
+        let economyField = app.textFields["vehicleMilesPerGallonField"]
+        let focused = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "hasKeyboardFocus == true"),
+            object: economyField
+        )
+        XCTAssertEqual(XCTWaiter().wait(for: [focused], timeout: 5), .completed)
+        enter("34", into: economyField, in: app)
+        app.buttons["saveVehicleButton"].tap()
+        assertVehicleSheetClosed(in: app)
+
+        let summary = app.descendants(matching: .any)["defaultVehicleSummary"]
+        XCTAssertTrue(scrollToTop(reaching: summary, in: app), "The default card is at the top")
+        XCTAssertTrue(summary.label.contains(name), "The name is whole: \(summary.label)")
+        XCTAssertGreaterThan(onPixelGrid(summary.frame.height), 44)
+        attachScreenshot("settings-xxxl")
+        XCTAssertTrue(scrollTo(vehicleRow(containing: name, in: app), in: app, maxSwipes: 20), "And in the list below it")
+        goBack(in: app)
+
+        let next = app.descendants(matching: .any)["nextShiftVehicle"]
+        XCTAssertTrue(next.waitForExistence(timeout: 5))
+        XCTAssertEqual(next.value as? String, "\(name), 34 miles per gallon", "The whole name is kept")
+        XCTAssertLessThanOrEqual(next.frame.maxX, app.windows.firstMatch.frame.maxX, "The row wraps rather than running off")
+        XCTAssertGreaterThan(next.frame.height, 60, "A name this long at this size takes more than one line")
+        XCTAssertTrue(scrollUntilHittable(app.buttons["startShiftButton"], in: app))
+    }
+
+    /// Settings, from the gear to its foot: reachable and named, an empty
+    /// state rather than an empty screen, a default stated in words or stated
+    /// as missing, a gas price recorded, corrected, removed and recorded as
+    /// zero, each distinct, and the acknowledgements naming the license and the
+    /// system typeface.
+    ///
+    /// Was four journeys, each opening an empty Settings.
+    @MainActor
+    func testSettingsStatesItsDefaultsAndRecordsTheGasPrice() throws {
         let app = launchWithEmptyStore()
-        app.buttons["startShiftButton"].tap()
+
+        let gear = app.buttons["settingsLink"]
+        XCTAssertTrue(gear.waitForExistence(timeout: 10), "A gear should be on the main screen")
+        XCTAssertEqual(gear.label, "Settings", "A glyph alone says nothing to a listener")
+        gear.tap()
+        XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            app.descendants(matching: .any)["vehiclesEmptyState"].waitForExistence(timeout: 5),
+            "A driver who has entered nothing is told so rather than shown an empty screen"
+        )
+        let none = app.descendants(matching: .any)["noDefaultVehicleNotice"]
+        XCTAssertTrue(none.waitForExistence(timeout: 5), "No selection is stated rather than left empty")
+        XCTAssertTrue(none.label.contains("No vehicle selected") && none.label.contains("next shift"), none.label)
+        attachScreenshot("settings-no-vehicle")
+
+        let price = app.descendants(matching: .any)["currentGasPriceRow"]
+        XCTAssertTrue(price.waitForExistence(timeout: 5))
+        XCTAssertTrue(waitForLabel(price, toContain: "Current gas price"), "Showed: \(price.label)")
+        XCTAssertEqual(price.value as? String, "Not set", "Nothing recorded is stated as nothing recorded")
+        price.tap()
+        let field = app.textFields["currentGasPriceField"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        enter("3.19", into: field, in: app)
+        app.buttons["saveCurrentGasPriceButton"].tap()
+        XCTAssertTrue(waitForLabelValue(price, toEqual: "$3.19 per gallon"), "The price says its unit to a listener")
+        price.tap()
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        XCTAssertEqual(field.value as? String, "3.19", "The editor opens on the stored figure")
+        replaceTappedField(field, with: "3.35", in: app)
+        app.buttons["saveCurrentGasPriceButton"].tap()
+        XCTAssertTrue(waitForLabelValue(price, toEqual: "$3.35 per gallon"))
+        price.tap()
+        let remove = app.buttons["removeCurrentGasPriceButton"]
+        XCTAssertTrue(remove.waitForExistence(timeout: 5))
+        remove.tap()
+        XCTAssertTrue(waitForLabelValue(price, toEqual: "Not set"), "Removed is not a price of nothing")
+
+        addVehicle(named: "2020 Honda Civic", milesPerGallon: "34", in: app)
+        let summary = app.descendants(matching: .any)["defaultVehicleSummary"]
+        XCTAssertTrue(summary.waitForExistence(timeout: 5), "The first vehicle becomes the default")
+        XCTAssertEqual(summary.label, "Default vehicle: 2020 Honda Civic, 34 miles per gallon. Used for your next shift.")
+        XCTAssertFalse(none.exists)
+        let row = vehicleRow(containing: "2020 Honda Civic", in: app)
+        XCTAssertTrue(row.label.hasPrefix("Selected as the default vehicle."), "Showed: \(row.label)")
+        setCurrentGasPrice("0", in: app)
+        XCTAssertEqual(price.value as? String, "$0.00 per gallon", "A recorded zero is not Not set")
+        attachScreenshot("settings-default-vehicle")
+        row.tap()
+        XCTAssertTrue(none.waitForExistence(timeout: 5), "Tapping the default again clears it")
+        XCTAssertFalse(summary.exists)
+
+        let link = app.buttons["acknowledgementsLink"]
+        XCTAssertTrue(scrollUntilHittable(link, in: app), "About is at the foot of Settings")
+        link.tap()
+        XCTAssertTrue(app.navigationBars["Acknowledgements"].waitForExistence(timeout: 5))
+        XCTAssertTrue(elements(containing: "MIT License", in: app).firstMatch.waitForExistence(timeout: 5))
+        let typeface = app.descendants(matching: .any)["typefaceAcknowledgement"]
+        XCTAssertTrue(scrollTo(typeface, in: app))
+        XCTAssertTrue(typeface.label.contains("bundles no font"), "Showed: \(typeface.label)")
+    }
+
+    /// The vehicle editor labels each field, refuses a vehicle with no economy
+    /// and one with an economy of zero in one sentence each, carried by one
+    /// element, and writes nothing it refused.
+    ///
+    /// Was two journeys over the same sheet. The rules are `VehicleSettingsTests`.
+    @MainActor
+    func testTheVehicleEditorLabelsItsFieldsAndRefusesWhatItCannotDivideBy() throws {
+        let app = launchWithEmptyStore()
+        openSettings(in: app)
+
+        let add = app.buttons["addVehicleButton"]
+        XCTAssertTrue(scrollUntilHittable(add, in: app))
+        add.tap()
+        let nameField = app.textFields["vehicleNameField"]
+        XCTAssertTrue(nameField.waitForExistence(timeout: 5))
+        XCTAssertEqual(nameField.label, "Vehicle name")
+        let economyField = app.textFields["vehicleMilesPerGallonField"]
+        XCTAssertEqual(economyField.label, "Miles per gallon")
+        attachScreenshot("vehicle-editor")
+
+        enter("The van", into: nameField, in: app)
+        app.buttons["saveVehicleButton"].tap()
+        let message = validationMessage("vehicleValidationMessage", in: app)
+        XCTAssertTrue(message.waitForExistence(timeout: 5), "A vehicle with no economy is refused")
+        XCTAssertTrue(message.label.contains("miles per gallon"), "The sentence, not a glyph: \(message.label)")
+        XCTAssertEqual(
+            app.descendants(matching: .any).matching(identifier: "vehicleValidationMessage").count, 1,
+            "One element carries the refusal, so no query can find a glyph called Warning instead"
+        )
+        attachScreenshot("vehicle-editor-validation")
+
+        enter("0", into: economyField, in: app)
+        app.buttons["saveVehicleButton"].tap()
+        XCTAssertTrue(
+            waitForLabel(message, toContain: "more than zero"),
+            "Zero is refused because it is what the recorded miles are divided by: \(message.label)"
+        )
+        app.buttons["cancelVehicleButton"].tap()
+        XCTAssertTrue(
+            app.descendants(matching: .any)["vehiclesEmptyState"].waitForExistence(timeout: 5),
+            "Nothing refused was written"
+        )
+    }
+
+    /// The snapshot every default rests on, end to end: an older shift is
+    /// filled from the current defaults only when the driver asks and saves; a
+    /// shift started afterwards records the vehicle, economy, price and hourly
+    /// target with no typing and is compared with that target; and changing
+    /// every setting, deleting the vehicle and moving the target leaves it
+    /// exactly as it was recorded.
+    ///
+    /// Two launches: the older shift is the seeded history's, and the new one
+    /// is worked on an empty store, where it is the only row to open (the
+    /// seeded history holds a shift dated after today, which sorts above it).
+    ///
+    /// Was four journeys. The snapshot and comparison rules are
+    /// `FuelAssumptionPersistenceTests` and `HourlyTargetTests`.
+    @MainActor
+    func testDefaultsAreRecordedAtStartAndNeverReachARecordedShift() throws {
+        var app = launchWithSeededHistory()
+
+        func setTarget(_ amount: String) {
+            let row = app.descendants(matching: .any)["hourlyTargetRow"]
+            XCTAssertTrue(scrollUntilHittable(row, in: app))
+            row.tap()
+            let field = app.textFields["hourlyTargetField"]
+            XCTAssertTrue(field.waitForExistence(timeout: 5))
+            clear(field, in: app)
+            enter(amount, into: field, in: app)
+            app.buttons["saveHourlyTargetButton"].tap()
+            XCTAssertTrue(waitForDisappearance(of: field))
+            XCTAssertTrue(waitForLabelValue(row, toEqual: "$\(amount) per working hour"), "Showed: \(String(describing: row.value))")
+        }
+        func setDefaults() {
+            openSettings(in: app)
+            addVehicle(named: "2020 Honda Civic", milesPerGallon: "34", in: app)
+            setCurrentGasPrice("3.19", in: app)
+            setTarget("25.00")
+            goBack(in: app)
+        }
+
+        setDefaults()
+
+        // 1. An older shift, worked before the defaults existed.
+        openFirstShift(in: app)
+        let cost = app.descendants(matching: .any)["shiftDetailEstimatedFuelCost"]
+        XCTAssertTrue(scrollTo(cost, in: app))
+        XCTAssertTrue(cost.label.contains("Add your vehicle's miles per gallon"), "Not filled in: \(cost.label)")
+        let editor = app.buttons["editFuelAssumptionsButton"]
+        XCTAssertTrue(scrollUntilHittable(editor, in: app))
+        editor.tap()
+        let defaults = app.buttons["useCurrentDefaultsButton"]
+        XCTAssertTrue(scrollUntilHittable(defaults, in: app), "An older shift is offered the current defaults")
+        defaults.tap()
+        XCTAssertEqual(app.textFields["fuelMilesPerGallonField"].value as? String, "34", "The fields are filled")
+        XCTAssertEqual(app.textFields["fuelGasPriceField"].value as? String, "3.19")
+        app.buttons["cancelFuelAssumptionsButton"].tap()
+        XCTAssertTrue(scrollTo(cost, in: app))
+        XCTAssertTrue(waitForLabel(cost, toContain: "Add your vehicle's miles per gallon"), "Filling a field is not recording it")
+        XCTAssertTrue(scrollUntilHittable(editor, in: app))
+        editor.tap()
+        XCTAssertTrue(scrollUntilHittable(defaults, in: app))
+        defaults.tap()
+        app.buttons["saveFuelAssumptionsButton"].tap()
+        XCTAssertTrue(scrollTo(cost, in: app))
+        XCTAssertTrue(waitForLabel(cost, toContain: "estimated fuel cost, based on recorded mileage"), "Showed: \(cost.label)")
+        goBack(in: app)
+
+        // 2. A shift started now records every default with no typing.
+        app.terminate()
+        app = launchWithEmptyStore()
+        setDefaults()
+        completeAShift(in: app)
+        openFirstShift(in: app)
+        app.buttons["editShiftEarningsButton"].tap()
+        type("80.00", into: app)
+        app.buttons["saveEarningsButton"].tap()
+        let economy = app.descendants(matching: .any)["shiftDetailFuelMilesPerGallon"]
+        let price = app.descendants(matching: .any)["shiftDetailFuelGasPrice"]
+        let vehicle = app.descendants(matching: .any)["shiftDetailFuelVehicle"]
+        let target = app.descendants(matching: .any)["shiftDetailHourlyTarget"]
+        func assertRecorded(_ why: String) {
+            XCTAssertTrue(scrollToTop(reaching: app.descendants(matching: .any)["shiftDetailDuration"], in: app))
+            XCTAssertTrue(scrollTo(target, in: app))
+            XCTAssertTrue(waitForLabel(target, toContain: "Above target"), "\(why): \(target.label)")
+            XCTAssertTrue(target.label.contains("target of $25.00 a working hour"), "\(why): \(target.label)")
+            XCTAssertTrue(scrollTo(economy, in: app))
+            XCTAssertTrue(waitForLabel(economy, toContain: "34 miles per gallon assumed"), "\(why): \(economy.label)")
+            XCTAssertTrue(scrollTo(price, in: app))
+            XCTAssertTrue(waitForLabel(price, toContain: "$3.19 per gallon assumed"), "\(why): \(price.label)")
+            XCTAssertTrue(scrollTo(vehicle, in: app))
+            XCTAssertTrue(waitForLabel(vehicle, toContain: "2020 Honda Civic"), "\(why): \(vehicle.label)")
+        }
+        assertRecorded("Recorded at the start")
+        goBack(in: app)
+
+        // 3. Change everything, delete the vehicle, move the target.
+        openSettings(in: app)
+        let edit = app.buttons["Edit 2020 Honda Civic"]
+        XCTAssertTrue(scrollUntilHittable(edit, in: app))
+        edit.tap()
+        replaceTappedField(app.textFields["vehicleMilesPerGallonField"], with: "12", in: app)
+        app.buttons["saveVehicleButton"].tap()
+        assertVehicleSheetClosed(in: app)
+        setCurrentGasPrice("9.99", in: app)
+        setTarget("30.00")
+        let editAgain = app.buttons["Edit 2020 Honda Civic"]
+        XCTAssertTrue(scrollToTop(reaching: editAgain, in: app))
+        XCTAssertTrue(scrollUntilHittable(editAgain, in: app))
+        editAgain.tap()
+        let delete = app.buttons["deleteVehicleButton"]
+        XCTAssertTrue(scrollUntilHittable(delete, in: app))
+        delete.tap()
+        // `.firstMatch`: a confirmation dialog's button renders as an element
+        // containing its own text, and both carry the identifier.
+        app.buttons.matching(identifier: "confirmDeleteVehicleButton").firstMatch.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["vehiclesEmptyState"].waitForExistence(timeout: 5))
+        goBack(in: app)
+
+        openFirstShift(in: app)
+        assertRecorded("Unmoved by Settings, and intelligible with no profile behind it")
+    }
+
+    /// One day's summary, read top to bottom: every figure states the coverage
+    /// behind it, and none claims more than its records.
+    ///
+    /// The arithmetic behind every number is pinned in `PeriodMetricsTests`,
+    /// `PeriodExpenseMetricsTests` and `PeriodFuelMetricsTests`; what only the
+    /// screen can show is that each figure reaches it with its wording and its
+    /// counts, which one pass down the list reads in the order it is drawn.
+    @MainActor
+    func testTheDaySummaryStatesEachFigureWithItsCoverage() throws {
+        let app = launchWithPeriodSummary()
+        openPeriodSummary(in: app)
+
+        // Earnings: a subtotal, called recorded, with the shifts behind it, and
+        // untouched by the expenses recorded beside it.
+        let earnings = app.descendants(matching: .any)["periodEarnings"]
+        XCTAssertTrue(earnings.waitForExistence(timeout: 5))
+        XCTAssertTrue(waitForLabel(earnings, toContain: "$86.25"), "Showed: \(earnings.label)")
+        XCTAssertTrue(
+            earnings.label.contains("1 of 2 completed shifts"),
+            "The day's other shift has no amount, and the screen says so: \(earnings.label)"
+        )
+        XCTAssertTrue(
+            earnings.label.contains("Recorded gross earnings"),
+            "A subtotal is called recorded, never the day's earnings: \(earnings.label)"
+        )
+        XCTAssertFalse(earnings.label.contains("$37.65"), "The net is a separate figure, in its own section")
+        let shiftCount = app.descendants(matching: .any)["periodShiftCount"]
+        XCTAssertTrue(scrollTo(shiftCount, in: app))
+        XCTAssertTrue(waitForLabel(shiftCount, toContain: "2 completed shifts"), "Showed: \(shiftCount.label)")
+
+        // Recorded expenses and the net after them, which is not profit.
+        let expenses = app.descendants(matching: .any)["periodExpenses"]
+        XCTAssertTrue(scrollTo(expenses, in: app), "The summary reports what the day cost")
+        XCTAssertTrue(waitForLabel(expenses, toContain: "$48.60"), "Showed: \(expenses.label)")
+        XCTAssertTrue(expenses.label.contains("2 recorded expenses"), "Showed: \(expenses.label)")
+        let categories = app.descendants(matching: .any).matching(identifier: "periodExpenseCategory")
+        XCTAssertEqual(categories.count, 2, "Fuel and parking, and no category with nothing in it")
+
+        let net = app.descendants(matching: .any)["periodNetAfterExpenses"]
+        XCTAssertTrue(scrollTo(net, in: app))
+        XCTAssertTrue(waitForLabel(net, toContain: "$37.65"), "$86.25 less $48.60: \(net.label)")
+        XCTAssertTrue(net.label.contains("net after recorded expenses"), "Showed: \(net.label)")
+        XCTAssertTrue(net.label.contains("1 of 2 shifts"), "The earnings half is a subtotal: \(net.label)")
+        XCTAssertTrue(net.label.contains("not profit"), "And the figure states what it is not: \(net.label)")
+        XCTAssertFalse(net.label.contains("estimated fuel"), "No estimate is folded in: \(net.label)")
+
+        // Mileage is a floor, and the rate over it names its paired subset.
+        let mileage = app.descendants(matching: .any)["periodMileage"]
+        XCTAssertTrue(scrollTo(mileage, in: app, maxSwipes: 14))
+        XCTAssertTrue(mileage.label.contains("Recorded mileage"), "Showed: \(mileage.label)")
+        XCTAssertTrue(
+            mileage.label.contains("1 of 2 completed shifts"),
+            "The shift with no route is counted, not treated as zero miles: \(mileage.label)"
+        )
+        XCTAssertTrue(mileage.label.contains("partial route capture"), "Showed: \(mileage.label)")
+        XCTAssertFalse(mileage.label.lowercased().contains("driven"), "Showed: \(mileage.label)")
+
+        let rate = app.descendants(matching: .any)["periodPerMileRate"]
+        XCTAssertTrue(scrollTo(rate, in: app, maxSwipes: 14))
+        XCTAssertTrue(rate.label.contains("gross earnings per recorded mile"), "Showed: \(rate.label)")
+        XCTAssertTrue(
+            rate.label.contains("1 of 2 shifts with both earnings and a measurable route"),
+            "Only the shift carrying both halves is behind it: \(rate.label)"
+        )
+
+        // Delivery amounts, as their own subtotal and never the headline.
+        let subtotal = app.descendants(matching: .any)["periodDeliveryEarnings"]
+        XCTAssertTrue(scrollTo(subtotal, in: app, maxSwipes: 14))
+        XCTAssertTrue(subtotal.label.contains("$24.25"), "The two delivery amounts, added: \(subtotal.label)")
+        XCTAssertTrue(subtotal.label.contains("2 of 4 deliveries"), "Showed: \(subtotal.label)")
+        XCTAssertTrue(subtotal.label.contains("separate record"), "Showed: \(subtotal.label)")
+
+        // The estimates, after every recorded figure, each with its coverage.
+        let fuel = app.descendants(matching: .any)["periodEstimatedFuel"]
+        XCTAssertTrue(scrollTo(fuel, in: app, maxSwipes: 14))
+        XCTAssertTrue(waitForLabel(fuel, toContain: "Estimated fuel"), "Showed: \(fuel.label)")
+        XCTAssertTrue(fuel.label.contains("$"), "And it states an amount: \(fuel.label)")
+        XCTAssertTrue(fuel.label.contains("1 of 2 completed shifts"), "Showed: \(fuel.label)")
+        XCTAssertTrue(fuel.label.contains("recorded miles"), "Showed: \(fuel.label)")
+
+        let estimatedNet = app.descendants(matching: .any)["periodEstimatedNetAfterFuel"]
+        XCTAssertTrue(scrollTo(estimatedNet, in: app, maxSwipes: 14))
+        XCTAssertTrue(waitForLabel(estimatedNet, toContain: "Estimated net after fuel"), "Showed: \(estimatedNet.label)")
+        XCTAssertTrue(estimatedNet.label.contains("1 of 2 shifts"), "Showed: \(estimatedNet.label)")
+        XCTAssertTrue(
+            estimatedNet.label.contains("not this period's earnings less this period's fuel"),
+            "And refuses to be read as the period's: \(estimatedNet.label)"
+        )
+        XCTAssertTrue(estimatedNet.label.contains("never added together"), "Showed: \(estimatedNet.label)")
+    }
+
+    /// The week counts the shift the day does not, totals its recorded amounts
+    /// with their coverage and states its pickup wait as a median of individual
+    /// pickups; the week before it, which nobody drove, shows a sentence
+    /// rather than a grid of zeroes.
+    ///
+    /// Was three journeys over this fixture.
+    @MainActor
+    func testTheWeekSummaryStatesItsEarningsAndPickupWaitWithTheirBasis() throws {
+        let app = launchWithPeriodSummary()
+        openPeriodSummary(in: app)
+
+        let shiftCount = app.descendants(matching: .any)["periodShiftCount"]
+        XCTAssertTrue(scrollTo(shiftCount, in: app))
+        XCTAssertTrue(waitForLabel(shiftCount, toContain: "2 completed shifts"), "Today: \(shiftCount.label)")
+        let picker = app.segmentedControls["periodUnitPicker"]
+        XCTAssertTrue(scrollToTop(reaching: picker, in: app))
+        selectPeriod("Week", in: app)
+        XCTAssertTrue(scrollTo(shiftCount, in: app))
+        XCTAssertTrue(waitForLabel(shiftCount, toContain: "3 completed shifts"), "The week holds the third: \(shiftCount.label)")
+
+        let earnings = app.descendants(matching: .any)["periodEarnings"]
+        XCTAssertTrue(scrollToTop(reaching: earnings, in: app))
+        XCTAssertTrue(waitForLabel(earnings, toContain: "$206.25"), "Showed: \(earnings.label)")
+        XCTAssertTrue(earnings.label.contains("2 of 3 completed shifts"), "Showed: \(earnings.label)")
+
+        let wait = app.descendants(matching: .any)["periodPickupWait"]
+        XCTAssertTrue(scrollTo(wait, in: app))
+        XCTAssertTrue(waitForLabel(wait, toContain: "Median recorded pickup wait"), "Showed: \(wait.label)")
+        XCTAssertTrue(wait.label.contains("5 recorded pickups"), "Showed: \(wait.label)")
+        XCTAssertFalse(wait.label.lowercased().contains("typical"), "Showed: \(wait.label)")
+
+        let previous = app.buttons["periodPreviousButton"]
+        XCTAssertTrue(scrollToTop(reaching: previous, in: app, swipes: 12))
+        previous.tap()
+        let empty = app.descendants(matching: .any)["periodEmptyState"]
+        XCTAssertTrue(empty.waitForExistence(timeout: 5))
+        XCTAssertEqual(empty.label, "No completed shifts recorded this week.")
+        XCTAssertFalse(earnings.exists, "An empty week shows no earnings figure at all, not $0.00")
+        XCTAssertFalse(app.descendants(matching: .any)["periodMileage"].exists)
+    }
+
+    /// A day read beside the day before it. Today is unfinished and partly
+    /// recorded, so both figures and coverages are printed and a difference is
+    /// stated but no percentage, and the screen says why; the finished day
+    /// before it, completely recorded, states the percentage; and the day
+    /// before that, which holds nothing, is said to hold nothing, with its
+    /// earnings missing rather than zero and its counts still compared.
+    ///
+    /// Was three journeys over this fixture. The rules are
+    /// `PeriodComparisonTests`, including that no estimate is compared.
+    @MainActor
+    func testADayIsComparedWithTheDayBeforeIt() throws {
+        let app = launchWithPeriodComparison()
+        openPeriodSummary(in: app)
+
+        let earnings = comparisonRow("recordedGrossEarnings", in: app)
+        XCTAssertTrue(scrollTo(earnings, in: app), "The comparison is on the summary")
+        XCTAssertTrue(earnings.label.contains("$100.00") && earnings.label.contains("$80.00"), "Both figures: \(earnings.label)")
+        XCTAssertTrue(earnings.label.contains("more recorded"), "More or less recorded, never better or worse: \(earnings.label)")
+        XCTAssertTrue(earnings.label.contains("1 of 2 shifts") && earnings.label.contains("1 of 1 shift"), earnings.label)
+        XCTAssertFalse(earnings.label.contains("%"), "No percentage against a day that has not finished: \(earnings.label)")
+        let notes = app.descendants(matching: .any)["periodComparisonNotes"]
+        XCTAssertTrue(scrollTo(notes, in: app))
+        XCTAssertTrue(notes.label.contains("still in progress"), "And the screen says why: \(notes.label)")
+
+        let previous = app.buttons["periodPreviousButton"]
+        XCTAssertTrue(scrollToTop(reaching: previous, in: app, swipes: 12))
+        previous.tap()
+        XCTAssertTrue(scrollTo(earnings, in: app))
+        XCTAssertTrue(waitForLabel(earnings, toContain: "$64.00"), "Yesterday beside the day before it: \(earnings.label)")
+        XCTAssertTrue(earnings.label.contains("$16.00 more recorded"), "Showed: \(earnings.label)")
+        XCTAssertTrue(earnings.label.contains("25%"), "Both days complete and finished: \(earnings.label)")
+        XCTAssertTrue(earnings.label.contains("1 of 1 shift, compared with 1 of 1 shift"), "Showed: \(earnings.label)")
+
+        XCTAssertTrue(scrollToTop(reaching: previous, in: app, swipes: 12))
+        previous.tap()
+        let before = app.descendants(matching: .any)["periodComparisonPrevious"]
+        XCTAssertTrue(scrollTo(before, in: app))
+        XCTAssertTrue(
+            waitForLabel(before, toContain: "No completed shift and no recorded expense"),
+            "The day before this one holds nothing, and the screen says so: \(before.label)"
+        )
+        XCTAssertTrue(scrollTo(earnings, in: app))
+        XCTAssertTrue(earnings.label.contains("Not recorded"), "Showed: \(earnings.label)")
+        XCTAssertFalse(earnings.label.contains("$0.00"), "Never a day that earned nothing: \(earnings.label)")
+        let shifts = comparisonRow("completedShifts", in: app)
+        XCTAssertTrue(scrollTo(shifts, in: app))
+        XCTAssertTrue(shifts.label.contains("1 more recorded"), "Counts are still compared: \(shifts.label)")
+    }
+
+    /// Months: a month holds at least its days and any week inside it; the
+    /// current month cannot step forward; a month stepped back to survives
+    /// leaving the app; and an empty month names itself and offers no export.
+    ///
+    /// Was four journeys over this fixture. Month boundaries are
+    /// `MonthAndCustomPeriodTests`.
+    @MainActor
+    func testMonthsHoldTheirDaysStepBackAndSurviveLeavingTheApp() throws {
+        let app = launchWithPeriodSummary()
+        openPeriodSummary(in: app)
+
+        selectPeriod("Day", in: app)
+        let day = try XCTUnwrap(shiftCount(in: app), "Today holds completed shifts")
+        selectPeriod("Week", in: app)
+        let week = try XCTUnwrap(shiftCount(in: app), "So does this week")
+        selectPeriod("Month", in: app)
+        let month = try XCTUnwrap(shiftCount(in: app), "And so does this month")
+        XCTAssertLessThanOrEqual(day, week, "A week holds at least its days")
+        XCTAssertLessThanOrEqual(day, month, "A month holds at least its days")
+        // A week can straddle two months (the week of 1 October 2026 began in
+        // September), so `week <= month` holds only for a week inside the month.
+        if Self.currentWeekIsInsideCurrentMonth() {
+            XCTAssertLessThanOrEqual(week, month, "A month holds at least a week that lies inside it")
+        }
+        XCTAssertGreaterThanOrEqual(month, 2, "The fixture's shifts are all in the month it is anchored to")
+        let current = periodTitle(in: app)
+
+        let next = app.buttons["periodNextButton"]
+        let previous = app.buttons["periodPreviousButton"]
+        XCTAssertTrue(next.waitForExistence(timeout: 5))
+        XCTAssertFalse(next.isEnabled, "A future month holds no records and is not offered")
+        previous.tap()
+        XCTAssertTrue(next.isEnabled, "Once in the past, the way back to now is open")
+        let chosen = periodTitle(in: app)
+
+        // Re-reading the clock on return moves the naming only.
+        XCUIDevice.shared.press(.home)
+        app.activate()
+        XCTAssertTrue(app.descendants(matching: .any)["periodTitle"].waitForExistence(timeout: 10))
+        XCTAssertEqual(periodTitle(in: app), chosen, "The month the driver stepped to is still selected")
+        XCTAssertTrue(next.isEnabled)
+
+        // Two steps back, so the month is empty whichever day the test runs on.
+        previous.tap()
+        let empty = app.descendants(matching: .any)["periodEmptyState"]
+        XCTAssertTrue(empty.waitForExistence(timeout: 5), "An earlier month holds nothing")
+        XCTAssertTrue(empty.label.contains("month"), "The empty state names its period: \(empty.label)")
+        XCTAssertNotEqual(periodTitle(in: app), current)
+        XCTAssertFalse(app.buttons["exportPeriodButton"].exists, "An empty month offers no export")
+    }
+
+    /// A custom range has no chevrons; cancelling its picker changes nothing;
+    /// applying it summarises the dates it covers; and the range comes back as
+    /// it was left after a trip through the other lengths.
+    ///
+    /// Was three journeys over this fixture.
+    @MainActor
+    func testACustomRangeIsChosenCancelledAndKept() throws {
+        let app = launchWithPeriodSummary()
+        openPeriodSummary(in: app)
+        selectPeriod("Custom", in: app)
+
+        XCTAssertFalse(app.buttons["periodPreviousButton"].exists, "A chosen range is not stepped")
+        XCTAssertFalse(app.buttons["periodNextButton"].exists)
+        let before = periodTitle(in: app)
+        let count = shiftCount(in: app)
+
+        let choose = app.buttons["periodCustomRangeButton"]
+        XCTAssertTrue(choose.waitForExistence(timeout: 5), "A range is chosen, not stepped to")
+        choose.tap()
+        XCTAssertTrue(app.buttons["customRangeCancelButton"].waitForExistence(timeout: 5))
+        app.buttons["customRangeCancelButton"].tap()
+        XCTAssertTrue(choose.waitForExistence(timeout: 5), "Back on the summary")
+        XCTAssertEqual(periodTitle(in: app), before, "Cancel is not a quiet Apply")
+        XCTAssertEqual(shiftCount(in: app), count)
+
+        choose.tap()
+        let summary = app.descendants(matching: .any)["customRangeSummary"]
+        XCTAssertTrue(summary.waitForExistence(timeout: 5), "The sheet says what the dates select")
+        XCTAssertTrue(summary.label.contains("Custom reporting range"), "Showed: \(summary.label)")
+        app.buttons["customRangeApplyButton"].tap()
+        XCTAssertNotNil(shiftCount(in: app), "The applied range holds the fixture's recent shifts")
+        let chosen = periodTitle(in: app)
+        XCTAssertTrue(chosen.contains("selected day"), "The range says how many days it covers: \(chosen)")
+
+        selectPeriod("Week", in: app)
+        selectPeriod("Month", in: app)
+        selectPeriod("Custom", in: app)
+        XCTAssertEqual(periodTitle(in: app), chosen, "The range came back as it was left")
+    }
+
+    /// A completed shift exports JSON first, named for its scope and size, and
+    /// choosing CSV rewrites the file under a new name.
+    ///
+    /// Was two journeys. What the files hold is `ShiftExportJSONTests` and
+    /// `ShiftExportCSVTests`.
+    @MainActor
+    func testAShiftExportsAsJSONOrCSV() throws {
+        let app = launchWithSeededHistory()
+        openFirstShift(in: app)
+        openExport("exportShiftButton", in: app)
+
+        let name = exportFileName(in: app)
+        XCTAssertTrue(name.contains("DashPilot-Shift-"), "The file is named for its scope: \(name)")
+        XCTAssertTrue(name.contains(".json"), "JSON is the default format: \(name)")
+        XCTAssertTrue(name.contains("1 shift"), "The sheet says how much is in the file: \(name)")
+        XCTAssertTrue(app.buttons["shareExportButton"].waitForExistence(timeout: 5), "Offered to the share sheet")
+        XCTAssertFalse(app.descendants(matching: .any)["exportFailureMessage"].exists, "Nothing failed")
+
+        selectExportFormat("CSV", in: app)
+        let fileName = app.descendants(matching: .any)["exportFileName"]
+        XCTAssertTrue(waitForLabel(fileName, toContain: ".csv"), "The CSV file replaces the JSON one: \(fileName.label)")
+        XCTAssertTrue(app.buttons["shareExportButton"].exists)
+    }
+
+    /// Each period exports its own records, named for it: a day, a week, a
+    /// month and a chosen range; and a period with nothing in it offers no
+    /// export it would have to refuse.
+    ///
+    /// Was five journeys over this fixture. Which records each scope selects
+    /// is `MonthAndRangeExportTests`.
+    @MainActor
+    func testEachPeriodExportsItsOwnRecords() throws {
+        let app = launchWithPeriodSummary()
+        openPeriodSummary(in: app)
+        let picker = app.segmentedControls["periodUnitPicker"]
+
+        func export(_ unit: String) -> String {
+            // The export control is at the foot of the list, so dismissing leaves
+            // the screen scrolled past the picker at its top.
+            XCTAssertTrue(scrollToTop(reaching: picker, in: app, swipes: 12), "The summary is back")
+            selectPeriod(unit, in: app)
+            openExport("exportPeriodButton", in: app)
+            let name = exportFileName(in: app)
+            XCTAssertTrue(app.buttons["shareExportButton"].exists, "Offered to the share sheet: \(name)")
+            XCTAssertFalse(app.descendants(matching: .any)["exportFailureMessage"].exists)
+            app.buttons["dismissExportButton"].tap()
+            return name
+        }
+
+        let day = export("Day")
+        XCTAssertTrue(day.contains("DashPilot-Day-") && day.contains("2 shifts"), "Today holds two of the three: \(day)")
+        let week = export("Week")
+        XCTAssertTrue(week.contains("DashPilot-Week-") && week.contains("3 shifts"), "The week holds all three: \(week)")
+        let month = export("Month")
+        XCTAssertTrue(month.contains("DashPilot-Month-"), "The file names the month it covers: \(month)")
+        let range = export("Custom")
+        XCTAssertTrue(range.contains("DashPilot-Range-") && range.contains("-to-"), "Both selected days: \(range)")
+
+        XCTAssertTrue(scrollToTop(reaching: picker, in: app, swipes: 12))
+        selectPeriod("Day", in: app)
+        let previous = app.buttons["periodPreviousButton"]
+        XCTAssertTrue(previous.waitForExistence(timeout: 5))
+        for _ in 0..<10 { previous.tap() }
+        XCTAssertTrue(app.descendants(matching: .any)["periodEmptyState"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["exportPeriodButton"].exists, "An empty period offers no export it would refuse")
+    }
+
+    /// Expenses: a negative amount is refused with the rule it broke and
+    /// nothing written; a cost is recorded with its category, corrected and
+    /// deleted; and a cost on a day with no shift is still that day's record,
+    /// with no net invented from it.
+    ///
+    /// Was four journeys. Parsing is `ExpenseTests`; the period's
+    /// arithmetic is `PeriodExpenseMetricsTests`.
+    @MainActor
+    func testExpensesAreRecordedRefusedCorrectedAndSummarised() throws {
+        let app = launchWithEmptyStore()
+        openExpenses(in: app)
+        let empty = app.descendants(matching: .any)["expensesEmptyState"]
+        XCTAssertTrue(empty.exists)
+
+        app.buttons["addExpenseButton"].tap()
+        let field = app.textFields["expenseAmountField"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        enter("-5", into: field, in: app)
+        app.buttons["saveExpenseButton"].tap()
+        let message = validationMessage("expenseValidationMessage", in: app)
+        XCTAssertTrue(message.waitForExistence(timeout: 5), "The refusal is explained rather than silent")
+        XCTAssertTrue(message.label.lowercased().contains("negative"), "It names the rule: \(message.label)")
+        app.buttons["cancelExpenseButton"].tap()
+        XCTAssertTrue(empty.waitForExistence(timeout: 5), "Nothing refused was written")
+
+        recordExpense("42.10", in: app)
+        let row = app.descendants(matching: .any).matching(identifier: "expenseRow").firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        XCTAssertTrue(waitForLabel(row, toContain: "$42.10"), "The amount entered: \(row.label)")
+        XCTAssertTrue(row.label.contains("Fuel"), "And its category: \(row.label)")
+        XCTAssertFalse(empty.exists)
+
+        row.tap()
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        XCTAssertEqual(field.value as? String, "42.1", "The editor opens on what was recorded")
+        clear(field, in: app)
+        enter("50.00", into: field, in: app)
+        app.buttons["saveExpenseButton"].tap()
+        XCTAssertTrue(app.buttons["saveExpenseButton"].waitForNonExistence(timeout: 5))
+        XCTAssertTrue(waitForLabel(row, toContain: "$50.00"), "The correction is what the list shows")
+
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        openPeriodSummary(in: app)
+        XCTAssertTrue(
+            app.descendants(matching: .any)["periodEmptyState"].waitForExistence(timeout: 5),
+            "The day still holds no completed shift, and says so"
+        )
+        let expenses = app.descendants(matching: .any)["periodExpenses"]
+        XCTAssertTrue(scrollTo(expenses, in: app), "But the cost recorded on it is not hidden behind that")
+        XCTAssertTrue(waitForLabel(expenses, toContain: "$50.00"))
+        let net = app.descendants(matching: .any)["periodNetAfterExpenses"]
+        XCTAssertTrue(scrollTo(net, in: app))
+        XCTAssertTrue(
+            net.label.lowercased().contains("no net after recorded expenses"),
+            "With no recorded earnings there is nothing to net: \(net.label)"
+        )
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+
+        openExpenses(in: app)
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        row.tap()
+        let delete = app.buttons["deleteExpenseButton"]
+        XCTAssertTrue(delete.waitForExistence(timeout: 5))
+        delete.tap()
+        XCTAssertTrue(empty.waitForExistence(timeout: 5))
+    }
+
+    /// The shift panel from an empty install to a shift with a delivery, read in
+    /// the order it is drawn, and a shift with no vehicle borrowing none.
+    ///
+    /// Before a shift: nothing selected is said as that and blocks nothing, the
+    /// history says where shifts will appear, and the permission panel is on
+    /// screen. Running: state, then the working clock, then the figures, then
+    /// the vehicle, with no earnings figure invented. A vehicle added in
+    /// Settings mid-shift is the next shift's, until the driver corrects this
+    /// one explicitly. The delivery count follows what is recorded.
+    ///
+    /// Eight journeys each launched an empty store for one of these; the rules
+    /// behind them are `NextShiftVehicleContextTests`, `ShiftVehicleContextTests`
+    /// and `RunningShiftFuelCorrectionTests`.
+    @MainActor
+    func testTheShiftPanelReadsInOrderAndBorrowsNothing() throws {
+        let app = launchWithEmptyStore()
+
+        let next = app.descendants(matching: .any)["nextShiftVehicle"]
+        XCTAssertTrue(next.waitForExistence(timeout: 10))
+        XCTAssertTrue(waitForLabelValue(next, toEqual: "No vehicle selected for the next shift"))
+        XCTAssertFalse(next.label.contains("0 MPG") || next.label.contains("$0.00"))
+        XCTAssertTrue(
+            app.descendants(matching: .any)["locationAuthorizationStatus"].exists,
+            "The permission panel is on screen from launch"
+        )
+        let emptyHistory = app.descendants(matching: .any)["emptyHistoryNotice"]
+        XCTAssertTrue(scrollUntilHittable(emptyHistory, in: app, maxSwipes: 8), "The empty history states itself")
+        XCTAssertTrue(emptyHistory.label.contains("No completed shifts yet"), "Showed: \(emptyHistory.label)")
+        XCTAssertFalse(
+            app.descendants(matching: .any)["currentWeekSummary"].exists,
+            "No summary is drawn over no shifts"
+        )
+
+        let start = app.buttons["startShiftButton"]
+        XCTAssertTrue(scrollToTop(reaching: start, in: app))
+        XCTAssertTrue(start.isEnabled, "Nothing selected blocks nothing")
+        start.tap()
 
         let status = app.descendants(matching: .any)["activeShiftStatus"]
         let working = app.descendants(matching: .any)["workingTime"]
@@ -606,72 +1443,155 @@ final class DashPilotUITests: XCTestCase {
         for element in [status, working, mileage, counts, vehicle] {
             XCTAssertTrue(element.waitForExistence(timeout: 5), "\(element) is on the panel")
         }
-
         XCTAssertLessThan(status.frame.minY, working.frame.minY)
         XCTAssertLessThan(working.frame.minY, mileage.frame.minY)
         XCTAssertLessThan(mileage.frame.minY, vehicle.frame.minY, "Context comes after the figures")
         XCTAssertGreaterThan(working.frame.height, mileage.frame.height / 2, "The clock is the largest figure")
-
         XCTAssertEqual(mileage.label, "Recorded mileage")
         XCTAssertEqual(counts.label, "Deliveries")
-        XCTAssertTrue(
-            (counts.value as? String)?.contains("No delivery in progress") == true,
-            "The counts speak the shift's own sentence: \(String(describing: counts.value))"
-        )
+        XCTAssertEqual(counts.value as? String, "No delivery in progress")
         XCTAssertFalse(
             app.descendants(matching: .any)["liveRecordedGross"].exists,
             "No earnings figure is invented for a shift that cannot record one yet"
         )
         attachScreenshot("home-active-no-deliveries")
+
+        XCTAssertTrue(scrollTo(vehicle, in: app))
+        XCTAssertEqual(vehicle.value as? String, "No vehicle recorded for this shift", "And invented no vehicle")
+
+        // A vehicle entered after the shift began belongs to the next shift.
+        openSettings(in: app)
+        addVehicle(named: "The van", milesPerGallon: "18", in: app)
+        goBack(in: app)
+        let stillEmpty = app.descendants(matching: .any)["activeShiftVehicle"]
+        XCTAssertTrue(scrollTo(stillEmpty, in: app))
+        XCTAssertEqual(
+            stillEmpty.value as? String,
+            "No vehicle recorded for this shift",
+            "Borrowing the current selection would claim a vehicle this shift never recorded"
+        )
+
+        // Unless the driver fills it, which a shift with nothing measured allows.
+        let change = app.buttons["changeShiftVehicleButton"]
+        XCTAssertTrue(scrollUntilHittable(change, in: app))
+        change.tap()
+        let van = app.descendants(matching: .any)
+            .matching(identifier: "correctionVehicleRow")
+            .containing(NSPredicate(format: "label CONTAINS %@", "The van"))
+            .firstMatch
+        XCTAssertTrue(van.waitForExistence(timeout: 5))
+        van.tap()
+        XCTAssertTrue(waitForLabel(van, toContain: "Chosen"), "The choice is said: \(van.label)")
+        let save = app.buttons["saveShiftVehicleButton"]
+        XCTAssertTrue(waitForEnabled(save, true))
+        save.tap()
+        let filled = app.descendants(matching: .any)["activeShiftVehicle"]
+        XCTAssertTrue(scrollTo(filled, in: app))
+        XCTAssertTrue(
+            waitForLabelValue(filled, toEqual: "The van, 18 miles per gallon"),
+            "Showed: \(String(describing: filled.value))"
+        )
+
+        // The counts follow what the driver records.
+        let startDelivery = app.buttons["startDeliveryButton"]
+        XCTAssertTrue(startDelivery.waitForExistence(timeout: 5))
+        startDelivery.tap()
+        XCTAssertTrue(scrollToTop(reaching: counts, in: app))
+        XCTAssertTrue(waitForLabelValue(counts, toEqual: "1 delivery in progress"))
+        attachScreenshot("home-one-delivery")
     }
 
-    /// Parked and paused are two different states, told apart by more than
-    /// colour, and a parked shift still says it is running.
+    /// Park and Pause are different states of a running shift, told apart by
+    /// more than colour, and each changes exactly what it should.
+    ///
+    /// Parked: the shift still runs, the route stops, and the delivery entry
+    /// stays because an offer can arrive at a counter. Paused: working time
+    /// stops, the capture line says so, no delivery can be started, the shift is
+    /// still the shift in progress and nothing reaches history; resuming brings
+    /// it all back, and ending it after a pause is one shift in history.
+    ///
+    /// Was five journeys, each launching an empty store and starting a shift.
     @MainActor
-    func testParkedAndPausedAreDistinctStates() throws {
+    func testParkAndPauseAreDistinctStatesOfTheRunningShift() throws {
         let app = launchWithEmptyStore()
-        app.buttons["startShiftButton"].tap()
+        let startShift = app.buttons["startShiftButton"]
+        XCTAssertTrue(startShift.waitForExistence(timeout: 10))
+        startShift.tap()
 
-        let park = app.buttons["parkShiftButton"]
-        XCTAssertTrue(scrollUntilHittable(park, in: app))
-        park.tap()
+        XCTAssertTrue(app.buttons["pauseShiftButton"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.descendants(matching: .any)["activeShiftStatus"].exists)
+        XCTAssertFalse(app.buttons["resumeShiftButton"].exists)
+        let entry = app.buttons["startDeliveryButton"]
+        XCTAssertTrue(entry.waitForExistence(timeout: 5))
 
+        pressPark(in: app)
         let parked = app.descendants(matching: .any)["parkedShiftNotice"]
         XCTAssertTrue(parked.waitForExistence(timeout: 5))
         XCTAssertTrue(parked.label.contains("Parked") && parked.label.contains("still running"), "Showed: \(parked.label)")
         XCTAssertTrue(app.descendants(matching: .any)["activeShiftStatus"].exists, "A parked shift is still running")
         XCTAssertFalse(app.descendants(matching: .any)["pausedShiftStatus"].exists, "Parked is not paused")
+        XCTAssertTrue(entry.isHittable, "Parked: an accepted offer can still be recorded")
         attachScreenshot("home-parked")
-
-        let resumeDriving = app.buttons["resumeDrivingButton"]
-        XCTAssertTrue(scrollUntilHittable(resumeDriving, in: app))
-        resumeDriving.tap()
+        pressResumeDriving(in: app)
 
         let pause = app.buttons["pauseShiftButton"]
-        XCTAssertTrue(scrollUntilHittable(pause, in: app))
+        XCTAssertTrue(reachShiftControl(pause, in: app))
         pause.tap()
-
-        XCTAssertTrue(app.descendants(matching: .any)["pausedShiftStatus"].waitForExistence(timeout: 5))
+        let resume = app.buttons["resumeShiftButton"]
+        XCTAssertTrue(resume.waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            app.descendants(matching: .any)["pausedShiftStatus"].waitForExistence(timeout: 5),
+            "A paused shift says it is paused rather than looking like a running one"
+        )
         XCTAssertFalse(app.descendants(matching: .any)["parkedShiftNotice"].exists, "Paused is not parked")
         XCTAssertFalse(app.buttons["parkShiftButton"].exists, "Parking is withheld while paused")
         let working = app.descendants(matching: .any)["workingTime"]
+        XCTAssertTrue(working.exists, "A driver on a break still sees how long they have worked")
         XCTAssertEqual(working.label, "Working time, paused")
+        XCTAssertTrue(app.buttons["endShiftButton"].exists, "And can end the shift without resuming")
+        XCTAssertTrue(waitForDisappearance(of: entry), "Paused: nothing offers to start a delivery")
+        XCTAssertTrue(app.descendants(matching: .any)["pausedDeliveryNotice"].exists, "And the panel says why")
+        XCTAssertFalse(startShift.exists, "A paused shift is still the shift in progress")
+        XCTAssertEqual(rows(in: app).count, 0, "Nothing has reached history")
+        let capture = app.descendants(matching: .any)["routeCaptureStatus"]
+        XCTAssertTrue(reachShiftControl(capture, in: app))
+        XCTAssertTrue(
+            capture.label.lowercased().contains("paused") || capture.label.lowercased().contains("stopped"),
+            "The capture line says recording stopped, not that something failed: \(capture.label)"
+        )
         attachScreenshot("home-paused")
+
+        XCTAssertTrue(scrollToTop(reaching: resume, in: app))
+        resume.tap()
+        XCTAssertTrue(app.buttons["pauseShiftButton"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.descendants(matching: .any)["activeShiftStatus"].exists)
+        XCTAssertTrue(entry.waitForExistence(timeout: 5), "Resumed: the entry is back")
+
+        let end = app.buttons["endShiftButton"]
+        XCTAssertTrue(reachShiftControl(end, in: app))
+        end.tap()
+        XCTAssertTrue(startShift.waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            scrollUntilHittable(rows(in: app).firstMatch, in: app),
+            "The shift that was paused and parked still finishes as one shift in history"
+        )
     }
 
-    /// At the largest accessibility size the panel stacks rather than
-    /// squeezing, and every control is still reachable and whole.
+    /// At the largest accessibility size a running shift with stacked
+    /// deliveries stacks rather than squeezes: the figures, each card's name,
+    /// state and step, cancelling, and Pause and End are all whole, reachable
+    /// and full-size.
+    ///
+    /// Was two journeys, the empty panel and one card, each at AX5.
     @MainActor
-    func testActiveShiftHomeAtTheLargestTextSize() throws {
-        let app = launchWithEmptyStore(textSize: Self.accessibilityXXXLTextSize)
-
-        let start = app.buttons["startShiftButton"]
-        XCTAssertTrue(scrollUntilHittable(start, in: app, maxSwipes: 10))
-        attachScreenshot("home-pre-shift-xxxl")
-        start.tap()
+    func testTheRunningShiftAtTheLargestTextSize() throws {
+        let app = XCUIApplication()
+        app.launchArguments.append(Self.seededActiveDeliveryArgument)
+        app.launchArguments += ["-UIPreferredContentSizeCategoryName", Self.accessibilityXXXLTextSize]
+        launchInPortrait(app)
 
         let working = app.descendants(matching: .any)["workingTime"]
-        XCTAssertTrue(working.waitForExistence(timeout: 5))
+        XCTAssertTrue(working.waitForExistence(timeout: 10))
         let mileage = app.descendants(matching: .any)["liveRecordedMileage"]
         XCTAssertTrue(scrollTo(mileage, in: app, maxSwipes: 10))
         let counts = app.descendants(matching: .any)["liveDeliveryCounts"]
@@ -679,11 +1599,255 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertGreaterThanOrEqual(counts.frame.minY, mileage.frame.maxY - 1, "The figures stack rather than share a row")
         attachScreenshot("home-active-xxxl")
 
+        let card = deliveryCard("Delivery 2", in: app)
+        XCTAssertTrue(scrollTo(card, in: app, maxSwipes: 25))
+        XCTAssertTrue(card.label.contains("Next step"), "Showed: \(card.label)")
+        let action = app.buttons.matching(
+            NSPredicate(format: "identifier == %@ AND label CONTAINS %@", "deliveryActionButton", "Delivery 2")
+        ).firstMatch
+        XCTAssertTrue(scrollUntilHittable(action, in: app, maxSwipes: 25))
+        XCTAssertGreaterThanOrEqual(onPixelGrid(action.frame.height), 44)
+        attachScreenshot("home-delivery-xxxl")
+        let cancel = app.buttons.matching(
+            NSPredicate(format: "identifier == %@ AND label CONTAINS %@", "cancelDeliveryButton", "Delivery 2")
+        ).firstMatch
+        XCTAssertTrue(scrollUntilHittable(cancel, in: app, maxSwipes: 25))
+        XCTAssertGreaterThanOrEqual(onPixelGrid(cancel.frame.height), 44)
+
         for identifier in ["pauseShiftButton", "endShiftButton"] {
             let button = app.buttons[identifier]
-            XCTAssertTrue(scrollUntilHittable(button, in: app, maxSwipes: 15), "\(identifier) is reachable")
+            XCTAssertTrue(scrollUntilHittable(button, in: app, maxSwipes: 25), "\(identifier) is reachable")
             XCTAssertGreaterThanOrEqual(onPixelGrid(button.frame.height), 44)
         }
+    }
+
+    /// Two deliveries left in progress come back on launch as two cards, each
+    /// with its own name, state, clock and next step, laid out step first; they
+    /// survive leaving the app and coming back; and a recovered card is a
+    /// control over the real record.
+    ///
+    /// Was four journeys over the same fixture.
+    @MainActor
+    func testRecoveredStackedDeliveriesStayDistinctAndSurviveLeavingTheApp() throws {
+        let app = launchWithActiveDelivery()
+
+        let accepted = deliveryButton("deliveryActionButton", containing: "Delivery 2", in: app)
+        let carrying = deliveryButton("deliveryActionButton", containing: "Delivery 3", in: app)
+        XCTAssertTrue(scrollTo(accepted, in: app), "The recovered deliveries have their own controls")
+        XCTAssertEqual(accepted.label, "Delivery 2. Mark arrived at pickup")
+        XCTAssertEqual(carrying.label, "Delivery 3. Mark delivery completed")
+        XCTAssertEqual(
+            app.buttons.matching(identifier: "deliveryActionButton").count, 2,
+            "Two active deliveries, neither collapsed into the other nor duplicated"
+        )
+        let status = app.descendants(matching: .any)["deliveryStatus"]
+        XCTAssertTrue(status.label.contains("2 deliveries in progress"), "Status: \(status.label)")
+        XCTAssertTrue(status.label.contains("1 delivery completed"), "The earlier delivery is still counted")
+
+        let second = deliveryCard("Delivery 2", in: app)
+        let third = deliveryCard("Delivery 3", in: app)
+        XCTAssertTrue(scrollTo(second, in: app))
+        XCTAssertTrue(second.label.contains("Next step, mark arrived at pickup"), "Showed: \(second.label)")
+        XCTAssertTrue(second.label.contains("In this state for 25 minutes"), "Its own clock: \(second.label)")
+        XCTAssertTrue(scrollTo(third, in: app))
+        XCTAssertTrue(third.label.contains("Next step, mark delivery completed"), "Showed: \(third.label)")
+        XCTAssertTrue(third.label.contains("In this state for 4 minutes"), "And this one its own: \(third.label)")
+        attachScreenshot("home-two-stacked-deliveries")
+
+        // The card leads with its state, then the step, then cancelling.
+        let cancel = deliveryButton("cancelDeliveryButton", containing: "Delivery 2", in: app)
+        XCTAssertTrue(scrollTo(second, in: app))
+        XCTAssertTrue(scrollUntilHittable(cancel, in: app))
+        XCTAssertLessThan(second.frame.minY, accepted.frame.minY)
+        XCTAssertLessThan(accepted.frame.minY, cancel.frame.minY, "Cancelling sits below the step, not beside it")
+        XCTAssertGreaterThan(accepted.frame.height, cancel.frame.height - 1, "The step is the dominant control")
+        XCTAssertGreaterThanOrEqual(onPixelGrid(cancel.frame.height), 44, "A quiet control is still a full-size target")
+
+        XCUIDevice.shared.press(.home)
+        app.activate()
+        XCTAssertTrue(
+            app.descendants(matching: .any)["activeShiftStatus"].waitForExistence(timeout: 10),
+            "The shift is still running; returning to the app ends nothing"
+        )
+        XCTAssertTrue(scrollTo(accepted, in: app), "Both deliveries are still on screen")
+        XCTAssertEqual(accepted.label, "Delivery 2. Mark arrived at pickup")
+        XCTAssertEqual(carrying.label, "Delivery 3. Mark delivery completed")
+        XCTAssertEqual(app.buttons.matching(identifier: "deliveryActionButton").count, 2, "Neither duplicated nor dropped")
+        XCTAssertTrue(scrollTo(app.descendants(matching: .any)["routeCaptureStatus"], in: app))
+
+        XCTAssertTrue(scrollUpUntilHittable(carrying, in: app, maxSwipes: 6))
+        tapWithinReach(carrying, in: app)
+        XCTAssertTrue(
+            waitForCount(app.buttons.matching(identifier: "deliveryActionButton"), toEqual: 1),
+            "The delivered one leaves the list"
+        )
+        XCTAssertEqual(accepted.label, "Delivery 2. Mark arrived at pickup", "And the other keeps its step")
+        XCTAssertTrue(waitForLabel(status, toContain: "2 deliveries completed"), "Status: \(status.label)")
+    }
+
+    /// One simulated drive through the live figures: recorded mileage grows
+    /// while positions are accepted and says it is recorded; the running shift
+    /// shows no earnings or rate and says why; pausing freezes both mileage and
+    /// working time; resuming does not add the distance covered during the
+    /// break and says the route is now partial; and once a distance exists the
+    /// vehicle correction is gone while the vehicle row stays readable.
+    ///
+    /// Was five journeys, three of which each waited fifteen to twenty seconds
+    /// for the synthetic vehicle to move.
+    @MainActor
+    func testARecordedRouteGrowsFreezesWhilePausedAndLeavesTheBreakOut() throws {
+        let app = launchWithSimulatedRoute()
+
+        openSettings(in: app)
+        addVehicle(named: "2020 Honda Civic", milesPerGallon: "34", in: app)
+        goBack(in: app)
+        let startShift = app.buttons["startShiftButton"]
+        XCTAssertTrue(startShift.waitForExistence(timeout: 10))
+        startShift.tap()
+
+        let mileage = app.descendants(matching: .any)["liveRecordedMileage"]
+        XCTAssertTrue(mileage.waitForExistence(timeout: 10))
+        let first = try XCTUnwrap(waitForRecordedMiles(in: app), "No measured distance while recording")
+        XCTAssertGreaterThan(first, 0)
+        let deadline = Date().addingTimeInterval(30)
+        var grown: Double?
+        while Date() < deadline, grown == nil {
+            if let miles = recordedMiles(in: app), miles > first { grown = miles }
+            _ = mileage.waitForExistence(timeout: 0.5)
+        }
+        XCTAssertNotNil(grown, "Recorded mileage did not grow while the route was being recorded")
+        let spoken = try XCTUnwrap(mileage.value as? String)
+        XCTAssertTrue(spoken.contains("recorded"), "The figure has to say what it is: \(spoken)")
+        XCTAssertFalse(spoken.lowercased().contains("total"), "Recorded mileage is not a total: \(spoken)")
+
+        // No money on a running shift, and the reason with the shift's context.
+        let counts = app.descendants(matching: .any)["liveDeliveryCounts"]
+        let figures = [counts, mileage].map { $0.label + (($0.value as? String) ?? "") }
+        let notice = app.descendants(matching: .any)["liveRateNotice"]
+        XCTAssertTrue(reachShiftControl(notice, in: app), "The rate notice is with the shift's context")
+        XCTAssertTrue(notice.label.contains("still running"), "Showed: \(notice.label)")
+        XCTAssertFalse(app.descendants(matching: .any)["liveRecordedGross"].exists)
+        for text in figures + [notice.label] {
+            XCTAssertFalse(text.contains("$"), "A running shift states no amount: \(text)")
+            XCTAssertFalse(text.contains("/hr"), "A running shift derives no rate: \(text)")
+        }
+
+        // Driving has been recorded, so the vehicle can no longer be corrected.
+        let vehicle = app.descendants(matching: .any)["activeShiftVehicle"]
+        XCTAssertTrue(scrollTo(vehicle, in: app))
+        XCTAssertEqual(vehicle.value as? String, "2020 Honda Civic, 34 miles per gallon")
+        XCTAssertFalse(
+            app.buttons["changeShiftVehicleButton"].exists,
+            "A dead action is worse than no action, so the control is absent rather than disabled"
+        )
+
+        // Pausing freezes both figures; the vehicle keeps driving meanwhile.
+        let pause = app.buttons["pauseShiftButton"]
+        XCTAssertTrue(reachShiftControl(pause, in: app))
+        pause.tap()
+        let resume = app.buttons["resumeShiftButton"]
+        XCTAssertTrue(resume.waitForExistence(timeout: 10))
+        let workingTime = app.descendants(matching: .any)["workingTime"]
+        XCTAssertTrue(scrollToTop(reaching: workingTime, in: app))
+        let settling = expectation(description: "the pause settles")
+        settling.isInverted = true
+        wait(for: [settling], timeout: 3)
+        let pausedMiles = try XCTUnwrap(recordedMiles(in: app))
+        let pausedWorking = try XCTUnwrap(workingTime.value as? String)
+
+        let paused = expectation(description: "the driver takes a break")
+        paused.isInverted = true
+        wait(for: [paused], timeout: 20)
+        XCTAssertEqual(recordedMiles(in: app), pausedMiles, "Recorded mileage must not move while paused")
+        XCTAssertEqual(workingTime.value as? String, pausedWorking, "Working time must not move while paused")
+        XCTAssertTrue(resume.exists, "And the shift did not resume by itself")
+
+        resume.tap()
+        XCTAssertTrue(app.buttons["pauseShiftButton"].waitForExistence(timeout: 10))
+        let resumeDeadline = Date().addingTimeInterval(30)
+        var afterResume: Double?
+        while Date() < resumeDeadline, afterResume == nil {
+            if let miles = recordedMiles(in: app), miles > pausedMiles { afterResume = miles }
+            _ = mileage.waitForExistence(timeout: 0.3)
+        }
+        let resumedMiles = try XCTUnwrap(afterResume, "Recording did not restart after the shift was resumed")
+        XCTAssertLessThan(
+            resumedMiles - pausedMiles, 0.25,
+            "Resuming added \(resumedMiles - pausedMiles) mi at once; the break must not be measured"
+        )
+        let resumedSpoken = try XCTUnwrap(mileage.value as? String)
+        XCTAssertTrue(
+            resumedSpoken.lowercased().contains("partial route"),
+            "A route with a break in it says so while the shift is still running: \(resumedSpoken)"
+        )
+    }
+
+    /// With location granted and no positions, the running shift says what
+    /// recording promises and what it does not, says there is no route rather
+    /// than zero miles, keeps saying it is recording across leaving the app,
+    /// and Park stops recording in two places while the shift keeps running
+    /// and Resume Driving starts it again.
+    ///
+    /// Was six journeys over the stubbed provider.
+    @MainActor
+    func testRecordingParkingAndResumingSayWhatTheyDo() throws {
+        let app = launchWithStubbedLocation()
+
+        let panel = app.descendants(matching: .any)["locationAuthorizationPanel"]
+        XCTAssertTrue(panel.waitForExistence(timeout: 10))
+        XCTAssertTrue(scrollTo(panel, in: app))
+        let scope = panel.descendants(matching: .staticText).allElementsBoundByIndex
+            .map(\.label).joined(separator: " ").lowercased()
+        XCTAssertTrue(scope.contains("another app") || scope.contains("screen is locked"), "Showed: \(scope)")
+        XCTAssertTrue(scope.contains("started with dashpilot open"), "The scope's limit is stated: \(scope)")
+
+        let startShift = app.buttons["startShiftButton"]
+        XCTAssertTrue(scrollToTop(reaching: startShift, in: app))
+        startShift.tap()
+
+        let mileage = app.descendants(matching: .any)["liveRecordedMileage"]
+        XCTAssertTrue(mileage.waitForExistence(timeout: 10))
+        let spoken = try XCTUnwrap(mileage.value as? String)
+        XCTAssertTrue(spoken.contains("No route recorded"), "Expected an absent route, read: \(spoken)")
+        XCTAssertFalse(spoken.contains("0.0"), "An absent route is not a distance of zero: \(spoken)")
+        XCTAssertNil(recordedMiles(in: app))
+
+        let status = app.descendants(matching: .any)["routeCaptureStatus"]
+        XCTAssertTrue(status.waitForExistence(timeout: 5))
+        XCTAssertTrue(waitForLabel(status, toContain: "Location tracking active"), "Showed: \(status.label)")
+        let line = status.label.lowercased()
+        XCTAssertTrue(line.contains("other apps") && line.contains("locked"), "It carries on off screen: \(line)")
+        XCTAssertTrue(line.contains("ios can still stop it"), "And is not guaranteed: \(line)")
+
+        XCUIDevice.shared.press(.home)
+        app.activate()
+        XCTAssertTrue(app.buttons["endShiftButton"].waitForExistence(timeout: 10))
+        let returned = app.descendants(matching: .any)["routeCaptureStatus"]
+        XCTAssertTrue(returned.waitForExistence(timeout: 5))
+        XCTAssertTrue(returned.label.contains("Location tracking active"), "Showed: \(returned.label)")
+        XCTAssertFalse(returned.label.contains("Route recording paused"), "No break was claimed: \(returned.label)")
+
+        let park = app.buttons["parkShiftButton"]
+        XCTAssertTrue(reachShiftControl(park, in: app), "Parking is offered on a running shift")
+        XCTAssertTrue(park.label.contains("shift keeps running"), "It says what it does not do: \(park.label)")
+        park.tap()
+        XCTAssertTrue(waitForLabel(returned, toContain: "Route recording stopped while parked"), "Showed: \(returned.label)")
+        XCTAssertTrue(returned.label.contains("is not counted"), "Showed: \(returned.label)")
+        XCTAssertFalse(returned.label.contains("still running"), "The notice says that, not the capture line")
+        let notice = app.descendants(matching: .any)["parkedShiftNotice"]
+        XCTAssertTrue(notice.waitForExistence(timeout: 5))
+        XCTAssertTrue(notice.label.contains("shift is still running"), "Showed: \(notice.label)")
+        XCTAssertTrue(app.descendants(matching: .any)["activeShiftStatus"].exists, "Still running")
+        XCTAssertFalse(app.descendants(matching: .any)["pausedShiftStatus"].exists, "No pause was recorded")
+        XCTAssertTrue(app.descendants(matching: .any)["workingTime"].exists, "Working time is still counting")
+
+        let resume = app.buttons["resumeDrivingButton"]
+        XCTAssertTrue(resume.waitForExistence(timeout: 5), "Leaving the state is one tap")
+        XCTAssertFalse(park.exists, "Parking is not offered while already parked")
+        resume.tap()
+        XCTAssertTrue(waitForLabel(returned, toContain: "Location tracking active"), "Recording starts again")
+        XCTAssertFalse(app.descendants(matching: .any)["parkedShiftNotice"].exists, "And the notice goes with it")
+        XCTAssertTrue(app.buttons["parkShiftButton"].exists, "Parking is offered again")
     }
 
     // MARK: Active delivery cards
@@ -696,449 +1860,7 @@ final class DashPilotUITests: XCTestCase {
         ).firstMatch
     }
 
-    /// One delivery's card says which delivery, what state and for how long,
-    /// then puts the next step above everything else that can be done to it.
-    @MainActor
-    func testADeliveryCardLeadsWithItsStateThenItsNextStep() throws {
-        let app = launchWithEmptyStore()
-        app.buttons["startShiftButton"].tap()
-        let startDelivery = app.buttons["startDeliveryButton"]
-        XCTAssertTrue(scrollUntilHittable(startDelivery, in: app))
-        startDelivery.tap()
-
-        let card = deliveryCard("Delivery 1", in: app)
-        XCTAssertTrue(card.waitForExistence(timeout: 5))
-        XCTAssertTrue(card.label.contains("Next step, mark arrived at pickup"), "Showed: \(card.label)")
-        XCTAssertTrue(
-            card.label.contains("In this state for"),
-            "The time at this step is said, from the recorded acceptance: \(card.label)"
-        )
-
-        let action = app.buttons["deliveryActionButton"]
-        let cancel = app.buttons["cancelDeliveryButton"]
-        XCTAssertTrue(scrollUntilHittable(cancel, in: app))
-        XCTAssertLessThan(card.frame.minY, action.frame.minY)
-        XCTAssertLessThan(action.frame.minY, cancel.frame.minY, "Cancelling sits below the step, not beside it")
-        XCTAssertGreaterThan(action.frame.height, cancel.frame.height - 1, "The step is the dominant control")
-        XCTAssertGreaterThanOrEqual(onPixelGrid(cancel.frame.height), 44, "A quiet control is still a full-size target")
-        XCTAssertTrue(action.label.contains("Delivery 1"), "The step names its delivery: \(action.label)")
-        attachScreenshot("home-one-delivery")
-    }
-
-    /// Two deliveries in different states read as two deliveries: each card
-    /// leads with its own name, its own state and its own step.
-    @MainActor
-    func testStackedDeliveriesInDifferentStatesStayDistinct() throws {
-        let app = launchWithActiveDelivery()
-
-        let second = deliveryCard("Delivery 2", in: app)
-        let third = deliveryCard("Delivery 3", in: app)
-        XCTAssertTrue(scrollTo(second, in: app))
-        XCTAssertTrue(scrollTo(third, in: app))
-
-        XCTAssertTrue(second.label.contains("Next step, mark arrived at pickup"), "Showed: \(second.label)")
-        XCTAssertTrue(third.label.contains("Next step, mark delivery completed"), "Showed: \(third.label)")
-        XCTAssertTrue(second.label.contains("In this state for 25 minutes"), "Its own clock: \(second.label)")
-        XCTAssertTrue(third.label.contains("In this state for 4 minutes"), "And this one its own: \(third.label)")
-
-        let actions = app.buttons.matching(identifier: "deliveryActionButton")
-        let labels = actions.allElementsBoundByIndex.map(\.label)
-        XCTAssertTrue(labels.contains { $0.contains("Delivery 2") }, "\(labels)")
-        XCTAssertTrue(labels.contains { $0.contains("Delivery 3") }, "\(labels)")
-        attachScreenshot("home-two-stacked-deliveries")
-    }
-
-    /// The reminder still says it is a suggestion from the driver's own times,
-    /// in the new card as in the old.
-    @MainActor
-    func testTheRestyledReminderStillClaimsNoObservation() throws {
-        let app = launchWithMissedLifecycle()
-
-        let reminder = app.descendants(matching: .any).matching(identifier: "deliverySuggestion").firstMatch
-        XCTAssertTrue(scrollTo(reminder, in: app))
-        XCTAssertTrue(reminder.label.contains("DashPilot cannot tell where you are"), "Showed: \(reminder.label)")
-        XCTAssertTrue(reminder.label.contains("not something it observed"), "Showed: \(reminder.label)")
-        let confirm = app.buttons.matching(identifier: "deliverySuggestionActionButton").firstMatch
-        XCTAssertGreaterThanOrEqual(onPixelGrid(confirm.frame.height), 44)
-        attachScreenshot("home-reminder")
-    }
-
-    /// At the largest accessibility size a card grows downwards: the name and
-    /// state are whole, and the step and cancelling are both still full-size.
-    @MainActor
-    func testADeliveryCardAtTheLargestTextSize() throws {
-        let app = XCUIApplication()
-        app.launchArguments.append(Self.seededActiveDeliveryArgument)
-        app.launchArguments += ["-UIPreferredContentSizeCategoryName", Self.accessibilityXXXLTextSize]
-        launchInPortrait(app)
-
-        let card = deliveryCard("Delivery 2", in: app)
-        XCTAssertTrue(scrollTo(card, in: app, maxSwipes: 25))
-        XCTAssertTrue(card.label.contains("Next step"), "Showed: \(card.label)")
-
-        let action = app.buttons.matching(
-            NSPredicate(format: "identifier == %@ AND label CONTAINS %@", "deliveryActionButton", "Delivery 2")
-        ).firstMatch
-        XCTAssertTrue(scrollUntilHittable(action, in: app, maxSwipes: 25))
-        XCTAssertGreaterThanOrEqual(onPixelGrid(action.frame.height), 44)
-        attachScreenshot("home-delivery-xxxl")
-
-        let cancel = app.buttons.matching(
-            NSPredicate(format: "identifier == %@ AND label CONTAINS %@", "cancelDeliveryButton", "Delivery 2")
-        ).firstMatch
-        XCTAssertTrue(scrollUntilHittable(cancel, in: app, maxSwipes: 25))
-        XCTAssertGreaterThanOrEqual(onPixelGrid(cancel.frame.height), 44)
-    }
-
-    /// Pause a running shift, see the screen say so, and resume it.
-    ///
-    /// The three states a shift can be in have to be distinguishable without
-    /// reading, so what is asserted is that the panel actually swaps: the
-    /// running label and the Pause control give way to the paused label and the
-    /// Resume control, and back again.
-    @MainActor
-    func testPausesAndResumesAShift() throws {
-        let app = launchWithEmptyStore()
-
-        let startButton = app.buttons["startShiftButton"]
-        XCTAssertTrue(startButton.waitForExistence(timeout: 10))
-        startButton.tap()
-
-        let pauseButton = app.buttons["pauseShiftButton"]
-        XCTAssertTrue(pauseButton.waitForExistence(timeout: 5))
-        XCTAssertTrue(app.descendants(matching: .any)["activeShiftStatus"].exists)
-        XCTAssertFalse(app.buttons["resumeShiftButton"].exists)
-
-        pauseButton.tap()
-
-        let resumeButton = app.buttons["resumeShiftButton"]
-        XCTAssertTrue(resumeButton.waitForExistence(timeout: 5))
-        XCTAssertTrue(
-            app.descendants(matching: .any)["pausedShiftStatus"].waitForExistence(timeout: 5),
-            "A paused shift says it is paused rather than looking like a running one"
-        )
-        XCTAssertFalse(pauseButton.exists)
-        // The working figure stays on screen: a driver on a break still needs to
-        // see how long they have worked.
-        XCTAssertTrue(app.descendants(matching: .any)["workingTime"].exists)
-        // And the shift can still be ended from here, without resuming first.
-        XCTAssertTrue(app.buttons["endShiftButton"].exists)
-
-        resumeButton.tap()
-
-        XCTAssertTrue(pauseButton.waitForExistence(timeout: 5))
-        XCTAssertFalse(resumeButton.exists)
-        XCTAssertTrue(app.descendants(matching: .any)["activeShiftStatus"].exists)
-    }
-
-    /// A paused shift explains what stopped, rather than leaving the driver to
-    /// find the break in the route afterwards.
-    @MainActor
-    func testAPausedShiftSaysRecordingHasStopped() throws {
-        let app = launchWithEmptyStore()
-
-        let startButton = app.buttons["startShiftButton"]
-        XCTAssertTrue(startButton.waitForExistence(timeout: 10))
-        startButton.tap()
-
-        let pauseButton = app.buttons["pauseShiftButton"]
-        XCTAssertTrue(pauseButton.waitForExistence(timeout: 5))
-        pauseButton.tap()
-
-        XCTAssertTrue(app.buttons["resumeShiftButton"].waitForExistence(timeout: 5))
-
-        let status = app.descendants(matching: .any)["routeCaptureStatus"]
-        XCTAssertTrue(status.waitForExistence(timeout: 5))
-        XCTAssertTrue(
-            status.label.lowercased().contains("paused")
-                || status.label.lowercased().contains("stopped"),
-            "The capture line says recording stopped, not that something failed: \(status.label)"
-        )
-
-        // Deliveries are not offered while paused, because a delivery started
-        // then would be time the app is simultaneously reporting as not worked.
-        XCTAssertTrue(
-            app.descendants(matching: .any)["pausedDeliveryNotice"].waitForExistence(timeout: 5)
-        )
-    }
-
-    /// Pausing and resuming does not end the shift, and the finished shift
-    /// reports the time it was worked rather than the time it covered.
-    @MainActor
-    func testAPausedShiftIsStillTheShiftInProgress() throws {
-        let app = launchWithEmptyStore()
-
-        let startButton = app.buttons["startShiftButton"]
-        XCTAssertTrue(startButton.waitForExistence(timeout: 10))
-        startButton.tap()
-
-        app.buttons["pauseShiftButton"].tap()
-        XCTAssertTrue(app.buttons["resumeShiftButton"].waitForExistence(timeout: 5))
-
-        // Still the shift in progress: no new shift may be started over it, and
-        // nothing has appeared in history.
-        XCTAssertFalse(startButton.exists, "A paused shift is still the shift in progress")
-        XCTAssertEqual(rows(in: app).count, 0)
-
-        app.buttons["resumeShiftButton"].tap()
-        XCTAssertTrue(app.buttons["pauseShiftButton"].waitForExistence(timeout: 5))
-
-        app.buttons["endShiftButton"].tap()
-
-        XCTAssertTrue(startButton.waitForExistence(timeout: 5))
-        XCTAssertTrue(
-            scrollUntilHittable(rows(in: app).firstMatch, in: app),
-            "The shift that was paused still finishes as one shift in history"
-        )
-    }
-
     // MARK: Live shift figures
-
-    /// The running shift reports the miles its route has actually recorded, and
-    /// the figure grows while positions are being accepted.
-    ///
-    /// The whole point of the panel: a driver mid-shift can see what has been
-    /// recorded so far without ending the shift to find out. The word "recorded"
-    /// is asserted with the figure, because a mileage read as "miles I drove" is
-    /// the one claim this app must not make.
-    @MainActor
-    func testRecordedMileageGrowsWhileAShiftIsRecording() throws {
-        let app = launchWithSimulatedRoute()
-
-        let startButton = app.buttons["startShiftButton"]
-        XCTAssertTrue(startButton.waitForExistence(timeout: 10))
-        startButton.tap()
-
-        let mileage = app.descendants(matching: .any)["liveRecordedMileage"]
-        XCTAssertTrue(mileage.waitForExistence(timeout: 10))
-
-        let first = try XCTUnwrap(
-            waitForRecordedMiles(in: app),
-            "The panel never reported a measured distance while the route was being recorded"
-        )
-        XCTAssertGreaterThan(first, 0)
-
-        // Long enough for the synthetic vehicle to cover well over a tenth of a
-        // mile, which is the resolution the figure is written at.
-        let deadline = Date().addingTimeInterval(30)
-        var grown: Double?
-        while Date() < deadline, grown == nil {
-            if let miles = recordedMiles(in: app), miles > first { grown = miles }
-            _ = mileage.waitForExistence(timeout: 0.5)
-        }
-        XCTAssertNotNil(grown, "Recorded mileage did not grow while the route was being recorded")
-
-        let spoken = try XCTUnwrap(mileage.value as? String)
-        XCTAssertTrue(spoken.contains("recorded"), "The figure has to say what it is: \(spoken)")
-        XCTAssertFalse(spoken.lowercased().contains("total"), "Recorded mileage is not a total: \(spoken)")
-    }
-
-    /// Pausing stops the mileage and the working figure, and neither moves again
-    /// until the driver resumes.
-    ///
-    /// Both are the same claim from two directions: a driver on a break is not
-    /// working and is not recording, so a shift that kept either number moving
-    /// would be reporting work that did not happen.
-    @MainActor
-    func testRecordedMileageAndWorkingTimeFreezeWhilePaused() throws {
-        let app = launchWithSimulatedRoute()
-
-        let startButton = app.buttons["startShiftButton"]
-        XCTAssertTrue(startButton.waitForExistence(timeout: 10))
-        startButton.tap()
-
-        let beforePause = try XCTUnwrap(waitForRecordedMiles(in: app))
-
-        let pauseButton = app.buttons["pauseShiftButton"]
-        XCTAssertTrue(pauseButton.waitForExistence(timeout: 10))
-        pauseButton.tap()
-        XCTAssertTrue(app.buttons["resumeShiftButton"].waitForExistence(timeout: 10))
-
-        // Read after the pause has settled: pausing flushes the positions
-        // captured up to the tap, so the figure may move once more and then stop.
-        let workingTime = app.descendants(matching: .any)["workingTime"]
-        XCTAssertTrue(workingTime.waitForExistence(timeout: 5))
-        _ = workingTime.waitForExistence(timeout: 3)
-
-        let pausedMiles = try XCTUnwrap(recordedMiles(in: app))
-        let pausedWorking = try XCTUnwrap(workingTime.value as? String)
-        XCTAssertGreaterThanOrEqual(pausedMiles, beforePause)
-
-        // Fifteen seconds during which the synthetic vehicle keeps driving. A
-        // shift that measured it would be several tenths of a mile further on,
-        // and a working figure that kept ticking would be fifteen seconds later.
-        let waited = expectation(description: "the shift stays paused")
-        waited.isInverted = true
-        wait(for: [waited], timeout: 15)
-
-        XCTAssertEqual(
-            recordedMiles(in: app),
-            pausedMiles,
-            "Recorded mileage must not move while the shift is paused"
-        )
-        XCTAssertEqual(
-            workingTime.value as? String,
-            pausedWorking,
-            "Working time must not move while the shift is paused"
-        )
-        // And the shift is still paused rather than having resumed by itself.
-        XCTAssertTrue(app.buttons["resumeShiftButton"].exists)
-    }
-
-    /// Resuming does not add the distance covered during the break, and the
-    /// route says it is partial.
-    ///
-    /// The synthetic vehicle keeps driving while capture is stopped, exactly as
-    /// a driver who takes a break somewhere and resumes somewhere else does.
-    /// Resuming mints a new capture session, so the stretch between the two is
-    /// a gap and the distance across it is left out rather than guessed at.
-    @MainActor
-    func testResumingDoesNotRecordTheDistanceCoveredWhilePaused() throws {
-        let app = launchWithSimulatedRoute()
-
-        let startButton = app.buttons["startShiftButton"]
-        XCTAssertTrue(startButton.waitForExistence(timeout: 10))
-        startButton.tap()
-
-        _ = try XCTUnwrap(waitForRecordedMiles(in: app))
-
-        app.buttons["pauseShiftButton"].tap()
-        let resumeButton = app.buttons["resumeShiftButton"]
-        XCTAssertTrue(resumeButton.waitForExistence(timeout: 10))
-
-        let settling = expectation(description: "the pause settles")
-        settling.isInverted = true
-        wait(for: [settling], timeout: 3)
-        let pausedMiles = try XCTUnwrap(recordedMiles(in: app))
-
-        // Twenty seconds of driving nobody recorded: around half a kilometre,
-        // which is several times what the first seconds after resuming add.
-        let break_ = expectation(description: "the driver takes a break")
-        break_.isInverted = true
-        wait(for: [break_], timeout: 20)
-
-        resumeButton.tap()
-        XCTAssertTrue(app.buttons["pauseShiftButton"].waitForExistence(timeout: 10))
-
-        // Wait for the first reading that shows the route growing again, and
-        // check what it added. Bridging the break would have added the whole
-        // half kilometre at once.
-        let mileage = app.descendants(matching: .any)["liveRecordedMileage"]
-        let deadline = Date().addingTimeInterval(30)
-        var afterResume: Double?
-        while Date() < deadline, afterResume == nil {
-            if let miles = recordedMiles(in: app), miles > pausedMiles { afterResume = miles }
-            _ = mileage.waitForExistence(timeout: 0.3)
-        }
-
-        let resumedMiles = try XCTUnwrap(afterResume, "Recording did not restart after the shift was resumed")
-        XCTAssertLessThan(
-            resumedMiles - pausedMiles,
-            0.25,
-            """
-            Resuming added \(resumedMiles - pausedMiles) mi at once.             The distance covered while the shift was paused was not recorded and must not be measured.
-            """
-        )
-
-        let spoken = try XCTUnwrap(mileage.value as? String)
-        XCTAssertTrue(
-            spoken.contains("Partial route") || spoken.contains("partial route"),
-            "A route with a break in it says so while the shift is still running: \(spoken)"
-        )
-    }
-
-    /// A shift recording nothing says there is no route, rather than showing no
-    /// miles.
-    ///
-    /// The stubbed provider grants permission and produces no positions, which
-    /// is the shape of a shift whose capture has not produced a usable fix yet.
-    /// "No route recorded" and "0.0 mi" are different statements and the panel
-    /// must make the first one.
-    @MainActor
-    func testARunningShiftWithNoRouteSaysSoRatherThanShowingNoMiles() throws {
-        let app = launchWithStubbedLocation()
-
-        let startButton = app.buttons["startShiftButton"]
-        XCTAssertTrue(startButton.waitForExistence(timeout: 10))
-        startButton.tap()
-
-        let mileage = app.descendants(matching: .any)["liveRecordedMileage"]
-        XCTAssertTrue(mileage.waitForExistence(timeout: 10))
-
-        let spoken = try XCTUnwrap(mileage.value as? String)
-        XCTAssertTrue(spoken.contains("No route recorded"), "Expected an absent route, read: \(spoken)")
-        XCTAssertFalse(spoken.contains("0.0"), "An absent route is not a distance of zero: \(spoken)")
-        XCTAssertNil(recordedMiles(in: app))
-    }
-
-    /// A running shift shows no earnings and no rates, and says why.
-    ///
-    /// Shift gross earnings cannot be recorded until the shift has finished, so
-    /// every rate derived from them is withheld. The panel states the reason
-    /// once rather than showing a dash, a zero, or a figure worked out from the
-    /// amounts recorded against individual deliveries.
-    @MainActor
-    func testARunningShiftShowsNoEarningsOrRates() throws {
-        let app = launchWithSimulatedRoute()
-
-        let startButton = app.buttons["startShiftButton"]
-        XCTAssertTrue(startButton.waitForExistence(timeout: 10))
-        startButton.tap()
-
-        // Nothing on the running panel may read as money. A currency symbol here
-        // would be a figure the shift does not have. The figures are read at the
-        // top, before the list moves.
-        let deliveries = app.descendants(matching: .any)["liveDeliveryCounts"]
-        XCTAssertTrue(deliveries.waitForExistence(timeout: 10))
-        let mileage = app.descendants(matching: .any)["liveRecordedMileage"]
-        XCTAssertTrue(mileage.waitForExistence(timeout: 5))
-        let figures = [deliveries, mileage].map { $0.label + (($0.value as? String) ?? "") }
-
-        // The reason is said with the shift's context below the deliveries, so
-        // it never stands between the timer and Start Delivery.
-        let notice = app.descendants(matching: .any)["liveRateNotice"]
-        XCTAssertTrue(reachShiftControl(notice, in: app), "The rate notice is with the shift's context")
-        XCTAssertTrue(
-            notice.label.contains("still running"),
-            "The reason has to name the shift's state, not imply a missing amount: \(notice.label)"
-        )
-
-        XCTAssertFalse(
-            app.descendants(matching: .any)["liveRecordedGross"].exists,
-            "A running shift cannot carry an amount, so none may be shown"
-        )
-
-        for text in figures + [notice.label] {
-            XCTAssertFalse(text.contains("$"), "A running shift states no amount: \(text)")
-            XCTAssertFalse(text.contains("/hr"), "A running shift derives no rate: \(text)")
-        }
-    }
-
-    /// The running shift counts the deliveries that are open and the ones it has
-    /// finished, and the counts follow what the driver actually records.
-    @MainActor
-    func testTheRunningShiftCountsItsDeliveries() throws {
-        let app = launchWithEmptyStore()
-
-        let startButton = app.buttons["startShiftButton"]
-        XCTAssertTrue(startButton.waitForExistence(timeout: 10))
-        startButton.tap()
-
-        let counts = app.descendants(matching: .any)["liveDeliveryCounts"]
-        XCTAssertTrue(counts.waitForExistence(timeout: 10))
-        XCTAssertEqual(counts.label, "Deliveries")
-        XCTAssertEqual(counts.value as? String, "No delivery in progress")
-
-        let startDelivery = app.buttons["startDeliveryButton"]
-        XCTAssertTrue(startDelivery.waitForExistence(timeout: 5))
-        startDelivery.tap()
-
-        let settling = expectation(description: "the count follows the record")
-        settling.isInverted = true
-        wait(for: [settling], timeout: 2)
-
-        XCTAssertEqual(counts.value as? String, "1 delivery in progress")
-    }
 
     // MARK: History weeks
 
@@ -1209,70 +1931,96 @@ final class DashPilotUITests: XCTestCase {
         app.descendants(matching: .any).matching(identifier: "olderWeekShiftRow")
     }
 
-    /// History lists the week the driver is in, and says which week that is.
+    /// History lists the week the driver is in, opens with that week's own
+    /// figures, says how much is behind View Older Weeks, exports every shift
+    /// rather than the week on screen, and follows an edit made to the week's
+    /// shift when the driver comes back.
+    ///
+    /// Was five journeys over this fixture (and one over the seeded history for
+    /// the export). The week's scope and partition are `HistoryFetchScopeTests`.
     @MainActor
-    func testHistoryShowsThisWeekOnly() throws {
+    func testHistoryShowsThisWeekWithItsOwnFiguresAndFollowsAnEdit() throws {
         let app = launchWithOlderWeeks()
 
         let history = rows(in: app)
         XCTAssertTrue(scrollUntilHittable(history.firstMatch, in: app), "This week's shift is listed")
-        XCTAssertTrue(
-            waitForCount(history, toEqual: 1),
-            "Only the current week's shift is listed, not the fixture's four"
-        )
-        XCTAssertTrue(
-            waitForLabel(history.firstMatch, toContain: "$70.00"),
-            "And it is this week's shift: \(history.firstMatch.label)"
-        )
-
+        XCTAssertTrue(waitForCount(history, toEqual: 1), "Only the current week's shift is listed")
+        XCTAssertTrue(waitForLabel(history.firstMatch, toContain: "$70.00"), "Showed: \(history.firstMatch.label)")
         let header = app.descendants(matching: .any)["historyHeader"]
         XCTAssertTrue(header.waitForExistence(timeout: 5))
-        XCTAssertTrue(
-            header.label.contains("This Week"),
-            "The heading says what the list is scoped to: \(header.label)"
-        )
+        XCTAssertTrue(header.label.contains("This Week"), "Showed: \(header.label)")
 
-        // The older shifts are absent from this screen rather than merely
-        // further down it: the section is scrolled to its end first, so an
-        // unrendered row cannot pass for a hidden one.
         let older = app.buttons["olderHistoryWeeksLink"]
         XCTAssertTrue(scrollUntilHittable(older, in: app), "The older-weeks control is reachable")
         XCTAssertEqual(elements(containing: "$55.00", in: app).count, 0, "Last week's shift is not in this list")
         XCTAssertEqual(elements(containing: "$41.00", in: app).count, 0)
         XCTAssertEqual(elements(containing: "$33.00", in: app).count, 0)
+        XCTAssertTrue(waitForLabel(older, toContain: "2 weeks · 3 shifts"), "Showed: \(older.label)")
 
-        // Two weeks, three shifts: the fixture's two older weeks, one holding a
-        // single shift and one holding two.
-        // The week count is worked out off the main actor, so it is waited for
-        // rather than read the instant the row appears.
-        XCTAssertTrue(
-            waitForLabel(older, toContain: "2 weeks · 3 shifts"),
-            "The control says how much is behind it: \(older.label)"
-        )
+        let summary = currentWeekSummary(in: app)
+        XCTAssertTrue(scrollToTop(reaching: summary, in: app, swipes: 12), "The week says how it is going")
+        XCTAssertTrue(waitForLabel(summary, toContain: "Recorded gross earnings, $70.00"), "Showed: \(summary.label)")
+        XCTAssertTrue(summary.label.contains("1 completed shift"), "Showed: \(summary.label)")
+        XCTAssertFalse(summary.label.contains("$55.00"), "Last week is not in this week's figures")
+        XCTAssertTrue(summary.label.contains("No recorded mileage"), "Showed: \(summary.label)")
+        XCTAssertFalse(summary.label.contains("0.0 mi"), "Missing is never a zero")
+        XCTAssertTrue(scrollUntilHittable(history.firstMatch, in: app))
+        XCTAssertLessThan(summary.frame.minY, history.firstMatch.frame.minY, "The figures come before the shifts")
+
+        // Export All History means the store, not the week on screen.
+        XCTAssertTrue(scrollToTop(reaching: app.buttons["exportAllHistoryButton"], in: app))
+        openExport("exportAllHistoryButton", in: app)
+        let name = exportFileName(in: app)
+        XCTAssertTrue(name.contains("DashPilot-History-"), "\(name)")
+        XCTAssertTrue(name.contains("4 shifts"), "This week's shift and the three before it: \(name)")
+        app.buttons["dismissExportButton"].tap()
+
+        // An edit to this week's shift is followed on return, not on relaunch.
+        openFirstShift(in: app)
+        let edit = app.buttons["editShiftEarningsButton"]
+        XCTAssertTrue(scrollTo(edit, in: app))
+        edit.tap()
+        let field = app.textFields["earningsAmountField"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        clear(field, in: app)
+        type("90", into: app)
+        app.buttons["saveEarningsButton"].tap()
+        XCTAssertTrue(waitForLabel(app.descendants(matching: .any)["shiftDetailEarnings"], toContain: "$90.00"))
+        goBack(in: app)
+        XCTAssertTrue(scrollToTop(reaching: summary, in: app, swipes: 12))
+        XCTAssertTrue(waitForLabel(summary, toContain: "Recorded gross earnings, $90.00"), "Showed: \(summary.label)")
+        XCTAssertFalse(summary.label.contains("$70.00"), "The previous figure is gone: \(summary.label)")
     }
 
-    /// The older work is one tap away, grouped by the week it was done in.
+    /// Older Weeks groups every other shift by its week, newest first, with no
+    /// group for a week nobody worked; each week opens with one spoken summary
+    /// (its shifts, earnings, working time, coverage, and no mileage or fuel
+    /// figure it does not have) above its shifts; a week of two shifts states
+    /// its total rather than its parts; and a shift opens its own detail.
+    ///
+    /// Was six journeys, each launching this fixture and opening Older Weeks.
+    /// The totals are `HistoryWeekSummaryTests`'.
     @MainActor
-    func testOlderWeeksAreGroupedAndReachable() throws {
+    func testOlderWeeksAreGroupedSummarisedAndOpen() throws {
         let app = launchWithOlderWeeks()
+        openOlderWeeks(in: app)
 
-        let older = app.buttons["olderHistoryWeeksLink"]
-        XCTAssertTrue(scrollUntilHittable(older, in: app, maxSwipes: 12))
-        older.tap()
+        let summaries = app.descendants(matching: .any).matching(identifier: "olderWeekSummary")
+        XCTAssertTrue(waitForCount(summaries, toEqual: 2), "One summary per week that holds shifts")
+        let lastWeek = summaries.element(boundBy: 0)
+        XCTAssertTrue(waitForLabel(lastWeek, toContain: "1 completed shift"), "Showed: \(lastWeek.label)")
+        for expected in ["$55.00", "Recorded gross earnings", "working time", "across 1 of 1 completed shift", "No recorded mileage"] {
+            XCTAssertTrue(lastWeek.label.contains(expected), "The week says \(expected): \(lastWeek.label)")
+        }
+        XCTAssertFalse(lastWeek.label.contains("0.0 mi"), "Missing is never a zero")
+        XCTAssertFalse(lastWeek.label.contains("Estimated fuel"), "No fuel figure for a week with none")
+        XCTAssertFalse(lastWeek.label.contains("$0.00"))
 
         let rows = olderWeekRows(in: app)
-        XCTAssertTrue(rows.firstMatch.waitForExistence(timeout: 10))
+        XCTAssertTrue(rows.firstMatch.waitForExistence(timeout: 5))
+        XCTAssertTrue(waitForLabel(rows.element(boundBy: 0), toContain: "$55.00"), "The newest older week is first")
+        XCTAssertLessThan(lastWeek.frame.minY, rows.firstMatch.frame.minY, "The week's figures come before its shifts")
 
-        // Newest week first, so last week's shift leads.
-        XCTAssertTrue(
-            waitForLabel(rows.element(boundBy: 0), toContain: "$55.00"),
-            "The newest older week is first: \(rows.element(boundBy: 0).label)"
-        )
-
-        // Every shift outside this week is here. Each week opens with its own
-        // summary, so the three rows do not all fit one screen: each is scrolled
-        // to in the order the list holds them, newest first, and the headings
-        // passed on the way are collected rather than counted on one screen.
         let headings = app.descendants(matching: .any).matching(identifier: "olderWeekHeader")
         var headingLabels = Set<String>()
         for amount in ["$55.00", "$33.00", "$41.00"] {
@@ -1285,237 +2033,186 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertEqual(headingLabels.count, 2, "Two weeks hold shifts, and the empty weeks between them do not")
         XCTAssertFalse(headingLabels.contains(""), "A week names the days it covers")
 
-        // This week's shift stayed on the screen it belongs to.
-        XCTAssertEqual(elements(containing: "$70.00", in: app).count, 0)
-    }
+        let threeWeeksAgo = summaries.matching(NSPredicate(format: "label CONTAINS %@", "$74.00")).firstMatch
+        XCTAssertTrue(threeWeeksAgo.waitForExistence(timeout: 5), "Two shifts are added up rather than listed")
+        XCTAssertTrue(threeWeeksAgo.label.contains("2 completed shifts"), "Showed: \(threeWeeksAgo.label)")
+        XCTAssertFalse(threeWeeksAgo.label.contains("$41.00"), "The week states its total, not its parts")
+        XCTAssertEqual(elements(containing: "$70.00", in: app).count, 0, "This week is not on this screen")
 
-    /// An older shift is a shift, not a summary: it opens the same detail screen
-    /// the current week's rows open, with its own recorded amount.
-    @MainActor
-    func testAnOlderShiftOpensItsOwnDetail() throws {
-        let app = launchWithOlderWeeks()
-
-        let older = app.buttons["olderHistoryWeeksLink"]
-        XCTAssertTrue(scrollUntilHittable(older, in: app, maxSwipes: 12))
-        older.tap()
-
-        let rows = olderWeekRows(in: app)
-        XCTAssertTrue(rows.firstMatch.waitForExistence(timeout: 10))
-        rows.firstMatch.tap()
-
+        let row = rows.matching(NSPredicate(format: "label CONTAINS %@", "$41.00")).firstMatch
+        XCTAssertTrue(scrollUntilHittable(row, in: app))
+        row.tap()
         let earnings = app.descendants(matching: .any)["shiftDetailEarnings"]
         XCTAssertTrue(earnings.waitForExistence(timeout: 5), "The same detail screen opens")
-        XCTAssertTrue(
-            earnings.label.contains("$55.00"),
-            "And it is the tapped shift's own amount: \(earnings.label)"
-        )
+        XCTAssertTrue(earnings.label.contains("$41.00"), "With the tapped shift's own amount: \(earnings.label)")
     }
 
-    /// Each older week says how the whole week went before the driver opens
-    /// anything in it.
+    /// A week's summary names its week first, then its figures in the order a
+    /// listener needs them; a week whose fuel is estimated for some shifts says
+    /// which, keeps the estimated net apart from recorded fuel, and a week
+    /// estimated in full says so.
+    ///
+    /// Was three journeys over the long history.
     @MainActor
-    func testOlderWeeksAreSummarisedBeforeTheirShifts() throws {
-        let app = launchWithOlderWeeks()
-
-        let older = app.buttons["olderHistoryWeeksLink"]
-        XCTAssertTrue(scrollUntilHittable(older, in: app, maxSwipes: 12))
-        older.tap()
-
-        let summaries = app.descendants(matching: .any).matching(identifier: "olderWeekSummary")
-        XCTAssertTrue(summaries.firstMatch.waitForExistence(timeout: 10), "A week says how it went")
-        XCTAssertTrue(waitForCount(summaries, toEqual: 2), "One summary per week that holds shifts")
-
-        // The newest older week holds one shift, for $55.00.
-        let lastWeek = summaries.element(boundBy: 0)
-        XCTAssertTrue(
-            waitForLabel(lastWeek, toContain: "1 completed shift"),
-            "The week says how many shifts it holds: \(lastWeek.label)"
-        )
-        XCTAssertTrue(
-            lastWeek.label.contains("$55.00"),
-            "And what they came to, using the recorded amount: \(lastWeek.label)"
-        )
-
-        // It is above the shifts rather than under them: the first summary
-        // appears before the first row on screen.
-        let firstRow = olderWeekRows(in: app).firstMatch
-        XCTAssertTrue(firstRow.waitForExistence(timeout: 5))
-        XCTAssertLessThan(
-            lastWeek.frame.minY,
-            firstRow.frame.minY,
-            "The week's own figures come before the shifts they are a summary of"
-        )
-
-        // And the shifts are still shifts: tapping one opens its own detail.
-        firstRow.tap()
-        let earnings = app.descendants(matching: .any)["shiftDetailEarnings"]
-        XCTAssertTrue(earnings.waitForExistence(timeout: 5))
-        XCTAssertTrue(earnings.label.contains("$55.00"), "Showed: \(earnings.label)")
-    }
-
-    /// A week holding two shifts totals both, and the total is the week's rather
-    /// than either shift's.
-    @MainActor
-    func testAWeekOfSeveralShiftsIsTotalled() throws {
-        let app = launchWithOlderWeeks()
-
-        let older = app.buttons["olderHistoryWeeksLink"]
-        XCTAssertTrue(scrollUntilHittable(older, in: app, maxSwipes: 12))
-        older.tap()
-
-        let summaries = app.descendants(matching: .any).matching(identifier: "olderWeekSummary")
-        XCTAssertTrue(summaries.firstMatch.waitForExistence(timeout: 10))
-        XCTAssertTrue(waitForCount(summaries, toEqual: 2))
-
-        // The older of the two weeks holds the fixture's $41.00 and $33.00.
-        let threeWeeksAgo = summaries.element(boundBy: 1)
-        XCTAssertTrue(scrollTo(threeWeeksAgo, in: app))
-        XCTAssertTrue(
-            waitForLabel(threeWeeksAgo, toContain: "2 completed shifts"),
-            "Showed: \(threeWeeksAgo.label)"
-        )
-        XCTAssertTrue(
-            threeWeeksAgo.label.contains("$74.00"),
-            "Two shifts are added up rather than listed: \(threeWeeksAgo.label)"
-        )
-        XCTAssertFalse(threeWeeksAgo.label.contains("$41.00"), "The week states its total, not its parts")
-
-        // The week the driver is in is not on this screen at all, summary or
-        // otherwise.
-        XCTAssertEqual(elements(containing: "$70.00", in: app).count, 0)
-    }
-
-    /// The summary speaks every unit and every coverage, because a listener has
-    /// no caption in view to read afterwards.
-    @MainActor
-    func testTheWeeklySummarySpeaksItsUnitsAndCoverage() throws {
-        let app = launchWithOlderWeeks()
-
-        let older = app.buttons["olderHistoryWeeksLink"]
-        XCTAssertTrue(scrollUntilHittable(older, in: app, maxSwipes: 12))
-        older.tap()
-
-        let summary = app.descendants(matching: .any).matching(identifier: "olderWeekSummary").firstMatch
-        XCTAssertTrue(summary.waitForExistence(timeout: 10))
-
-        for expected in ["completed shift", "Recorded gross earnings", "working time"] {
-            XCTAssertTrue(
-                waitForLabel(summary, toContain: expected),
-                "The week is one spoken sentence and says \(expected): \(summary.label)"
-            )
-        }
-        XCTAssertTrue(
-            summary.label.contains("across 1 of 1 completed shift"),
-            "Every aggregate ends with what is behind it: \(summary.label)"
-        )
-
-        // The fixture's older shifts have no route, which is the more valuable
-        // claim: a week nothing was measured in says so rather than reporting
-        // no miles driven.
-        XCTAssertTrue(
-            summary.label.contains("No recorded mileage"),
-            "An unmeasured week is stated as unmeasured: \(summary.label)"
-        )
-        XCTAssertFalse(summary.label.contains("0.0 mi"), "Missing is never a zero")
-    }
-
-    /// The summary stacks rather than truncating at the largest accessibility
-    /// text size, and the shifts under it are still reachable.
-    @MainActor
-    func testTheWeeklySummarySurvivesLargeText() throws {
-        let app = XCUIApplication()
-        app.launchArguments.append(Self.seededOlderWeeksArgument)
-        app.launchArguments += ["-UIPreferredContentSizeCategoryName", Self.accessibilityXXXLTextSize]
-        launchInPortrait(app)
-
-        let older = app.buttons["olderHistoryWeeksLink"]
-        XCTAssertTrue(scrollUntilHittable(older, in: app, maxSwipes: 20))
-        older.tap()
-
-        let summary = app.descendants(matching: .any).matching(identifier: "olderWeekSummary").firstMatch
-        XCTAssertTrue(summary.waitForExistence(timeout: 10), "The week still says how it went")
-        XCTAssertTrue(
-            waitForLabel(summary, toContain: "$55.00"),
-            "And the figure is whole rather than shortened: \(summary.label)"
-        )
-
-        let row = olderWeekRows(in: app).firstMatch
-        XCTAssertTrue(scrollTo(row, in: app, maxSwipes: 20), "The shifts under it are still reachable")
-    }
-
-    /// A week whose fuel is estimated for some shifts says whose, and keeps the
-    /// estimated net apart from recorded expenses.
-    @MainActor
-    func testAWeeksFuelEstimateStatesItsCoverage() throws {
+    func testOlderWeekSummariesStateTheirFuelCoverageInOrder() throws {
         let app = launchWithLongHistory()
         openOlderWeeks(in: app)
 
-        // Last week: three shifts, two of which recorded fuel assumptions.
+        let header = app.descendants(matching: .any).matching(identifier: "olderWeekHeader").firstMatch
         let lastWeek = app.descendants(matching: .any).matching(identifier: "olderWeekSummary").firstMatch
         XCTAssertTrue(waitForLabel(lastWeek, toContain: "3 completed shifts"), "Showed: \(lastWeek.label)")
+        XCTAssertTrue(lastWeek.label.hasPrefix(header.label), "The summary names its own week first")
+        let order = ["3 completed shifts", "Recorded gross earnings", "working time", "Recorded mileage"]
+            .compactMap { lastWeek.label.range(of: $0)?.lowerBound }
+        XCTAssertEqual(order.count, 4, "Every figure is spoken: \(lastWeek.label)")
+        XCTAssertEqual(order, order.sorted(), "In the order a listener needs them")
         XCTAssertTrue(lastWeek.label.contains("Recorded gross earnings, $185.00"), "Showed: \(lastWeek.label)")
         XCTAssertTrue(
             lastWeek.label.contains("Estimated fuel") && lastWeek.label.contains("across 2 of 3 completed shifts"),
             "The estimate says it covers two of the three shifts: \(lastWeek.label)"
         )
-        XCTAssertTrue(lastWeek.label.contains("recorded miles"), "And how much of the driving: \(lastWeek.label)")
+        XCTAssertTrue(lastWeek.label.contains("recorded miles"), "Showed: \(lastWeek.label)")
         XCTAssertTrue(
             lastWeek.label.contains("Estimated net after fuel") && lastWeek.label.contains("never added together"),
-            "The net carries the sentence that keeps it apart from recorded fuel: \(lastWeek.label)"
+            "Showed: \(lastWeek.label)"
         )
         XCTAssertFalse(lastWeek.label.contains("Net after recorded expenses"), "Only one net is on the card")
         attachScreenshot("older-week-partial-fuel")
-    }
 
-    /// A week nobody recorded fuel for carries no fuel figure, and certainly
-    /// not a zero.
-    @MainActor
-    func testAWeekWithoutFuelShowsNoFuelFigure() throws {
-        let app = launchWithOlderWeeks()
-        openOlderWeeks(in: app)
-
-        let lastWeek = app.descendants(matching: .any).matching(identifier: "olderWeekSummary").firstMatch
-        XCTAssertTrue(waitForLabel(lastWeek, toContain: "$55.00"), "Showed: \(lastWeek.label)")
-        XCTAssertFalse(lastWeek.label.contains("Estimated fuel"), "Showed: \(lastWeek.label)")
-        XCTAssertFalse(lastWeek.label.contains("$0.00"), "Missing is never a zero: \(lastWeek.label)")
-    }
-
-    /// The summary is one coherent sentence: the week, then its shifts, then
-    /// the three figures that describe it, in that order.
-    @MainActor
-    func testTheWeeklySummaryNamesItsWeekThenItsFigures() throws {
-        let app = launchWithLongHistory()
-        openOlderWeeks(in: app)
-
-        let header = app.descendants(matching: .any).matching(identifier: "olderWeekHeader").firstMatch
-        let summary = app.descendants(matching: .any).matching(identifier: "olderWeekSummary").firstMatch
-        XCTAssertTrue(waitForLabel(summary, toContain: "completed shifts"))
+        let complete = app.descendants(matching: .any).matching(identifier: "olderWeekSummary")
+            .matching(NSPredicate(format: "label CONTAINS %@", "$50.03")).firstMatch
+        XCTAssertTrue(scrollUntilHittable(complete, in: app, maxSwipes: 16), "Three weeks ago is reachable")
         XCTAssertTrue(
-            summary.label.hasPrefix(header.label),
-            "The summary names its own week first: \(summary.label) / \(header.label)"
+            complete.label.contains("Estimated fuel") && complete.label.contains("across every completed shift"),
+            "Complete coverage is stated: \(complete.label)"
         )
-
-        let label = summary.label
-        let order = ["3 completed shifts", "Recorded gross earnings", "working time", "Recorded mileage"]
-            .compactMap { label.range(of: $0)?.lowerBound }
-        XCTAssertEqual(order.count, 4, "Every figure is spoken: \(label)")
-        XCTAssertEqual(order, order.sorted(), "In the order a listener needs them: \(label)")
+        attachScreenshot("older-week-full-fuel")
     }
 
-    /// At the largest accessibility size the fuller card still says every
-    /// figure whole, and the shifts under it are still reachable.
+    /// A finished shift says which vehicle and assumptions it recorded,
+    /// including a price recorded as zero, and today's Settings reach neither a
+    /// shift that recorded a vehicle nor one that recorded none.
+    ///
+    /// Was three journeys over the long history.
     @MainActor
-    func testTheFullWeeklySummarySurvivesLargeText() throws {
-        let app = launchWithLongHistory(textSize: Self.accessibilityXXXLTextSize)
-        openOlderWeeks(in: app, maxSwipes: 25)
+    func testAHistoricalShiftKeepsTheVehicleItRecorded() throws {
+        let app = launchWithLongHistory()
 
+        openSettings(in: app)
+        addVehicle(named: "Synthetic Van", milesPerGallon: "9", in: app)
+        setCurrentGasPrice("5.55", in: app)
+        goBack(in: app)
+
+        // This week's first shift recorded no vehicle, and borrows none.
+        openFirstShift(in: app)
+        let vehicle = app.descendants(matching: .any)["shiftDetailFuelVehicle"]
+        XCTAssertTrue(scrollTo(vehicle, in: app))
+        XCTAssertTrue(waitForLabel(vehicle, toContain: "No vehicle recorded for this shift"), "Showed: \(vehicle.label)")
+        XCTAssertFalse(vehicle.label.contains("9 miles per gallon"), "Nothing is borrowed from Settings")
+        XCTAssertFalse(app.descendants(matching: .any)["shiftDetailFuelMilesPerGallon"].exists, "No economy is invented")
+        goBack(in: app)
+
+        // Last week's Friday recorded the van at a gas price of zero.
+        openLastWeeksFridayShift(in: app)
+        let recorded = app.descendants(matching: .any)["shiftDetailFuelVehicle"]
+        XCTAssertTrue(scrollTo(recorded, in: app))
+        XCTAssertTrue(
+            waitForLabel(recorded, toContain: "Vehicle recorded with this shift: Synthetic Van"),
+            "Showed: \(recorded.label)"
+        )
+        XCTAssertTrue(recorded.label.contains("20 miles per gallon"), "Showed: \(recorded.label)")
+        XCTAssertTrue(recorded.label.contains("gas $0.00 per gallon"), "A recorded zero is said: \(recorded.label)")
+        XCTAssertFalse(recorded.label.contains("9 miles per gallon"), "Showed: \(recorded.label)")
+        XCTAssertFalse(recorded.label.contains("$5.55"), "Showed: \(recorded.label)")
+        let price = app.descendants(matching: .any)["shiftDetailFuelGasPrice"]
+        XCTAssertTrue(scrollTo(price, in: app))
+        XCTAssertTrue(waitForLabel(price, toContain: "$0.00 per gallon assumed"), "Showed: \(price.label)")
+    }
+
+    /// History at the largest accessibility size: the current week's figures,
+    /// an older week's fuller card and a historical shift's vehicle row stack
+    /// whole, a shift several weeks down is reachable and opens, and returning
+    /// keeps the place in the list.
+    ///
+    /// Was five journeys, each launching at AX5 and scrolling to one card.
+    @MainActor
+    func testHistoryAtTheLargestTextSize() throws {
+        let app = launchWithLongHistory(textSize: Self.accessibilityXXXLTextSize)
+
+        let current = currentWeekSummary(in: app)
+        XCTAssertTrue(scrollUntilHittable(current, in: app, maxSwipes: 25), "The current week's summary is reachable")
+        XCTAssertTrue(waitForLabel(current, toContain: "Recorded gross earnings"), "Showed: \(current.label)")
+        XCTAssertGreaterThan(onPixelGrid(current.frame.height), 44, "A summary is never a tiny cell")
+        attachScreenshot("history-xxxl")
+        XCTAssertTrue(scrollUntilHittable(rows(in: app).firstMatch, in: app, maxSwipes: 25), "Its shifts are reachable")
+
+        openOlderWeeks(in: app, maxSwipes: 25)
         let summary = app.descendants(matching: .any).matching(identifier: "olderWeekSummary").firstMatch
         XCTAssertTrue(waitForLabel(summary, toContain: "$185.00"), "Showed: \(summary.label)")
         XCTAssertTrue(summary.label.contains("Estimated fuel"))
-        XCTAssertGreaterThan(onPixelGrid(summary.frame.height), 44, "A summary is never a tiny cell")
+        XCTAssertGreaterThan(onPixelGrid(summary.frame.height), 44)
 
-        let row = olderWeekRows(in: app).firstMatch
-        XCTAssertTrue(scrollTo(row, in: app, maxSwipes: 25), "The shifts under it are still reachable")
+        openLastWeeksFridayRow(in: app, maxSwipes: 25)
+        let vehicle = app.descendants(matching: .any)["shiftDetailFuelVehicle"]
+        XCTAssertTrue(scrollUntilHittable(vehicle, in: app, maxSwipes: 40))
+        XCTAssertTrue(waitForLabel(vehicle, toContain: "Synthetic Van"), "Showed: \(vehicle.label)")
+        XCTAssertGreaterThanOrEqual(onPixelGrid(vehicle.frame.height), 44, "The row is not squeezed to fit")
+        goBackToOlderWeeks(in: app)
+
+        let target = olderWeekRows(in: app).matching(NSPredicate(format: "label CONTAINS %@", "$50.06")).firstMatch
+        XCTAssertTrue(scrollUntilHittable(target, in: app, maxSwipes: 80), "A shift a few weeks down is reachable")
+        target.tap()
+        XCTAssertTrue(app.navigationBars.buttons.element(boundBy: 0).waitForExistence(timeout: 5))
+        let earnings = app.descendants(matching: .any)["shiftDetailEarnings"]
+        XCTAssertTrue(scrollTo(earnings, in: app, maxSwipes: 20), "The tapped shift's detail opens")
+        XCTAssertTrue(earnings.label.contains("$50.06"), "Showed: \(earnings.label)")
+        goBackToOlderWeeks(in: app)
+        XCTAssertTrue(target.waitForExistence(timeout: 5), "Returning keeps the place in the list")
+    }
+
+    /// Editing an older shift's amount, then deleting that shift, each update
+    /// its week's summary on return, without leaving Older Weeks.
+    ///
+    /// Was two journeys over the long history.
+    @MainActor
+    func testEditingAndDeletingAnOlderShiftRefreshesItsWeek() throws {
+        let app = launchWithLongHistory()
+        openOlderWeeks(in: app)
+
+        let lastWeek = app.descendants(matching: .any).matching(identifier: "olderWeekSummary").firstMatch
+        XCTAssertTrue(waitForLabel(lastWeek, toContain: "Recorded gross earnings, $185.00"), "Showed: \(lastWeek.label)")
+        XCTAssertTrue(lastWeek.label.contains("3 completed shifts"))
+
+        openLastWeeksFridayRow(in: app)
+        let edit = app.buttons["editShiftEarningsButton"]
+        XCTAssertTrue(scrollTo(edit, in: app))
+        edit.tap()
+        let field = app.textFields["earningsAmountField"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        clear(field, in: app)
+        type("50", into: app)
+        app.buttons["saveEarningsButton"].tap()
+        XCTAssertTrue(waitForLabel(app.descendants(matching: .any)["shiftDetailEarnings"], toContain: "$50.00"))
+        goBackToOlderWeeks(in: app)
+        XCTAssertTrue(
+            waitForLabel(lastWeek, toContain: "Recorded gross earnings, $190.00"),
+            "The week is worked out again from what the store now says: \(lastWeek.label)"
+        )
+        attachScreenshot("older-weeks-after-edit")
+
+        let friday = olderWeekRows(in: app).firstMatch
+        XCTAssertTrue(scrollUntilHittable(friday, in: app))
+        XCTAssertTrue(waitForLabel(friday, toContain: "$50.00"), "Showed: \(friday.label)")
+        friday.tap()
+        let delete = app.buttons["deleteShiftButton"]
+        XCTAssertTrue(scrollTo(delete, in: app, maxSwipes: 20))
+        delete.tap()
+        let confirm = app.buttons.matching(identifier: "confirmDeleteShiftButton").firstMatch
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        confirm.tap()
+        XCTAssertTrue(app.navigationBars["Older Weeks"].waitForExistence(timeout: 5))
+        XCTAssertTrue(waitForLabel(lastWeek, toContain: "2 completed shifts"), "Showed: \(lastWeek.label)")
+        XCTAssertTrue(lastWeek.label.contains("Recorded gross earnings, $140.00"), "Showed: \(lastWeek.label)")
     }
 
     // MARK: The current week's own figures
@@ -1523,143 +2220,6 @@ final class DashPilotUITests: XCTestCase {
     @MainActor
     private func currentWeekSummary(in app: XCUIApplication) -> XCUIElement {
         app.descendants(matching: .any).matching(identifier: "currentWeekSummary").firstMatch
-    }
-
-    /// The week the driver is in opens with its own figures, above the shifts
-    /// that make it up, and they are this week's figures and nobody else's.
-    @MainActor
-    func testTheCurrentWeekOpensWithItsOwnFigures() throws {
-        let app = launchWithOlderWeeks()
-
-        let summary = currentWeekSummary(in: app)
-        XCTAssertTrue(scrollTo(summary, in: app, maxSwipes: 12), "The week says how it is going")
-        XCTAssertTrue(
-            waitForLabel(summary, toContain: "Recorded gross earnings, $70.00"),
-            "Using this week's recorded amount: \(summary.label)"
-        )
-        XCTAssertTrue(summary.label.contains("1 completed shift"), "Showed: \(summary.label)")
-        XCTAssertFalse(summary.label.contains("$55.00"), "Last week is not in this week's figures")
-        XCTAssertTrue(
-            summary.label.contains("No recorded mileage"),
-            "A week whose routes measured nothing says so: \(summary.label)"
-        )
-        XCTAssertFalse(summary.label.contains("0.0 mi"), "Missing is never a zero")
-
-        let firstRow = rows(in: app).firstMatch
-        XCTAssertTrue(scrollUntilHittable(firstRow, in: app), "The shifts are under it")
-        XCTAssertLessThan(
-            summary.frame.minY,
-            firstRow.frame.minY,
-            "The week's own figures come before the shifts they summarise"
-        )
-    }
-
-    /// Editing a shift of the current week updates the week's figures on the
-    /// root screen when the driver comes back from the shift's detail. The root
-    /// screen is popped back to, never relaunched or rebuilt, so this is the
-    /// summary following the store rather than a fresh screen reading it.
-    @MainActor
-    func testEditingACurrentWeekShiftRefreshesTheWeek() throws {
-        let app = launchWithOlderWeeks()
-
-        let summary = currentWeekSummary(in: app)
-        XCTAssertTrue(scrollTo(summary, in: app, maxSwipes: 12))
-        XCTAssertTrue(waitForLabel(summary, toContain: "Recorded gross earnings, $70.00"), "Showed: \(summary.label)")
-
-        openFirstShift(in: app)
-        let edit = app.buttons["editShiftEarningsButton"]
-        XCTAssertTrue(scrollTo(edit, in: app))
-        edit.tap()
-        let field = app.textFields["earningsAmountField"]
-        XCTAssertTrue(field.waitForExistence(timeout: 5))
-        clear(field, in: app)
-        type("90", into: app)
-        app.buttons["saveEarningsButton"].tap()
-        let earnings = app.descendants(matching: .any)["shiftDetailEarnings"]
-        XCTAssertTrue(waitForLabel(earnings, toContain: "$90.00"), "Showed: \(earnings.label)")
-
-        goBack(in: app)
-        XCTAssertTrue(scrollTo(summary, in: app, maxSwipes: 12))
-        XCTAssertTrue(
-            waitForLabel(summary, toContain: "Recorded gross earnings, $90.00"),
-            "The week is worked out again from what the store now says: \(summary.label)"
-        )
-        XCTAssertFalse(summary.label.contains("$70.00"), "The previous figure is gone: \(summary.label)")
-    }
-
-    /// A week of recorded work leads with what it paid, then how long and how
-    /// far, then its shifts and deliveries, and the shifts still open.
-    @MainActor
-    func testTheCurrentWeekSummaryStatesItsWork() throws {
-        let app = launchWithSeededHistory()
-
-        let summary = currentWeekSummary(in: app)
-        XCTAssertTrue(scrollUntilHittable(summary, in: app, maxSwipes: 12))
-        for expected in ["completed shifts", "Recorded gross earnings", "working time", "Recorded mileage"] {
-            XCTAssertTrue(
-                waitForLabel(summary, toContain: expected),
-                "The week is one spoken sentence and says \(expected): \(summary.label)"
-            )
-        }
-        // One more swipe so the review screenshot shows the whole card and the
-        // rows under it, rather than the moment the card became hittable.
-        app.swipeUp()
-        attachScreenshot("history-current-week")
-
-        openFirstShift(in: app)
-        XCTAssertTrue(
-            app.descendants(matching: .any)["shiftDetailEarnings"].waitForExistence(timeout: 5),
-            "A shift under the summary still opens its own detail"
-        )
-    }
-
-    /// At the largest accessibility text size the week's figures stack whole,
-    /// and the shifts under them are still reachable.
-    @MainActor
-    func testTheCurrentWeekSurvivesTheLargestTextSize() throws {
-        let app = launchWithSeededHistory(atTextSize: Self.accessibilityXXXLTextSize)
-
-        let summary = currentWeekSummary(in: app)
-        XCTAssertTrue(scrollUntilHittable(summary, in: app, maxSwipes: 25), "The summary is reachable")
-        XCTAssertTrue(waitForLabel(summary, toContain: "Recorded gross earnings"), "Showed: \(summary.label)")
-        XCTAssertGreaterThan(onPixelGrid(summary.frame.height), 44, "A summary is never a tiny cell")
-        attachScreenshot("history-xxxl")
-
-        XCTAssertTrue(
-            scrollUntilHittable(rows(in: app).firstMatch, in: app, maxSwipes: 25),
-            "The shifts under it are still reachable"
-        )
-    }
-
-    /// A driver with no history is told where it will come from, and no summary
-    /// of nothing is drawn.
-    @MainActor
-    func testAnEmptyHistorySaysWhereShiftsWillAppear() throws {
-        let app = launchWithEmptyStore()
-
-        let notice = app.descendants(matching: .any)["emptyHistoryNotice"]
-        XCTAssertTrue(scrollUntilHittable(notice, in: app, maxSwipes: 8), "The empty history states itself")
-        XCTAssertTrue(notice.label.contains("No completed shifts yet"), "Showed: \(notice.label)")
-        XCTAssertFalse(currentWeekSummary(in: app).exists, "No summary is drawn over no shifts")
-        XCTAssertFalse(app.buttons["exportAllHistoryButton"].exists, "Nothing to export is not offered")
-    }
-
-    /// A week whose fuel is estimated over every shift says so, rather than
-    /// leaving complete coverage as the case with no caveat.
-    @MainActor
-    func testAnOlderWeekWithCompleteFuelCoverageSaysSo() throws {
-        let app = launchWithLongHistory()
-        openOlderWeeks(in: app)
-
-        let summary = app.descendants(matching: .any).matching(identifier: "olderWeekSummary")
-            .matching(NSPredicate(format: "label CONTAINS %@", "$50.03")).firstMatch
-        XCTAssertTrue(scrollUntilHittable(summary, in: app, maxSwipes: 16), "Three weeks ago is reachable")
-        XCTAssertTrue(
-            summary.label.contains("Estimated fuel") && summary.label.contains("across every completed shift"),
-            "Complete coverage is stated: \(summary.label)"
-        )
-        XCTAssertTrue(summary.label.contains("recorded miles"), "And how much of the driving: \(summary.label)")
-        attachScreenshot("older-week-full-fuel")
     }
 
     // MARK: Historical vehicle context
@@ -1679,83 +2239,6 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertTrue(scrollUntilHittable(row, in: app, maxSwipes: maxSwipes))
         XCTAssertTrue(waitForLabel(row, toContain: "$45.00"), "Showed: \(row.label)")
         row.tap()
-    }
-
-    /// A finished shift says which vehicle and assumptions it recorded, beside
-    /// its fuel estimate, including a price recorded as zero.
-    @MainActor
-    func testAHistoricalShiftShowsTheVehicleItRecorded() throws {
-        let app = launchWithLongHistory()
-        openLastWeeksFridayShift(in: app)
-
-        let vehicle = app.descendants(matching: .any)["shiftDetailFuelVehicle"]
-        XCTAssertTrue(scrollTo(vehicle, in: app))
-        XCTAssertTrue(
-            waitForLabel(vehicle, toContain: "Vehicle recorded with this shift: Synthetic Van"),
-            "Showed: \(vehicle.label)"
-        )
-        XCTAssertTrue(vehicle.label.contains("20 miles per gallon"), "Showed: \(vehicle.label)")
-        XCTAssertTrue(vehicle.label.contains("gas $0.00 per gallon"), "A recorded zero is said: \(vehicle.label)")
-
-        let price = app.descendants(matching: .any)["shiftDetailFuelGasPrice"]
-        XCTAssertTrue(scrollTo(price, in: app))
-        XCTAssertTrue(waitForLabel(price, toContain: "$0.00 per gallon assumed"), "Showed: \(price.label)")
-    }
-
-    /// A shift that recorded no vehicle says so, and does not borrow the one
-    /// selected in Settings today.
-    @MainActor
-    func testAShiftThatRecordedNoVehicleStaysUnnamed() throws {
-        let app = launchWithLongHistory()
-
-        openSettings(in: app)
-        addVehicle(named: "Today's Car", milesPerGallon: "31", in: app)
-        goBack(in: app)
-
-        openFirstShift(in: app)
-        let vehicle = app.descendants(matching: .any)["shiftDetailFuelVehicle"]
-        XCTAssertTrue(scrollTo(vehicle, in: app))
-        XCTAssertTrue(
-            waitForLabel(vehicle, toContain: "No vehicle recorded for this shift"),
-            "Showed: \(vehicle.label)"
-        )
-        XCTAssertFalse(vehicle.label.contains("Today's Car"), "Nothing is borrowed from Settings")
-        XCTAssertFalse(
-            app.descendants(matching: .any)["shiftDetailFuelMilesPerGallon"].exists,
-            "No economy is invented either"
-        )
-    }
-
-    /// Selecting and pricing a different vehicle today leaves last week's
-    /// recorded vehicle exactly as it was.
-    @MainActor
-    func testSettingsChangesDoNotReachAHistoricalShift() throws {
-        let app = launchWithLongHistory()
-
-        openSettings(in: app)
-        addVehicle(named: "Synthetic Van", milesPerGallon: "9", in: app)
-        setCurrentGasPrice("5.55", in: app)
-        goBack(in: app)
-
-        openLastWeeksFridayShift(in: app)
-        let vehicle = app.descendants(matching: .any)["shiftDetailFuelVehicle"]
-        XCTAssertTrue(scrollTo(vehicle, in: app))
-        XCTAssertTrue(waitForLabel(vehicle, toContain: "20 miles per gallon"), "Showed: \(vehicle.label)")
-        XCTAssertFalse(vehicle.label.contains("9 miles per gallon"), "Showed: \(vehicle.label)")
-        XCTAssertFalse(vehicle.label.contains("$5.55"), "Showed: \(vehicle.label)")
-    }
-
-    /// At the largest accessibility size the vehicle row still says the whole
-    /// name and every figure.
-    @MainActor
-    func testTheHistoricalVehicleSurvivesLargeText() throws {
-        let app = launchWithLongHistory(textSize: Self.accessibilityXXXLTextSize)
-        openLastWeeksFridayShift(in: app, maxSwipes: 25)
-
-        let vehicle = app.descendants(matching: .any)["shiftDetailFuelVehicle"]
-        XCTAssertTrue(scrollUntilHittable(vehicle, in: app, maxSwipes: 40))
-        XCTAssertTrue(waitForLabel(vehicle, toContain: "Synthetic Van"), "Showed: \(vehicle.label)")
-        XCTAssertGreaterThanOrEqual(onPixelGrid(vehicle.frame.height), 44, "The row is not squeezed to fit")
     }
 
     // MARK: Long histories
@@ -1826,89 +2309,7 @@ final class DashPilotUITests: XCTestCase {
         )
     }
 
-    /// At the largest accessibility size a shift several weeks down is still
-    /// reachable and opens, and its week's summary is never a tiny cell.
-    @MainActor
-    func testALongHistoryIsNavigableAtTheLargestTextSize() throws {
-        let app = launchWithLongHistory(textSize: Self.accessibilityXXXLTextSize)
-        openOlderWeeks(in: app, maxSwipes: 25)
-
-        let target = olderWeekRows(in: app).matching(NSPredicate(format: "label CONTAINS %@", "$50.06")).firstMatch
-        XCTAssertTrue(scrollUntilHittable(target, in: app, maxSwipes: 80), "A shift a few weeks down is reachable")
-
-        let summaries = app.descendants(matching: .any).matching(identifier: "olderWeekSummary")
-        for index in 0..<min(summaries.count, 3) {
-            let summary = summaries.element(boundBy: index)
-            if summary.exists, summary.isHittable {
-                XCTAssertGreaterThan(onPixelGrid(summary.frame.height), 44, "A summary is never a tiny cell")
-            }
-        }
-
-        target.tap()
-        // At this size the earnings section is below the fold of the detail
-        // screen, so it is scrolled to rather than expected on arrival.
-        XCTAssertTrue(app.navigationBars.buttons.element(boundBy: 0).waitForExistence(timeout: 5))
-        let earnings = app.descendants(matching: .any)["shiftDetailEarnings"]
-        XCTAssertTrue(scrollTo(earnings, in: app, maxSwipes: 20), "The tapped shift's detail opens")
-        XCTAssertTrue(earnings.label.contains("$50.06"), "Showed: \(earnings.label)")
-        goBackToOlderWeeks(in: app)
-        XCTAssertTrue(target.waitForExistence(timeout: 5), "Returning keeps the place in the list")
-    }
-
     // MARK: A week follows an edit to its own shifts
-
-    /// Editing an older shift's amount updates its week's summary on return,
-    /// without leaving Older Weeks, and leaves the next week's summary alone.
-    @MainActor
-    func testEditingAnOlderShiftRefreshesItsWeek() throws {
-        let app = launchWithLongHistory()
-        openOlderWeeks(in: app)
-
-        let summaries = app.descendants(matching: .any).matching(identifier: "olderWeekSummary")
-        let lastWeek = summaries.firstMatch
-        XCTAssertTrue(waitForLabel(lastWeek, toContain: "Recorded gross earnings, $185.00"), "Showed: \(lastWeek.label)")
-
-        openLastWeeksFridayRow(in: app)
-        let edit = app.buttons["editShiftEarningsButton"]
-        XCTAssertTrue(scrollTo(edit, in: app))
-        edit.tap()
-        let field = app.textFields["earningsAmountField"]
-        XCTAssertTrue(field.waitForExistence(timeout: 5))
-        clear(field, in: app)
-        type("50", into: app)
-        app.buttons["saveEarningsButton"].tap()
-        let earnings = app.descendants(matching: .any)["shiftDetailEarnings"]
-        XCTAssertTrue(waitForLabel(earnings, toContain: "$50.00"), "Showed: \(earnings.label)")
-
-        goBackToOlderWeeks(in: app)
-        XCTAssertTrue(
-            waitForLabel(lastWeek, toContain: "Recorded gross earnings, $190.00"),
-            "The week is worked out again from what the store now says: \(lastWeek.label)"
-        )
-        attachScreenshot("older-weeks-after-edit")
-    }
-
-    /// Deleting an older shift updates its week's count and total on return.
-    @MainActor
-    func testDeletingAnOlderShiftRefreshesItsWeek() throws {
-        let app = launchWithLongHistory()
-        openOlderWeeks(in: app)
-
-        let lastWeek = app.descendants(matching: .any).matching(identifier: "olderWeekSummary").firstMatch
-        XCTAssertTrue(waitForLabel(lastWeek, toContain: "3 completed shifts"), "Showed: \(lastWeek.label)")
-
-        openLastWeeksFridayRow(in: app)
-        let delete = app.buttons["deleteShiftButton"]
-        XCTAssertTrue(scrollTo(delete, in: app, maxSwipes: 20))
-        delete.tap()
-        let confirm = app.buttons.matching(identifier: "confirmDeleteShiftButton").firstMatch
-        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
-        confirm.tap()
-
-        XCTAssertTrue(app.navigationBars["Older Weeks"].waitForExistence(timeout: 5))
-        XCTAssertTrue(waitForLabel(lastWeek, toContain: "2 completed shifts"), "Showed: \(lastWeek.label)")
-        XCTAssertTrue(lastWeek.label.contains("Recorded gross earnings, $140.00"), "Showed: \(lastWeek.label)")
-    }
 
     /// A week the driver has not worked yet says so, and does not quietly fill
     /// itself with the week before.
@@ -1974,76 +2375,698 @@ final class DashPilotUITests: XCTestCase {
         )
     }
 
-    /// A completed shift's detail, read top to bottom: its durations told apart
-    /// in words, overlapping deliveries counted once, each rate naming what it
-    /// divides by, and a route with a gap called partial.
+    /// A completed shift's detail, read top to bottom: what it paid, then how
+    /// long and how far with the partial route said beside the distance; its
+    /// durations told apart in words with overlapping deliveries counted once;
+    /// each rate naming what it divides by; a route with a gap called partial;
+    /// a shift with no pause still offered one; and the corrections below
+    /// every figure, with deletion last.
     ///
     /// The fixture's three deliveries run 5–30, 40–60 and 50–80 minutes into a
     /// three-hour shift, so the union is 65 minutes where their durations sum
-    /// to 75; $86.25 over 65 minutes is $79.62, where 75 would give $69.00. Four
-    /// journeys used to open this shift to read one section each; the
-    /// arithmetic is pinned in `DeliveryActiveTimeTests` and `ShiftMetricsTests`,
-    /// and what this reads is that the screen states it.
+    /// to 75; $86.25 over 65 minutes is $79.62. The arithmetic is pinned in
+    /// `DeliveryActiveTimeTests` and `ShiftMetricsTests`; this reads that the
+    /// screen states it. Was seven journeys opening this same shift.
     @MainActor
     func testTheRecordedShiftsDetailStatesItsTimesRatesAndRoute() throws {
         let app = launchWithSeededHistory()
 
+        let summary = currentWeekSummary(in: app)
+        XCTAssertTrue(scrollUntilHittable(summary, in: app, maxSwipes: 12))
+        for expected in ["completed shifts", "Recorded gross earnings", "working time", "Recorded mileage"] {
+            XCTAssertTrue(waitForLabel(summary, toContain: expected), "The week says \(expected): \(summary.label)")
+        }
+        app.swipeUp()
+        attachScreenshot("history-current-week")
+
         let row = rows(in: app).firstMatch
         XCTAssertTrue(scrollUntilHittable(row, in: app))
-        XCTAssertTrue(
-            row.label.contains("more miles were driven than were recorded"),
-            "The row says the route is partial: \(row.label)"
-        )
+        XCTAssertTrue(row.label.contains("more miles were driven than were recorded"), "Showed: \(row.label)")
         openFirstShift(in: app)
 
-        let active = app.descendants(matching: .any)["shiftDetailDeliveryActiveTime"]
-        XCTAssertTrue(active.waitForExistence(timeout: 5))
-        XCTAssertTrue(active.label.contains("delivery active time"), "Showed: \(active.label)")
-        XCTAssertTrue(active.label.contains("1 hour"), "The union is 65 minutes: \(active.label)")
-        XCTAssertTrue(active.label.contains("5 minutes"))
-        XCTAssertFalse(active.label.contains("15 minutes"), "Summed durations would give 1 hour 15: \(active.label)")
+        let earnings = app.descendants(matching: .any)["shiftDetailEarnings"]
+        XCTAssertTrue(earnings.waitForExistence(timeout: 5))
+        XCTAssertTrue(earnings.label.contains("Recorded gross earnings, $86.25"), "Showed: \(earnings.label)")
+        let summaryWorking = app.descendants(matching: .any)["shiftDetailSummaryWorkingTime"]
+        let summaryMileage = app.descendants(matching: .any)["shiftDetailSummaryMileage"]
+        XCTAssertTrue(summaryWorking.waitForExistence(timeout: 5))
+        XCTAssertTrue(summaryWorking.label.hasSuffix("working time"), "Showed: \(summaryWorking.label)")
+        XCTAssertTrue(
+            waitForLabel(summaryMileage, toContain: "more miles were driven than were recorded"),
+            "The summary's figure carries the partial route: \(summaryMileage.label)"
+        )
+        XCTAssertLessThan(earnings.frame.minY, summaryWorking.frame.minY, "What the shift paid leads")
+        attachScreenshot("detail-summary")
 
+        let active = app.descendants(matching: .any)["shiftDetailDeliveryActiveTime"]
+        XCTAssertTrue(scrollTo(active, in: app))
+        XCTAssertTrue(active.label.contains("delivery active time"), "Showed: \(active.label)")
+        XCTAssertTrue(active.label.contains("1 hour") && active.label.contains("5 minutes"), "Showed: \(active.label)")
+        XCTAssertFalse(active.label.contains("15 minutes"), "Summed durations would give 1 hour 15: \(active.label)")
         let nonDelivery = app.descendants(matching: .any)["shiftDetailNonDeliveryTime"]
         XCTAssertTrue(nonDelivery.exists)
         XCTAssertTrue(nonDelivery.label.contains("non-delivery time"), "Not called idle: \(nonDelivery.label)")
-        XCTAssertTrue(nonDelivery.label.contains("1 hour"))
         XCTAssertTrue(nonDelivery.label.contains("55 minutes"), "Three hours less 65 minutes: \(nonDelivery.label)")
-        let elapsed = app.descendants(matching: .any)["shiftDetailDuration"]
-        XCTAssertTrue(elapsed.label.contains("elapsed shift time"), "\(elapsed.label)")
+        XCTAssertTrue(app.descendants(matching: .any)["shiftDetailDuration"].label.contains("elapsed shift time"))
 
         let hourly = app.descendants(matching: .any)["shiftDetailHourlyRate"]
-        XCTAssertTrue(scrollTo(hourly, in: app), "The performance section should be reachable")
-        XCTAssertTrue(
-            hourly.label.contains("$28.75 gross earnings per shift hour"),
-            "The hourly rate divides by the whole elapsed shift: \(hourly.label)"
-        )
-
+        XCTAssertTrue(scrollTo(hourly, in: app))
+        XCTAssertTrue(hourly.label.contains("$28.75 gross earnings per shift hour"), "Showed: \(hourly.label)")
         let activeRate = app.descendants(matching: .any)["shiftDetailActiveHourlyRate"]
         XCTAssertTrue(scrollTo(activeRate, in: app))
-        XCTAssertTrue(
-            activeRate.label.contains("$79.62 gross earnings per delivery active hour"),
-            "The denominator is the union of the overlapping deliveries: \(activeRate.label)"
-        )
+        XCTAssertTrue(activeRate.label.contains("$79.62 gross earnings per delivery active hour"), "Showed: \(activeRate.label)")
         XCTAssertFalse(activeRate.label.contains("$69.00"))
         for overclaim in ["wage", "true hourly", "net", "working", "driving"] {
             XCTAssertFalse(activeRate.label.lowercased().contains(overclaim), "Not \(overclaim): \(activeRate.label)")
         }
-
-        // The per-mile figure is asserted by its wording only: its denominator
-        // comes from measuring synthetic coordinates.
         let perMile = app.descendants(matching: .any)["shiftDetailPerMileRate"]
         XCTAssertTrue(scrollTo(perMile, in: app))
         XCTAssertTrue(perMile.label.contains("gross earnings per recorded mile"), "Showed: \(perMile.label)")
-        XCTAssertFalse(perMile.label.contains("per mile driven"), "Showed: \(perMile.label)")
+        XCTAssertFalse(perMile.label.contains("per mile driven"))
 
         let mileage = app.descendants(matching: .any)["shiftDetailRecordedMileage"]
-        XCTAssertTrue(scrollTo(mileage, in: app), "The route section should be reachable")
+        XCTAssertTrue(scrollTo(mileage, in: app))
         XCTAssertTrue(mileage.label.contains("Partial route"), "Showed: \(mileage.label)")
         XCTAssertFalse(mileage.label.contains("Coverage"), "No coverage percentage: \(mileage.label)")
         let segments = app.descendants(matching: .any)["shiftDetailCaptureSegments"]
         XCTAssertTrue(scrollTo(segments, in: app))
         XCTAssertEqual(segments.label, "2 capture segments")
         XCTAssertTrue(app.descendants(matching: .any)["shiftDetailCaptureGaps"].label.contains("capture gap"))
+
+        let noPauses = app.staticTexts["shiftDetailNoPauses"]
+        XCTAssertTrue(scrollTo(noPauses, in: app, maxSwipes: 15), "The section says the shift recorded no pause")
+        XCTAssertEqual(noPauses.label, "No pauses recorded")
+        XCTAssertTrue(scrollTo(app.buttons["addMissedPauseButton"], in: app, maxSwipes: 3), "And still offers one")
+        XCTAssertFalse(app.buttons["editShiftPauseButton"].exists, "There is nothing to edit")
+        XCTAssertFalse(app.buttons["deleteShiftPauseButton"].exists, "and nothing to delete")
+
+        let correctEnd = app.buttons["correctShiftEndButton"]
+        XCTAssertTrue(scrollUntilHittable(correctEnd, in: app, maxSwipes: 15), "The corrections are below the figures")
+        let delete = app.buttons["deleteShiftButton"]
+        XCTAssertTrue(scrollUntilHittable(delete, in: app, maxSwipes: 6))
+        XCTAssertLessThan(correctEnd.frame.minY, delete.frame.minY, "Deletion stands apart, last")
+    }
+
+    /// A completed shift's delivery log: each delivery's recorded events with
+    /// their times and its pickup place, a cancelled one keeping what happened
+    /// and claiming nothing else, overlapping deliveries kept as separate rows;
+    /// then grouping corrected from the finished shift, with the rows saying so
+    /// and nothing they recorded moving.
+    ///
+    /// Was three journeys opening this same shift.
+    @MainActor
+    func testACompletedShiftsDeliveriesPlacesAndGrouping() throws {
+        let app = launchWithSeededHistory()
+        openFirstShift(in: app)
+
+        let summary = app.descendants(matching: .any)["shiftDetailDeliverySummary"]
+        XCTAssertTrue(scrollTo(summary, in: app))
+        XCTAssertEqual(summary.label, "2 deliveries completed. 1 delivery cancelled")
+
+        let first = deliveryRow(containing: "Delivery 1, delivered", in: app)
+        XCTAssertTrue(scrollTo(first, in: app))
+        XCTAssertTrue(first.label.contains("Accepted at"), "Each event is spoken with its time: \(first.label)")
+        XCTAssertTrue(first.label.contains("Waited at pickup"), "Showed: \(first.label)")
+        XCTAssertTrue(first.label.contains("Accepted to delivered"))
+        XCTAssertTrue(first.label.contains("Picked up from \(Self.noodles)"), "Showed: \(first.label)")
+        XCTAssertFalse(first.label.contains("accepted together"), "No grouping is claimed yet: \(first.label)")
+
+        let cancelled = deliveryRow(containing: "Delivery 2, cancelled", in: app)
+        XCTAssertTrue(scrollTo(cancelled, in: app), "A cancelled delivery is history, not an omission")
+        XCTAssertTrue(cancelled.label.contains("Arrived at pickup at"), "Showed: \(cancelled.label)")
+        XCTAssertFalse(cancelled.label.contains("Picked up at"), "Nothing it did not record: \(cancelled.label)")
+        XCTAssertFalse(cancelled.label.contains("Waited at pickup"), "A wait with no end is not derived")
+        XCTAssertFalse(cancelled.label.contains("Accepted to delivered"))
+        XCTAssertTrue(cancelled.label.contains("Picked up from \(Self.diner)"), "Showed: \(cancelled.label)")
+
+        let third = deliveryRow(containing: "Delivery 3, delivered", in: app)
+        XCTAssertTrue(scrollTo(third, in: app), "Every recorded delivery is listed")
+        XCTAssertTrue(third.label.contains("Picked up from \(Self.noodles)"), "Two deliveries share one place")
+        XCTAssertTrue(app.buttons.matching(identifier: "shiftDetailPickupPlaceButton").firstMatch.exists)
+
+        let correct = app.buttons["correctOffersButton"]
+        XCTAssertTrue(scrollTo(correct, in: app), "History offers the same correction the running shift does")
+        correct.tap()
+        let combine = app.buttons
+            .matching(NSPredicate(format: "identifier == %@ AND label CONTAINS %@", "offerCorrectionMergeButton", "Combine Offer 2"))
+            .firstMatch
+        XCTAssertTrue(scrollTo(combine, in: app))
+        combine.tap()
+        let destination = app.buttons
+            .matching(NSPredicate(format: "identifier == %@ AND label CONTAINS %@", "offerCorrectionDestinationButton", "into Offer 1"))
+            .firstMatch
+        XCTAssertTrue(destination.waitForExistence(timeout: 5))
+        destination.tap()
+        let alert = app.alerts.firstMatch
+        XCTAssertTrue(alert.waitForExistence(timeout: 5))
+        alert.buttons.matching(identifier: "confirmOfferCorrectionButton").firstMatch.tap()
+        app.buttons["closeOfferCorrectionButton"].tap()
+
+        goBack(in: app)
+        openFirstShift(in: app)
+        XCTAssertTrue(scrollTo(summary, in: app))
+        XCTAssertEqual(summary.label, "2 deliveries completed. 1 delivery cancelled", "Regrouping moved no count")
+        let corrected = deliveryRow(containing: "Delivery 1, delivered", in: app)
+        XCTAssertTrue(scrollTo(corrected, in: app))
+        XCTAssertTrue(corrected.label.contains("Offer 1, accepted together with Delivery 2"), "Showed: \(corrected.label)")
+        XCTAssertTrue(corrected.label.contains("Waited at pickup"), "The recorded wait is untouched")
+        XCTAssertTrue(corrected.label.contains("Accepted to delivered"))
+    }
+
+    /// A finished shift's earnings refuse what cannot be read and change
+    /// nothing; recorded on a shift with no measurable route, they give an
+    /// hourly rate and say why there is no per-mile one.
+    ///
+    /// Was two journeys over this fixture.
+    @MainActor
+    func testShiftEarningsRefuseWhatCannotBeReadAndInventNoPerMileRate() throws {
+        let app = launchWithFinishedDelivery()
+        openFirstShift(in: app)
+
+        app.buttons["editShiftEarningsButton"].tap()
+        type("1.2.3", into: app)
+        app.buttons["saveEarningsButton"].tap()
+        XCTAssertTrue(
+            app.descendants(matching: .any)["earningsValidationMessage"].waitForExistence(timeout: 5),
+            "The driver is told why it was refused"
+        )
+        XCTAssertTrue(app.textFields["earningsAmountField"].exists, "The editor keeps what was typed")
+        app.buttons["cancelEarningsButton"].tap()
+        XCTAssertTrue(app.buttons["editShiftEarningsButton"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.buttons["editShiftEarningsButton"].label, "Add Earnings", "A refused amount records nothing")
+        XCTAssertEqual(app.descendants(matching: .any)["shiftDetailEarnings"].label, "No amount recorded")
+
+        app.buttons["editShiftEarningsButton"].tap()
+        type("86.25", into: app)
+        app.buttons["saveEarningsButton"].tap()
+        let hourly = app.descendants(matching: .any)["shiftDetailHourlyRate"]
+        XCTAssertTrue(scrollTo(hourly, in: app))
+        XCTAssertTrue(waitForLabel(hourly, toContain: "gross earnings per shift hour"))
+        let perMile = app.descendants(matching: .any)["shiftDetailPerMileRate"]
+        XCTAssertTrue(scrollTo(perMile, in: app))
+        XCTAssertTrue(perMile.label.contains("No usable position was recorded"), "Showed: \(perMile.label)")
+        XCTAssertFalse(perMile.label.contains("$0.00"))
+    }
+
+    /// An edit to a delivery's amount that is cancelled writes nothing, and a
+    /// removed amount returns the delivery to having none, which is not a
+    /// recorded zero.
+    ///
+    /// Was two journeys over this fixture.
+    @MainActor
+    func testADeliveryAmountCancelledOrRemovedLeavesNothingInvented() throws {
+        let app = launchWithFinishedDelivery()
+        openFirstShift(in: app)
+
+        let row = deliveryRow(containing: "Delivery 1, delivered", in: app)
+        XCTAssertTrue(scrollTo(row, in: app))
+        recordDeliveryAmount("14.75", in: app)
+        XCTAssertTrue(waitForLabel(row, toContain: "$14.75"))
+
+        app.buttons["shiftDetailDeliveryEarningsButton"].firstMatch.tap()
+        let field = app.textFields["deliveryEarningsAmountField"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        clear(field, in: app)
+        enter("99.99", into: field, in: app)
+        app.buttons["cancelDeliveryEarningsButton"].tap()
+        XCTAssertTrue(waitForLabel(row, toContain: "$14.75"), "Cancel writes nothing: \(row.label)")
+        XCTAssertFalse(row.label.contains("99.99"))
+
+        app.buttons["shiftDetailDeliveryEarningsButton"].firstMatch.tap()
+        let remove = app.buttons["removeDeliveryEarningsButton"].firstMatch
+        XCTAssertTrue(remove.waitForExistence(timeout: 5))
+        XCTAssertEqual(remove.label, "Remove gross earnings from Delivery 1")
+        remove.tap()
+        XCTAssertTrue(app.buttons["shiftDetailDeliveryEarningsButton"].firstMatch.waitForExistence(timeout: 5))
+        XCTAssertEqual(
+            app.buttons["shiftDetailDeliveryEarningsButton"].firstMatch.label,
+            "Add gross earnings for Delivery 1",
+            "The delivery is back to having no amount recorded"
+        )
+        XCTAssertFalse(row.label.contains("Gross earnings"), "Removed is not $0.00: \(row.label)")
+    }
+
+    /// The tips sheet keeps each tip its own record: with no platform amount it
+    /// states no total; the earnings editor states the tips already recorded
+    /// rather than inviting them into the platform amount; a tip of nothing is
+    /// refused in a tip's words; two tips of different methods are two rows;
+    /// a tip is corrected in place; and removing every tip leaves no total of
+    /// tips and the platform amount untouched.
+    ///
+    /// Was five journeys over this fixture. The arithmetic is the tip suites'.
+    @MainActor
+    func testTheTipsSheetKeepsEachTipItsOwnRecord() throws {
+        let app = launchWithFinishedDelivery()
+        openFirstShift(in: app)
+        let row = deliveryRow(containing: "Delivery 1, delivered", in: app)
+        XCTAssertTrue(scrollTo(row, in: app))
+
+        // A tip on a delivery with no platform amount: there is no total.
+        app.buttons["shiftDetailDeliveryTipsButton"].firstMatch.tap()
+        addTip("5.00", method: "Cash", in: app)
+        XCTAssertTrue(
+            waitForLabel(app.descendants(matching: .any)["deliveryTipsPlatformPay"], toContain: "No platform pay recorded for Delivery 1")
+        )
+        XCTAssertFalse(app.descendants(matching: .any)["deliveryTipsEffectiveTotal"].exists, "No total over half a fact")
+        let notice = app.descendants(matching: .any)["deliveryTipsNoPlatformPayNotice"]
+        XCTAssertTrue(notice.waitForExistence(timeout: 5))
+        XCTAssertTrue(notice.label.contains("no total"), "Showed: \(notice.label)")
+        app.buttons["closeDeliveryTipsButton"].tap()
+        XCTAssertTrue(waitForLabel(row, toContain: "1 additional tip for Delivery 1, $5.00"))
+        XCTAssertFalse(row.label.contains("Total recorded"), "Showed: \(row.label)")
+
+        // The earnings editor says the tip is already recorded.
+        app.buttons["shiftDetailDeliveryEarningsButton"].firstMatch.tap()
+        let stated = app.descendants(matching: .any)["deliveryEarningsAdditionalTips"]
+        XCTAssertTrue(stated.waitForExistence(timeout: 5))
+        XCTAssertTrue(stated.label.contains("$5.00"), "Showed: \(stated.label)")
+        typeDeliveryAmount("10.00", in: app)
+        app.buttons["saveDeliveryEarningsButton"].tap()
+        XCTAssertTrue(waitForDisappearance(of: app.textFields["deliveryEarningsAmountField"]))
+        XCTAssertTrue(waitForLabel(row, toContain: "Total recorded for Delivery 1, $15.00"), "Showed: \(row.label)")
+
+        // A tip of nothing is refused, and records nothing.
+        app.buttons["shiftDetailDeliveryTipsButton"].firstMatch.tap()
+        app.buttons["addDeliveryTipButton"].tap()
+        let tipField = app.textFields["deliveryTipAmountField"]
+        XCTAssertTrue(tipField.waitForExistence(timeout: 5))
+        enter("0", into: tipField, in: app)
+        app.buttons["saveDeliveryTipButton"].tap()
+        let message = app.descendants(matching: .any)["deliveryTipValidationMessage"]
+        XCTAssertTrue(message.waitForExistence(timeout: 5))
+        XCTAssertTrue(message.label.lowercased().contains("more than nothing"), "Showed: \(message.label)")
+        app.buttons["cancelDeliveryTipButton"].tap()
+        XCTAssertTrue(waitForDisappearance(of: tipField))
+
+        // A second tip by another method is a second record.
+        addTip("3.00", method: "Platform", in: app)
+        let tipRows = app.descendants(matching: .any).matching(identifier: "deliveryTipRow")
+        XCTAssertTrue(waitForCount(tipRows, toEqual: 2), "Two tips are two records rather than one doubled one")
+        XCTAssertTrue(tipRows.element(boundBy: 0).label.contains("$5.00") && tipRows.element(boundBy: 0).label.contains("by cash"))
+        XCTAssertTrue(tipRows.element(boundBy: 1).label.contains("$3.00") && tipRows.element(boundBy: 1).label.contains("by platform"))
+        XCTAssertTrue(waitForLabel(app.descendants(matching: .any)["deliveryTipsEffectiveTotal"], toContain: "$18.00"))
+        let total = app.descendants(matching: .any)["deliveryTipsEffectiveTotal"]
+        XCTAssertTrue(total.label.contains("platform pay and tips together"), "Showed: \(total.label)")
+
+        // Corrected in place.
+        let editTip = app.buttons["editDeliveryTipButton"].firstMatch
+        XCTAssertTrue(editTip.waitForExistence(timeout: 5))
+        XCTAssertEqual(editTip.label, "Edit tip 1 for Delivery 1", "The control names which tip it acts on")
+        editTip.tap()
+        let editField = app.textFields["deliveryTipAmountField"]
+        XCTAssertTrue(editField.waitForExistence(timeout: 5))
+        XCTAssertEqual(editField.value as? String, "5", "The editor opens on the stored amount")
+        clear(editField, in: app)
+        enter("4.50", into: editField, in: app)
+        app.buttons["saveDeliveryTipButton"].tap()
+        XCTAssertTrue(waitForLabel(total, toContain: "$17.50"))
+        XCTAssertTrue(waitForDisappearance(of: app.textFields["deliveryTipAmountField"]))
+
+        // Removing every tip takes the records away and leaves the platform pay.
+        for _ in 0..<2 {
+            app.buttons["editDeliveryTipButton"].firstMatch.tap()
+            let remove = app.buttons["removeDeliveryTipButton"]
+            XCTAssertTrue(remove.waitForExistence(timeout: 5))
+            XCTAssertEqual(remove.label, "Remove this additional tip from Delivery 1")
+            remove.tap()
+            XCTAssertTrue(waitForDisappearance(of: remove))
+        }
+        XCTAssertTrue(waitForCount(tipRows, toEqual: 0))
+        XCTAssertFalse(
+            app.descendants(matching: .any)["deliveryTipsAdditionalTotal"].exists,
+            "No tip recorded is not a tip of nothing, so there is no total of them"
+        )
+        XCTAssertTrue(waitForLabel(app.descendants(matching: .any)["deliveryTipsPlatformPay"], toContain: "$10.00"))
+        app.buttons["closeDeliveryTipsButton"].tap()
+        XCTAssertTrue(waitForLabel(row, toContain: "Gross earnings for Delivery 1, $10.00"))
+        XCTAssertFalse(row.label.contains("additional tip"), "Showed: \(row.label)")
+    }
+
+    /// Each delivery keeps its own amount and its own rate over its own
+    /// lifecycle, however far the lifecycles overlap: a cancelled one has none,
+    /// a tip moves only its own delivery's rate, an edit to one leaves the
+    /// others, and none of it touches the shift's own amount.
+    ///
+    /// Delivery 1 ran twenty-five minutes for $14.75 ($35.40 an hour; with a
+    /// $5.00 tip, $47.40); Delivery 3 thirty minutes for $9.50 ($19.00).
+    /// Was four journeys opening this same shift.
+    @MainActor
+    func testEachDeliveryKeepsItsOwnAmountAndRate() throws {
+        let app = launchWithSeededHistory()
+        openFirstShift(in: app)
+
+        let shiftEarnings = app.descendants(matching: .any)["shiftDetailEarnings"]
+        XCTAssertTrue(shiftEarnings.waitForExistence(timeout: 10))
+        XCTAssertTrue(shiftEarnings.label.contains("86.25"), "The fixture's shift total: \(shiftEarnings.label)")
+
+        let first = deliveryRow(containing: "Delivery 1, delivered", in: app)
+        XCTAssertTrue(scrollTo(first, in: app))
+        XCTAssertTrue(first.label.contains("Gross earnings for Delivery 1, $14.75"), "Showed: \(first.label)")
+        XCTAssertTrue(first.label.contains("$35.40 earned per recorded delivery hour"), "Showed: \(first.label)")
+        let second = deliveryRow(containing: "Delivery 2, cancelled", in: app)
+        XCTAssertTrue(scrollTo(second, in: app))
+        XCTAssertFalse(second.label.contains("Gross earnings"), "No amount recorded shows none: \(second.label)")
+        XCTAssertFalse(second.label.contains("per recorded delivery hour"), "No cancelled hourly rate: \(second.label)")
+        let third = deliveryRow(containing: "Delivery 3, delivered", in: app)
+        XCTAssertTrue(scrollTo(third, in: app))
+        XCTAssertTrue(third.label.contains("Gross earnings for Delivery 3, $9.50"), "Showed: \(third.label)")
+        XCTAssertTrue(third.label.contains("$19.00 earned per recorded delivery hour"), "Its own thirty minutes: \(third.label)")
+
+        // A tip moves Delivery 1's rate and nobody else's.
+        XCTAssertTrue(scrollToTop(reaching: shiftEarnings, in: app))
+        XCTAssertTrue(scrollTo(first, in: app))
+        let tips = deliveryCard(containing: "Delivery 1, delivered", in: app).buttons["shiftDetailDeliveryTipsButton"]
+        XCTAssertTrue(scrollUntilHittable(tips, in: app))
+        tips.tap()
+        addTip("5.00", method: "Cash", in: app)
+        app.buttons["closeDeliveryTipsButton"].tap()
+        XCTAssertTrue(scrollTo(first, in: app))
+        XCTAssertTrue(waitForLabel(first, toContain: "$47.40 earned per recorded delivery hour"), "Showed: \(first.label)")
+        XCTAssertTrue(first.label.contains("Total recorded for Delivery 1, $19.75"), "Showed: \(first.label)")
+        XCTAssertTrue(scrollTo(third, in: app))
+        XCTAssertTrue(third.label.contains("$19.00 earned per recorded delivery hour"), "Showed: \(third.label)")
+
+        // Editing Delivery 3 leaves Delivery 1 and the shift's own amount alone.
+        let editThird = app.buttons
+            .matching(identifier: "shiftDetailDeliveryEarningsButton")
+            .matching(NSPredicate(format: "label CONTAINS %@", "Delivery 3"))
+            .firstMatch
+        XCTAssertTrue(scrollUntilHittable(editThird, in: app))
+        editThird.tap()
+        let field = app.textFields["deliveryEarningsAmountField"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        clear(field, in: app)
+        enter("20.00", into: field, in: app)
+        app.buttons["saveDeliveryEarningsButton"].tap()
+        XCTAssertTrue(waitForLabel(third, toContain: "$20.00"), "Showed: \(third.label)")
+        XCTAssertTrue(scrollToTop(reaching: shiftEarnings, in: app))
+        XCTAssertTrue(shiftEarnings.label.contains("86.25"), "A delivery amount never corrects the shift total")
+        XCTAssertTrue(scrollTo(first, in: app))
+        XCTAssertTrue(first.label.contains("$14.75"), "One delivery's amount is its own: \(first.label)")
+    }
+
+    /// Expected pay is recorded on a delivery in progress and stated as an
+    /// expectation, never as earnings; delivering a delivery that carries one
+    /// offers to record what it actually paid, and saying not now records
+    /// nothing, in the running shift or in its history.
+    ///
+    /// Was two journeys over this fixture.
+    @MainActor
+    func testExpectedPayIsAnExpectationUntilTheDriverRecordsEarnings() throws {
+        let app = launchWithExpectedPay()
+
+        let card = deliveryStatus(containing: "Delivery 2", in: app)
+        let add = deliveryButton("expectedEarningsButton", containing: "Delivery 2", in: app)
+        XCTAssertTrue(scrollTo(add, in: app), "A delivery in progress offers expected pay")
+        XCTAssertEqual(add.label, "Add expected pay for Delivery 2")
+        XCTAssertFalse(card.label.contains("Expected pay"), "Nothing is expected until recorded: \(card.label)")
+        tapWithinReach(add, in: app)
+        let field = app.textFields["deliveryExpectedEarningsAmountField"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        XCTAssertNotEqual(field.value as? String, "8.5", "The editor opens on this delivery's own record")
+        XCTAssertFalse(app.buttons["removeDeliveryExpectedEarningsButton"].exists, "There is nothing to remove yet")
+        typeExpectedPay("12.25", in: app)
+        app.buttons["saveDeliveryExpectedEarningsButton"].tap()
+        XCTAssertTrue(waitForLabel(card, toContain: "Expected pay for Delivery 2, $12.25"), "Showed: \(card.label)")
+        XCTAssertTrue(card.label.contains("No gross earnings recorded yet"), "Showed: \(card.label)")
+        XCTAssertFalse(card.label.contains("Gross earnings for Delivery 2, $12.25"))
+        XCTAssertEqual(
+            deliveryButton("expectedEarningsButton", containing: "Delivery 2", in: app).label,
+            "Change expected pay for Delivery 2"
+        )
+        XCTAssertTrue(deliveryStatus(containing: "Delivery 1", in: app).label.contains("Expected pay for Delivery 1, $8.50"))
+        let notice = app.descendants(matching: .any)["liveRateNotice"]
+        XCTAssertTrue(reachShiftControl(notice, in: app))
+        XCTAssertEqual(notice.label, "This shift is still running. Rates are worked out once it ends.")
+        XCTAssertFalse(app.descendants(matching: .any)["liveRecordedGross"].exists, "No shift figure counts it")
+
+        // Delivering one that carries an expectation offers the real amount.
+        let action = deliveryButton("deliveryActionButton", containing: "Delivery 1", in: app)
+        XCTAssertTrue(scrollTo(action, in: app))
+        XCTAssertEqual(action.label, "Delivery 1. Mark order picked up")
+        tapWithinReach(action, in: app)
+        XCTAssertTrue(waitForLabel(action, toContain: "Mark delivery completed"))
+        XCTAssertFalse(app.buttons["confirmEarningsRecordButton"].exists, "Nothing is asked before delivery")
+        tapWithinReach(action, in: app)
+        let expectedRow = app.descendants(matching: .any)["confirmEarningsExpectedAmount"]
+        XCTAssertTrue(expectedRow.waitForExistence(timeout: 5), "The confirmation is raised")
+        XCTAssertEqual(expectedRow.label, "Expected pay for Delivery 1, $8.50. No gross earnings recorded yet.")
+        let amount = app.textFields["confirmEarningsAmountField"]
+        XCTAssertEqual(amount.label, "Gross earnings for Delivery 1")
+        XCTAssertEqual(amount.value as? String, "8.5")
+        XCTAssertTrue(app.navigationBars["Delivery 1 Delivered"].exists)
+        let dismiss = app.buttons["confirmEarningsDismissButton"].firstMatch
+        XCTAssertEqual(dismiss.label, "Record no earnings for Delivery 1 now")
+        dismiss.tap()
+        XCTAssertTrue(waitForDisappearance(of: app.buttons["confirmEarningsRecordButton"].firstMatch))
+        XCTAssertTrue(waitForCount(app.buttons.matching(identifier: "deliveryActionButton"), toEqual: 1))
+
+        // The other delivery carries an expectation now too, and is finished
+        // the same way, so the shift can end and its history be read.
+        let remaining = deliveryButton("deliveryActionButton", containing: "Delivery 2", in: app)
+        for expected in ["Mark order picked up", "Mark delivery completed"] {
+            XCTAssertTrue(waitForLabel(remaining, toContain: expected), "Showed: \(remaining.label)")
+            tapWithinReach(remaining, in: app)
+        }
+        let secondDismiss = app.buttons["confirmEarningsDismissButton"].firstMatch
+        XCTAssertTrue(secondDismiss.waitForExistence(timeout: 5))
+        secondDismiss.tap()
+        XCTAssertTrue(waitForDisappearance(of: secondDismiss))
+        let endShift = app.buttons["endShiftButton"]
+        XCTAssertTrue(reachShiftControl(endShift, in: app))
+        endShift.tap()
+        openFirstShift(in: app)
+        let row = deliveryRow(containing: "Delivery 1, delivered", in: app)
+        XCTAssertTrue(scrollTo(row, in: app))
+        XCTAssertTrue(row.label.contains("Expected pay for Delivery 1, $8.50. No gross earnings recorded yet."), "Showed: \(row.label)")
+        XCTAssertFalse(row.label.contains("Gross earnings for Delivery 1"), "Dismissing recorded no amount")
+        let shiftEarnings = app.descendants(matching: .any)["shiftDetailEarnings"]
+        XCTAssertTrue(scrollToTop(reaching: shiftEarnings, in: app))
+        XCTAssertEqual(shiftEarnings.label, "No amount recorded", "No shift figure was invented from an expectation")
+    }
+
+    /// Deleting a completed shift is confirmed, says its route goes with it,
+    /// and backing out deletes nothing.
+    ///
+    /// Was two journeys over this fixture.
+    @MainActor
+    func testDeletingACompletedShiftIsConfirmed() throws {
+        let app = launchWithSeededHistory()
+        openFirstShift(in: app)
+        let delete = app.buttons["deleteShiftButton"]
+        XCTAssertTrue(scrollTo(delete, in: app), "Deletion lives at the bottom of the detail screen")
+        delete.tap()
+        let cancel = app.buttons.matching(identifier: "Cancel").firstMatch
+        XCTAssertTrue(cancel.waitForExistence(timeout: 5))
+        cancel.tap()
+        XCTAssertTrue(app.buttons["deleteShiftButton"].waitForExistence(timeout: 5), "Backing out deletes nothing")
+
+        app.buttons["deleteShiftButton"].tap()
+        let confirm = app.buttons.matching(identifier: "confirmDeleteShiftButton").firstMatch
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "route positions")).count > 0,
+            "The confirmation says the shift's route is deleted with it"
+        )
+        confirm.tap()
+        XCTAssertTrue(app.navigationBars["DashPilot"].waitForExistence(timeout: 5), "Detail returns to history")
+        let remaining = rows(in: app)
+        XCTAssertTrue(waitForCount(remaining, toEqual: 1), "The deleted shift is gone from history")
+        XCTAssertFalse(remaining.firstMatch.label.contains("$86.25"), "And the one that remains is the other")
+    }
+
+    /// A finished shift's fuel assumptions: with none, the estimate and the net
+    /// say which to add and every gross figure stands; a zero economy is
+    /// refused and records neither half; one half alone names the missing half;
+    /// both give an estimate that says what it is based on and that the route
+    /// is partial, and a net that reads as a ledger and calls itself a ceiling;
+    /// a better economy moves the estimate; removing them leaves none.
+    ///
+    /// Was eight journeys opening this same shift. The arithmetic is
+    /// `FuelEstimateTests` and `ShiftProfitabilityTests`.
+    @MainActor
+    func testFuelAssumptionsOnAFinishedShift() throws {
+        let app = launchWithSeededHistory()
+        openFirstShift(in: app)
+
+        let hourlyGross = app.descendants(matching: .any)["shiftDetailHourlyRate"]
+        XCTAssertTrue(scrollTo(hourlyGross, in: app))
+        XCTAssertTrue(waitForLabel(hourlyGross, toContain: "gross earnings per shift hour"), "Gross rates stand")
+        let cost = app.descendants(matching: .any)["shiftDetailEstimatedFuelCost"]
+        XCTAssertTrue(scrollTo(cost, in: app))
+        XCTAssertTrue(cost.label.contains("Add your vehicle's miles per gallon"), "Showed: \(cost.label)")
+        XCTAssertFalse(cost.label.contains("$0.00"))
+        let net = app.descendants(matching: .any)["shiftDetailEstimatedNetAfterFuel"]
+        XCTAssertTrue(scrollTo(net, in: app))
+        XCTAssertTrue(waitForLabel(net, toContain: "Add your miles per gallon and a gas price"), "Showed: \(net.label)")
+        XCTAssertFalse(net.label.contains("$0.00"), "An absent net is not a net of nothing")
+
+        // Zero economy is refused, and records neither half.
+        let button = app.buttons["editFuelAssumptionsButton"]
+        XCTAssertTrue(scrollUntilHittable(button, in: app))
+        XCTAssertEqual(button.label, "Add Fuel Assumptions")
+        button.tap()
+        typeFuelAssumptions(milesPerGallon: "0", gasPrice: "3.50", in: app)
+        app.buttons["saveFuelAssumptionsButton"].tap()
+        let message = validationMessage("fuelAssumptionsValidationMessage", in: app)
+        XCTAssertTrue(message.waitForExistence(timeout: 5))
+        XCTAssertTrue(message.label.contains("more than zero"), "Showed: \(message.label)")
+        XCTAssertTrue(app.textFields["fuelGasPriceField"].exists, "The editor keeps what was typed")
+        app.buttons["cancelFuelAssumptionsButton"].tap()
+        XCTAssertTrue(scrollUntilHittable(button, in: app))
+        XCTAssertEqual(button.label, "Add Fuel Assumptions", "Neither half was recorded")
+
+        // One half alone names the other.
+        button.tap()
+        typeFuelAssumptions(milesPerGallon: "25", gasPrice: nil, in: app)
+        app.buttons["saveFuelAssumptionsButton"].tap()
+        XCTAssertTrue(scrollTo(cost, in: app))
+        XCTAssertTrue(waitForLabel(cost, toContain: "Add what a gallon of fuel cost"), "Showed: \(cost.label)")
+        let price = app.descendants(matching: .any)["shiftDetailFuelGasPrice"]
+        XCTAssertTrue(scrollTo(price, in: app))
+        XCTAssertTrue(waitForLabel(price, toContain: "No gas price recorded"), "Showed: \(price.label)")
+
+        // Both halves: an estimate, its basis, its caveat, and the ledger.
+        XCTAssertTrue(scrollUntilHittable(button, in: app))
+        XCTAssertEqual(button.label, "Edit Fuel Assumptions")
+        button.tap()
+        let priceField = app.textFields["fuelGasPriceField"]
+        XCTAssertTrue(priceField.waitForExistence(timeout: 5))
+        enter("3.50", into: priceField, in: app)
+        app.buttons["saveFuelAssumptionsButton"].tap()
+        XCTAssertTrue(scrollTo(cost, in: app))
+        XCTAssertTrue(waitForLabel(cost, toContain: "estimated fuel cost, based on recorded mileage"), "Showed: \(cost.label)")
+        XCTAssertTrue(cost.label.contains("This route is partial"), "Showed: \(cost.label)")
+        XCTAssertTrue(cost.label.contains("more fuel was used than this estimates"), "Showed: \(cost.label)")
+        let firstEstimate = cost.label
+        let gallons = app.descendants(matching: .any)["shiftDetailEstimatedGallons"]
+        XCTAssertTrue(scrollTo(gallons, in: app))
+        XCTAssertTrue(waitForLabel(gallons, toContain: "gallons estimated, from recorded mileage"))
+        let economy = app.descendants(matching: .any)["shiftDetailFuelMilesPerGallon"]
+        XCTAssertTrue(scrollTo(economy, in: app))
+        XCTAssertTrue(waitForLabel(economy, toContain: "25 miles per gallon assumed"))
+        XCTAssertTrue(scrollTo(price, in: app))
+        XCTAssertTrue(waitForLabel(price, toContain: "$3.50 per gallon assumed"))
+
+        let recorded = app.descendants(matching: .any)["shiftDetailNetRecordedEarnings"]
+        XCTAssertTrue(scrollTo(recorded, in: app))
+        XCTAssertTrue(waitForLabel(recorded, toContain: "$86.25 recorded gross earnings for this shift"))
+        let fuel = app.descendants(matching: .any)["shiftDetailNetEstimatedFuel"]
+        XCTAssertTrue(scrollTo(fuel, in: app))
+        XCTAssertTrue(waitForLabel(fuel, toContain: "estimated fuel cost, based on recorded mileage"))
+        XCTAssertTrue(fuel.label.contains("-$"), "It is subtracted, which the figure shows: \(fuel.label)")
+        XCTAssertTrue(scrollTo(net, in: app))
+        XCTAssertTrue(waitForLabel(net, toContain: "estimated net after fuel"), "Showed: \(net.label)")
+        XCTAssertFalse(net.label.lowercased().contains("profit"))
+        let hourlyNet = app.descendants(matching: .any)["shiftDetailEstimatedNetPerWorkingHour"]
+        XCTAssertTrue(scrollTo(hourlyNet, in: app))
+        XCTAssertTrue(waitForLabel(hourlyNet, toContain: "estimated net after fuel per working hour"))
+        let ceiling = app.descendants(matching: .any)["shiftDetailEstimatedNetPartialNotice"]
+        XCTAssertTrue(scrollTo(ceiling, in: app))
+        XCTAssertTrue(waitForLabel(ceiling, toContain: "this net is a ceiling"), "Showed: \(ceiling.label)")
+
+        // A better economy is less fuel over the same miles.
+        XCTAssertTrue(scrollUntilHittable(button, in: app))
+        button.tap()
+        let economyField = app.textFields["fuelMilesPerGallonField"]
+        XCTAssertTrue(economyField.waitForExistence(timeout: 5))
+        XCTAssertEqual(economyField.value as? String, "25", "The editor opens on the stored figures")
+        XCTAssertEqual(app.textFields["fuelGasPriceField"].value as? String, "3.5")
+        clear(economyField, in: app)
+        enter("50", into: economyField, in: app)
+        app.buttons["saveFuelAssumptionsButton"].tap()
+        XCTAssertTrue(scrollTo(cost, in: app))
+        XCTAssertTrue(waitForLabel(cost, toContain: "estimated fuel cost"))
+        XCTAssertNotEqual(cost.label, firstEstimate, "A more economical vehicle uses less fuel")
+
+        // Removing them leaves no estimate, not an estimate of nothing.
+        XCTAssertTrue(scrollUntilHittable(button, in: app))
+        button.tap()
+        let remove = app.buttons["removeFuelAssumptionsButton"]
+        XCTAssertTrue(remove.waitForExistence(timeout: 5))
+        remove.tap()
+        XCTAssertTrue(scrollTo(cost, in: app))
+        XCTAssertTrue(waitForLabel(cost, toContain: "Add your vehicle's miles per gallon"), "Showed: \(cost.label)")
+        XCTAssertFalse(cost.label.contains("$0.00"))
+    }
+
+    /// Assumptions recorded on one shift fill the next shift's editor, which is
+    /// a suggestion until saved, and that shift's net names its missing
+    /// earnings rather than its fuel.
+    ///
+    /// Was two journeys over this fixture.
+    @MainActor
+    func testFuelAssumptionsSeedTheNextShiftAndItsNetNamesMissingEarnings() throws {
+        let app = launchWithSeededHistory()
+        openFirstShift(in: app)
+        recordFuelAssumptions(milesPerGallon: "25", gasPrice: "3.50", in: app)
+        goBack(in: app)
+
+        revealHistoryRows(2, in: app).element(boundBy: 1).tap()
+        let net = app.descendants(matching: .any)["shiftDetailEstimatedNetAfterFuel"]
+        XCTAssertTrue(scrollTo(net, in: app))
+        XCTAssertTrue(waitForLabel(net, toContain: "Add what this shift paid"), "Showed: \(net.label)")
+        XCTAssertFalse(net.label.contains("$0.00"))
+
+        let add = app.buttons["editFuelAssumptionsButton"]
+        XCTAssertTrue(scrollUntilHittable(add, in: app))
+        XCTAssertEqual(add.label, "Add Fuel Assumptions", "This shift has recorded nothing of its own")
+        add.tap()
+        let economyField = app.textFields["fuelMilesPerGallonField"]
+        XCTAssertTrue(economyField.waitForExistence(timeout: 5))
+        XCTAssertEqual(economyField.value as? String, "25", "Filled in from the last pair recorded")
+        XCTAssertEqual(app.textFields["fuelGasPriceField"].value as? String, "3.5")
+        app.buttons["cancelFuelAssumptionsButton"].tap()
+        XCTAssertTrue(scrollUntilHittable(add, in: app))
+        XCTAssertEqual(add.label, "Add Fuel Assumptions", "A filled field is a suggestion, not a figure")
+    }
+
+    /// A completed shift at the largest accessibility size: the summary's
+    /// figures stack whole, the delivery's six actions become one full-width
+    /// column, every one still tappable, and the end of the screen is reachable.
+    ///
+    /// Was two journeys at AX5 over this fixture.
+    @MainActor
+    func testACompletedShiftAtTheLargestTextSize() throws {
+        let app = launchWithSeededHistory(atTextSize: Self.accessibilityXXXLTextSize)
+        let shift = rows(in: app).firstMatch
+        XCTAssertTrue(scrollTo(shift, in: app, maxSwipes: 15), "A completed shift is listed, further down")
+        XCTAssertTrue(scrollUntilHittable(shift, in: app, maxSwipes: 5))
+        shift.tap()
+
+        let earnings = app.descendants(matching: .any)["shiftDetailEarnings"]
+        XCTAssertTrue(earnings.waitForExistence(timeout: 5))
+        XCTAssertTrue(earnings.label.contains("$86.25"), "The figure is whole rather than shortened")
+        let working = app.descendants(matching: .any)["shiftDetailSummaryWorkingTime"]
+        XCTAssertTrue(scrollTo(working, in: app))
+        XCTAssertGreaterThan(onPixelGrid(working.frame.height), 44, "A stacked figure is never a tiny cell")
+        attachScreenshot("detail-xxxl")
+
+        let card = deliveryCard(containing: "Delivery 1, delivered", in: app)
+        XCTAssertTrue(scrollTo(card, in: app, maxSwipes: 30), "The delivery should be listed")
+        let place = card.buttons["shiftDetailPickupPlaceButton"]
+        let history = card.buttons["shiftDetailPickupHistoryButton"]
+        let deliveryEarnings = card.buttons["shiftDetailDeliveryEarningsButton"]
+        let tips = card.buttons["shiftDetailDeliveryTipsButton"]
+        let times = card.buttons["shiftDetailCorrectDeliveryTimesButton"]
+        let correct = card.buttons["shiftDetailCorrectToCancelledButton"]
+        XCTAssertTrue(scrollUntilHittable(place, in: app, maxSwipes: 30))
+        let width = app.windows.element(boundBy: 0).frame.width
+        for action in [place, history, deliveryEarnings, tips, times, correct] {
+            XCTAssertTrue(action.exists, "Nothing is dropped to keep the card short")
+            XCTAssertGreaterThan(action.frame.width, width * 0.7, "Full width: \(action.label)")
+        }
+        XCTAssertGreaterThan(history.frame.minY, place.frame.maxY - 1, "One column rather than two narrow ones")
+        XCTAssertEqual(history.frame.minX, place.frame.minX, accuracy: 1)
+        XCTAssertTrue(scrollUntilHittable(tips, in: app, maxSwipes: 10))
+        XCTAssertGreaterThan(tips.frame.minY, deliveryEarnings.frame.maxY - 1)
+        XCTAssertTrue(scrollUntilHittable(times, in: app, maxSwipes: 10))
+        XCTAssertGreaterThan(times.frame.minY, tips.frame.maxY - 1)
+        XCTAssertTrue(scrollUntilHittable(correct, in: app, maxSwipes: 10))
+        XCTAssertGreaterThan(correct.frame.minY, times.frame.maxY - 1)
+
+        let delete = app.buttons["deleteShiftButton"]
+        XCTAssertTrue(scrollTo(delete, in: app, maxSwipes: 60), "And so is the end of the screen")
     }
 
     /// A completed shift that recorded no amount, no delivery and no route
@@ -2128,58 +3151,6 @@ final class DashPilotUITests: XCTestCase {
         goBack(in: app)
         let row = rows(in: app).firstMatch
         XCTAssertTrue(waitForLabel(row, toContain: "104.10"), "History shows the amount too: \(row.label)")
-    }
-
-    /// An amount that cannot be read is refused, and refusing it changes nothing.
-    @MainActor
-    func testInvalidEarningsAreNotSaved() throws {
-        let app = launchWithFinishedDelivery()
-        openFirstShift(in: app)
-
-        app.buttons["editShiftEarningsButton"].tap()
-        type("1.2.3", into: app)
-        app.buttons["saveEarningsButton"].tap()
-
-        let message = app.descendants(matching: .any)["earningsValidationMessage"]
-        XCTAssertTrue(message.waitForExistence(timeout: 5), "The driver should be told why it was refused")
-        XCTAssertTrue(
-            app.textFields["earningsAmountField"].exists,
-            "The editor stays open with what was typed rather than discarding it"
-        )
-
-        app.buttons["cancelEarningsButton"].tap()
-
-        XCTAssertTrue(app.buttons["editShiftEarningsButton"].waitForExistence(timeout: 5))
-        XCTAssertEqual(
-            app.buttons["editShiftEarningsButton"].label,
-            "Add Earnings",
-            "A refused amount leaves the shift with no earnings recorded"
-        )
-        XCTAssertEqual(app.descendants(matching: .any)["shiftDetailEarnings"].label, "No amount recorded")
-    }
-
-    /// Earnings on a shift with no route give an hourly rate and no invented
-    /// per-mile one.
-    @MainActor
-    func testEarningsWithoutARouteShowNoPerMileRate() throws {
-        let app = launchWithFinishedDelivery()
-        openFirstShift(in: app)
-
-        app.buttons["editShiftEarningsButton"].tap()
-        type("86.25", into: app)
-        app.buttons["saveEarningsButton"].tap()
-
-        let hourly = app.descendants(matching: .any)["shiftDetailHourlyRate"]
-        XCTAssertTrue(scrollTo(hourly, in: app))
-        XCTAssertTrue(waitForLabel(hourly, toContain: "gross earnings per shift hour"))
-
-        let perMile = app.descendants(matching: .any)["shiftDetailPerMileRate"]
-        XCTAssertTrue(scrollTo(perMile, in: app))
-        XCTAssertTrue(
-            perMile.label.contains("No usable position was recorded"),
-            "A shift with nothing measurable in its route is told why, not shown a rate: \(perMile.label)"
-        )
-        XCTAssertFalse(perMile.label.contains("$0.00"))
     }
 
     // MARK: Deliveries
@@ -2278,175 +3249,7 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertEqual(first.label, "Delivery 1. Mark arrived at pickup", "Delivery 1 is untouched")
     }
 
-    /// Two deliveries left in progress are both picked up on the next launch,
-    /// each showing its own next step.
-    @MainActor
-    func testRecoversEveryActiveDeliveryOnLaunch() throws {
-        let app = launchWithActiveDelivery()
-
-        let accepted = deliveryButton("deliveryActionButton", containing: "Delivery 2", in: app)
-        let carrying = deliveryButton("deliveryActionButton", containing: "Delivery 3", in: app)
-        XCTAssertTrue(scrollTo(accepted, in: app), "The recovered deliveries have their own controls")
-        XCTAssertEqual(
-            accepted.label,
-            "Delivery 2. Mark arrived at pickup",
-            "The fixture's second delivery was only accepted, so its next step is arriving"
-        )
-        XCTAssertEqual(
-            carrying.label,
-            "Delivery 3. Mark delivery completed",
-            "The third was already picked up, so its next step is delivering it"
-        )
-        XCTAssertEqual(
-            app.buttons.matching(identifier: "deliveryActionButton").count,
-            2,
-            "Two active deliveries, neither collapsed into the other nor duplicated"
-        )
-
-        let status = app.descendants(matching: .any)["deliveryStatus"]
-        XCTAssertTrue(status.label.contains("2 deliveries in progress"), "Status: \(status.label)")
-        XCTAssertTrue(status.label.contains("1 delivery completed"), "The shift's earlier delivery is still counted")
-    }
-
-    /// A shift and every delivery on it survive the driver leaving the app and
-    /// coming back, which is what a shift spent answering messages and reading
-    /// maps actually looks like.
-    ///
-    /// The interface is rebuilt from the store on return rather than from view
-    /// state, so nothing here should have to be restored by hand. Route capture
-    /// pauses and resumes across the same transition; that half is asserted in
-    /// `RealWorldRecoveryTests`, because a UI test cannot make the simulator
-    /// produce positions.
-    @MainActor
-    func testStackedWorkSurvivesLeavingAndReturningToTheApp() throws {
-        let app = launchWithActiveDelivery()
-
-        let accepted = deliveryButton("deliveryActionButton", containing: "Delivery 2", in: app)
-        XCTAssertTrue(scrollTo(accepted, in: app))
-
-        XCUIDevice.shared.press(.home)
-        app.activate()
-
-        XCTAssertTrue(
-            app.descendants(matching: .any)["activeShiftStatus"].waitForExistence(timeout: 10),
-            "The shift is still running; nothing about returning to the app ends one"
-        )
-        let carrying = deliveryButton("deliveryActionButton", containing: "Delivery 3", in: app)
-        XCTAssertTrue(scrollTo(accepted, in: app), "Both deliveries are still on screen")
-        XCTAssertEqual(accepted.label, "Delivery 2. Mark arrived at pickup")
-        XCTAssertEqual(carrying.label, "Delivery 3. Mark delivery completed")
-        XCTAssertEqual(
-            app.buttons.matching(identifier: "deliveryActionButton").count,
-            2,
-            "Neither delivery was duplicated by the return, and neither was dropped"
-        )
-
-        // And the driver can still see whether the route is being recorded,
-        // on the line below the cards, with the shift's own controls.
-        XCTAssertTrue(scrollTo(app.descendants(matching: .any)["routeCaptureStatus"], in: app))
-
-        // The recovered card is a control over the real record, not a redrawn
-        // placeholder: advancing it moves that delivery and leaves the other.
-        XCTAssertTrue(scrollUpUntilHittable(carrying, in: app, maxSwipes: 6))
-        tapWithinReach(carrying, in: app)
-        XCTAssertTrue(
-            waitForCount(app.buttons.matching(identifier: "deliveryActionButton"), toEqual: 1),
-            "The delivered one leaves the list"
-        )
-        XCTAssertEqual(accepted.label, "Delivery 2. Mark arrived at pickup")
-    }
-
     // MARK: Parked for a pickup
-
-    /// Recording the vehicle as parked stops the route, says so in two places,
-    /// and leaves the shift running.
-    @MainActor
-    func testParkingStopsTheRouteAndLeavesTheShiftRunning() throws {
-        let app = launchWithStubbedLocation()
-
-        let startShift = app.buttons["startShiftButton"]
-        XCTAssertTrue(startShift.waitForExistence(timeout: 10))
-        startShift.tap()
-
-        let status = app.descendants(matching: .any)["routeCaptureStatus"]
-        XCTAssertTrue(status.waitForExistence(timeout: 10))
-        XCTAssertTrue(
-            waitForLabel(status, toContain: "Location tracking active"),
-            "The shift starts recording: \(status.label)"
-        )
-
-        let park = app.buttons["parkShiftButton"]
-        XCTAssertTrue(scrollTo(park, in: app), "Parking is offered on a running shift")
-        XCTAssertTrue(
-            park.label.contains("shift keeps running"),
-            "The control says aloud what it does not do: \(park.label)"
-        )
-        park.tap()
-
-        // The capture status says recording has stopped, and says why.
-        XCTAssertTrue(
-            waitForLabel(status, toContain: "Route recording stopped while parked"),
-            "Capture status: \(status.label)"
-        )
-        // It adds what the notice above it does not, what driving again does to
-        // the distance, and does not repeat what the notice already says.
-        XCTAssertTrue(status.label.contains("is not counted"), "Capture status: \(status.label)")
-        XCTAssertFalse(
-            status.label.contains("still running"),
-            "The parked notice says the shift is running; the capture line does not repeat it: \(status.label)"
-        )
-
-        // And the panel says it again where the driver is looking, with the
-        // shift's own state unchanged beside it.
-        let notice = app.descendants(matching: .any)["parkedShiftNotice"]
-        XCTAssertTrue(notice.waitForExistence(timeout: 5))
-        XCTAssertTrue(
-            notice.label.contains("shift is still running"),
-            "Parked is not paused, and the notice must not read as though it were: \(notice.label)"
-        )
-        XCTAssertTrue(
-            app.descendants(matching: .any)["activeShiftStatus"].exists,
-            "The shift still reports itself as running rather than paused"
-        )
-        XCTAssertFalse(
-            app.descendants(matching: .any)["pausedShiftStatus"].exists,
-            "No pause was recorded"
-        )
-        XCTAssertTrue(
-            app.descendants(matching: .any)["workingTime"].exists,
-            "And its working time is still on screen, still counting"
-        )
-    }
-
-    /// Resuming driving is one tap, and it starts recording again.
-    @MainActor
-    func testResumingDrivingStartsRecordingAgain() throws {
-        let app = launchWithStubbedLocation()
-
-        let startShift = app.buttons["startShiftButton"]
-        XCTAssertTrue(startShift.waitForExistence(timeout: 10))
-        startShift.tap()
-
-        let park = app.buttons["parkShiftButton"]
-        XCTAssertTrue(scrollTo(park, in: app))
-        park.tap()
-
-        let resume = app.buttons["resumeDrivingButton"]
-        XCTAssertTrue(resume.waitForExistence(timeout: 5), "Leaving the state is one tap")
-        XCTAssertFalse(park.exists, "And parking is not offered while already parked")
-        resume.tap()
-
-        let status = app.descendants(matching: .any)["routeCaptureStatus"]
-        XCTAssertTrue(
-            waitForLabel(status, toContain: "Location tracking active"),
-            "Recording starts again: \(status.label)"
-        )
-        XCTAssertFalse(
-            app.descendants(matching: .any)["parkedShiftNotice"].exists,
-            "And the notice goes with it"
-        )
-        XCTAssertTrue(app.buttons["parkShiftButton"].exists, "Parking is offered again")
-    }
 
     // MARK: Pick up orders with Park & Resume
 
@@ -2557,63 +3360,985 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertTrue(waitForLabel(card, toContain: state), "\(name): \(card.label)")
     }
 
-    /// Off unless the driver turns it on, the stacked-order switch is a child
-    /// that cannot be used on its own, and both choices are kept.
+    /// The pickup and parking settings: the workflow off unless chosen, its
+    /// stacked-order child unusable on its own and saying why, both choices
+    /// kept and kept inert, and resuming after progress off and independent.
+    ///
+    /// Was two journeys over the same Settings group.
     @MainActor
-    func testPickupWorkflowSettingsParentAndChild() throws {
+    func testPickupAndParkingSettingsAreOffAndKeptAsChosen() throws {
         let app = launchWithEmptyStore()
         openSettings(in: app)
 
         let parent = app.switches["pickupWorkflowToggle"]
         let child = app.switches["stackedOrdersInOrderToggle"]
-        XCTAssertTrue(scrollTo(child, in: app))
+        let resume = app.switches["resumeAfterProgressToggle"]
+        XCTAssertTrue(scrollTo(resume, in: app))
         XCTAssertEqual(parent.value as? String, "0", "A driver who never chose it has it off")
-        XCTAssertEqual(child.value as? String, "0", "And stacked orders off")
+        XCTAssertEqual(child.value as? String, "0")
+        XCTAssertEqual(resume.value as? String, "0", "Off unless the driver turns it on")
         XCTAssertTrue(parent.label.contains("Pick up orders with Park & Resume"), parent.label)
         XCTAssertTrue(child.label.contains("Handle stacked orders in order"), child.label)
+        XCTAssertTrue(child.label.contains("Needs Pick up orders with Park & Resume on"), "Says why: \(child.label)")
         XCTAssertFalse(child.isEnabled, "Stacked orders cannot be turned on while the workflow is off")
+        XCTAssertTrue(resume.label.contains("Resume driving after delivery progress"), resume.label)
+        XCTAssertTrue(resume.isEnabled, "It depends on nothing")
 
+        setSwitch("resumeAfterProgressToggle", to: true, in: app)
+        XCTAssertEqual(parent.value as? String, "0", "Turning it on turns nothing else on")
         setSwitch("pickupWorkflowToggle", to: true, in: app)
         XCTAssertTrue(waitForEnabled(child, true), "With the workflow on, stacked orders can be chosen")
         setSwitch("stackedOrdersInOrderToggle", to: true, in: app)
         attachScreenshot("settings-pickup-parking")
-
         setSwitch("pickupWorkflowToggle", to: false, in: app)
         XCTAssertTrue(waitForEnabled(child, false), "And inert again once the workflow is off")
-        XCTAssertEqual(child.value as? String, "1", "The stacked choice is kept, and inert while the workflow is off")
+        XCTAssertEqual(child.value as? String, "1", "The stacked choice is kept, and inert")
         goBack(in: app)
 
         openSettings(in: app)
-        XCTAssertTrue(scrollTo(child, in: app))
+        XCTAssertTrue(scrollTo(resume, in: app))
         XCTAssertEqual(parent.value as? String, "0", "The choices are kept across leaving the screen")
         XCTAssertEqual(child.value as? String, "1")
+        XCTAssertEqual(resume.value as? String, "1")
     }
 
-    /// Resuming after delivery progress is off for a driver who never chose
-    /// it, stands on its own beside the workflow, and the workflow's child says
-    /// on screen why it is unavailable.
+    /// The workflow the driver asked for after a real shift: Park records
+    /// Arrived at Pickup and Resume Driving records Picked Up, each saying which
+    /// delivery and that their setting did it; Undo after Park takes the arrival
+    /// back and leaves the vehicle parked, and Undo after Resume takes the
+    /// pickup back and leaves it driving.
+    ///
+    /// Was three journeys, each starting a shift and a delivery. Selection,
+    /// stacked orders and refusals are `ParkResumePickupWorkflowTests`.
     @MainActor
-    func testResumeAfterProgressSettingIsOffAndIndependent() throws {
+    func testParkAndResumeRecordThePickupAndUndoTakesEachBack() throws {
         let app = launchWithEmptyStore()
-        openSettings(in: app)
+        startShiftAndDelivery(in: app)
+        assertCard("Delivery 1", says: "heading to the pickup", in: app)
+        setPickupWorkflow(true, in: app)
 
-        let resume = app.switches["resumeAfterProgressToggle"]
-        XCTAssertTrue(scrollTo(resume, in: app))
-        XCTAssertEqual(resume.value as? String, "0", "Off unless the driver turns it on")
-        XCTAssertTrue(resume.label.contains("Resume driving after delivery progress"), resume.label)
-        XCTAssertTrue(resume.isEnabled, "It depends on nothing, so it is usable with the workflow off")
+        pressPark(in: app)
+        let parked = assertPickupWorkflowNotice(contains: "Delivery 1 marked Arrived at Pickup", in: app)
+        XCTAssertTrue(parked.label.contains("Recorded automatically when you parked"), parked.label)
+        XCTAssertTrue(parked.label.contains("Pick up orders with Park & Resume"), "Their setting, not a detection")
+        XCTAssertFalse(app.alerts.firstMatch.exists, "No alert stands between the driver and the door")
+        assertCard("Delivery 1", says: "waiting at the pickup", in: app)
+
+        let undo = app.buttons["undoPickupWorkflowStepButton"]
+        XCTAssertTrue(scrollUpUntilHittable(undo, in: app, maxSwipes: 6), "Undo is offered beside what was recorded")
+        XCTAssertTrue(undo.label.contains("Undo Arrived at Pickup for Delivery 1"), undo.label)
+        XCTAssertTrue(undo.label.contains("The vehicle is still parked"), undo.label)
+        XCTAssertGreaterThanOrEqual(onPixelGrid(undo.frame.height), 44)
+        undo.tap()
+        assertPickupWorkflowNotice(contains: "Undid Arrived at Pickup for Delivery 1", in: app)
+        XCTAssertTrue(waitForDisappearance(of: undo), "The offer goes once used")
+        XCTAssertTrue(app.descendants(matching: .any)["parkedShiftNotice"].exists, "The vehicle is still parked")
+        assertCard("Delivery 1", says: "heading to the pickup", in: app)
+
+        // Driving and parking again: Park records the arrival afresh, and
+        // Resume Driving records the pickup.
+        pressResumeDriving(in: app)
+        pressPark(in: app)
+        assertPickupWorkflowNotice(contains: "Delivery 1 marked Arrived at Pickup", in: app)
+        pressResumeDriving(in: app)
+        let resumed = assertPickupWorkflowNotice(contains: "Delivery 1 marked Picked Up", in: app)
+        XCTAssertTrue(resumed.label.contains("Recorded automatically when you resumed driving"), resumed.label)
+        XCTAssertFalse(app.descendants(matching: .any)["parkedShiftNotice"].exists, "The vehicle is driving")
+        assertCard("Delivery 1", says: "heading to the customer", in: app)
+
+        let undoPickup = app.buttons["undoPickupWorkflowStepButton"]
+        XCTAssertTrue(scrollUpUntilHittable(undoPickup, in: app, maxSwipes: 6))
+        XCTAssertTrue(undoPickup.label.contains("Undo Picked Up for Delivery 1"), undoPickup.label)
+        XCTAssertTrue(undoPickup.label.contains("still recorded as driving"), undoPickup.label)
+        undoPickup.tap()
+        assertPickupWorkflowNotice(contains: "Undid Picked Up for Delivery 1", in: app)
+        XCTAssertFalse(app.descendants(matching: .any)["parkedShiftNotice"].exists, "Still driving")
+        XCTAssertTrue(app.buttons["parkShiftButton"].exists)
+        assertCard("Delivery 1", says: "waiting at the pickup", in: app)
+    }
+
+    /// One stacked offer read as one offer of independent deliveries: one
+    /// heading over the offer and none over a delivery accepted alone, each
+    /// card saying what it is waiting for and naming aloud what it was accepted
+    /// with, and advancing one card moving only that card, with the heading
+    /// then saying how much of the offer is left.
+    ///
+    /// Was five journeys over this fixture. Grouping is `DeliveryGroupingTests`.
+    @MainActor
+    func testAStackedOfferReadsAsOneOfferOfIndependentDeliveries() throws {
+        let app = launchWithStackedOffer()
+        XCTAssertTrue(app.descendants(matching: .any)["activeShiftStatus"].waitForExistence(timeout: 15))
+
+        let heading = app.descendants(matching: .any)["offerGroupHeader"]
+        XCTAssertTrue(scrollTo(heading, in: app), "The offer that held two deliveries names itself")
+        XCTAssertTrue(heading.label.contains("Offer 1") && heading.label.contains("2 deliveries accepted together"))
+        XCTAssertEqual(
+            app.descendants(matching: .any).matching(identifier: "offerGroupHeader").count, 1,
+            "An offer of one gets no heading"
+        )
+        XCTAssertEqual(app.buttons.matching(identifier: "deliveryActionButton").count, 3)
+
+        let first = deliveryStatusCard(named: "Delivery 1", in: app)
+        let second = deliveryStatusCard(named: "Delivery 2", in: app)
+        let third = deliveryStatusCard(named: "Delivery 3", in: app)
+        XCTAssertTrue(scrollTo(first, in: app))
+        XCTAssertTrue(first.label.contains("waiting at the pickup"), first.label)
+        XCTAssertTrue(first.label.contains("Next step, mark order picked up"), first.label)
+        XCTAssertFalse(first.label.contains("Next step, mark arrived at pickup"), "Not offered what it recorded")
+        XCTAssertTrue(first.label.contains("Part of Offer 1, accepted together with Delivery 2"), first.label)
+        XCTAssertTrue(scrollTo(second, in: app))
+        XCTAssertTrue(second.label.contains("heading to the pickup"), second.label)
+        XCTAssertTrue(second.label.contains("Next step, mark arrived at pickup"), second.label)
+        XCTAssertTrue(scrollTo(third, in: app))
+        XCTAssertTrue(third.label.contains("Next step, mark arrived at pickup"), third.label)
+        XCTAssertFalse(third.label.contains("accepted together"), "Accepted alone claims no grouping: \(third.label)")
+
+        // Advancing Delivery 2 moves only Delivery 2.
+        let firstBefore = first.label
+        let step = deliveryButton("deliveryActionButton", containing: "Delivery 2", in: app)
+        XCTAssertTrue(scrollTo(step, in: app))
+        tapWithinReach(step, in: app)
+        XCTAssertTrue(waitForLabel(second, toContain: "Next step, mark order picked up"), second.label)
+        XCTAssertEqual(first.label, firstBefore, "The card beside it says exactly what it said")
+
+        // Delivering one of the offer leaves its sibling and says what is left.
+        let firstStep = deliveryButton("deliveryActionButton", containing: "Delivery 1", in: app)
+        XCTAssertTrue(scrollToTop(reaching: app.descendants(matching: .any)["activeShiftStatus"], in: app))
+        XCTAssertTrue(scrollUntilHittable(firstStep, in: app))
+        firstStep.tap()
+        XCTAssertTrue(waitForLabel(firstStep, toContain: "Mark delivery completed"))
+        tapWithinReach(firstStep, in: app)
+        XCTAssertTrue(waitForCount(app.buttons.matching(identifier: "deliveryActionButton"), toEqual: 2))
+        XCTAssertTrue(scrollTo(heading, in: app))
+        XCTAssertTrue(heading.label.contains("1 of 2 still in progress"), "Showed: \(heading.label)")
+    }
+
+    /// Reminders about a step that may have gone unrecorded: one per stale
+    /// delivery, never for one already in the car, each naming its delivery and
+    /// its step, stating what the record holds and claiming no observation;
+    /// dismissing one records nothing, and confirming one advances only that
+    /// delivery through its ordinary step.
+    ///
+    /// Was five journeys over this fixture. Which deliveries are stale is
+    /// `DeliveryProgressAssistanceTests`.
+    @MainActor
+    func testRemindersStateTheirEvidenceAndAnswerOnlyTheirOwnDelivery() throws {
+        let app = launchWithMissedLifecycle()
+
+        let reminders = app.descendants(matching: .any).matching(identifier: "deliverySuggestion")
+        XCTAssertTrue(reminders.firstMatch.waitForExistence(timeout: 10))
+        XCTAssertTrue(waitForCount(reminders, toEqual: 2), "The delivery already picked up gets none")
+        let waiting = deliveryButton("deliverySuggestionActionButton", containing: "Delivery 1", in: app)
+        let heading = deliveryButton("deliverySuggestionActionButton", containing: "Delivery 2", in: app)
+        XCTAssertTrue(waiting.label.hasPrefix("Delivery 1.") && waiting.label.contains("Mark order picked up"), waiting.label)
+        XCTAssertTrue(heading.label.hasPrefix("Delivery 2.") && heading.label.contains("Mark arrived at pickup"), heading.label)
+        XCTAssertFalse(deliveryButton("deliverySuggestionActionButton", containing: "Delivery 3", in: app).exists)
+        XCTAssertGreaterThanOrEqual(onPixelGrid(waiting.frame.height), 44)
+
+        let first = reminders.matching(NSPredicate(format: "label CONTAINS %@", "Delivery 1")).firstMatch
+        let spoken = first.label
+        XCTAssertTrue(spoken.contains("reached the pickup") && spoken.contains("records no pickup"), spoken)
+        XCTAssertTrue(spoken.contains("Already picked this order up?"), spoken)
+        XCTAssertTrue(spoken.contains("DashPilot cannot tell where you are"), spoken)
+        XCTAssertTrue(spoken.contains("not something it observed"), spoken)
+        for claim in ["you arrived", "you picked up", "detected", "confirmed"] {
+            XCTAssertFalse(spoken.lowercased().contains(claim), "A reminder must not claim \"\(claim)\"")
+        }
+        attachScreenshot("home-reminder")
+
+        let stepOne = deliveryButton("deliveryActionButton", containing: "Delivery 1", in: app)
+        let stepTwo = deliveryButton("deliveryActionButton", containing: "Delivery 2", in: app)
+        XCTAssertEqual(stepOne.label, "Delivery 1. Mark order picked up")
+        XCTAssertEqual(stepTwo.label, "Delivery 2. Mark arrived at pickup")
+        let status = app.descendants(matching: .any)["deliveryStatus"]
+        XCTAssertTrue(waitForLabel(status, toContain: "3 deliveries in progress"), status.label)
+
+        let dismiss = deliveryButton("deliverySuggestionDismissButton", containing: "Delivery 1", in: app)
+        XCTAssertTrue(dismiss.label.contains("Nothing is recorded"), dismiss.label)
+        tapWithinReach(dismiss, in: app)
+        XCTAssertTrue(waitForCount(reminders, toEqual: 1), "Only the dismissed reminder goes")
+        XCTAssertEqual(stepOne.label, "Delivery 1. Mark order picked up", "Dismissing recorded nothing")
+
+        XCTAssertTrue(heading.waitForExistence(timeout: 5))
+        tapWithinReach(heading, in: app)
+        XCTAssertTrue(waitForLabel(stepTwo, toContain: "Delivery 2. Mark order picked up"), stepTwo.label)
+        XCTAssertEqual(stepOne.label, "Delivery 1. Mark order picked up", "Delivery 1 is untouched")
+        XCTAssertTrue(waitForCount(reminders, toEqual: 0), "The answered reminder leaves too")
+        XCTAssertTrue(waitForLabel(status, toContain: "3 deliveries in progress"), status.label)
+    }
+
+    /// The several-delivery sheet: cancelling it records nothing; it opens on
+    /// two and says so, keeps Start pinned under its form with the count and
+    /// both switches above it, says what it will record, and records one offer
+    /// however fast Start is pressed twice; the one-tap path still adds a single
+    /// delivery in an offer of its own.
+    ///
+    /// Was three journeys, each starting an empty shift.
+    @MainActor
+    func testTheOfferSheetRecordsOneOfferOrNothing() throws {
+        let app = launchWithEmptyStore()
+        app.buttons["startShiftButton"].tap()
+        let startDelivery = app.buttons["startDeliveryButton"]
+        XCTAssertTrue(startDelivery.waitForExistence(timeout: 5))
+        let actions = app.buttons.matching(identifier: "deliveryActionButton")
+
+        let offerControl = app.buttons["startOfferButton"]
+        XCTAssertTrue(scrollTo(offerControl, in: app), "The control for a several-delivery offer is on the panel")
+        offerControl.tap()
+        let cancel = app.buttons["cancelStartOfferButton"]
+        XCTAssertTrue(cancel.waitForExistence(timeout: 5))
+        cancel.tap()
+        XCTAssertTrue(startDelivery.waitForExistence(timeout: 5))
+        XCTAssertEqual(actions.count, 0, "A dismissed sheet records nothing")
+
+        offerControl.tap()
+        let confirm = app.buttons["confirmStartOfferButton"]
+        let stepper = app.steppers["offerDeliveryCountStepper"]
+        let pickup = app.switches["offerSamePickupToggle"]
+        let dropOff = app.switches["offerSameDropOffToggle"]
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        XCTAssertEqual(confirm.label, "Start an offer of 2 deliveries", "It opens on two, and says so")
+        stepper.buttons.element(boundBy: 1).tap()
+        XCTAssertTrue(waitForLabel(confirm, toContain: "Start an offer of 3 deliveries"), "The action follows the count")
+        XCTAssertLessThan(stepper.frame.minY, pickup.frame.minY)
+        XCTAssertLessThan(pickup.frame.minY, dropOff.frame.minY)
+        XCTAssertLessThan(dropOff.frame.maxY, confirm.frame.minY, "No switch is under the action")
+        for _ in 0..<3 { app.swipeUp() }
+        XCTAssertTrue(confirm.isHittable, "Start is reachable with the form scrolled to its end")
+        setSwitch("offerSamePickupToggle", to: true, in: app)
+        setSwitch("offerSameDropOffToggle", to: true, in: app)
+        XCTAssertTrue(waitForLabel(confirm, toContain: "same pickup and same drop-off"), "Showed: \(confirm.label)")
+        attachScreenshot("offer-sheet-three-shared")
+        confirm.doubleTap()
+        XCTAssertTrue(waitForDisappearance(of: confirm))
+        XCTAssertTrue(waitForCount(actions, toEqual: 3), "Three deliveries, from one offer")
+        let headers = app.descendants(matching: .any).matching(identifier: "offerGroupHeader")
+        XCTAssertEqual(headers.count, 1, "One offer, not two")
+        XCTAssertTrue(headers.firstMatch.label.contains("3 deliveries accepted together"), headers.firstMatch.label)
+        XCTAssertTrue(headers.firstMatch.label.contains("same pickup and drop-off"), headers.firstMatch.label)
+
+        XCTAssertTrue(scrollToTop(reaching: startDelivery, in: app))
+        startDelivery.tap()
+        XCTAssertTrue(waitForCount(actions, toEqual: 4), "One more delivery, not two")
+        XCTAssertEqual(headers.count, 1, "The delivery started alone joined no group")
+    }
+
+    /// Correcting grouping on a running shift: leaving the sheet changes
+    /// nothing; two offers recorded separately are combined into the one they
+    /// were, named and confirmed; one delivery is split into an offer of its
+    /// own; and an offer grouped by mistake is separated into one per
+    /// delivery; every card keeps its step throughout.
+    ///
+    /// Was four journeys over this fixture. Every correction's rules are
+    /// `OfferCorrectionServiceTests` and `OfferCorrectionInvarianceTests`.
+    @MainActor
+    func testCorrectingGroupingOnARunningShift() throws {
+        let app = launchWithStackedOffer()
+        XCTAssertTrue(app.descendants(matching: .any)["activeShiftStatus"].waitForExistence(timeout: 15))
+        let correct = app.buttons["correctOffersButton"]
+        XCTAssertTrue(scrollTo(correct, in: app), "Correction is one control, not a button on every card")
+        let heading = app.descendants(matching: .any)["offerGroupHeader"]
+
+        correct.tap()
+        XCTAssertTrue(app.buttons["offerCorrectionSeparateButton"].waitForExistence(timeout: 5))
+        app.buttons["closeOfferCorrectionButton"].tap()
+        XCTAssertTrue(scrollTo(heading, in: app))
+        XCTAssertTrue(heading.label.contains("2 deliveries accepted together"), "Leaving changed nothing")
+
+        XCTAssertTrue(scrollTo(correct, in: app))
+        correct.tap()
+        let combine = app.buttons
+            .matching(NSPredicate(format: "identifier == %@ AND label CONTAINS %@", "offerCorrectionMergeButton", "Combine Offer 2"))
+            .firstMatch
+        XCTAssertTrue(scrollTo(combine, in: app), "Offer 2 can be combined into the offer accepted before it")
+        combine.tap()
+        let destination = app.buttons["offerCorrectionDestinationButton"]
+        XCTAssertTrue(destination.waitForExistence(timeout: 5))
+        XCTAssertEqual(destination.label, "Combine Offer 2 into Offer 1", "The direction is in the control")
+        destination.tap()
+        let alert = app.alerts.firstMatch
+        XCTAssertTrue(alert.waitForExistence(timeout: 5))
+        let confirm = alert.buttons.matching(identifier: "confirmOfferCorrectionButton").firstMatch
+        XCTAssertEqual(confirm.label, "Combine into Offer 1")
         XCTAssertTrue(
-            app.switches["stackedOrdersInOrderToggle"].label.contains("Needs Pick up orders with Park & Resume on"),
-            "The disabled child says why: \(app.switches["stackedOrdersInOrderToggle"].label)"
+            alert.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "Delivery 3 moves to Offer 1")).count > 0,
+            "The confirmation names what moves"
+        )
+        confirm.tap()
+        let offerHeaders = app.staticTexts.matching(NSPredicate(format: "identifier == %@", "offerCorrectionOfferHeader"))
+        XCTAssertTrue(waitForCount(offerHeaders, toEqual: 1), "The offer left holding nothing is gone")
+        XCTAssertTrue(offerHeaders.firstMatch.label.contains("3 deliveries accepted together"))
+
+        // One delivery split out into an offer of its own.
+        let delivery = app.buttons
+            .matching(NSPredicate(format: "identifier == %@ AND label CONTAINS %@",
+                                  "offerCorrectionDeliveryButton", "Delivery 2"))
+            .firstMatch
+        XCTAssertTrue(scrollTo(delivery, in: app))
+        XCTAssertEqual(delivery.label, "Move Delivery 2 out of Offer 1")
+        delivery.tap()
+        let split = app.buttons["offerCorrectionSplitButton"]
+        XCTAssertTrue(split.waitForExistence(timeout: 5), "Splitting is offered apart from moving, not mixed into it")
+        XCTAssertEqual(split.label, "Put Delivery 2 in a new offer of its own")
+        split.tap()
+        XCTAssertTrue(alert.waitForExistence(timeout: 5))
+        alert.buttons.matching(identifier: "confirmOfferCorrectionButton").firstMatch.tap()
+        // Offers are renumbered by acceptance time: Delivery 2, accepted before
+        // Delivery 3, now leads Offer 1 alone, and the pair left is Offer 2.
+        XCTAssertTrue(waitForCount(offerHeaders, toEqual: 2))
+        XCTAssertTrue(waitForLabel(offerHeaders.element(boundBy: 0), toContain: "Offer 1. 1 delivery"))
+        XCTAssertTrue(offerHeaders.element(boundBy: 1).label.contains("Offer 2. 2 deliveries accepted together"))
+
+        let separate = app.buttons["offerCorrectionSeparateButton"]
+        XCTAssertTrue(separate.waitForExistence(timeout: 5))
+        XCTAssertEqual(separate.label, "Separate Offer 2 into one offer per delivery")
+        separate.tap()
+        XCTAssertTrue(alert.waitForExistence(timeout: 5))
+        let separateConfirm = alert.buttons.matching(identifier: "confirmOfferCorrectionButton").firstMatch
+        XCTAssertEqual(separateConfirm.label, "Separate Offer 2")
+        separateConfirm.tap()
+        XCTAssertTrue(waitForCount(app.buttons.matching(identifier: "offerCorrectionSeparateButton"), toEqual: 0))
+        app.buttons["closeOfferCorrectionButton"].tap()
+
+        XCTAssertEqual(
+            app.descendants(matching: .any).matching(identifier: "offerGroupHeader").count, 0,
+            "Three offers of one"
+        )
+        XCTAssertEqual(app.buttons.matching(identifier: "deliveryActionButton").count, 3, "Nothing was deleted")
+        XCTAssertEqual(
+            deliveryButton("deliveryActionButton", containing: "Delivery 1", in: app).label,
+            "Delivery 1. Mark order picked up",
+            "Regrouping moved no lifecycle step"
+        )
+        XCTAssertEqual(deliveryButton("deliveryActionButton", containing: "Delivery 2", in: app).label, "Delivery 2. Mark arrived at pickup")
+    }
+
+    /// A shift cannot end while any delivery is in progress, and says how many;
+    /// a cancellation is named, confirmed, kept as history and spares the other
+    /// delivery; one left still blocks the end, in wording that follows the
+    /// count; once nothing is running the shift ends with both outcomes in its
+    /// record.
+    ///
+    /// Was three journeys over this fixture.
+    @MainActor
+    func testActiveDeliveriesBlockEndingUntilEachIsResolved() throws {
+        let app = launchWithActiveDelivery()
+
+        let endShift = app.buttons["endShiftButton"]
+        XCTAssertTrue(app.descendants(matching: .any)["activeShiftStatus"].waitForExistence(timeout: 10))
+        XCTAssertTrue(reachShiftControl(endShift, in: app), "End is below the delivery cards")
+        endShift.tap()
+        XCTAssertTrue(
+            app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "2 deliveries are still in progress"))
+                .firstMatch.waitForExistence(timeout: 5),
+            "Ending is refused with a reason that counts them"
+        )
+        app.buttons["OK"].tap()
+        XCTAssertTrue(app.buttons["endShiftButton"].waitForExistence(timeout: 5), "The shift is still running")
+        XCTAssertTrue(rows(in: app).count == 0, "No completed shift appeared in history")
+
+        // Cancelling one is named, confirmed, and spares the other.
+        let cancel = deliveryButton("cancelDeliveryButton", containing: "Delivery 2", in: app)
+        XCTAssertTrue(scrollToTop(reaching: app.descendants(matching: .any)["activeShiftStatus"], in: app))
+        XCTAssertTrue(scrollTo(cancel, in: app))
+        XCTAssertEqual(cancel.label, "Delivery 2. Cancel this delivery", "The control says which delivery it ends")
+        tapWithinReach(cancel, in: app)
+        XCTAssertTrue(
+            app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "Cancel Delivery 2?"))
+                .firstMatch.waitForExistence(timeout: 5),
+            "The confirmation names the delivery"
+        )
+        let confirm = app.buttons.matching(identifier: "confirmCancelDeliveryButton").firstMatch
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        confirm.tap()
+        let status = app.descendants(matching: .any)["deliveryStatus"]
+        XCTAssertTrue(waitForLabel(status, toContain: "1 delivery cancelled"), "Status: \(status.label)")
+        XCTAssertTrue(status.label.contains("1 delivery completed"), "The cancelled one is not counted as completed")
+        let carrying = deliveryButton("deliveryActionButton", containing: "Delivery 3", in: app)
+        XCTAssertTrue(carrying.exists, "The other delivery is untouched by the cancellation")
+        XCTAssertEqual(carrying.label, "Delivery 3. Mark delivery completed")
+
+        // One left still blocks the end, and the wording follows the count.
+        XCTAssertTrue(reachShiftControl(app.buttons["endShiftButton"], in: app))
+        app.buttons["endShiftButton"].tap()
+        XCTAssertTrue(
+            app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "A delivery is still in progress"))
+                .firstMatch.waitForExistence(timeout: 5),
+            "One remaining delivery still blocks the end, and the wording follows the count"
+        )
+        app.buttons["OK"].tap()
+
+        XCTAssertTrue(scrollToTop(reaching: app.descendants(matching: .any)["activeShiftStatus"], in: app))
+        XCTAssertTrue(scrollTo(carrying, in: app))
+        tapWithinReach(carrying, in: app)
+        XCTAssertTrue(waitForCount(app.buttons.matching(identifier: "deliveryActionButton"), toEqual: 0))
+        XCTAssertTrue(reachShiftControl(app.buttons["endShiftButton"], in: app))
+        app.buttons["endShiftButton"].tap()
+        openFirstShift(in: app)
+        let summary = app.descendants(matching: .any)["shiftDetailDeliverySummary"]
+        XCTAssertTrue(scrollTo(summary, in: app))
+        XCTAssertEqual(summary.label, "2 deliveries completed. 1 delivery cancelled")
+    }
+
+    /// Correcting a historical completion to the cancellation it was: the
+    /// control names its subject, dismissing the confirmation writes nothing,
+    /// confirming keeps the recorded instant as the cancellation time and
+    /// keeps the place and amount, the counts move by one each way, and a
+    /// delivery already cancelled is offered no such correction.
+    ///
+    /// Was three journeys over this fixture; the refusal on a running shift is
+    /// `HistoricalDeliveryCancellationServiceTests`.
+    @MainActor
+    func testCorrectingAHistoricalCompletionToACancellation() throws {
+        let app = launchWithSeededHistory()
+        openFirstShift(in: app)
+
+        let summary = app.staticTexts["shiftDetailDeliverySummary"]
+        XCTAssertTrue(scrollTo(summary, in: app))
+        XCTAssertEqual(summary.label, "2 deliveries completed. 1 delivery cancelled")
+        let card = deliveryCard(containing: "Delivery 1, delivered", in: app)
+        XCTAssertTrue(scrollTo(card, in: app))
+        let recordedTime = try XCTUnwrap(
+            Self.time(after: "Delivered at", in: deliveryRow(containing: "Delivery 1, delivered", in: app).label)
+        )
+        let correct = card.buttons["shiftDetailCorrectToCancelledButton"]
+        XCTAssertTrue(scrollUntilHittable(correct, in: app))
+        XCTAssertEqual(
+            correct.label,
+            "Correct Delivery 1 to cancelled. It stays a finished delivery, recorded as cancelled instead of delivered."
         )
 
-        setSwitch("resumeAfterProgressToggle", to: true, in: app)
-        XCTAssertEqual(app.switches["pickupWorkflowToggle"].value as? String, "0", "Turning it on turns nothing else on")
-        goBack(in: app)
+        correct.tap()
+        let alert = app.alerts.firstMatch
+        XCTAssertTrue(alert.waitForExistence(timeout: 5), "Confirmed before anything is written")
+        alert.buttons["Cancel"].tap()
+        XCTAssertTrue(deliveryRow(containing: "Delivery 1, delivered", in: app).waitForExistence(timeout: 5))
+        XCTAssertFalse(deliveryRow(containing: "Delivery 1, cancelled", in: app).exists, "Dismissing wrote nothing")
 
-        openSettings(in: app)
-        XCTAssertTrue(scrollTo(resume, in: app))
-        XCTAssertEqual(resume.value as? String, "1", "Kept across leaving the screen")
+        XCTAssertTrue(scrollUntilHittable(correct, in: app))
+        correct.tap()
+        XCTAssertTrue(alert.waitForExistence(timeout: 5))
+        let confirm = alert.buttons.matching(identifier: "confirmCorrectToCancelledButton").firstMatch
+        XCTAssertEqual(confirm.label, "Correct Delivery 1")
+        XCTAssertTrue(
+            alert.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "Delivery 1 stays a finished delivery")).count > 0
+        )
+        XCTAssertTrue(
+            alert.staticTexts.containing(
+                NSPredicate(format: "label CONTAINS %@", "the time you recorded it as delivered becomes the time it was cancelled")
+            ).count > 0
+        )
+        confirm.tap()
+
+        let corrected = deliveryRow(containing: "Delivery 1, cancelled", in: app)
+        XCTAssertTrue(corrected.waitForExistence(timeout: 5))
+        XCTAssertEqual(Self.time(after: "Cancelled at", in: corrected.label), recordedTime, "The same instant")
+        XCTAssertNil(Self.time(after: "Delivered at", in: corrected.label), "The completion is gone")
+        XCTAssertFalse(corrected.label.contains("Accepted to delivered"))
+        XCTAssertTrue(corrected.label.contains("Picked up from \(Self.noodles)"), "The place stays")
+        XCTAssertTrue(corrected.label.contains("Gross earnings for Delivery 1"), "And the amount")
+        XCTAssertTrue(scrollUpUntilHittable(summary, in: app))
+        XCTAssertEqual(summary.label, "1 delivery completed. 2 deliveries cancelled")
+
+        let correctedCard = deliveryCard(containing: "Delivery 1, cancelled", in: app)
+        XCTAssertTrue(scrollTo(correctedCard, in: app))
+        XCTAssertFalse(correctedCard.buttons["shiftDetailCorrectToCancelledButton"].exists, "Not offered twice")
+        XCTAssertTrue(correctedCard.buttons["shiftDetailDeliveryEarningsButton"].exists, "The others still apply")
+        let alreadyCancelled = deliveryCard(containing: "Delivery 2, cancelled", in: app)
+        XCTAssertTrue(scrollTo(alreadyCancelled, in: app))
+        XCTAssertFalse(alreadyCancelled.buttons["shiftDetailCorrectToCancelledButton"].exists, "Already terminal as what it was")
+    }
+
+    /// Correcting a recorded pause in its editor: cancelling writes nothing; a
+    /// stretch over recorded delivery work is refused naming what it collided
+    /// with and cannot be saved; a correction states its consequence first and
+    /// moves exactly the paused time, the working time and the hourly rate.
+    ///
+    /// Was three journeys over this fixture. The rules are
+    /// `ShiftPauseCorrectionTests`.
+    @MainActor
+    func testCorrectingAndRefusingAPauseInTheEditor() throws {
+        let app = launchWithPausedHistory()
+        openFirstShift(in: app)
+
+        let elapsed = app.descendants(matching: .any)["shiftDetailDuration"]
+        XCTAssertTrue(scrollTo(elapsed, in: app))
+        XCTAssertEqual(elapsed.label, "4 hours elapsed shift time")
+        XCTAssertEqual(app.descendants(matching: .any)["shiftDetailPausedTime"].label, "50 minutes paused time, over 2 pauses")
+        XCTAssertEqual(app.descendants(matching: .any)["shiftDetailWorkingTime"].label, "3 hours, 10 minutes working time")
+        let hourlyRate = app.descendants(matching: .any)["shiftDetailHourlyRate"]
+        let perMileRate = app.descendants(matching: .any)["shiftDetailPerMileRate"]
+        XCTAssertTrue(scrollTo(hourlyRate, in: app))
+        let hourlyBefore = hourlyRate.label
+        XCTAssertTrue(scrollTo(perMileRate, in: app))
+        let perMileBefore = perMileRate.label
+
+        // Cancelling writes nothing.
+        let edit = pauseButton("editShiftPauseButton", containing: "Pause 1", in: app)
+        XCTAssertTrue(scrollUntilHittable(edit, in: app))
+        XCTAssertEqual(edit.label, "Edit Pause 1. Change when this pause started and ended")
+        edit.tap()
+        let summary = app.descendants(matching: .any)["shiftPauseEditorSummary"]
+        XCTAssertTrue(summary.waitForExistence(timeout: 5))
+        setTime(minute: "45", ofPicker: "shiftPauseEndPicker", in: app)
+        app.buttons["shiftPauseEditorCancelButton"].tap()
+        XCTAssertTrue(pauseRow(containing: "Pause 1", in: app).waitForExistence(timeout: 5))
+        XCTAssertTrue(pauseRow(containing: "Pause 1", in: app).label.contains("30 minutes"), "As recorded")
+
+        // Over a delivery: refused, named, and not saveable.
+        let editTwo = pauseButton("editShiftPauseButton", containing: "Pause 2", in: app)
+        XCTAssertTrue(scrollUntilHittable(editTwo, in: app))
+        editTwo.tap()
+        XCTAssertTrue(summary.waitForExistence(timeout: 5))
+        setTime(minute: "15", ofPicker: "shiftPauseStartPicker", in: app)
+        let refusal = app.descendants(matching: .any).matching(identifier: "shiftPauseEditorRefusal").firstMatch
+        XCTAssertTrue(refusal.waitForExistence(timeout: 5))
+        XCTAssertTrue(refusal.label.contains("A delivery was in progress during that time"), "Showed: \(refusal.label)")
+        XCTAssertFalse(app.buttons["shiftPauseEditorSaveButton"].isEnabled, "Withheld rather than refused later")
+        app.buttons["shiftPauseEditorCancelButton"].tap()
+        XCTAssertTrue(pauseRow(containing: "Pause 2", in: app).waitForExistence(timeout: 5))
+        XCTAssertTrue(pauseRow(containing: "Pause 2", in: app).label.contains("20 minutes"))
+
+        // Corrected: the consequence first, then exactly three figures move.
+        XCTAssertTrue(scrollUntilHittable(edit, in: app))
+        edit.tap()
+        XCTAssertTrue(summary.waitForExistence(timeout: 5))
+        XCTAssertTrue(summary.label.hasPrefix("30 minutes paused"), "Showed: \(summary.label)")
+        XCTAssertTrue(summary.label.contains("working time becomes 3 hr, 10 min"), "Showed: \(summary.label)")
+        setTime(minute: "45", ofPicker: "shiftPauseEndPicker", in: app)
+        XCTAssertTrue(waitForLabel(summary, toContain: "45 minutes paused"), "Showed: \(summary.label)")
+        XCTAssertTrue(summary.label.contains("working time becomes 2 hr, 55 min"), "Showed: \(summary.label)")
+        app.buttons["shiftPauseEditorSaveButton"].tap()
+        let correctedRow = pauseRow(containing: "Pause 1", in: app)
+        XCTAssertTrue(correctedRow.waitForExistence(timeout: 5))
+        XCTAssertTrue(correctedRow.label.contains("45 minutes"), "Showed: \(correctedRow.label)")
+
+        XCTAssertTrue(scrollToTop(reaching: elapsed, in: app))
+        XCTAssertTrue(waitForLabel(app.descendants(matching: .any)["shiftDetailPausedTime"], toContain: "1 hour, 5 minutes"))
+        XCTAssertEqual(app.descendants(matching: .any)["shiftDetailWorkingTime"].label, "2 hours, 55 minutes working time")
+        XCTAssertEqual(elapsed.label, "4 hours elapsed shift time", "The shift's own start and end did not move")
+        XCTAssertEqual(
+            app.descendants(matching: .any)["shiftDetailDeliveryActiveTime"].label,
+            "30 minutes delivery active time",
+            "and neither did the delivery it recorded"
+        )
+        XCTAssertTrue(scrollTo(hourlyRate, in: app))
+        XCTAssertNotEqual(hourlyRate.label, hourlyBefore, "The rate over working time follows the correction")
+        XCTAssertTrue(scrollTo(perMileRate, in: app))
+        XCTAssertEqual(perMileRate.label, perMileBefore, "The rate a pause has nothing to do with is unchanged")
+    }
+
+    /// Deleting a recorded pause and adding one never recorded: deleting is
+    /// confirmed and says the working time grows and the route is untouched,
+    /// backing out keeps it, and the pause left is renumbered; a missed pause
+    /// opens refused rather than suggested, and once given a valid stretch is
+    /// numbered by when it began and comes out of working time.
+    ///
+    /// Was three journeys over this fixture.
+    @MainActor
+    func testDeletingAndAddingPauses() throws {
+        let app = launchWithPausedHistory()
+        openFirstShift(in: app)
+
+        let delete = pauseButton("deleteShiftPauseButton", containing: "Pause 1", in: app)
+        XCTAssertTrue(scrollUntilHittable(delete, in: app))
+        XCTAssertEqual(delete.label, "Delete Pause 1. Record that this pause did not happen")
+        delete.tap()
+        let alert = app.alerts.firstMatch
+        XCTAssertTrue(alert.waitForExistence(timeout: 5))
+        alert.buttons["Cancel"].tap()
+        XCTAssertTrue(pauseRow(containing: "Pause 1", in: app).label.contains("30 minutes"), "Backing out keeps it")
+
+        XCTAssertTrue(scrollUntilHittable(delete, in: app))
+        delete.tap()
+        XCTAssertTrue(alert.waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            alert.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "working time becomes 30 min longer")).count > 0
+        )
+        XCTAssertTrue(
+            alert.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "route recorded during it is not changed")).count > 0
+        )
+        let confirm = alert.buttons.matching(identifier: "confirmDeleteShiftPauseButton").firstMatch
+        XCTAssertEqual(confirm.label, "Delete Pause 1")
+        confirm.tap()
+        let remaining = pauseRow(containing: "Pause 1", in: app)
+        XCTAssertTrue(remaining.waitForExistence(timeout: 5))
+        XCTAssertTrue(remaining.label.contains("20 minutes"), "The pause left is the one that was second")
+        XCTAssertFalse(pauseRow(containing: "Pause 2", in: app).exists)
+
+        let elapsed = app.descendants(matching: .any)["shiftDetailDuration"]
+        XCTAssertTrue(scrollToTop(reaching: elapsed, in: app))
+        XCTAssertTrue(waitForLabel(app.descendants(matching: .any)["shiftDetailWorkingTime"], toContain: "3 hours, 40 minutes"))
+        XCTAssertEqual(app.descendants(matching: .any)["shiftDetailPausedTime"].label, "20 minutes paused time, over 1 pause")
+
+        let add = app.buttons["addMissedPauseButton"]
+        XCTAssertTrue(scrollUntilHittable(add, in: app))
+        XCTAssertEqual(add.label, "Add a pause you did not record during the shift")
+        add.tap()
+        let refusal = app.descendants(matching: .any).matching(identifier: "shiftPauseEditorRefusal").firstMatch
+        XCTAssertTrue(refusal.waitForExistence(timeout: 5), "Nothing is suggested")
+        XCTAssertTrue(refusal.label.contains("A pause has to end after it started"), "Showed: \(refusal.label)")
+        XCTAssertFalse(app.buttons["shiftPauseEditorSaveButton"].isEnabled)
+        setTime(minute: "50", ofPicker: "shiftPauseStartPicker", in: app)
+        setTime(minute: "55", ofPicker: "shiftPauseEndPicker", in: app)
+        let summary = app.descendants(matching: .any)["shiftPauseEditorSummary"]
+        XCTAssertTrue(summary.waitForExistence(timeout: 5))
+        XCTAssertTrue(summary.label.hasPrefix("5 minutes paused"), "Showed: \(summary.label)")
+        app.buttons["shiftPauseEditorSaveButton"].tap()
+        let added = pauseRow(containing: "Pause 1", in: app)
+        XCTAssertTrue(added.waitForExistence(timeout: 5))
+        XCTAssertTrue(added.label.contains("5 minutes"), "First, because it began first: \(added.label)")
+        XCTAssertTrue(pauseRow(containing: "Pause 2", in: app).exists, "Two of them now")
+
+        XCTAssertTrue(scrollToTop(reaching: elapsed, in: app))
+        XCTAssertTrue(waitForLabel(app.descendants(matching: .any)["shiftDetailPausedTime"], toContain: "over 2 pauses"))
+        XCTAssertEqual(app.descendants(matching: .any)["shiftDetailWorkingTime"].label, "3 hours, 35 minutes working time")
+        XCTAssertEqual(elapsed.label, "4 hours elapsed shift time", "The shift's own times did not move")
+    }
+
+    /// Correcting the end of a shift DashPilot recorded as ending late: a later
+    /// end would add time and no mileage; an end inside recorded delivery work
+    /// is refused naming the delivery and event; an earlier end states what it
+    /// costs, is confirmed before route is deleted, can be declined with
+    /// nothing written, and once confirmed measures the mileage again from the
+    /// positions that remain rather than scaling it.
+    ///
+    /// Was four journeys. The rules are `ShiftEndCorrectionTests`.
+    @MainActor
+    func testCorrectingAShiftThatDashPilotRecordedAsEndingLate() throws {
+        let app = launchWithLateEndHistory()
+        openFirstShift(in: app)
+
+        let elapsed = app.descendants(matching: .any)["shiftDetailDuration"]
+        XCTAssertTrue(scrollTo(elapsed, in: app))
+        XCTAssertEqual(elapsed.label, "3 hours, 40 minutes elapsed shift time")
+        let hourlyRate = app.descendants(matching: .any)["shiftDetailHourlyRate"]
+        XCTAssertTrue(scrollTo(hourlyRate, in: app))
+        XCTAssertTrue(hourlyRate.label.hasPrefix("$27.27"), "Showed: \(hourlyRate.label)")
+        let mileage = app.descendants(matching: .any)["shiftDetailRecordedMileage"]
+        XCTAssertTrue(scrollTo(mileage, in: app))
+        XCTAssertTrue(mileage.label.contains("6.7 miles"), "Showed: \(mileage.label)")
+
+        let correct = app.buttons["correctShiftEndButton"]
+        XCTAssertTrue(scrollUntilHittable(correct, in: app))
+        XCTAssertEqual(correct.label, "Correct the time this shift ended")
+        correct.tap()
+        let summary = app.descendants(matching: .any)["shiftEndCorrectionSummary"]
+        XCTAssertTrue(summary.waitForExistence(timeout: 5))
+        XCTAssertTrue(summary.label.hasPrefix("3 hours, 40 minutes elapsed"), "Showed: \(summary.label)")
+        XCTAssertTrue(app.descendants(matching: .any)["shiftEndCorrectionRecordedEnd"].exists)
+        let warning = app.descendants(matching: .any).matching(identifier: "shiftEndCorrectionRouteWarning").firstMatch
+
+        // Later: time and no mileage.
+        setTime(minute: "50", ofPicker: "shiftEndCorrectionPicker", in: app)
+        XCTAssertTrue(warning.waitForExistence(timeout: 5))
+        XCTAssertTrue(waitForLabel(warning, toContain: "No route or mileage is added"), "Showed: \(warning.label)")
+
+        // Inside recorded delivery work: refused, named.
+        setTime(minute: "05", ofPicker: "shiftEndCorrectionPicker", in: app)
+        let refusal = app.descendants(matching: .any).matching(identifier: "shiftEndCorrectionRefusal").firstMatch
+        XCTAssertTrue(refusal.waitForExistence(timeout: 5))
+        XCTAssertTrue(refusal.label.hasPrefix("Delivery 1 has Delivered recorded at "), "Showed: \(refusal.label)")
+        XCTAssertTrue(refusal.label.contains("after the proposed shift end"), "Showed: \(refusal.label)")
+        XCTAssertFalse(app.buttons["shiftEndCorrectionSaveButton"].isEnabled)
+
+        // Earlier, clear of the work: its cost is stated, then confirmed.
+        setTime(minute: "20", ofPicker: "shiftEndCorrectionPicker", in: app)
+        XCTAssertTrue(waitForLabel(summary, toContain: "3 hours, 20 minutes elapsed"), "Showed: \(summary.label)")
+        XCTAssertTrue(waitForLabel(warning, toContain: "10 recorded positions"), "Showed: \(warning.label)")
+        XCTAssertTrue(warning.label.contains("not reduced by the same share as the time"), "Showed: \(warning.label)")
+        app.buttons["shiftEndCorrectionSaveButton"].tap()
+        let confirm = app.buttons["confirmShiftEndCorrectionButton"].firstMatch
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5), "Destroying recorded route is confirmed first")
+        app.alerts.buttons["Cancel"].tap()
+        XCTAssertTrue(summary.waitForExistence(timeout: 5), "Declined, the sheet stays with the chosen time")
+        app.buttons["shiftEndCorrectionSaveButton"].tap()
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        confirm.tap()
+
+        XCTAssertTrue(scrollToTop(reaching: elapsed, in: app))
+        XCTAssertTrue(waitForLabel(elapsed, toContain: "3 hours, 20 minutes"), "Showed: \(elapsed.label)")
+        XCTAssertTrue(scrollTo(hourlyRate, in: app))
+        XCTAssertTrue(waitForLabel(hourlyRate, toContain: "$30.00"), "Showed: \(hourlyRate.label)")
+        XCTAssertTrue(scrollTo(mileage, in: app))
+        XCTAssertTrue(waitForLabel(mileage, toContain: "4.5 miles"), "Measured again: \(mileage.label)")
+        XCTAssertFalse(mileage.label.contains("5.6 miles"), "Not scaled by the time removed")
+        XCTAssertTrue(waitForLabel(app.staticTexts["shiftDetailCaptureSegments"], toContain: "2"))
+    }
+
+    /// The real recovery, end to end. The delivery's completion and the shift's
+    /// end were both recorded late; correcting the end is refused naming the
+    /// delivery and event; the delivery's times say what they will not touch,
+    /// refuse an order that breaks the lifecycle, and once corrected move the
+    /// two figures derived from them while the route stays as recorded; and
+    /// the same end correction is then accepted and trims the route.
+    ///
+    /// Was three journeys. The rules are `DeliveryTimeCorrectionTests`.
+    @MainActor
+    func testTheShiftEndIsCorrectedOnceTheDeliveryBlockingItIs() throws {
+        let app = launchWithLateDeliveryHistory()
+        openFirstShift(in: app)
+
+        let elapsed = app.descendants(matching: .any)["shiftDetailDuration"]
+        XCTAssertTrue(scrollTo(elapsed, in: app))
+        XCTAssertEqual(elapsed.label, "3 hours, 40 minutes elapsed shift time")
+        let mileage = app.descendants(matching: .any)["shiftDetailRecordedMileage"]
+        XCTAssertTrue(scrollTo(mileage, in: app))
+        XCTAssertTrue(mileage.label.contains("6.7 miles"), "Showed: \(mileage.label)")
+        let row = app.descendants(matching: .any)["shiftDetailDeliveryRow"].firstMatch
+        XCTAssertTrue(scrollTo(row, in: app))
+        XCTAssertTrue(row.label.contains("Accepted to delivered 1 hour, 30 minutes"), "Showed: \(row.label)")
+        XCTAssertTrue(row.label.contains("$8.00 earned per recorded delivery hour"), "Showed: \(row.label)")
+
+        // 1. The end is refused, naming the delivery and the event.
+        let correctEnd = app.buttons["correctShiftEndButton"]
+        XCTAssertTrue(scrollUntilHittable(correctEnd, in: app))
+        correctEnd.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["shiftEndCorrectionSummary"].waitForExistence(timeout: 5))
+        setTime(minute: "20", ofPicker: "shiftEndCorrectionPicker", in: app)
+        let endRefusal = app.descendants(matching: .any).matching(identifier: "shiftEndCorrectionRefusal").firstMatch
+        XCTAssertTrue(endRefusal.waitForExistence(timeout: 5))
+        XCTAssertTrue(endRefusal.label.hasPrefix("Delivery 1 has Delivered recorded at "), "Showed: \(endRefusal.label)")
+        XCTAssertTrue(endRefusal.label.contains("Open that delivery and correct its times"), "Showed: \(endRefusal.label)")
+        XCTAssertFalse(app.buttons["shiftEndCorrectionSaveButton"].isEnabled)
+        app.buttons["shiftEndCorrectionCancelButton"].tap()
+
+        // 2. The delivery's times: what they will not touch, and an order that
+        //    breaks the lifecycle refused.
+        XCTAssertTrue(scrollToTop(reaching: elapsed, in: app))
+        let correctTimes = app.buttons["shiftDetailCorrectDeliveryTimesButton"]
+        XCTAssertTrue(scrollUntilHittable(correctTimes, in: app, maxSwipes: 15))
+        XCTAssertTrue(correctTimes.label.hasPrefix("Correct the times Delivery 1 recorded"), correctTimes.label)
+        correctTimes.tap()
+        let summary = app.descendants(matching: .any)["deliveryTimeCorrectionSummary"]
+        XCTAssertTrue(summary.waitForExistence(timeout: 5))
+        XCTAssertTrue(summary.label.contains("1 hour, 30 minutes"), "Showed: \(summary.label)")
+        let note = app.descendants(matching: .any).matching(identifier: "deliveryTimeCorrectionRouteNotice").firstMatch
+        XCTAssertTrue(note.waitForExistence(timeout: 5))
+        XCTAssertTrue(note.label.contains("recorded mileage are not changed"), "Showed: \(note.label)")
+        setTime(minute: "02", ofPicker: "deliveryTimeCorrectionPicker.pickedUp", in: app)
+        let timeRefusal = app.descendants(matching: .any).matching(identifier: "deliveryTimeCorrectionRefusal").firstMatch
+        XCTAssertTrue(timeRefusal.waitForExistence(timeout: 5))
+        XCTAssertTrue(timeRefusal.label.hasPrefix("Picked up cannot be earlier than arrived at the pickup"), timeRefusal.label)
+        XCTAssertTrue(timeRefusal.label.contains("correct arrived at the pickup as well"), timeRefusal.label)
+        XCTAssertFalse(app.buttons["deliveryTimeCorrectionSaveButton"].isEnabled)
+        setTime(minute: "10", ofPicker: "deliveryTimeCorrectionPicker.pickedUp", in: app)
+
+        // 3. The completion corrected: the derived figures move, nothing else.
+        setTime(minute: "15", ofPicker: "deliveryTimeCorrectionPicker.delivered", in: app)
+        XCTAssertTrue(waitForLabel(summary, toContain: "1 hour, 15 minutes"), "Showed: \(summary.label)")
+        XCTAssertTrue(summary.label.contains("$9.60"), "Showed: \(summary.label)")
+        app.buttons["deliveryTimeCorrectionSaveButton"].tap()
+        XCTAssertTrue(scrollTo(row, in: app))
+        XCTAssertTrue(waitForLabel(row, toContain: "Accepted to delivered 1 hour, 15 minutes"), "Showed: \(row.label)")
+        XCTAssertTrue(row.label.contains("$9.60 earned per recorded delivery hour"), "Showed: \(row.label)")
+        XCTAssertTrue(row.label.contains("Gross earnings for Delivery 1, $12.00"), "The amount did not move")
+        XCTAssertTrue(row.label.contains("Waited at pickup 5 minutes"), "Nor the wait's two ends")
+        XCTAssertTrue(row.label.hasPrefix("Delivery 1, delivered"), "Still terminal the same way")
+        XCTAssertTrue(scrollToTop(reaching: elapsed, in: app))
+        XCTAssertTrue(scrollTo(mileage, in: app))
+        XCTAssertTrue(mileage.label.contains("6.7 miles"), "Not one metre of route moved with the times")
+
+        // 4. The same end correction, now accepted, trims the route.
+        XCTAssertTrue(scrollUntilHittable(correctEnd, in: app))
+        correctEnd.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["shiftEndCorrectionSummary"].waitForExistence(timeout: 5))
+        setTime(minute: "20", ofPicker: "shiftEndCorrectionPicker", in: app)
+        XCTAssertFalse(endRefusal.exists, "No longer refused")
+        app.buttons["shiftEndCorrectionSaveButton"].tap()
+        let confirm = app.buttons["confirmShiftEndCorrectionButton"].firstMatch
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        confirm.tap()
+        XCTAssertTrue(scrollToTop(reaching: elapsed, in: app))
+        XCTAssertTrue(waitForLabel(elapsed, toContain: "3 hours, 20 minutes"))
+        let hourlyRate = app.descendants(matching: .any)["shiftDetailHourlyRate"]
+        XCTAssertTrue(scrollTo(hourlyRate, in: app))
+        XCTAssertTrue(waitForLabel(hourlyRate, toContain: "$30.00"), "Showed: \(hourlyRate.label)")
+        XCTAssertTrue(scrollTo(mileage, in: app))
+        XCTAssertTrue(waitForLabel(mileage, toContain: "4.5 miles"), "Measured again: \(mileage.label)")
+    }
+
+    /// A pickup place named on a running delivery advances nothing; a second
+    /// delivery reuses it from the recent list with no typing; a place put on
+    /// the wrong delivery is changed; and removing it leaves the delivery
+    /// exactly where it was in its lifecycle.
+    ///
+    /// Was four journeys, each starting a shift and a delivery. Matching is
+    /// `PickupPlaceNameTests`.
+    @MainActor
+    func testAPickupPlaceIsNamedReusedChangedAndRemoved() throws {
+        let app = launchWithEmptyStore()
+        startShiftAndDelivery(in: app)
+
+        let action = deliveryButton("deliveryActionButton", containing: "Delivery 1", in: app)
+        XCTAssertTrue(waitForLabel(action, toContain: "Mark arrived at pickup"))
+        let pickup = deliveryButton("pickupPlaceButton", containing: "Delivery 1", in: app)
+        XCTAssertTrue(scrollTo(pickup, in: app), "The card offers a pickup place control")
+        XCTAssertEqual(pickup.label, "Add pickup place for Delivery 1")
+        tapWithinReach(pickup, in: app)
+        typePickupPlace(Self.noodles, in: app)
+        app.buttons["savePickupPlaceButton"].tap()
+        let status = deliveryStatus(containing: "Delivery 1", in: app)
+        XCTAssertTrue(waitForLabel(status, toContain: Self.noodles), "The card names the place: \(status.label)")
+        XCTAssertTrue(waitForLabel(pickup, toContain: "Change pickup place"))
+        XCTAssertEqual(action.label, "Delivery 1. Mark arrived at pickup", "Naming a pickup advances nothing")
+
+        let startDelivery = app.buttons["startDeliveryButton"]
+        XCTAssertTrue(scrollTo(startDelivery, in: app))
+        startDelivery.tap()
+        let second = deliveryButton("pickupPlaceButton", containing: "Delivery 2", in: app)
+        XCTAssertTrue(second.waitForExistence(timeout: 5))
+        tapWithinReach(second, in: app)
+        let recent = app.buttons
+            .matching(NSPredicate(format: "identifier == %@ AND label CONTAINS %@", "recentPickupPlaceButton", Self.noodles))
+            .firstMatch
+        XCTAssertTrue(recent.waitForExistence(timeout: 5), "The place used moments ago is offered")
+        recent.tap()
+        XCTAssertTrue(waitForLabel(deliveryStatus(containing: "Delivery 2", in: app), toContain: Self.noodles))
+
+        XCTAssertTrue(scrollTo(pickup, in: app))
+        tapWithinReach(pickup, in: app)
+        let field = app.textFields["pickupPlaceNameField"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        XCTAssertEqual(field.value as? String, Self.noodles, "The editor opens on what was recorded")
+        clear(field, in: app)
+        enter(Self.diner, into: field, in: app)
+        app.buttons["savePickupPlaceButton"].tap()
+        XCTAssertTrue(waitForLabel(status, toContain: Self.diner), "Showed: \(status.label)")
+        XCTAssertFalse(status.label.contains(Self.noodles), "The old place is gone from the card")
+
+        tapWithinReach(action, in: app)
+        XCTAssertTrue(waitForLabel(action, toContain: "Mark order picked up"))
+        XCTAssertTrue(waitForLabel(pickup, toContain: "Change pickup place"))
+        tapWithinReach(pickup, in: app)
+        let remove = app.buttons["removePickupPlaceButton"]
+        XCTAssertTrue(remove.waitForExistence(timeout: 5))
+        remove.tap()
+        XCTAssertTrue(waitForLabel(status, toContain: "waiting at the pickup"), "Showed: \(status.label)")
+        XCTAssertFalse(status.label.contains(Self.diner), "The place is gone")
+        XCTAssertEqual(action.label, "Delivery 1. Mark order picked up", "Exactly where it was in its lifecycle")
+        XCTAssertTrue(waitForLabel(pickup, toContain: "Add pickup place"))
+    }
+
+    /// Pickup waits: a delivery states its own wait, never as the place's; a
+    /// place's history is the median of its recorded pickups with the count
+    /// and range, claiming nothing more; one recorded pickup is not a typical
+    /// wait; two places keep separate histories; and a delivery with no place
+    /// has no history to open.
+    ///
+    /// Was five journeys over this fixture. Medians are `PickupWaitMetricsTests`.
+    @MainActor
+    func testPickupWaitHistoryIsPerPlaceAndStatesItsSample() throws {
+        let app = launchWithPickupHistory()
+        openFirstShift(in: app)
+
+        let first = deliveryRow(containing: "Delivery 1, delivered", in: app)
+        XCTAssertTrue(scrollTo(first, in: app))
+        XCTAssertTrue(first.label.contains("Waited at pickup 6 minutes"), "Showed: \(first.label)")
+        XCTAssertFalse(first.label.lowercased().contains("typical"), "One wait is not a claim about the place")
+        XCTAssertFalse(first.label.contains("median"))
+
+        openPickupHistory(from: "Delivery 1, delivered", in: app)
+        let summary = app.descendants(matching: .any)["pickupPlaceHistorySummary"]
+        XCTAssertTrue(summary.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.navigationBars[Self.noodles].exists, "Titled by the place it describes")
+        XCTAssertTrue(summary.label.contains("Typical recorded pickup wait, 11 minutes"), "Showed: \(summary.label)")
+        XCTAssertTrue(summary.label.contains("median of 3 recorded pickups"), "Showed: \(summary.label)")
+        XCTAssertTrue(summary.label.contains("longest 41 minutes"), "A long wait is kept: \(summary.label)")
+        XCTAssertFalse(summary.label.contains("4 recorded pickups"), "A cancelled arrival contributed nothing")
+        for overclaim in ["reliable", "accurate", "predict", "average", "score", "best", "fastest"] {
+            XCTAssertFalse(summary.label.lowercased().contains(overclaim), "Must not claim \(overclaim)")
+        }
+        closePickupHistory(in: app)
+
+        openPickupHistory(from: "Delivery 5, delivered", in: app)
+        XCTAssertTrue(summary.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.navigationBars[Self.diner].exists)
+        XCTAssertTrue(summary.label.contains("1 recorded pickup, 20 minutes"), "Showed: \(summary.label)")
+        XCTAssertTrue(summary.label.contains("Not enough history for a typical wait"), "Showed: \(summary.label)")
+        XCTAssertFalse(summary.label.lowercased().contains("typical recorded pickup wait"))
+        XCTAssertFalse(summary.label.contains("Median"))
+        XCTAssertFalse(summary.label.contains("11 minutes"), "The other place's median does not leak in")
+        closePickupHistory(in: app)
+
+        let unattributed = deliveryRow(containing: "Delivery 6, delivered", in: app)
+        XCTAssertTrue(scrollTo(unattributed, in: app))
+        XCTAssertFalse(unattributed.label.contains("Picked up from"), "It named no place")
+        XCTAssertTrue(unattributed.label.contains("Waited at pickup"), "Its own wait is still recorded")
+        XCTAssertNil(pickupHistoryButton(near: unattributed, in: app), "A delivery with no place is offered no history")
+    }
+
+    /// Correcting pickup places: renaming onto a name another place uses is
+    /// refused and points at merging; a rename changes only the name; and
+    /// merging two places a driver meant as one moves deliveries, destroys
+    /// nothing, and reads their waits together.
+    ///
+    /// Was three journeys over this fixture. Merging is `PickupPlaceServiceTests`.
+    @MainActor
+    func testCorrectingPickupPlacesRenamesRefusesAndMerges() throws {
+        let app = launchWithPickupHistory()
+        openFirstShift(in: app)
+        openPickupHistory(from: "Delivery 1, delivered", in: app)
+        let summary = app.descendants(matching: .any)["pickupPlaceHistorySummary"]
+        XCTAssertTrue(summary.waitForExistence(timeout: 5))
+        let before = summary.label
+
+        let rename = app.buttons["renamePickupPlaceButton"]
+        XCTAssertTrue(scrollTo(rename, in: app))
+        XCTAssertEqual(rename.label, "Rename pickup place, \(Self.noodles)", "The control names its place")
+        rename.tap()
+        let field = app.textFields["pickupPlaceRenameField"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        XCTAssertEqual(field.value as? String, Self.noodles)
+        clear(field, in: app)
+        enter(Self.diner, into: field, in: app)
+        app.buttons["savePickupPlaceRenameButton"].tap()
+        let message = app.staticTexts.matching(identifier: "pickupPlaceRenameMessage").firstMatch
+        XCTAssertTrue(message.waitForExistence(timeout: 5), "Refused rather than silently merged")
+        XCTAssertTrue(message.label.contains(Self.diner) && message.label.lowercased().contains("merge"), message.label)
+        XCTAssertTrue(field.exists, "The sheet stays open with what was typed")
+
+        clear(field, in: app)
+        enter(Self.renamedNoodles, into: field, in: app)
+        app.buttons["savePickupPlaceRenameButton"].tap()
+        XCTAssertTrue(app.navigationBars[Self.renamedNoodles].waitForExistence(timeout: 5), "Titled by the new name")
+        XCTAssertEqual(summary.label, before, "A rename moves no wait")
+        closePickupHistory(in: app)
+        let row = deliveryRow(containing: "Delivery 1, delivered", in: app)
+        XCTAssertTrue(waitForLabel(row, toContain: "Picked up from \(Self.renamedNoodles)"))
+        XCTAssertTrue(row.label.contains("Waited at pickup 6 minutes"), "Its own record is untouched")
+
+        openPickupHistory(from: "Delivery 5, delivered", in: app)
+        XCTAssertTrue(summary.waitForExistence(timeout: 5))
+        let merge = app.buttons["mergePickupPlaceButton"]
+        XCTAssertTrue(scrollTo(merge, in: app))
+        XCTAssertEqual(merge.label, "Merge pickup place, \(Self.diner)")
+        merge.tap()
+        let destination = app.buttons
+            .matching(identifier: "pickupPlaceMergeDestinationButton")
+            .matching(NSPredicate(format: "label == %@", "Merge \(Self.diner) into \(Self.renamedNoodles)"))
+            .firstMatch
+        XCTAssertTrue(destination.waitForExistence(timeout: 5), "The direction is spoken in full")
+        destination.tap()
+        let confirmation = app.alerts.firstMatch
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 5))
+        let spoken = confirmation.label + " " + confirmation.staticTexts.allElementsBoundByIndex.map(\.label).joined(separator: " ")
+        XCTAssertTrue(spoken.contains("will move to"), "The deliveries move: \(spoken)")
+        XCTAssertFalse(spoken.lowercased().contains("deliveries will be deleted"), "Nothing is destroyed")
+        confirmation.buttons.matching(identifier: "confirmPickupPlaceMergeButton").firstMatch.tap()
+        XCTAssertTrue(waitForDisappearance(of: summary), "The merged-away place closes with it")
+
+        let moved = deliveryRow(containing: "Delivery 5, delivered", in: app)
+        XCTAssertTrue(waitForLabel(moved, toContain: "Picked up from \(Self.renamedNoodles)"))
+        XCTAssertTrue(moved.label.contains("Waited at pickup 20 minutes"), "Keeping its own record")
+        openPickupHistory(from: "Delivery 5, delivered", in: app)
+        XCTAssertTrue(summary.waitForExistence(timeout: 5))
+        XCTAssertTrue(summary.label.contains("median of 4 recorded pickups"), "Showed: \(summary.label)")
+        XCTAssertTrue(summary.label.contains("Typical recorded pickup wait, 16 minutes"), "Showed: \(summary.label)")
+        XCTAssertTrue(
+            summary.label.contains("Shortest recorded wait 6 minutes") && summary.label.contains("longest 41 minutes"),
+            "The spread spans both places' waits: \(summary.label)"
+        )
     }
 
     /// Parked at a pickup with the setting on, the driver's own Picked Up
@@ -2692,130 +4417,6 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertTrue(waitForDisappearance(of: banner, timeout: 30), "The Undo leaves after its window")
         XCTAssertEqual(next.frame, before, "Leaving moved the next delivery's button: \(before) to \(next.frame)")
         XCTAssertTrue(next.isHittable)
-    }
-
-    /// With the workflow off, parking beside a delivery at its pickup parks and
-    /// does nothing else, exactly as it did before the workflow existed.
-    @MainActor
-    func testParkingWithPickupSettingOffLeavesDeliveriesAlone() throws {
-        let app = launchWithStackedOffer()
-        XCTAssertTrue(deliveryStatusCard(named: "Delivery 1", in: app).waitForExistence(timeout: 10))
-
-        pressPark(in: app)
-
-        XCTAssertTrue(app.descendants(matching: .any)["parkedShiftNotice"].waitForExistence(timeout: 5))
-        XCTAssertFalse(
-            app.descendants(matching: .any)["pickupWorkflowNotice"].exists,
-            "Nothing is added to ordinary parking"
-        )
-        let first = deliveryStatusCard(named: "Delivery 1", in: app)
-        XCTAssertTrue(scrollTo(first, in: app))
-        XCTAssertTrue(first.label.contains("waiting at the pickup"), first.label)
-        let second = deliveryStatusCard(named: "Delivery 2", in: app)
-        XCTAssertTrue(scrollTo(second, in: app))
-        XCTAssertTrue(second.label.contains("heading to the pickup"), second.label)
-    }
-
-    /// The workflow the driver asked for after a real shift: Park records
-    /// Arrived at Pickup, Resume Driving records Picked Up, and each says which
-    /// delivery and that it was recorded automatically.
-    @MainActor
-    func testParkAndResumePickUpTheOneDelivery() throws {
-        let app = launchWithEmptyStore()
-        startShiftAndDelivery(in: app)
-        assertCard("Delivery 1", says: "heading to the pickup", in: app)
-        setPickupWorkflow(true, in: app)
-
-        pressPark(in: app)
-        let parked = assertPickupWorkflowNotice(contains: "Delivery 1 marked Arrived at Pickup", in: app)
-        XCTAssertTrue(parked.label.contains("Recorded automatically when you parked"), parked.label)
-        XCTAssertTrue(parked.label.contains("Pick up orders with Park & Resume"), "Their setting, not a detection")
-        XCTAssertTrue(app.descendants(matching: .any)["parkedShiftNotice"].exists, "And the vehicle is parked")
-        XCTAssertFalse(app.alerts.firstMatch.exists, "No alert stands between the driver and the door")
-        assertCard("Delivery 1", says: "waiting at the pickup", in: app)
-
-        pressResumeDriving(in: app)
-        let resumed = assertPickupWorkflowNotice(contains: "Delivery 1 marked Picked Up", in: app)
-        XCTAssertTrue(resumed.label.contains("Recorded automatically when you resumed driving"), resumed.label)
-        XCTAssertFalse(app.descendants(matching: .any)["parkedShiftNotice"].exists, "The vehicle is driving")
-        assertCard("Delivery 1", says: "heading to the customer", in: app)
-    }
-
-    /// Two orders, each picked up by its own Park and Resume Driving, lowest
-    /// number first.
-    @MainActor
-    func testStackedOrdersArePickedUpInOrder() throws {
-        let app = launchWithEmptyStore()
-        startShiftAndDelivery(in: app)
-        let startDelivery = app.buttons["startDeliveryButton"]
-        XCTAssertTrue(scrollUntilHittable(startDelivery, in: app))
-        startDelivery.tap()
-        assertCard("Delivery 2", says: "heading to the pickup", in: app)
-        setPickupWorkflow(true, stackedOrders: true, in: app)
-
-        pressPark(in: app)
-        assertPickupWorkflowNotice(contains: "Delivery 1 marked Arrived at Pickup", in: app)
-        assertCard("Delivery 1", says: "waiting at the pickup", in: app)
-        assertCard("Delivery 2", says: "heading to the pickup", in: app)
-
-        pressResumeDriving(in: app)
-        assertPickupWorkflowNotice(contains: "Delivery 1 marked Picked Up", in: app)
-        assertCard("Delivery 1", says: "heading to the customer", in: app)
-        assertCard("Delivery 2", says: "heading to the pickup", in: app)
-
-        pressPark(in: app)
-        assertPickupWorkflowNotice(contains: "Delivery 2 marked Arrived at Pickup", in: app)
-        pressResumeDriving(in: app)
-        assertPickupWorkflowNotice(contains: "Delivery 2 marked Picked Up", in: app)
-        assertCard("Delivery 1", says: "heading to the customer", in: app)
-        assertCard("Delivery 2", says: "heading to the customer", in: app)
-    }
-
-    /// Undo after Park takes back the arrival and leaves the vehicle parked.
-    @MainActor
-    func testUndoAfterAutomatedArrivalKeepsTheVehicleParked() throws {
-        let app = launchWithEmptyStore()
-        startShiftAndDelivery(in: app)
-        setPickupWorkflow(true, in: app)
-        pressPark(in: app)
-        assertPickupWorkflowNotice(contains: "Delivery 1 marked Arrived at Pickup", in: app)
-
-        let undo = app.buttons["undoPickupWorkflowStepButton"]
-        XCTAssertTrue(scrollUpUntilHittable(undo, in: app, maxSwipes: 6), "Undo is offered beside what was recorded")
-        XCTAssertTrue(undo.label.contains("Undo Arrived at Pickup for Delivery 1"), undo.label)
-        XCTAssertTrue(undo.label.contains("The vehicle is still parked"), undo.label)
-        XCTAssertGreaterThanOrEqual(onPixelGrid(undo.frame.height), 44, "A full-size target")
-        undo.tap()
-
-        assertPickupWorkflowNotice(contains: "Undid Arrived at Pickup for Delivery 1", in: app)
-        XCTAssertTrue(waitForDisappearance(of: undo), "The offer goes once used")
-        XCTAssertTrue(app.descendants(matching: .any)["parkedShiftNotice"].exists, "The vehicle is still parked")
-        XCTAssertTrue(app.buttons["resumeDrivingButton"].exists)
-        assertCard("Delivery 1", says: "heading to the pickup", in: app)
-    }
-
-    /// Undo after Resume Driving takes back the pickup and leaves the vehicle
-    /// driving.
-    @MainActor
-    func testUndoAfterAutomatedPickupKeepsTheVehicleDriving() throws {
-        let app = launchWithEmptyStore()
-        startShiftAndDelivery(in: app)
-        setPickupWorkflow(true, in: app)
-        pressPark(in: app)
-        assertPickupWorkflowNotice(contains: "Delivery 1 marked Arrived at Pickup", in: app)
-        pressResumeDriving(in: app)
-        assertPickupWorkflowNotice(contains: "Delivery 1 marked Picked Up", in: app)
-
-        let undo = app.buttons["undoPickupWorkflowStepButton"]
-        XCTAssertTrue(scrollUpUntilHittable(undo, in: app, maxSwipes: 6))
-        XCTAssertTrue(undo.label.contains("Undo Picked Up for Delivery 1"), undo.label)
-        XCTAssertTrue(undo.label.contains("still recorded as driving"), undo.label)
-        undo.tap()
-
-        assertPickupWorkflowNotice(contains: "Undid Picked Up for Delivery 1", in: app)
-        XCTAssertFalse(app.descendants(matching: .any)["parkedShiftNotice"].exists, "The vehicle is still driving")
-        XCTAssertTrue(app.buttons["parkShiftButton"].exists)
-        assertCard("Delivery 1", says: "waiting at the pickup", in: app)
     }
 
     // MARK: Same pickup and same drop-off
@@ -3120,545 +4721,11 @@ final class DashPilotUITests: XCTestCase {
         assertInsideTheCard("activityControl.deliveryStep", in: app)
     }
 
-    /// Several orders, two of them sharing a pickup, parked: the card still
-    /// holds Resume Driving and Start Delivery inside its height.
-    @MainActor
-    func testLiveActivityKeepsResumeDrivingWithSeveralOrders() throws {
-        let app = launchWithLiveActivityPreview()
-        setPickupWorkflow(true, stackedOrders: true, in: app)
-        app.buttons["startShiftButton"].tap()
-        // The card's preview now sits above the shift, so the panel's controls
-        // start below the fold.
-        XCTAssertTrue(app.descendants(matching: .any)["liveActivityPreview"].waitForExistence(timeout: 5))
-        startOffer(samePickup: true, sameDropOff: true, expectingCards: 2, in: app)
-        XCTAssertTrue(scrollToTop(reaching: app.descendants(matching: .any)["liveActivityPreview"], in: app))
-        startOffer(of: 3, expectingCards: 5, in: app)
-
-        pressPark(in: app)
-        XCTAssertTrue(scrollToTop(reaching: app.descendants(matching: .any)["liveActivityPreview"], in: app))
-        XCTAssertEqual(activityControls(in: app), ["activityControl.resumeDriving", "activityControl.startDelivery"])
-        assertInsideTheCard("activityControl.resumeDriving", in: app)
-        assertInsideTheCard("activityControl.startDelivery", in: app)
-
-        let card = app.descendants(matching: .any)["liveActivityPreview"]
-        XCTAssertTrue(
-            card.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Deliveries 1 and 2")).firstMatch.exists,
-            "The pair the driver marked as sharing a stop is one row"
-        )
-    }
-
-    /// Two orders picked up: the card offers Delivered for the lower number
-    /// beside Resume Driving, inside its height, and falls back to the one
-    /// delivery's own step once the first is delivered.
-    @MainActor
-    func testLiveActivityOffersDeliveredInOrderForStackedOrders() throws {
-        let app = launchWithLiveActivityPreview()
-        app.buttons["startShiftButton"].tap()
-        XCTAssertTrue(app.descendants(matching: .any)["liveActivityPreview"].waitForExistence(timeout: 5))
-        startOffer(expectingCards: 2, in: app)
-
-        for name in ["Delivery 1", "Delivery 2"] {
-            let action = deliveryButton("deliveryActionButton", containing: name, in: app)
-            for next in ["Mark order picked up", "Mark delivery completed"] {
-                XCTAssertTrue(scrollUntilHittable(action, in: app))
-                action.tap()
-                XCTAssertTrue(waitForLabel(action, toContain: next), "\(name): \(action.label)")
-            }
-        }
-
-        let card = app.descendants(matching: .any)["liveActivityPreview"]
-        XCTAssertTrue(scrollToTop(reaching: card, in: app))
-        XCTAssertEqual(
-            activityControls(in: app),
-            ["activityControl.nextDelivered", "activityControl.startDelivery", "activityControl.park"]
-        )
-        let delivered = card.buttons["activityControl.nextDelivered"]
-        XCTAssertEqual(delivered.label, "Mark delivery 1 delivered", "The control names the order it records")
-
-        pressPark(in: app)
-        XCTAssertTrue(scrollToTop(reaching: card, in: app))
-        XCTAssertEqual(
-            activityControls(in: app),
-            ["activityControl.resumeDriving", "activityControl.nextDelivered", "activityControl.startDelivery"]
-        )
-        assertInsideTheCard("activityControl.resumeDriving", in: app)
-        assertInsideTheCard("activityControl.nextDelivered", in: app)
-
-        let first = deliveryButton("deliveryActionButton", containing: "Delivery 1", in: app)
-        XCTAssertTrue(scrollUntilHittable(first, in: app))
-        first.tap()
-        XCTAssertTrue(scrollToTop(reaching: card, in: app))
-        XCTAssertTrue(card.buttons["activityControl.deliveryStep"].waitForExistence(timeout: 5))
-        XCTAssertFalse(card.buttons["activityControl.nextDelivered"].exists, "One left: its own step again")
-    }
-
-    /// A completed shift that was parked says how much of its short route the
-    /// driver asked for, and reports every minute of it as worked.
-    @MainActor
-    func testACompletedParkedShiftExplainsItsShortRoute() throws {
-        let app = launchWithParkedHistory()
-
-        openFirstShift(in: app)
-
-        let mileage = app.descendants(matching: .any)["shiftDetailRecordedMileage"]
-        XCTAssertTrue(scrollTo(mileage, in: app))
-        // Longer than the helper's 5 s, for a measured reason: on CI run
-        // 36916384792 resolving this element in the shift detail's hierarchy
-        // took 4.2 s on the runner, so the wait evaluated its predicate once
-        // and expired while the label already held the figure (the failure
-        // message read it). The figure is measured in a task after the screen
-        // appears; 15 s allows several evaluations at that cost.
-        XCTAssertTrue(
-            waitForLabel(mileage, toContain: "4.5 miles recorded", timeout: 15),
-            "The two capture sessions, with nothing measured across the stretch parked: \(mileage.label)"
-        )
-
-        // The caveats are read out inside the same combined element as the
-        // figure they qualify, which is the arrangement that stops a listener
-        // hearing a mileage with nothing attached to it.
-        let caveats = mileage
-        XCTAssertTrue(
-            caveats.label.contains("1 stretch parked"),
-            "It says what the driver recorded: \(caveats.label)"
-        )
-        XCTAssertTrue(caveats.label.contains("25 min"), caveats.label)
-        XCTAssertTrue(
-            caveats.label.contains("time you recorded as parked"),
-            "And the partial sentence stops claiming miles were driven across it: \(caveats.label)"
-        )
-        XCTAssertFalse(
-            caveats.label.contains("more miles were driven than were recorded"),
-            "That sentence is untrue of a vehicle that spent the stretch in a parking space"
-        )
-
-        // Nothing was subtracted from the shift's own time. A paused shift shows
-        // a Paused row and a Working row; this one shows neither, because
-        // shopping is working and working equals elapsed to the second.
-        XCTAssertFalse(
-            app.descendants(matching: .any)["shiftDetailPausedTime"].exists,
-            "Parking records no pause"
-        )
-    }
-
     // MARK: What each stacked delivery is waiting for
-
-    /// Three cards on one screen, each saying which delivery it is, what it is
-    /// doing and what it is waiting for, without any of them being opened.
-    @MainActor
-    func testEveryStackedDeliverySaysWhatItIsWaitingFor() throws {
-        let app = launchWithStackedOffer()
-
-        let first = deliveryStatusCard(named: "Delivery 1", in: app)
-        XCTAssertTrue(first.waitForExistence(timeout: 10))
-        let second = deliveryStatusCard(named: "Delivery 2", in: app)
-        let third = deliveryStatusCard(named: "Delivery 3", in: app)
-
-        // The fixture's first delivery is at its pickup and the other two were
-        // only accepted, so one card is waiting for a different event from the
-        // two beside it.
-        XCTAssertTrue(first.label.contains("waiting at the pickup"), first.label)
-        XCTAssertTrue(
-            first.label.contains("Next step, mark order picked up"),
-            "The card says what it is waiting for, not only what it is doing: \(first.label)"
-        )
-
-        XCTAssertTrue(second.label.contains("heading to the pickup"), second.label)
-        XCTAssertTrue(second.label.contains("Next step, mark arrived at pickup"), second.label)
-        XCTAssertTrue(third.label.contains("Next step, mark arrived at pickup"), third.label)
-
-        // And the cards are distinguishable by that alone, which is the claim:
-        // two deliveries in different states must not read as one.
-        XCTAssertNotEqual(first.label, second.label)
-        XCTAssertFalse(
-            first.label.contains("Next step, mark arrived at pickup"),
-            "The card at its pickup is not offered the arrival it already recorded"
-        )
-    }
-
-    /// Advancing one stacked delivery moves that card's next step and leaves
-    /// every other card saying exactly what it said.
-    @MainActor
-    func testAdvancingOneStackedDeliveryMovesOnlyItsNextStep() throws {
-        let app = launchWithStackedOffer()
-
-        let second = deliveryStatusCard(named: "Delivery 2", in: app)
-        XCTAssertTrue(second.waitForExistence(timeout: 10))
-        let first = deliveryStatusCard(named: "Delivery 1", in: app)
-        let firstBefore = first.label
-
-        let step = deliveryButton("deliveryActionButton", containing: "Delivery 2", in: app)
-        XCTAssertTrue(scrollTo(step, in: app))
-        tapWithinReach(step, in: app)
-
-        XCTAssertTrue(
-            waitForLabel(second, toContain: "Next step, mark order picked up"),
-            "Delivery 2 recorded its arrival, so its card now waits for the pickup: \(second.label)"
-        )
-        XCTAssertEqual(
-            first.label,
-            firstBefore,
-            "And the card beside it says exactly what it said before"
-        )
-    }
 
     // MARK: Reminders about a lifecycle event that may have gone unrecorded
 
-    /// Two stale deliveries each get their own reminder, naming their own
-    /// delivery and offering their own next step.
-    @MainActor
-    func testStaleDeliveriesEachGetTheirOwnReminder() throws {
-        let app = launchWithMissedLifecycle()
-
-        let reminders = app.descendants(matching: .any).matching(identifier: "deliverySuggestion")
-        XCTAssertTrue(reminders.firstMatch.waitForExistence(timeout: 10))
-        XCTAssertTrue(
-            waitForCount(reminders, toEqual: 2),
-            "Two deliveries are stale; the third was picked up and is never the subject of one"
-        )
-
-        let waiting = deliveryButton("deliverySuggestionActionButton", containing: "Delivery 1", in: app)
-        let heading = deliveryButton("deliverySuggestionActionButton", containing: "Delivery 2", in: app)
-        XCTAssertTrue(waiting.exists, "The delivery at its pickup is offered the pickup")
-        XCTAssertTrue(heading.exists, "The delivery that only recorded an acceptance is offered the arrival")
-
-        // Each control names the delivery it acts on, in print and aloud, so
-        // neither is identified by where it happens to sit.
-        XCTAssertTrue(
-            waiting.label.hasPrefix("Delivery 1."),
-            "A reminder's control names its delivery first: \(waiting.label)"
-        )
-        XCTAssertTrue(waiting.label.contains("Mark order picked up"), waiting.label)
-        XCTAssertTrue(heading.label.hasPrefix("Delivery 2."), heading.label)
-        XCTAssertTrue(heading.label.contains("Mark arrived at pickup"), heading.label)
-
-        // Nothing is offered for the delivery that is already in the car,
-        // however long it has been carried.
-        XCTAssertFalse(
-            deliveryButton("deliverySuggestionActionButton", containing: "Delivery 3", in: app).exists,
-            "A delivery already picked up is never the subject of a reminder"
-        )
-    }
-
-    /// The reminder states what was recorded and says plainly that DashPilot did
-    /// not observe it.
-    @MainActor
-    func testAReminderStatesItsEvidenceAndClaimsNoObservation() throws {
-        let app = launchWithMissedLifecycle()
-
-        let reminder = app.descendants(matching: .any)
-            .matching(
-                NSPredicate(
-                    format: "identifier == %@ AND label CONTAINS %@",
-                    "deliverySuggestion",
-                    "Delivery 1"
-                )
-            )
-            .firstMatch
-        XCTAssertTrue(reminder.waitForExistence(timeout: 10))
-
-        let spoken = reminder.label
-        XCTAssertTrue(
-            spoken.contains("reached the pickup") && spoken.contains("records no pickup"),
-            "It states what the record holds: \(spoken)"
-        )
-        XCTAssertTrue(spoken.contains("Already picked this order up?"), spoken)
-        XCTAssertTrue(
-            spoken.contains("DashPilot cannot tell where you are"),
-            "The caveat travels with the reminder rather than sitting somewhere else: \(spoken)"
-        )
-        for claim in ["you arrived", "you picked up", "detected", "confirmed"] {
-            XCTAssertFalse(
-                spoken.lowercased().contains(claim),
-                "A reminder must not claim \"\(claim)\": \(spoken)"
-            )
-        }
-    }
-
-    /// Confirming a reminder records that delivery's own step and leaves the
-    /// other deliveries exactly where they were.
-    @MainActor
-    func testConfirmingAReminderAdvancesOnlyThatDelivery() throws {
-        let app = launchWithMissedLifecycle()
-
-        let heading = deliveryButton("deliveryActionButton", containing: "Delivery 2", in: app)
-        XCTAssertTrue(heading.waitForExistence(timeout: 10))
-        XCTAssertEqual(heading.label, "Delivery 2. Mark arrived at pickup")
-
-        let waitingStep = deliveryButton("deliveryActionButton", containing: "Delivery 1", in: app)
-        XCTAssertEqual(waitingStep.label, "Delivery 1. Mark order picked up")
-
-        let confirm = deliveryButton("deliverySuggestionActionButton", containing: "Delivery 2", in: app)
-        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
-        tapWithinReach(confirm, in: app)
-
-        // The delivery the reminder named has moved, through the ordinary
-        // lifecycle action rather than through anything of the reminder's own.
-        XCTAssertTrue(
-            waitForLabel(heading, toContain: "Delivery 2. Mark order picked up"),
-            "Delivery 2 recorded its arrival: \(heading.label)"
-        )
-        XCTAssertEqual(
-            waitingStep.label,
-            "Delivery 1. Mark order picked up",
-            "Delivery 1 is untouched by a reminder confirmed on Delivery 2"
-        )
-
-        // And the reminder it answered is gone, because the delivery is no
-        // longer in the state it was about.
-        XCTAssertTrue(
-            waitForCount(
-                app.buttons.matching(identifier: "deliverySuggestionActionButton"),
-                toEqual: 1
-            ),
-            "The answered reminder leaves; the other one stays"
-        )
-    }
-
-    /// Waving a reminder away records nothing and leaves the delivery alone.
-    @MainActor
-    func testDismissingAReminderChangesNothing() throws {
-        let app = launchWithMissedLifecycle()
-
-        let step = deliveryButton("deliveryActionButton", containing: "Delivery 1", in: app)
-        XCTAssertTrue(step.waitForExistence(timeout: 10))
-        XCTAssertEqual(step.label, "Delivery 1. Mark order picked up")
-
-        let status = app.descendants(matching: .any)["deliveryStatus"]
-        XCTAssertTrue(waitForLabel(status, toContain: "3 deliveries in progress"), status.label)
-
-        let dismiss = deliveryButton("deliverySuggestionDismissButton", containing: "Delivery 1", in: app)
-        XCTAssertTrue(dismiss.waitForExistence(timeout: 5))
-        XCTAssertTrue(
-            dismiss.label.contains("Nothing is recorded"),
-            "The control says aloud that it records nothing: \(dismiss.label)"
-        )
-        tapWithinReach(dismiss, in: app)
-
-        XCTAssertTrue(
-            waitForCount(
-                app.descendants(matching: .any).matching(identifier: "deliverySuggestion"),
-                toEqual: 1
-            ),
-            "Only the dismissed reminder goes"
-        )
-        XCTAssertEqual(
-            step.label,
-            "Delivery 1. Mark order picked up",
-            "The delivery is exactly where it was, so nothing was recorded"
-        )
-        XCTAssertTrue(
-            waitForLabel(status, toContain: "3 deliveries in progress"),
-            "And the shift still holds the same three deliveries: \(status.label)"
-        )
-    }
-
     // MARK: Offers containing several deliveries
-
-    /// Deliveries accepted together are shown together, and a delivery accepted
-    /// on its own is shown exactly as it always was.
-    @MainActor
-    func testDeliveriesAcceptedTogetherAreShownAsOneOffer() throws {
-        let app = launchWithStackedOffer()
-
-        // The panel is read before it is scrolled: `scrollTo` swipes rather than
-        // waits, so a journey that starts swiping at a still-launching app can
-        // exhaust its swipes before the first card exists.
-        XCTAssertTrue(app.descendants(matching: .any)["activeShiftStatus"].waitForExistence(timeout: 15), "The seeded shift is running")
-
-        let heading = app.descendants(matching: .any)["offerGroupHeader"]
-        XCTAssertTrue(scrollTo(heading, in: app), "The offer that held two deliveries names itself")
-        XCTAssertTrue(
-            heading.label.contains("Offer 1") && heading.label.contains("2 deliveries accepted together"),
-            "The heading says which offer and how many: \(heading.label)"
-        )
-
-        // Exactly one heading: the add-on offer held a single delivery, and a
-        // heading over every card would be the interface repeating itself.
-        XCTAssertEqual(
-            app.descendants(matching: .any).matching(identifier: "offerGroupHeader").count,
-            1,
-            "An offer of one gets no heading"
-        )
-
-        // Every card still exists, still advances itself, and still says which
-        // delivery it is.
-        XCTAssertEqual(app.buttons.matching(identifier: "deliveryActionButton").count, 3)
-        XCTAssertEqual(
-            deliveryButton("deliveryActionButton", containing: "Delivery 1", in: app).label,
-            "Delivery 1. Mark order picked up"
-        )
-        XCTAssertEqual(
-            deliveryButton("deliveryActionButton", containing: "Delivery 2", in: app).label,
-            "Delivery 2. Mark arrived at pickup"
-        )
-        XCTAssertEqual(
-            deliveryButton("deliveryActionButton", containing: "Delivery 3", in: app).label,
-            "Delivery 3. Mark arrived at pickup"
-        )
-    }
-
-    /// The grouping is spoken, so a listener knows which cards belong together
-    /// without seeing where they sit.
-    @MainActor
-    func testGroupedDeliveriesSayWhatTheyWereAcceptedWith() throws {
-        let app = launchWithStackedOffer()
-
-        // The panel is read before it is scrolled: `scrollTo` swipes rather than
-        // waits, so a journey that starts swiping at a still-launching app can
-        // exhaust its swipes before the first card exists.
-        XCTAssertTrue(app.descendants(matching: .any)["activeShiftStatus"].waitForExistence(timeout: 15), "The seeded shift is running")
-
-        let grouped = app.descendants(matching: .any)
-            .matching(
-                NSPredicate(
-                    format: "identifier == %@ AND label CONTAINS %@",
-                    "activeDeliveryStatus",
-                    "Delivery 1"
-                )
-            )
-            .firstMatch
-        XCTAssertTrue(scrollTo(grouped, in: app))
-        XCTAssertTrue(
-            grouped.label.contains("Part of Offer 1, accepted together with Delivery 2"),
-            "The card names its siblings aloud: \(grouped.label)"
-        )
-
-        let alone = app.descendants(matching: .any)
-            .matching(
-                NSPredicate(
-                    format: "identifier == %@ AND label CONTAINS %@",
-                    "activeDeliveryStatus",
-                    "Delivery 3"
-                )
-            )
-            .firstMatch
-        XCTAssertTrue(scrollTo(alone, in: app))
-        XCTAssertFalse(
-            alone.label.contains("accepted together"),
-            "A delivery accepted on its own claims no grouping: \(alone.label)"
-        )
-    }
-
-    /// One delivery of an offer advances without moving its sibling, and the
-    /// heading keeps stating the offer it belongs to.
-    @MainActor
-    func testAdvancingOneOfATwoDeliveryOfferLeavesItsSibling() throws {
-        let app = launchWithStackedOffer()
-
-        // The panel is read before it is scrolled: `scrollTo` swipes rather than
-        // waits, so a journey that starts swiping at a still-launching app can
-        // exhaust its swipes before the first card exists.
-        XCTAssertTrue(app.descendants(matching: .any)["activeShiftStatus"].waitForExistence(timeout: 15), "The seeded shift is running")
-
-        let first = deliveryButton("deliveryActionButton", containing: "Delivery 1", in: app)
-        let sibling = deliveryButton("deliveryActionButton", containing: "Delivery 2", in: app)
-        // Scrolled from a known top rather than from wherever the launch left
-        // the screen. `scrollTo` stops as soon as the button *exists*, and a
-        // button inside a scroll view exists while it is off screen above:
-        // `tap()` then scrolls it into view itself and can park it under the
-        // navigation bar, where the synthesized tap lands on the bar and the
-        // delivery never moves. That reproduces only in a full serial run,
-        // where the app is relaunched over a running one and the panel is not
-        // where an isolated launch leaves it. Going to the top first and
-        // swiping down to the card makes the position the same either way.
-        // From the top of the screen, searching down to the card.
-        XCTAssertTrue(scrollToTop(reaching: app.descendants(matching: .any)["activeShiftStatus"], in: app))
-        XCTAssertTrue(scrollUntilHittable(first, in: app), "The card's own button can be pressed where it is")
-        first.tap()
-
-        XCTAssertTrue(
-            waitForLabel(first, toContain: "Mark delivery completed"),
-            "The delivery that was tapped moved on"
-        )
-        XCTAssertEqual(
-            sibling.label,
-            "Delivery 2. Mark arrived at pickup",
-            "And its sibling stayed exactly where it was"
-        )
-
-        // Delivering one of the two leaves the other running, and the heading
-        // now says how much of the offer is left rather than disappearing.
-        tapWithinReach(first, in: app)
-        XCTAssertTrue(
-            waitForCount(app.buttons.matching(identifier: "deliveryActionButton"), toEqual: 2),
-            "The delivered one leaves the list and the other two stay"
-        )
-        let heading = app.descendants(matching: .any)["offerGroupHeader"]
-        XCTAssertTrue(scrollTo(heading, in: app))
-        XCTAssertTrue(
-            heading.label.contains("1 of 2 still in progress"),
-            "The offer is not finished because one of its deliveries is: \(heading.label)"
-        )
-    }
-
-    /// Recording an offer that contained two deliveries takes one sheet and one
-    /// confirmation, and records exactly two.
-    @MainActor
-    func testStartingAnOfferOfTwoRecordsTwoDeliveries() throws {
-        let app = launchWithEmptyStore()
-        app.buttons["startShiftButton"].tap()
-
-        XCTAssertTrue(app.buttons["startDeliveryButton"].waitForExistence(timeout: 5))
-        XCTAssertEqual(
-            app.buttons.matching(identifier: "deliveryActionButton").count,
-            0,
-            "Nothing is recorded before the sheet is confirmed"
-        )
-
-        let offerControl = app.buttons["startOfferButton"]
-        XCTAssertTrue(scrollTo(offerControl, in: app), "The control for a several-delivery offer is on the panel")
-        offerControl.tap()
-
-        let confirm = app.buttons["confirmStartOfferButton"]
-        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
-        XCTAssertEqual(confirm.label, "Start an offer of 2 deliveries", "It opens on two, and says so")
-        confirm.tap()
-
-        XCTAssertTrue(
-            waitForCount(app.buttons.matching(identifier: "deliveryActionButton"), toEqual: 2),
-            "Two deliveries, from one offer"
-        )
-        let heading = app.descendants(matching: .any)["offerGroupHeader"]
-        XCTAssertTrue(scrollTo(heading, in: app))
-        XCTAssertTrue(heading.label.contains("2 deliveries accepted together"), "Showed: \(heading.label)")
-
-        // And the one-tap path is untouched: it adds a single delivery, in an
-        // offer of its own, with no heading over it.
-        XCTAssertTrue(scrollToTop(reaching: app.buttons["startDeliveryButton"], in: app))
-        app.buttons["startDeliveryButton"].tap()
-        XCTAssertTrue(
-            waitForCount(app.buttons.matching(identifier: "deliveryActionButton"), toEqual: 3),
-            "One more delivery, not two"
-        )
-        XCTAssertEqual(
-            app.descendants(matching: .any).matching(identifier: "offerGroupHeader").count,
-            1,
-            "The delivery started alone joined no group"
-        )
-    }
-
-    /// Dismissing the sheet records nothing.
-    @MainActor
-    func testCancellingTheOfferSheetRecordsNothing() throws {
-        let app = launchWithEmptyStore()
-        app.buttons["startShiftButton"].tap()
-
-        XCTAssertTrue(app.buttons["startDeliveryButton"].waitForExistence(timeout: 5))
-        let offerControl = app.buttons["startOfferButton"]
-        XCTAssertTrue(scrollTo(offerControl, in: app))
-        offerControl.tap()
-
-        let cancel = app.buttons["cancelStartOfferButton"]
-        XCTAssertTrue(cancel.waitForExistence(timeout: 5))
-        cancel.tap()
-
-        XCTAssertTrue(app.buttons["startDeliveryButton"].waitForExistence(timeout: 5))
-        XCTAssertEqual(
-            app.buttons.matching(identifier: "deliveryActionButton").count,
-            0,
-            "A dismissed sheet records no offer and no delivery"
-        )
-    }
 
     // MARK: The pinned delivery entry
 
@@ -3710,60 +4777,6 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertTrue(waitForLabel(status, toContain: statement), "Showed: \(status.label)")
     }
 
-    /// The several-delivery sheet keeps Start pinned under its form, names the
-    /// count it will record, keeps both switches usable, and records the offer
-    /// once however fast it is pressed twice.
-    @MainActor
-    func testTheOfferSheetKeepsStartPinnedAndRecordsOnce() throws {
-        let app = launchWithEmptyStore()
-        app.buttons["startShiftButton"].tap()
-        XCTAssertTrue(app.buttons["startDeliveryButton"].waitForExistence(timeout: 5))
-        app.buttons["startOfferButton"].tap()
-
-        let confirm = app.buttons["confirmStartOfferButton"]
-        let stepper = app.steppers["offerDeliveryCountStepper"]
-        let pickup = app.switches["offerSamePickupToggle"]
-        let dropOff = app.switches["offerSameDropOffToggle"]
-        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
-        XCTAssertEqual(confirm.label, "Start an offer of 2 deliveries")
-
-        stepper.buttons.element(boundBy: 1).tap()
-        XCTAssertTrue(
-            waitForLabel(confirm, toContain: "Start an offer of 3 deliveries"),
-            "The pinned action follows the count: \(confirm.label)"
-        )
-
-        // The count, then the two switches, then the action, top to bottom,
-        // which is the order a listener moving forward meets them in.
-        XCTAssertLessThan(stepper.frame.minY, pickup.frame.minY)
-        XCTAssertLessThan(pickup.frame.minY, dropOff.frame.minY)
-        XCTAssertLessThan(dropOff.frame.maxY, confirm.frame.minY, "No switch is under the action")
-
-        for _ in 0..<3 { app.swipeUp() }
-        XCTAssertTrue(confirm.isHittable, "Start is reachable with the form scrolled to its end")
-
-        setSwitch("offerSamePickupToggle", to: true, in: app)
-        setSwitch("offerSameDropOffToggle", to: true, in: app)
-        XCTAssertTrue(
-            waitForLabel(confirm, toContain: "same pickup and same drop-off"),
-            "The action says what it will record: \(confirm.label)"
-        )
-        attachScreenshot("offer-sheet-three-shared")
-
-        // Two presses faster than the sheet can leave record one offer.
-        confirm.doubleTap()
-        XCTAssertTrue(waitForDisappearance(of: confirm))
-        XCTAssertTrue(waitForCount(app.buttons.matching(identifier: "deliveryActionButton"), toEqual: 3))
-        XCTAssertEqual(
-            app.descendants(matching: .any).matching(identifier: "offerGroupHeader").count,
-            1,
-            "One offer, not two"
-        )
-        let header = app.descendants(matching: .any)["offerGroupHeader"]
-        XCTAssertTrue(header.label.contains("3 deliveries accepted together"), "Showed: \(header.label)")
-        XCTAssertTrue(header.label.contains("same pickup and drop-off"), "Showed: \(header.label)")
-    }
-
     /// At the largest accessibility text size the bar still leaves every row
     /// reachable: the last thing on Home can be scrolled wholly above it, and
     /// the sheet's switches stay usable above its own pinned action.
@@ -3804,212 +4817,7 @@ final class DashPilotUITests: XCTestCase {
         assertDeliveriesInProgress("2 deliveries in progress", in: app)
     }
 
-    /// Parked keeps the bar, because an offer can arrive while the vehicle is
-    /// parked; paused removes it, because no delivery can be started then, and
-    /// the deliveries section says why.
-    @MainActor
-    func testTheEntryBarFollowsParkedAndPaused() throws {
-        let app = launchWithEmptyStore()
-        app.buttons["startShiftButton"].tap()
-        let start = app.buttons["startDeliveryButton"]
-        XCTAssertTrue(start.waitForExistence(timeout: 5))
-
-        pressPark(in: app)
-        XCTAssertTrue(start.isHittable, "Parked: an accepted offer can still be recorded")
-        pressResumeDriving(in: app)
-
-        let pause = app.buttons["pauseShiftButton"]
-        XCTAssertTrue(reachShiftControl(pause, in: app))
-        pause.tap()
-        XCTAssertTrue(app.buttons["resumeShiftButton"].waitForExistence(timeout: 5))
-        XCTAssertTrue(waitForDisappearance(of: start), "Paused: nothing offers to start a delivery")
-        XCTAssertTrue(app.descendants(matching: .any)["pausedDeliveryNotice"].exists)
-
-        app.buttons["resumeShiftButton"].tap()
-        XCTAssertTrue(start.waitForExistence(timeout: 5), "Resumed: the bar is back")
-    }
-
     // MARK: Correcting which deliveries arrived together
-
-    /// Two offers the driver recorded separately become the one acceptance they
-    /// really were, and the panel says so afterwards.
-    @MainActor
-    func testCorrectingGroupingCombinesTwoOffers() throws {
-        let app = launchWithStackedOffer()
-
-        XCTAssertTrue(app.descendants(matching: .any)["activeShiftStatus"].waitForExistence(timeout: 15), "The seeded shift is running")
-
-        let correct = app.buttons["correctOffersButton"]
-        XCTAssertTrue(scrollTo(correct, in: app), "Correction is one control, not a button on every card")
-        correct.tap()
-
-        // The add-on offer is the one that moves, because it was accepted after
-        // the offer it is joining.
-        let combine = app.buttons
-            .matching(NSPredicate(format: "identifier == %@ AND label CONTAINS %@",
-                                  "offerCorrectionMergeButton", "Combine Offer 2"))
-            .firstMatch
-        XCTAssertTrue(scrollTo(combine, in: app), "Offer 2 can be combined into the offer accepted before it")
-        combine.tap()
-
-        let destination = app.buttons["offerCorrectionDestinationButton"]
-        XCTAssertTrue(destination.waitForExistence(timeout: 5))
-        XCTAssertEqual(destination.label, "Combine Offer 2 into Offer 1", "The direction is in the control itself")
-        destination.tap()
-
-        // The confirmation names the deliveries that move, and says the offer
-        // they leave is removed.
-        let alert = app.alerts.firstMatch
-        XCTAssertTrue(alert.waitForExistence(timeout: 5))
-        let confirm = alert.buttons.matching(identifier: "confirmOfferCorrectionButton").firstMatch
-        XCTAssertTrue(confirm.exists)
-        XCTAssertEqual(confirm.label, "Combine into Offer 1")
-        XCTAssertTrue(
-            alert.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "Delivery 3 moves to Offer 1")).count > 0,
-            "The confirmation names what moves rather than saying \"merge\""
-        )
-        confirm.tap()
-
-        // One offer left, holding all three deliveries.
-        let header = app.staticTexts
-            .matching(NSPredicate(format: "identifier == %@", "offerCorrectionOfferHeader"))
-        XCTAssertTrue(waitForCount(header, toEqual: 1), "The offer left holding nothing is gone")
-        XCTAssertTrue(header.firstMatch.label.contains("3 deliveries accepted together"),
-                      "Showed: \(header.firstMatch.label)")
-
-        app.buttons["closeOfferCorrectionButton"].tap()
-
-        // And the running panel agrees, with every delivery still advancing
-        // itself.
-        let heading = app.descendants(matching: .any)["offerGroupHeader"]
-        XCTAssertTrue(scrollTo(heading, in: app))
-        XCTAssertTrue(heading.label.contains("3 deliveries accepted together"), "Showed: \(heading.label)")
-        XCTAssertEqual(app.buttons.matching(identifier: "deliveryActionButton").count, 3)
-        XCTAssertEqual(
-            deliveryButton("deliveryActionButton", containing: "Delivery 1", in: app).label,
-            "Delivery 1. Mark order picked up",
-            "The delivery that was already waiting at its pickup kept its own next step"
-        )
-    }
-
-    /// An offer grouped by mistake becomes one offer per delivery, and every
-    /// card keeps the step it was on.
-    @MainActor
-    func testCorrectingGroupingSeparatesAnOffer() throws {
-        let app = launchWithStackedOffer()
-
-        XCTAssertTrue(app.descendants(matching: .any)["activeShiftStatus"].waitForExistence(timeout: 15), "The seeded shift is running")
-
-        let correct = app.buttons["correctOffersButton"]
-        XCTAssertTrue(scrollTo(correct, in: app))
-        correct.tap()
-
-        let separate = app.buttons["offerCorrectionSeparateButton"]
-        XCTAssertTrue(separate.waitForExistence(timeout: 5), "Only a grouped offer offers this")
-        XCTAssertEqual(separate.label, "Separate Offer 1 into one offer per delivery")
-        separate.tap()
-
-        let alert = app.alerts.firstMatch
-        XCTAssertTrue(alert.waitForExistence(timeout: 5))
-        let confirm = alert.buttons.matching(identifier: "confirmOfferCorrectionButton").firstMatch
-        XCTAssertEqual(confirm.label, "Separate Offer 1")
-        XCTAssertTrue(
-            alert.staticTexts.containing(
-                NSPredicate(format: "label CONTAINS %@", "Delivery 2 moves into a new offer of its own")
-            ).count > 0,
-            "The confirmation names the delivery that moves"
-        )
-        confirm.tap()
-
-        XCTAssertTrue(
-            waitForCount(app.buttons.matching(identifier: "offerCorrectionSeparateButton"), toEqual: 0),
-            "Nothing is grouped any more, so nothing offers to be separated"
-        )
-
-        app.buttons["closeOfferCorrectionButton"].tap()
-
-        XCTAssertEqual(
-            app.descendants(matching: .any).matching(identifier: "offerGroupHeader").count,
-            0,
-            "Three offers of one, which is what the panel looked like before offers were grouped"
-        )
-        XCTAssertEqual(app.buttons.matching(identifier: "deliveryActionButton").count, 3)
-        XCTAssertEqual(
-            deliveryButton("deliveryActionButton", containing: "Delivery 1", in: app).label,
-            "Delivery 1. Mark order picked up",
-            "Regrouping moved no lifecycle step"
-        )
-        XCTAssertEqual(
-            deliveryButton("deliveryActionButton", containing: "Delivery 2", in: app).label,
-            "Delivery 2. Mark arrived at pickup"
-        )
-    }
-
-    /// One delivery leaves the offer it was grouped with, and the sibling it
-    /// leaves behind is untouched.
-    @MainActor
-    func testSplittingOneDeliveryIntoItsOwnOffer() throws {
-        let app = launchWithStackedOffer()
-
-        XCTAssertTrue(app.descendants(matching: .any)["activeShiftStatus"].waitForExistence(timeout: 15), "The seeded shift is running")
-
-        let correct = app.buttons["correctOffersButton"]
-        XCTAssertTrue(scrollTo(correct, in: app))
-        correct.tap()
-
-        let delivery = app.buttons
-            .matching(NSPredicate(format: "identifier == %@ AND label CONTAINS %@",
-                                  "offerCorrectionDeliveryButton", "Delivery 2"))
-            .firstMatch
-        XCTAssertTrue(delivery.waitForExistence(timeout: 5))
-        XCTAssertEqual(delivery.label, "Move Delivery 2 out of Offer 1")
-        delivery.tap()
-
-        let split = app.buttons["offerCorrectionSplitButton"]
-        XCTAssertTrue(split.waitForExistence(timeout: 5), "Splitting is offered apart from moving, not mixed into it")
-        XCTAssertEqual(split.label, "Put Delivery 2 in a new offer of its own")
-        split.tap()
-
-        let alert = app.alerts.firstMatch
-        XCTAssertTrue(alert.waitForExistence(timeout: 5))
-        alert.buttons.matching(identifier: "confirmOfferCorrectionButton").firstMatch.tap()
-
-        XCTAssertTrue(
-            waitForCount(app.buttons.matching(identifier: "offerCorrectionSeparateButton"), toEqual: 0),
-            "Every offer now holds one delivery"
-        )
-
-        app.buttons["closeOfferCorrectionButton"].tap()
-        XCTAssertEqual(
-            app.descendants(matching: .any).matching(identifier: "offerGroupHeader").count,
-            0
-        )
-        XCTAssertEqual(app.buttons.matching(identifier: "deliveryActionButton").count, 3, "Nothing was deleted")
-    }
-
-    /// Leaving the correction screen records nothing.
-    @MainActor
-    func testDismissingTheCorrectionSheetChangesNothing() throws {
-        let app = launchWithStackedOffer()
-
-        XCTAssertTrue(app.descendants(matching: .any)["activeShiftStatus"].waitForExistence(timeout: 15), "The seeded shift is running")
-
-        let correct = app.buttons["correctOffersButton"]
-        XCTAssertTrue(scrollTo(correct, in: app))
-        correct.tap()
-
-        XCTAssertTrue(app.buttons["offerCorrectionSeparateButton"].waitForExistence(timeout: 5))
-        app.buttons["closeOfferCorrectionButton"].tap()
-
-        let heading = app.descendants(matching: .any)["offerGroupHeader"]
-        XCTAssertTrue(scrollTo(heading, in: app))
-        XCTAssertTrue(heading.label.contains("2 deliveries accepted together"), "Showed: \(heading.label)")
-        XCTAssertEqual(
-            app.descendants(matching: .any).matching(identifier: "offerGroupHeader").count,
-            1,
-            "The grouping is exactly what it was"
-        )
-    }
 
     /// A store holding an offer with no deliveries is read, stated, and
     /// corrected around.
@@ -4043,72 +4851,6 @@ final class DashPilotUITests: XCTestCase {
             waitForCount(app.buttons.matching(identifier: "offerCorrectionSeparateButton"), toEqual: 0)
         )
         XCTAssertTrue(app.staticTexts["offerCorrectionEmptyOffer"].exists, "And the anomalous row is left alone")
-    }
-
-    /// Grouping is corrected from a finished shift too, and the history rows say
-    /// so afterwards.
-    @MainActor
-    func testCorrectingGroupingFromACompletedShift() throws {
-        let app = launchWithSeededHistory()
-        openFirstShift(in: app)
-
-        // Three deliveries, each recorded in an offer of its own, so no row
-        // claims any grouping yet.
-        let first = deliveryRow(containing: "Delivery 1, delivered", in: app)
-        XCTAssertTrue(scrollTo(first, in: app))
-        XCTAssertFalse(first.label.contains("accepted together"), "Showed: \(first.label)")
-
-        let correct = app.buttons["correctOffersButton"]
-        XCTAssertTrue(scrollTo(correct, in: app), "History offers the same correction the running shift does")
-        correct.tap()
-
-        // The second offer joins the first, which is the direction the
-        // acceptance times allow.
-        let combine = app.buttons
-            .matching(NSPredicate(format: "identifier == %@ AND label CONTAINS %@",
-                                  "offerCorrectionMergeButton", "Combine Offer 2"))
-            .firstMatch
-        XCTAssertTrue(scrollTo(combine, in: app))
-        combine.tap()
-
-        let destination = app.buttons
-            .matching(NSPredicate(format: "identifier == %@ AND label CONTAINS %@",
-                                  "offerCorrectionDestinationButton", "into Offer 1"))
-            .firstMatch
-        XCTAssertTrue(destination.waitForExistence(timeout: 5))
-        destination.tap()
-
-        let alert = app.alerts.firstMatch
-        XCTAssertTrue(alert.waitForExistence(timeout: 5))
-        alert.buttons.matching(identifier: "confirmOfferCorrectionButton").firstMatch.tap()
-
-        app.buttons["closeOfferCorrectionButton"].tap()
-
-        // Left and reopened rather than scrolled back: the sheet closes onto a
-        // screen already scrolled past the rows the correction changed, and a
-        // journey that swipes blindly to find them again is asserting how far
-        // the screen happened to have moved.
-        goBack(in: app)
-        openFirstShift(in: app)
-
-        let summary = app.descendants(matching: .any)["shiftDetailDeliverySummary"]
-        XCTAssertTrue(scrollTo(summary, in: app))
-        XCTAssertEqual(
-            summary.label,
-            "2 deliveries completed. 1 delivery cancelled",
-            "Regrouping moved no count and no terminal state"
-        )
-
-        // The two rows now say they arrived together, and neither lost anything
-        // it recorded.
-        let corrected = deliveryRow(containing: "Delivery 1, delivered", in: app)
-        XCTAssertTrue(scrollTo(corrected, in: app))
-        XCTAssertTrue(
-            corrected.label.contains("Offer 1, accepted together with Delivery 2"),
-            "Showed: \(corrected.label)"
-        )
-        XCTAssertTrue(corrected.label.contains("Waited at pickup"), "The recorded wait is untouched")
-        XCTAssertTrue(corrected.label.contains("Accepted to delivered"))
     }
 
     // MARK: Taking back a delivery marked delivered by mistake
@@ -4231,189 +4973,6 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertFalse(
             app.buttons["reopenDeliveryButton"].exists,
             "The control goes with the last delivered delivery it could act on"
-        )
-    }
-
-    /// Completing one of two deliveries leaves the other running.
-    @MainActor
-    func testCompletingOneDeliveryLeavesTheOtherRunning() throws {
-        let app = launchWithActiveDelivery()
-
-        let accepted = deliveryButton("deliveryActionButton", containing: "Delivery 2", in: app)
-        let carrying = deliveryButton("deliveryActionButton", containing: "Delivery 3", in: app)
-        XCTAssertTrue(scrollTo(carrying, in: app))
-        tapWithinReach(carrying, in: app)
-
-        XCTAssertTrue(
-            waitForCount(app.buttons.matching(identifier: "deliveryActionButton"), toEqual: 1),
-            "The delivered one leaves the list"
-        )
-        XCTAssertEqual(
-            accepted.label,
-            "Delivery 2. Mark arrived at pickup",
-            "The remaining delivery keeps its number and its own next step"
-        )
-
-        let status = app.descendants(matching: .any)["deliveryStatus"]
-        XCTAssertTrue(waitForLabel(status, toContain: "1 delivery in progress"), "Status: \(status.label)")
-        XCTAssertTrue(status.label.contains("2 deliveries completed"))
-    }
-
-    /// A shift cannot be ended while any delivery is in progress, the refusal
-    /// says how many, and it stays refused until the last one is resolved.
-    @MainActor
-    func testActiveDeliveriesBlockEndingTheShift() throws {
-        let app = launchWithActiveDelivery()
-
-        let endShift = app.buttons["endShiftButton"]
-        XCTAssertTrue(app.descendants(matching: .any)["activeShiftStatus"].waitForExistence(timeout: 10))
-        XCTAssertTrue(reachShiftControl(endShift, in: app), "End is below the delivery cards")
-        endShift.tap()
-
-        let plural = app.staticTexts.containing(
-            NSPredicate(format: "label CONTAINS %@", "2 deliveries are still in progress")
-        )
-        XCTAssertTrue(
-            plural.firstMatch.waitForExistence(timeout: 5),
-            "Ending is refused with a reason that counts them, not silently"
-        )
-        app.buttons["OK"].tap()
-
-        // Nothing was ended and nothing was silently completed. The journey is
-        // at End, below the cards, so End is what is still in view.
-        XCTAssertTrue(app.buttons["endShiftButton"].waitForExistence(timeout: 5), "The shift is still running")
-        XCTAssertTrue(rows(in: app).count == 0, "No completed shift appeared in history")
-
-        // Resolving one of the two is not enough.
-        let carrying = deliveryButton("deliveryActionButton", containing: "Delivery 3", in: app)
-        XCTAssertTrue(scrollTo(carrying, in: app))
-        tapWithinReach(carrying, in: app)
-        XCTAssertTrue(waitForCount(app.buttons.matching(identifier: "deliveryActionButton"), toEqual: 1))
-
-        XCTAssertTrue(reachShiftControl(app.buttons["endShiftButton"], in: app))
-        app.buttons["endShiftButton"].tap()
-        let singular = app.staticTexts.containing(
-            NSPredicate(format: "label CONTAINS %@", "A delivery is still in progress")
-        )
-        XCTAssertTrue(
-            singular.firstMatch.waitForExistence(timeout: 5),
-            "One remaining delivery still blocks the end, and the wording follows the count"
-        )
-        app.buttons["OK"].tap()
-
-        // The Undo offered for Delivery 3's completion stays for its 20-second
-        // window and then collapses, moving every card below it up. CI run
-        // 36324925828 tapped Delivery 2's Delivered at the moment it went, so
-        // the tap landed where the button had been and the journey failed on
-        // the count. Waiting for the banner to go is a condition, not a delay:
-        // the steps below are then tapped on a panel that is not moving.
-        XCTAssertTrue(
-            waitForDisappearance(of: app.descendants(matching: .any)["undoDeliveredBanner"], timeout: 30),
-            "The completion's Undo leaves after its window"
-        )
-
-        // Resolving the last one unblocks it.
-        let accepted = deliveryButton("deliveryActionButton", containing: "Delivery 2", in: app)
-        XCTAssertTrue(scrollTo(accepted, in: app))
-        tapWithinReach(accepted, in: app)
-        XCTAssertTrue(waitForLabel(accepted, toContain: "Mark order picked up"))
-        tapWithinReach(accepted, in: app)
-        XCTAssertTrue(waitForLabel(accepted, toContain: "Mark delivery completed"))
-        tapWithinReach(accepted, in: app)
-
-        XCTAssertTrue(waitForCount(app.buttons.matching(identifier: "deliveryActionButton"), toEqual: 0))
-        XCTAssertTrue(reachShiftControl(app.buttons["endShiftButton"], in: app))
-        app.buttons["endShiftButton"].tap()
-        XCTAssertTrue(
-            scrollUntilHittable(rows(in: app).firstMatch, in: app),
-            "The shift ends once nothing is running"
-        )
-    }
-
-    /// Cancelling names the delivery it will cancel, keeps it as history, and
-    /// leaves the other delivery alone.
-    @MainActor
-    func testCancellingOneDeliveryKeepsItAsHistoryAndSparesTheOther() throws {
-        let app = launchWithActiveDelivery()
-
-        let cancel = deliveryButton("cancelDeliveryButton", containing: "Delivery 2", in: app)
-        XCTAssertTrue(scrollTo(cancel, in: app))
-        XCTAssertEqual(cancel.label, "Delivery 2. Cancel this delivery", "The control says which delivery it ends")
-        tapWithinReach(cancel, in: app)
-
-        // The confirmation names it too: with two in progress, "Cancel Delivery"
-        // alone would be ambiguous.
-        let title = app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "Cancel Delivery 2?"))
-        XCTAssertTrue(title.firstMatch.waitForExistence(timeout: 5), "The confirmation names the delivery")
-
-        // `firstMatch` because SwiftUI mirrors the identifier onto the button's
-        // own label element as well as the button.
-        let confirm = app.buttons.matching(identifier: "confirmCancelDeliveryButton").firstMatch
-        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
-        confirm.tap()
-
-        let status = app.descendants(matching: .any)["deliveryStatus"]
-        XCTAssertTrue(waitForLabel(status, toContain: "1 delivery cancelled"), "Status: \(status.label)")
-        XCTAssertTrue(status.label.contains("1 delivery completed"), "The cancelled one is not counted as completed")
-
-        let carrying = deliveryButton("deliveryActionButton", containing: "Delivery 3", in: app)
-        XCTAssertTrue(carrying.exists, "The other delivery is untouched by the cancellation")
-        XCTAssertEqual(carrying.label, "Delivery 3. Mark delivery completed")
-        tapWithinReach(carrying, in: app)
-
-        // Back up to the shift's own controls, which the delivery cards pushed
-        // out of the list's rendered rows, the way the journey above does.
-        XCTAssertTrue(waitForCount(app.buttons.matching(identifier: "deliveryActionButton"), toEqual: 0))
-        XCTAssertTrue(reachShiftControl(app.buttons["endShiftButton"], in: app))
-        app.buttons["endShiftButton"].tap()
-        openFirstShift(in: app)
-        let summary = app.descendants(matching: .any)["shiftDetailDeliverySummary"]
-        XCTAssertTrue(scrollTo(summary, in: app))
-        XCTAssertEqual(summary.label, "2 deliveries completed. 1 delivery cancelled")
-    }
-
-    /// A completed shift's detail lists what each delivery recorded, including
-    /// two whose lifecycles overlapped.
-    @MainActor
-    func testCompletedShiftDetailShowsDeliveryLifecycles() throws {
-        let app = launchWithSeededHistory()
-        openFirstShift(in: app)
-
-        let summary = app.descendants(matching: .any)["shiftDetailDeliverySummary"]
-        XCTAssertTrue(scrollTo(summary, in: app))
-        XCTAssertEqual(
-            summary.label,
-            "2 deliveries completed. 1 delivery cancelled",
-            "The fixture holds two delivered and one cancelled"
-        )
-
-        // Rows are matched by what they say rather than by index. A `List` only
-        // renders what is near the viewport, so a count over the whole section
-        // would be asserting how far the screen happened to have scrolled.
-        let first = deliveryRow(containing: "Delivery 1, delivered", in: app)
-        XCTAssertTrue(scrollTo(first, in: app), "The first delivery is listed")
-        XCTAssertTrue(first.label.contains("Accepted at"), "Each recorded event is spoken with its time: \(first.label)")
-        XCTAssertTrue(
-            first.label.contains("Waited at pickup"),
-            "The pickup wait is derived from both its ends: \(first.label)"
-        )
-        XCTAssertTrue(first.label.contains("Accepted to delivered"))
-
-        // The cancelled one is listed too, keeping what happened and claiming
-        // nothing that did not.
-        let cancelled = deliveryRow(containing: "Delivery 2, cancelled", in: app)
-        XCTAssertTrue(scrollTo(cancelled, in: app), "A cancelled delivery is history, not an omission")
-        let label = cancelled.label
-        XCTAssertTrue(label.contains("Arrived at pickup at"), "The arrival that happened is kept: \(label)")
-        XCTAssertFalse(label.contains("Picked up at"), "Nothing it did not record is shown: \(label)")
-        XCTAssertFalse(label.contains("Waited at pickup"), "A wait with no end is not derived: \(label)")
-        XCTAssertFalse(label.contains("Accepted to delivered"))
-
-        // And the third, accepted while the second was still open: overlapping
-        // deliveries stay separate rows rather than being merged or flagged.
-        XCTAssertTrue(
-            scrollTo(deliveryRow(containing: "Delivery 3, delivered", in: app), in: app),
-            "Every recorded delivery is listed"
         )
     }
 
@@ -4595,236 +5154,7 @@ final class DashPilotUITests: XCTestCase {
         app.buttons["cancelDeliveryEarningsButton"].tap()
     }
 
-    /// At an accessibility text size the same actions stack instead of
-    /// compressing, and every one of them stays tappable.
-    @MainActor
-    func testCompletedDeliveryActionsStackAtAnAccessibilityTextSize() throws {
-        let app = launchWithSeededHistory(atTextSize: Self.accessibilityXXXLTextSize)
-
-        // The shift panel alone fills the screen at this size, so history is
-        // below the fold and the row has to be scrolled to before it is tapped
-        // rather than reached where an ordinary launch leaves it.
-        let shift = rows(in: app).firstMatch
-        XCTAssertTrue(scrollTo(shift, in: app, maxSwipes: 15), "A completed shift is listed, further down")
-        XCTAssertTrue(scrollUntilHittable(shift, in: app, maxSwipes: 5), "And can be opened")
-        shift.tap()
-
-        // Every row is several times taller at this size, so the delivery log is
-        // much further down the screen than it is by default.
-        let card = deliveryCard(containing: "Delivery 1, delivered", in: app)
-        XCTAssertTrue(scrollTo(card, in: app, maxSwipes: 30), "The delivery should be listed")
-
-        let place = card.buttons["shiftDetailPickupPlaceButton"]
-        let history = card.buttons["shiftDetailPickupHistoryButton"]
-        let earnings = card.buttons["shiftDetailDeliveryEarningsButton"]
-        let tips = card.buttons["shiftDetailDeliveryTipsButton"]
-        let times = card.buttons["shiftDetailCorrectDeliveryTimesButton"]
-        let correct = card.buttons["shiftDetailCorrectToCancelledButton"]
-
-        XCTAssertTrue(
-            scrollUntilHittable(place, in: app, maxSwipes: 30),
-            "The actions are reachable at an accessibility size too"
-        )
-
-        let width = app.windows.element(boundBy: 0).frame.width
-        for action in [place, history, earnings, tips, times, correct] {
-            XCTAssertTrue(action.exists, "Nothing is dropped to keep the card short")
-            XCTAssertGreaterThan(
-                action.frame.width,
-                width * 0.7,
-                "An action takes the width of the card rather than half of it: \(action.label)"
-            )
-        }
-
-        // One column: the second action is under the first rather than beside
-        // it, which is the card growing downwards instead of the words being
-        // squeezed sideways.
-        XCTAssertGreaterThan(
-            history.frame.minY,
-            place.frame.maxY - 1,
-            "The grid becomes a single column rather than keeping two narrow ones"
-        )
-        XCTAssertEqual(history.frame.minX, place.frame.minX, accuracy: 1, "Still one aligned column")
-
-        // Reached by scrolling, like anything else this far down a long screen.
-        XCTAssertTrue(scrollUntilHittable(tips, in: app, maxSwipes: 10), "And every action is still tappable")
-        XCTAssertGreaterThan(
-            tips.frame.minY,
-            earnings.frame.maxY - 1,
-            "The fourth action is under the third, not beside it"
-        )
-        XCTAssertTrue(scrollUntilHittable(times, in: app, maxSwipes: 10))
-        XCTAssertGreaterThan(
-            times.frame.minY,
-            tips.frame.maxY - 1,
-            "the fifth under the fourth"
-        )
-        XCTAssertTrue(scrollUntilHittable(correct, in: app, maxSwipes: 10))
-        XCTAssertGreaterThan(
-            correct.frame.minY,
-            times.frame.maxY - 1,
-            "and the sixth under the fifth, all the way down"
-        )
-    }
-
     // MARK: Correcting a historical completion to a cancellation
-
-    /// The whole journey, from a finished shift's own record.
-    ///
-    /// The claim is not only that the state changes. It is that the **time does
-    /// not**: the instant the row printed beside `Delivered` is the instant it
-    /// prints beside `Cancelled` afterwards, which is what keeps the shift's
-    /// delivery active time and every figure over it where they were.
-    @MainActor
-    func testCorrectingAHistoricalCompletionToACancellation() throws {
-        let app = launchWithSeededHistory()
-        openFirstShift(in: app)
-
-        let summary = app.staticTexts["shiftDetailDeliverySummary"]
-        XCTAssertTrue(scrollTo(summary, in: app), "The shift states how its deliveries ended")
-        XCTAssertEqual(summary.label, "2 deliveries completed. 1 delivery cancelled")
-
-        let card = deliveryCard(containing: "Delivery 1, delivered", in: app)
-        XCTAssertTrue(scrollTo(card, in: app), "The delivered delivery is listed")
-        let recordedTime = try XCTUnwrap(
-            Self.time(after: "Delivered at", in: deliveryRow(containing: "Delivery 1, delivered", in: app).label),
-            "The row states when it was recorded delivered"
-        )
-
-        let correct = card.buttons["shiftDetailCorrectToCancelledButton"]
-        XCTAssertTrue(scrollUntilHittable(correct, in: app), "and offers the correction")
-        XCTAssertEqual(
-            correct.label,
-            """
-            Correct Delivery 1 to cancelled. It stays a finished delivery, recorded as cancelled \
-            instead of delivered.
-            """,
-            "The control names its subject and says the delivery stays finished"
-        )
-        correct.tap()
-
-        let alert = app.alerts.firstMatch
-        XCTAssertTrue(alert.waitForExistence(timeout: 5), "The correction is confirmed before anything is written")
-        let confirm = alert.buttons.matching(identifier: "confirmCorrectToCancelledButton").firstMatch
-        XCTAssertTrue(confirm.exists)
-        XCTAssertEqual(confirm.label, "Correct Delivery 1", "The button repeats which delivery it acts on")
-        XCTAssertTrue(
-            alert.staticTexts.containing(
-                NSPredicate(format: "label CONTAINS %@", "Delivery 1 stays a finished delivery")
-            ).count > 0,
-            "The confirmation says the delivery stays finished rather than saying \"edit\""
-        )
-        XCTAssertTrue(
-            alert.staticTexts.containing(
-                NSPredicate(
-                    format: "label CONTAINS %@",
-                    "the time you recorded it as delivered becomes the time it was cancelled"
-                )
-            ).count > 0,
-            "and says where the cancellation time comes from"
-        )
-        confirm.tap()
-
-        let corrected = deliveryRow(containing: "Delivery 1, cancelled", in: app)
-        XCTAssertTrue(corrected.waitForExistence(timeout: 5), "The delivery is recorded as cancelled")
-        XCTAssertEqual(
-            Self.time(after: "Cancelled at", in: corrected.label),
-            recordedTime,
-            "at exactly the instant it had recorded as its completion. Showed: \(corrected.label)"
-        )
-        XCTAssertNil(
-            Self.time(after: "Delivered at", in: corrected.label),
-            "and the completion is gone rather than kept beside it"
-        )
-        XCTAssertFalse(
-            corrected.label.contains("Accepted to delivered"),
-            "The interval that needed a completion goes with it"
-        )
-        XCTAssertTrue(
-            corrected.label.contains("Picked up from \(Self.noodles)"),
-            "The pickup place stays recorded"
-        )
-        XCTAssertTrue(
-            corrected.label.contains("Gross earnings for Delivery 1"),
-            "and so does the amount, which a cancelled delivery may truthfully carry"
-        )
-
-        // The shift itself is still a finished shift, and its counts have moved
-        // by exactly one in each direction.
-        XCTAssertTrue(scrollUpUntilHittable(summary, in: app), "The summary is above the log")
-        XCTAssertEqual(
-            summary.label,
-            "1 delivery completed. 2 deliveries cancelled",
-            "The completion became a cancellation, and nothing is in progress"
-        )
-
-        // A second correction is not offered, because the row it acted on is no
-        // longer recorded as delivered.
-        let correctedCard = deliveryCard(containing: "Delivery 1, cancelled", in: app)
-        XCTAssertTrue(scrollTo(correctedCard, in: app))
-        XCTAssertFalse(
-            correctedCard.buttons["shiftDetailCorrectToCancelledButton"].exists,
-            "A control that would always refuse is not offered"
-        )
-        XCTAssertTrue(
-            correctedCard.buttons["shiftDetailDeliveryEarningsButton"].exists,
-            "and the corrections that still apply are still there"
-        )
-    }
-
-    /// Dismissing the confirmation writes nothing.
-    @MainActor
-    func testDismissingTheCancellationConfirmationChangesNothing() throws {
-        let app = launchWithSeededHistory()
-        openFirstShift(in: app)
-
-        let card = deliveryCard(containing: "Delivery 1, delivered", in: app)
-        XCTAssertTrue(scrollTo(card, in: app))
-        let correct = card.buttons["shiftDetailCorrectToCancelledButton"]
-        XCTAssertTrue(scrollUntilHittable(correct, in: app))
-        correct.tap()
-
-        let alert = app.alerts.firstMatch
-        XCTAssertTrue(alert.waitForExistence(timeout: 5))
-        alert.buttons["Cancel"].tap()
-
-        XCTAssertTrue(
-            deliveryRow(containing: "Delivery 1, delivered", in: app).waitForExistence(timeout: 5),
-            "The delivery is exactly as it was"
-        )
-        XCTAssertFalse(
-            deliveryRow(containing: "Delivery 1, cancelled", in: app).exists,
-            "and nothing was written"
-        )
-    }
-
-    /// A delivery the shift already records as cancelled has nothing to correct,
-    /// and a running shift has a better correction of its own.
-    @MainActor
-    func testTheHistoricalCorrectionIsOfferedNowhereElse() throws {
-        let app = launchWithSeededHistory()
-        openFirstShift(in: app)
-
-        let cancelled = deliveryCard(containing: "Delivery 2, cancelled", in: app)
-        XCTAssertTrue(scrollTo(cancelled, in: app), "The fixture records a cancelled delivery too")
-        XCTAssertFalse(
-            cancelled.buttons["shiftDetailCorrectToCancelledButton"].exists,
-            "A cancelled delivery is already terminal as what it was"
-        )
-
-        goBack(in: app)
-
-        // The running shift's own cards offer the lifecycle controls and the
-        // reopening, and never this one: while a shift is running a mis-tapped
-        // completion is reopened and finished properly.
-        let app2 = launchWithActiveDelivery()
-        XCTAssertTrue(app2.descendants(matching: .any)["activeShiftStatus"].waitForExistence(timeout: 15), "The seeded shift is running")
-        XCTAssertTrue(scrollTo(app2.buttons["reopenDeliveryButton"], in: app2), "Reopening is what is offered there")
-        XCTAssertFalse(
-            app2.buttons["shiftDetailCorrectToCancelledButton"].exists,
-            "and the historical correction is not"
-        )
-    }
 
     /// Reads the time a row's spoken label states for one event.
     ///
@@ -4840,350 +5170,6 @@ final class DashPilotUITests: XCTestCase {
     }
 
     // MARK: Correcting a recorded pause
-
-    /// The whole journey, from a finished shift's own record: read the pause,
-    /// correct where it ended, and watch the figure it feeds move.
-    ///
-    /// The claim is not only that the pause changes. It is that **exactly three
-    /// figures move with it** — the paused time, the working time and the hourly
-    /// rate — while the elapsed time, the delivery active time and the recorded
-    /// amount stay where they were. Those are what a pause is, and is not,
-    /// subtracted from.
-    @MainActor
-    func testCorrectingARecordedPauseFromAFinishedShift() throws {
-        let app = launchWithPausedHistory()
-        openFirstShift(in: app)
-
-        let elapsed = app.descendants(matching: .any)["shiftDetailDuration"]
-        XCTAssertTrue(scrollTo(elapsed, in: app), "The shift states its elapsed time")
-        XCTAssertEqual(elapsed.label, "4 hours elapsed shift time")
-        XCTAssertEqual(
-            app.descendants(matching: .any)["shiftDetailPausedTime"].label,
-            "50 minutes paused time, over 2 pauses"
-        )
-        XCTAssertEqual(
-            app.descendants(matching: .any)["shiftDetailWorkingTime"].label,
-            "3 hours, 10 minutes working time"
-        )
-        // The rates live below the pauses, so they are read on the way past and
-        // the screen is brought back to the top before anything is tapped.
-        let hourlyRate = app.descendants(matching: .any)["shiftDetailHourlyRate"]
-        let perMileRate = app.descendants(matching: .any)["shiftDetailPerMileRate"]
-        XCTAssertTrue(scrollTo(hourlyRate, in: app), "The shift derives an hourly rate")
-        let hourlyBefore = hourlyRate.label
-        XCTAssertTrue(scrollTo(perMileRate, in: app))
-        let perMileBefore = perMileRate.label
-        XCTAssertTrue(scrollToTop(reaching: elapsed, in: app))
-
-        let row = pauseRow(containing: "Pause 1", in: app)
-        XCTAssertTrue(scrollTo(row, in: app), "The shift lists the pauses it recorded")
-        XCTAssertTrue(
-            row.label.contains("30 minutes"),
-            "and says how long each one was. Showed: \(row.label)"
-        )
-
-        let edit = pauseButton("editShiftPauseButton", containing: "Pause 1", in: app)
-        XCTAssertTrue(scrollUntilHittable(edit, in: app), "Pause 1 offers its own correction")
-        XCTAssertEqual(
-            edit.label,
-            "Edit Pause 1. Change when this pause started and ended",
-            "The control names the pause it changes"
-        )
-        edit.tap()
-
-        let summary = app.descendants(matching: .any)["shiftPauseEditorSummary"]
-        XCTAssertTrue(summary.waitForExistence(timeout: 5), "The editor opens on the pause as recorded")
-        XCTAssertTrue(
-            summary.label.hasPrefix("30 minutes paused"),
-            "with the length it already has. Showed: \(summary.label)"
-        )
-        XCTAssertTrue(
-            summary.label.contains("working time becomes 3 hr, 10 min"),
-            "and states the figure the driver is really changing. Showed: \(summary.label)"
-        )
-
-        // The driver resumed a quarter of an hour later than they recorded.
-        setTime(minute: "45", ofPicker: "shiftPauseEndPicker", in: app)
-        XCTAssertTrue(
-            waitForLabel(summary, toContain: "45 minutes paused"),
-            "The consequence is restated before anything is written. Showed: \(summary.label)"
-        )
-        XCTAssertTrue(
-            summary.label.contains("working time becomes 2 hr, 55 min"),
-            "Showed: \(summary.label)"
-        )
-        app.buttons["shiftPauseEditorSaveButton"].tap()
-
-        // Back on the shift, and the three figures a pause feeds have moved.
-        let correctedRow = pauseRow(containing: "Pause 1", in: app)
-        XCTAssertTrue(correctedRow.waitForExistence(timeout: 5))
-        XCTAssertTrue(
-            correctedRow.label.contains("45 minutes"),
-            "The pause records what the driver corrected it to. Showed: \(correctedRow.label)"
-        )
-
-        XCTAssertTrue(scrollToTop(reaching: elapsed, in: app), "The shift's own times are at the top")
-        XCTAssertTrue(
-            waitForLabel(app.descendants(matching: .any)["shiftDetailPausedTime"], toContain: "1 hour, 5 minutes"),
-            "The paused total is the corrected pause plus the one that did not move"
-        )
-        XCTAssertEqual(
-            app.descendants(matching: .any)["shiftDetailWorkingTime"].label,
-            "2 hours, 55 minutes working time",
-            "and the working time is the elapsed time less it"
-        )
-        XCTAssertEqual(
-            elapsed.label,
-            "4 hours elapsed shift time",
-            "The shift's own start and end did not move"
-        )
-        XCTAssertEqual(
-            app.descendants(matching: .any)["shiftDetailDeliveryActiveTime"].label,
-            "30 minutes delivery active time",
-            "and neither did the delivery it recorded"
-        )
-        XCTAssertTrue(scrollTo(hourlyRate, in: app))
-        XCTAssertNotEqual(
-            hourlyRate.label,
-            hourlyBefore,
-            "The rate that divides by working time follows the correction"
-        )
-        XCTAssertTrue(scrollTo(perMileRate, in: app))
-        XCTAssertEqual(
-            perMileRate.label,
-            perMileBefore,
-            "and the rate a pause has nothing to do with is exactly as it was"
-        )
-    }
-
-    /// Leaving the editor writes nothing at all.
-    @MainActor
-    func testCancellingAPauseCorrectionChangesNothing() throws {
-        let app = launchWithPausedHistory()
-        openFirstShift(in: app)
-
-        let edit = pauseButton("editShiftPauseButton", containing: "Pause 1", in: app)
-        XCTAssertTrue(scrollUntilHittable(edit, in: app))
-        edit.tap()
-
-        XCTAssertTrue(app.descendants(matching: .any)["shiftPauseEditorSummary"].waitForExistence(timeout: 5))
-        setTime(minute: "45", ofPicker: "shiftPauseEndPicker", in: app)
-        app.buttons["shiftPauseEditorCancelButton"].tap()
-
-        let row = pauseRow(containing: "Pause 1", in: app)
-        XCTAssertTrue(row.waitForExistence(timeout: 5))
-        XCTAssertTrue(
-            row.label.contains("30 minutes"),
-            "The pause is exactly as it was recorded. Showed: \(row.label)"
-        )
-    }
-
-    /// A pause cannot be corrected over work the shift recorded, and the refusal
-    /// says which fact it collided with.
-    @MainActor
-    func testAPauseCannotBeCorrectedOverADelivery() throws {
-        let app = launchWithPausedHistory()
-        openFirstShift(in: app)
-
-        // Pause 2 begins a quarter of an hour after the shift's one delivery
-        // ended, so moving its start back by half an hour puts it inside that
-        // delivery.
-        let edit = pauseButton("editShiftPauseButton", containing: "Pause 2", in: app)
-        XCTAssertTrue(scrollUntilHittable(edit, in: app))
-        edit.tap()
-
-        XCTAssertTrue(app.descendants(matching: .any)["shiftPauseEditorSummary"].waitForExistence(timeout: 5))
-        setTime(minute: "15", ofPicker: "shiftPauseStartPicker", in: app)
-
-        // `firstMatch`, because a SwiftUI `Label` is a glyph and a text under one
-        // identifier and reading `.label` off a query matching both is an error.
-        let refusal = app.descendants(matching: .any)
-            .matching(identifier: "shiftPauseEditorRefusal")
-            .firstMatch
-        XCTAssertTrue(refusal.waitForExistence(timeout: 5), "The stretch is refused rather than saved")
-        XCTAssertTrue(
-            refusal.label.contains("A delivery was in progress during that time"),
-            "and the refusal says which recorded fact it collided with. Showed: \(refusal.label)"
-        )
-        XCTAssertFalse(
-            app.buttons["shiftPauseEditorSaveButton"].isEnabled,
-            "Saving is withheld rather than offered and then refused"
-        )
-
-        app.buttons["shiftPauseEditorCancelButton"].tap()
-        let row = pauseRow(containing: "Pause 2", in: app)
-        XCTAssertTrue(row.waitForExistence(timeout: 5))
-        XCTAssertTrue(row.label.contains("20 minutes"), "Showed: \(row.label)")
-    }
-
-    /// Deleting a pause recorded by mistake, which makes the shift's working
-    /// time longer rather than shorter.
-    @MainActor
-    func testDeletingAPauseRecordedByMistake() throws {
-        let app = launchWithPausedHistory()
-        openFirstShift(in: app)
-
-        let delete = pauseButton("deleteShiftPauseButton", containing: "Pause 1", in: app)
-        XCTAssertTrue(scrollUntilHittable(delete, in: app))
-        XCTAssertEqual(
-            delete.label,
-            "Delete Pause 1. Record that this pause did not happen",
-            "The control says what deleting a pause means rather than only that a row goes"
-        )
-        delete.tap()
-
-        let alert = app.alerts.firstMatch
-        XCTAssertTrue(alert.waitForExistence(timeout: 5), "Deleting is confirmed before anything is written")
-        XCTAssertTrue(
-            alert.staticTexts.containing(
-                NSPredicate(format: "label CONTAINS %@", "working time becomes 30 min longer")
-            ).count > 0,
-            "The confirmation states the direction the working time moves"
-        )
-        XCTAssertTrue(
-            alert.staticTexts.containing(
-                NSPredicate(format: "label CONTAINS %@", "route recorded during it is not changed")
-            ).count > 0,
-            "and that the route is not touched"
-        )
-        let confirm = alert.buttons.matching(identifier: "confirmDeleteShiftPauseButton").firstMatch
-        XCTAssertEqual(confirm.label, "Delete Pause 1", "The button repeats which pause it acts on")
-        confirm.tap()
-
-        // One pause left, and it is renumbered, which is why nothing acts on a
-        // pause by its number.
-        let remaining = pauseRow(containing: "Pause 1", in: app)
-        XCTAssertTrue(remaining.waitForExistence(timeout: 5))
-        XCTAssertTrue(
-            remaining.label.contains("20 minutes"),
-            "The pause that is left is the one that was second. Showed: \(remaining.label)"
-        )
-        XCTAssertFalse(pauseRow(containing: "Pause 2", in: app).exists, "and there is no second pause now")
-
-        let elapsed = app.descendants(matching: .any)["shiftDetailDuration"]
-        XCTAssertTrue(scrollToTop(reaching: elapsed, in: app))
-        XCTAssertTrue(
-            waitForLabel(app.descendants(matching: .any)["shiftDetailWorkingTime"], toContain: "3 hours, 40 minutes"),
-            "The working time grew by exactly the deleted pause"
-        )
-        XCTAssertEqual(
-            app.descendants(matching: .any)["shiftDetailPausedTime"].label,
-            "20 minutes paused time, over 1 pause"
-        )
-        XCTAssertEqual(elapsed.label, "4 hours elapsed shift time", "The shift itself is untouched")
-    }
-
-    /// Dismissing the confirmation writes nothing.
-    @MainActor
-    func testCancellingAPauseDeletionKeepsThePause() throws {
-        let app = launchWithPausedHistory()
-        openFirstShift(in: app)
-
-        let delete = pauseButton("deleteShiftPauseButton", containing: "Pause 1", in: app)
-        XCTAssertTrue(scrollUntilHittable(delete, in: app))
-        delete.tap()
-
-        let alert = app.alerts.firstMatch
-        XCTAssertTrue(alert.waitForExistence(timeout: 5))
-        alert.buttons["Cancel"].tap()
-
-        // Pause 1 first, because it is the row the screen is already on; Pause 2
-        // sits below it and has to be scrolled to. A `List` does not render a row
-        // it has scrolled past, so asserting its existence where the screen
-        // happens to be left is an assertion about the scroll position rather
-        // than about the store.
-        XCTAssertTrue(
-            pauseRow(containing: "Pause 1", in: app).label.contains("30 minutes"),
-            "The pause the driver did not delete is untouched"
-        )
-        XCTAssertTrue(
-            scrollTo(pauseRow(containing: "Pause 2", in: app), in: app),
-            "Both pauses are still there"
-        )
-    }
-
-    /// Recording a pause the driver took and never tapped anything for.
-    ///
-    /// It opens refused rather than pre-filled, because DashPilot observed
-    /// nothing about the break and has nothing to propose.
-    @MainActor
-    func testAddingAPauseThatWasNeverRecorded() throws {
-        let app = launchWithPausedHistory()
-        openFirstShift(in: app)
-
-        let add = app.buttons["addMissedPauseButton"]
-        XCTAssertTrue(scrollUntilHittable(add, in: app))
-        XCTAssertEqual(add.label, "Add a pause you did not record during the shift")
-        add.tap()
-
-        // `firstMatch`, because a SwiftUI `Label` is a glyph and a text under one
-        // identifier and reading `.label` off a query matching both is an error.
-        let refusal = app.descendants(matching: .any)
-            .matching(identifier: "shiftPauseEditorRefusal")
-            .firstMatch
-        XCTAssertTrue(refusal.waitForExistence(timeout: 5), "Nothing is suggested, so it opens with nothing valid")
-        XCTAssertTrue(
-            refusal.label.contains("A pause has to end after it started"),
-            "Showed: \(refusal.label)"
-        )
-        XCTAssertFalse(app.buttons["shiftPauseEditorSaveButton"].isEnabled)
-
-        // Five minutes inside the shift's first hour, which is before its first
-        // pause and long before its delivery. Both pickers open on the shift's
-        // own start, so only the minutes are moved: the hour a shift starts at
-        // depends on the machine's time zone, and a journey that typed one would
-        // be asserting where the machine is.
-        setTime(minute: "50", ofPicker: "shiftPauseStartPicker", in: app)
-        setTime(minute: "55", ofPicker: "shiftPauseEndPicker", in: app)
-
-        let summary = app.descendants(matching: .any)["shiftPauseEditorSummary"]
-        XCTAssertTrue(summary.waitForExistence(timeout: 5), "The stretch is now one the shift can record")
-        XCTAssertTrue(summary.label.hasPrefix("5 minutes paused"), "Showed: \(summary.label)")
-        app.buttons["shiftPauseEditorSaveButton"].tap()
-
-        // Numbered by when it began, so a pause added before the two recorded
-        // ones is `Pause 1` and the others move down.
-        let added = pauseRow(containing: "Pause 1", in: app)
-        XCTAssertTrue(added.waitForExistence(timeout: 5), "The shift records a third pause")
-        XCTAssertTrue(
-            added.label.contains("5 minutes"),
-            "and it is first, because it began first. Showed: \(added.label)"
-        )
-        XCTAssertTrue(pauseRow(containing: "Pause 3", in: app).exists, "There are three of them now")
-
-        let elapsed = app.descendants(matching: .any)["shiftDetailDuration"]
-        XCTAssertTrue(scrollToTop(reaching: elapsed, in: app))
-        XCTAssertTrue(
-            waitForLabel(app.descendants(matching: .any)["shiftDetailPausedTime"], toContain: "over 3 pauses"),
-            "The shift counts three pauses now"
-        )
-        XCTAssertEqual(
-            app.descendants(matching: .any)["shiftDetailWorkingTime"].label,
-            "3 hours, 5 minutes working time",
-            "and the added five minutes came out of the working time"
-        )
-        XCTAssertEqual(elapsed.label, "4 hours elapsed shift time", "The shift's own times did not move")
-    }
-
-    /// A shift that records no pause still offers to record one, and says so
-    /// rather than showing an empty section.
-    @MainActor
-    func testAShiftWithNoPausesStillOffersToRecordOne() throws {
-        let app = launchWithSeededHistory()
-        openFirstShift(in: app)
-
-        let none = app.staticTexts["shiftDetailNoPauses"]
-        XCTAssertTrue(scrollTo(none, in: app), "The section says the shift recorded no pause")
-        XCTAssertEqual(none.label, "No pauses recorded")
-        // The control is the section's next row, which a list renders only
-        // once it is near the screen.
-        XCTAssertTrue(
-            scrollTo(app.buttons["addMissedPauseButton"], in: app, maxSwipes: 3),
-            "and still offers the one correction a shift with no pauses needs"
-        )
-        XCTAssertFalse(app.buttons["editShiftPauseButton"].exists, "There is nothing to edit")
-        XCTAssertFalse(app.buttons["deleteShiftPauseButton"].exists, "and nothing to delete")
-    }
 
     /// What a running shift does **not** offer, checked through the states one
     /// shift passes through, in one launch.
@@ -5207,7 +5193,8 @@ final class DashPilotUITests: XCTestCase {
         let neverWhileRunning = [
             "editShiftPauseButton", "deleteShiftPauseButton", "addMissedPauseButton",
             "correctShiftEndButton", "exportShiftButton", "exportAllHistoryButton",
-            "reopenDeliveryButton", "correctOffersButton"
+            "reopenDeliveryButton", "correctOffersButton",
+            "shiftDetailCorrectDeliveryTimesButton", "shiftDetailCorrectToCancelledButton"
         ]
         for identifier in neverWhileRunning {
             XCTAssertFalse(app.buttons[identifier].exists, "\(identifier) is not offered on a running shift")
@@ -5240,499 +5227,7 @@ final class DashPilotUITests: XCTestCase {
 
     // MARK: Correcting a shift's end time
 
-    /// The whole journey: open a shift DashPilot recorded as ending late,
-    /// correct the end, agree to lose the route recorded afterwards, and watch
-    /// the three figures that depend on the boundary move.
-    ///
-    /// The claim is not only that the end changes. It is that the **mileage is
-    /// measured again** rather than reduced in proportion: the shift loses one
-    /// of its three equal capture sessions, so the honest answer is `4.5 mi` and
-    /// a figure scaled by the time removed would be about `5.6 mi`.
-    @MainActor
-    func testCorrectingAShiftThatDashPilotRecordedAsEndingLate() throws {
-        let app = launchWithLateEndHistory()
-        openFirstShift(in: app)
-
-        let elapsed = app.descendants(matching: .any)["shiftDetailDuration"]
-        XCTAssertTrue(scrollTo(elapsed, in: app), "The shift states its elapsed time")
-        XCTAssertEqual(elapsed.label, "3 hours, 40 minutes elapsed shift time")
-
-        // The rate and the route live below, in that order, so they are read on
-        // the way past; the correction is further down still, with the others.
-        let hourlyRate = app.descendants(matching: .any)["shiftDetailHourlyRate"]
-        XCTAssertTrue(scrollTo(hourlyRate, in: app))
-        XCTAssertTrue(hourlyRate.label.hasPrefix("$27.27"), "Showed: \(hourlyRate.label)")
-
-        let mileage = app.descendants(matching: .any)["shiftDetailRecordedMileage"]
-        XCTAssertTrue(scrollTo(mileage, in: app), "The shift states what its route recorded")
-        XCTAssertTrue(mileage.label.contains("6.7 miles"), "Showed: \(mileage.label)")
-        let segments = app.staticTexts["shiftDetailCaptureSegments"]
-        XCTAssertTrue(segments.label.contains("3"), "Three capture segments. Showed: \(segments.label)")
-
-        let correct = app.buttons["correctShiftEndButton"]
-        XCTAssertTrue(scrollUntilHittable(correct, in: app), "The shift offers to correct its end")
-        XCTAssertEqual(
-            correct.label,
-            "Correct the time this shift ended",
-            "The control says which fact it changes"
-        )
-        correct.tap()
-
-        let summary = app.descendants(matching: .any)["shiftEndCorrectionSummary"]
-        XCTAssertTrue(summary.waitForExistence(timeout: 5), "The editor opens on the end as recorded")
-        XCTAssertTrue(
-            summary.label.hasPrefix("3 hours, 40 minutes elapsed"),
-            "with the length the shift already has. Showed: \(summary.label)"
-        )
-        XCTAssertTrue(
-            app.descendants(matching: .any)["shiftEndCorrectionRecordedEnd"].exists,
-            "and says what the recorded end is, so the picker moving does not lose it"
-        )
-
-        // The driver actually stopped twenty minutes before DashPilot recorded it.
-        setTime(minute: "20", ofPicker: "shiftEndCorrectionPicker", in: app)
-        XCTAssertTrue(
-            waitForLabel(summary, toContain: "3 hours, 20 minutes elapsed"),
-            "The consequence is restated before anything is written. Showed: \(summary.label)"
-        )
-
-        let warning = app.descendants(matching: .any)
-            .matching(identifier: "shiftEndCorrectionRouteWarning")
-            .firstMatch
-        XCTAssertTrue(warning.waitForExistence(timeout: 5), "The destructive part is stated on the sheet")
-        XCTAssertTrue(
-            warning.label.contains("10 recorded positions"),
-            "with the number of positions that go. Showed: \(warning.label)"
-        )
-        XCTAssertTrue(
-            warning.label.contains("not reduced by the same share as the time"),
-            "and it refuses the proportional reading outright. Showed: \(warning.label)"
-        )
-
-        app.buttons["shiftEndCorrectionSaveButton"].tap()
-
-        // `firstMatch`, because the alert presents the button nested inside
-        // itself and both elements carry the identifier.
-        let confirm = app.buttons["confirmShiftEndCorrectionButton"].firstMatch
-        XCTAssertTrue(confirm.waitForExistence(timeout: 5), "Destroying recorded route is confirmed first")
-        confirm.tap()
-
-        // Back on the shift, with every figure the boundary feeds moved. The
-        // corrections are below everything they change, so the screen goes back
-        // to the top and reads down.
-        XCTAssertTrue(scrollToTop(reaching: elapsed, in: app))
-        XCTAssertTrue(
-            waitForLabel(elapsed, toContain: "3 hours, 20 minutes"),
-            "The shift records the end the driver corrected it to. Showed: \(elapsed.label)"
-        )
-        XCTAssertTrue(scrollTo(hourlyRate, in: app))
-        XCTAssertTrue(
-            waitForLabel(hourlyRate, toContain: "$30.00"),
-            "and the hourly figure divides by the corrected working time. Showed: \(hourlyRate.label)"
-        )
-        XCTAssertTrue(scrollTo(mileage, in: app))
-        XCTAssertTrue(
-            waitForLabel(mileage, toContain: "4.5 miles"),
-            "The mileage is what the positions that remain support. Showed: \(mileage.label)"
-        )
-        XCTAssertFalse(
-            mileage.label.contains("5.6 miles"),
-            "and not the route's distance scaled by the time removed"
-        )
-        XCTAssertTrue(
-            waitForLabel(app.staticTexts["shiftDetailCaptureSegments"], toContain: "2"),
-            "The third segment left with its positions"
-        )
-    }
-
-    /// Declining the confirmation leaves the shift and its whole route exactly
-    /// as they were.
-    @MainActor
-    func testDecliningTheRouteWarningKeepsTheShiftAsRecorded() throws {
-        let app = launchWithLateEndHistory()
-        openFirstShift(in: app)
-
-        let correct = app.buttons["correctShiftEndButton"]
-        XCTAssertTrue(scrollUntilHittable(correct, in: app))
-        correct.tap()
-
-        XCTAssertTrue(app.descendants(matching: .any)["shiftEndCorrectionSummary"].waitForExistence(timeout: 5))
-        setTime(minute: "20", ofPicker: "shiftEndCorrectionPicker", in: app)
-        app.buttons["shiftEndCorrectionSaveButton"].tap()
-
-        let confirm = app.buttons["confirmShiftEndCorrectionButton"].firstMatch
-        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
-        // The alert's own Cancel, not the sheet's: the sheet's says which shift
-        // it is keeping, so matching the bare word reaches only this one.
-        app.alerts.buttons["Cancel"].tap()
-
-        XCTAssertTrue(
-            app.descendants(matching: .any)["shiftEndCorrectionSummary"].waitForExistence(timeout: 5),
-            "The sheet stays open with the time the driver chose"
-        )
-        app.buttons["shiftEndCorrectionCancelButton"].tap()
-
-        // The figures are above the corrections, so the screen goes back up.
-        let elapsed = app.descendants(matching: .any)["shiftDetailDuration"]
-        XCTAssertTrue(scrollToTop(reaching: elapsed, in: app))
-        XCTAssertEqual(elapsed.label, "3 hours, 40 minutes elapsed shift time", "Nothing at all was written")
-        let mileage = app.descendants(matching: .any)["shiftDetailRecordedMileage"]
-        XCTAssertTrue(scrollTo(mileage, in: app))
-        XCTAssertTrue(mileage.label.contains("6.7 miles"), "and no position was deleted. Showed: \(mileage.label)")
-    }
-
-    /// An end before something the shift's deliveries recorded is refused, and
-    /// the refusal says which recorded fact it collided with.
-    @MainActor
-    func testAnEndCannotBeCorrectedOverRecordedDeliveryWork() throws {
-        let app = launchWithLateEndHistory()
-        openFirstShift(in: app)
-
-        let correct = app.buttons["correctShiftEndButton"]
-        XCTAssertTrue(scrollUntilHittable(correct, in: app))
-        correct.tap()
-
-        XCTAssertTrue(app.descendants(matching: .any)["shiftEndCorrectionSummary"].waitForExistence(timeout: 5))
-        // The fixture's one delivery was delivered ten minutes after the hour,
-        // so five minutes past it is inside recorded work.
-        setTime(minute: "05", ofPicker: "shiftEndCorrectionPicker", in: app)
-
-        // `firstMatch`, because a SwiftUI `Label` is a glyph and a text under
-        // one identifier, and reading `.label` off a query matching both is an
-        // error.
-        let refusal = app.descendants(matching: .any)
-            .matching(identifier: "shiftEndCorrectionRefusal")
-            .firstMatch
-        XCTAssertTrue(refusal.waitForExistence(timeout: 5), "The instant is refused rather than saved")
-        XCTAssertTrue(
-            refusal.label.hasPrefix("Delivery 1 has Delivered recorded at "),
-            "and the refusal names the delivery and the event it collided with. Showed: \(refusal.label)"
-        )
-        XCTAssertTrue(
-            refusal.label.contains("after the proposed shift end"),
-            "rather than leaving the driver to find it. Showed: \(refusal.label)"
-        )
-        XCTAssertFalse(
-            app.buttons["shiftEndCorrectionSaveButton"].isEnabled,
-            "Saving is withheld rather than offered and then refused"
-        )
-
-        app.buttons["shiftEndCorrectionCancelButton"].tap()
-        let elapsed = app.descendants(matching: .any)["shiftDetailDuration"]
-        XCTAssertTrue(scrollToTop(reaching: elapsed, in: app))
-        XCTAssertEqual(elapsed.label, "3 hours, 40 minutes elapsed shift time")
-    }
-
-    /// Moving the end **later** adds time and adds no mileage, and the sheet
-    /// says so before it is saved.
-    @MainActor
-    func testALaterEndAddsTimeAndNoMileage() throws {
-        let app = launchWithSeededHistory()
-        openFirstShift(in: app)
-
-        let elapsed = app.descendants(matching: .any)["shiftDetailDuration"]
-        let mileage = app.descendants(matching: .any)["shiftDetailRecordedMileage"]
-        XCTAssertTrue(scrollTo(mileage, in: app), "The shift states what its route recorded")
-        let mileageBefore = mileage.label
-
-        // The corrections sit below every figure, so the helper keeps going down.
-        let correct = app.buttons["correctShiftEndButton"]
-        XCTAssertTrue(scrollUntilHittable(correct, in: app), "The shift offers to correct its end")
-        correct.tap()
-
-        XCTAssertTrue(
-            app.descendants(matching: .any)["shiftEndCorrectionSummary"].waitForExistence(timeout: 5),
-            "The editor opens on the end as recorded"
-        )
-        setTime(minute: "30", ofPicker: "shiftEndCorrectionPicker", in: app)
-
-        let note = app.descendants(matching: .any)
-            .matching(identifier: "shiftEndCorrectionRouteWarning")
-            .firstMatch
-        XCTAssertTrue(note.waitForExistence(timeout: 5), "The sheet says what a longer shift does to the route")
-        XCTAssertTrue(
-            note.label.contains("No route or mileage is added"),
-            "which is nothing at all. Showed: \(note.label)"
-        )
-        app.buttons["shiftEndCorrectionSaveButton"].tap()
-        XCTAssertFalse(
-            app.buttons["confirmShiftEndCorrectionButton"].firstMatch.waitForExistence(timeout: 2),
-            "Nothing is destroyed, so nothing is confirmed"
-        )
-
-        XCTAssertTrue(scrollToTop(reaching: elapsed, in: app))
-        XCTAssertTrue(scrollTo(mileage, in: app), "The route section is still there to read")
-        XCTAssertEqual(
-            mileage.label,
-            mileageBefore,
-            "Not one metre was invented for the stretch the shift gained"
-        )
-    }
-
     // MARK: Correcting a completed delivery's recorded times
-
-    /// The whole journey: open a delivery DashPilot recorded as delivered two
-    /// hours after the food reached the door, correct the completion, and watch
-    /// the two figures derived from it move while the route stays exactly as it
-    /// was recorded.
-    @MainActor
-    func testCorrectingADeliveryRecordedAfterTheAppCameBack() throws {
-        let app = launchWithLateDeliveryHistory()
-        openFirstShift(in: app)
-
-        // The mileage is read first and re-read at the end: the whole promise of
-        // this correction is that it does not touch the route.
-        let elapsed = app.descendants(matching: .any)["shiftDetailDuration"]
-        let mileage = app.descendants(matching: .any)["shiftDetailRecordedMileage"]
-        XCTAssertTrue(scrollTo(mileage, in: app), "The shift states what its route recorded")
-        let mileageBefore = mileage.label
-        XCTAssertTrue(mileageBefore.contains("6.7 miles"), "Showed: \(mileageBefore)")
-
-        let row = app.descendants(matching: .any)["shiftDetailDeliveryRow"].firstMatch
-        XCTAssertTrue(scrollTo(row, in: app), "The delivery is in the shift's record")
-        XCTAssertTrue(
-            row.label.contains("Accepted to delivered 1 hour, 30 minutes"),
-            "with the duration its late completion implies. Showed: \(row.label)"
-        )
-        XCTAssertTrue(
-            row.label.contains("$8.00 earned per recorded delivery hour"),
-            "and the hourly figure over it. Showed: \(row.label)"
-        )
-
-        let correct = app.buttons["shiftDetailCorrectDeliveryTimesButton"]
-        XCTAssertTrue(scrollUntilHittable(correct, in: app), "The delivery offers to correct its times")
-        XCTAssertTrue(
-            correct.label.hasPrefix("Correct the times Delivery 1 recorded"),
-            "The control says which delivery it changes. Showed: \(correct.label)"
-        )
-        correct.tap()
-
-        let summary = app.descendants(matching: .any)["deliveryTimeCorrectionSummary"]
-        XCTAssertTrue(summary.waitForExistence(timeout: 5), "The editor opens on the times as recorded")
-        XCTAssertTrue(
-            summary.label.contains("1 hour, 30 minutes"),
-            "with the figures they produce. Showed: \(summary.label)"
-        )
-
-        let note = app.descendants(matching: .any)
-            .matching(identifier: "deliveryTimeCorrectionRouteNotice")
-            .firstMatch
-        XCTAssertTrue(note.waitForExistence(timeout: 5), "and says what it will not touch")
-        XCTAssertTrue(
-            note.label.contains("recorded mileage are not changed"),
-            "which is the route. Showed: \(note.label)"
-        )
-
-        // The order really reached the door fifteen minutes past the hour.
-        setTime(minute: "15", ofPicker: "deliveryTimeCorrectionPicker.delivered", in: app)
-        XCTAssertTrue(
-            waitForLabel(summary, toContain: "1 hour, 15 minutes"),
-            "The consequence is restated before anything is written. Showed: \(summary.label)"
-        )
-        XCTAssertTrue(
-            summary.label.contains("$9.60"),
-            "and so is the hourly figure it moves. Showed: \(summary.label)"
-        )
-
-        app.buttons["deliveryTimeCorrectionSaveButton"].tap()
-
-        XCTAssertTrue(scrollTo(row, in: app), "Back on the shift's record")
-        XCTAssertTrue(
-            waitForLabel(row, toContain: "Accepted to delivered 1 hour, 15 minutes"),
-            "The delivery records the completion the driver corrected it to. Showed: \(row.label)"
-        )
-        XCTAssertTrue(
-            row.label.contains("$9.60 earned per recorded delivery hour"),
-            "and the rate divides by the corrected lifecycle. Showed: \(row.label)"
-        )
-        XCTAssertTrue(
-            row.label.contains("Gross earnings for Delivery 1, $12.00"),
-            "over the amount that did not move. Showed: \(row.label)"
-        )
-        XCTAssertTrue(
-            row.label.contains("Waited at pickup 5 minutes"),
-            "and the wait, whose two ends did not move either. Showed: \(row.label)"
-        )
-        XCTAssertTrue(
-            row.label.hasPrefix("Delivery 1, delivered"),
-            "The delivery is still terminal, and terminal the same way. Showed: \(row.label)"
-        )
-
-        // Back to the top and then down again: the route section sits **above**
-        // the deliveries, and the scroll helper that walks down cannot reach it
-        // from here. This is the pair the end-correction journeys already use.
-        XCTAssertTrue(scrollToTop(reaching: elapsed, in: app))
-        XCTAssertTrue(scrollTo(mileage, in: app))
-        XCTAssertEqual(
-            mileage.label,
-            mileageBefore,
-            "and not one metre of recorded route moved with the times"
-        )
-    }
-
-    /// A time that would put one recorded event before another is refused, and
-    /// the refusal names the event the driver has to correct as well.
-    @MainActor
-    func testADeliveryTimeThatBreaksTheLifecycleOrderIsRefused() throws {
-        let app = launchWithLateDeliveryHistory()
-        openFirstShift(in: app)
-
-        let correct = app.buttons["shiftDetailCorrectDeliveryTimesButton"]
-        XCTAssertTrue(scrollUntilHittable(correct, in: app))
-        correct.tap()
-
-        XCTAssertTrue(app.descendants(matching: .any)["deliveryTimeCorrectionSummary"].waitForExistence(timeout: 5))
-
-        // The pickup was recorded ten minutes past the hour and the arrival at
-        // five, so two minutes past would have the order collected before the
-        // driver reached the counter.
-        setTime(minute: "02", ofPicker: "deliveryTimeCorrectionPicker.pickedUp", in: app)
-
-        // `firstMatch`, because a SwiftUI `Label` is a glyph and a text under
-        // one identifier, and reading `.label` off a query matching both is an
-        // error.
-        let refusal = app.descendants(matching: .any)
-            .matching(identifier: "deliveryTimeCorrectionRefusal")
-            .firstMatch
-        XCTAssertTrue(refusal.waitForExistence(timeout: 5), "The time is refused rather than saved")
-        XCTAssertTrue(
-            refusal.label.hasPrefix("Picked up cannot be earlier than arrived at the pickup"),
-            "and the refusal names the fact it collided with. Showed: \(refusal.label)"
-        )
-        XCTAssertTrue(
-            refusal.label.contains("correct arrived at the pickup as well"),
-            "and says that fact is corrected rather than moved out of the way. Showed: \(refusal.label)"
-        )
-        XCTAssertFalse(
-            app.buttons["deliveryTimeCorrectionSaveButton"].isEnabled,
-            "Saving is withheld rather than offered and then refused"
-        )
-
-        app.buttons["deliveryTimeCorrectionCancelButton"].tap()
-
-        let row = app.descendants(matching: .any)["shiftDetailDeliveryRow"].firstMatch
-        XCTAssertTrue(scrollTo(row, in: app))
-        XCTAssertTrue(
-            row.label.contains("Waited at pickup 5 minutes"),
-            "Nothing at all was written, and above all the arrival was not moved. Showed: \(row.label)"
-        )
-    }
-
-    /// The real recovery, end to end.
-    ///
-    /// DashPilot became unreachable near the end of a shift. The remaining work
-    /// was recorded once a new build was installed, so both the delivery's
-    /// completion and the shift's own end are late. Correcting the end alone is
-    /// refused, because the delivery records work after the proposed end — and
-    /// the refusal says **which** delivery and **which** event, which is the
-    /// whole of what the driver needs. They correct that, and the same end
-    /// correction is then accepted and trims the route as it always did.
-    @MainActor
-    func testTheShiftEndIsCorrectedOnceTheDeliveryBlockingItIs() throws {
-        let app = launchWithLateDeliveryHistory()
-        openFirstShift(in: app)
-
-        let elapsed = app.descendants(matching: .any)["shiftDetailDuration"]
-        XCTAssertTrue(scrollTo(elapsed, in: app))
-        XCTAssertEqual(elapsed.label, "3 hours, 40 minutes elapsed shift time")
-
-        // 1. The end correction is refused.
-        let correctEnd = app.buttons["correctShiftEndButton"]
-        XCTAssertTrue(scrollUntilHittable(correctEnd, in: app))
-        correctEnd.tap()
-
-        XCTAssertTrue(app.descendants(matching: .any)["shiftEndCorrectionSummary"].waitForExistence(timeout: 5))
-        setTime(minute: "20", ofPicker: "shiftEndCorrectionPicker", in: app)
-
-        // 2. And it identifies the blocking delivery and event.
-        let refusal = app.descendants(matching: .any)
-            .matching(identifier: "shiftEndCorrectionRefusal")
-            .firstMatch
-        XCTAssertTrue(refusal.waitForExistence(timeout: 5), "The end is refused")
-        XCTAssertTrue(
-            refusal.label.hasPrefix("Delivery 1 has Delivered recorded at "),
-            "and says which delivery and which event block it. Showed: \(refusal.label)"
-        )
-        XCTAssertTrue(
-            refusal.label.contains("Open that delivery and correct its times"),
-            "and where to go next. Showed: \(refusal.label)"
-        )
-        XCTAssertFalse(app.buttons["shiftEndCorrectionSaveButton"].isEnabled)
-        app.buttons["shiftEndCorrectionCancelButton"].tap()
-
-        // 3 and 4. The driver opens that delivery and corrects it. The delivery
-        // log is above the shift's corrections, so the screen goes back up first.
-        XCTAssertTrue(scrollToTop(reaching: elapsed, in: app))
-        let correctTimes = app.buttons["shiftDetailCorrectDeliveryTimesButton"]
-        XCTAssertTrue(scrollUntilHittable(correctTimes, in: app, maxSwipes: 15))
-        correctTimes.tap()
-
-        XCTAssertTrue(app.descendants(matching: .any)["deliveryTimeCorrectionSummary"].waitForExistence(timeout: 5))
-        setTime(minute: "15", ofPicker: "deliveryTimeCorrectionPicker.delivered", in: app)
-        app.buttons["deliveryTimeCorrectionSaveButton"].tap()
-
-        let row = app.descendants(matching: .any)["shiftDetailDeliveryRow"].firstMatch
-        XCTAssertTrue(scrollTo(row, in: app))
-        XCTAssertTrue(
-            waitForLabel(row, toContain: "Accepted to delivered 1 hour, 15 minutes"),
-            "The delivery no longer records work after the end the driver wants. Showed: \(row.label)"
-        )
-
-        // 5. The same correction is retried.
-        XCTAssertTrue(scrollToTop(reaching: elapsed, in: app))
-        XCTAssertTrue(scrollUntilHittable(correctEnd, in: app))
-        correctEnd.tap()
-
-        XCTAssertTrue(app.descendants(matching: .any)["shiftEndCorrectionSummary"].waitForExistence(timeout: 5))
-        setTime(minute: "20", ofPicker: "shiftEndCorrectionPicker", in: app)
-        XCTAssertFalse(
-            app.descendants(matching: .any)
-                .matching(identifier: "shiftEndCorrectionRefusal")
-                .firstMatch
-                .exists,
-            "and it is no longer refused"
-        )
-        app.buttons["shiftEndCorrectionSaveButton"].tap()
-
-        // 6. And it trims the route and rederives the figures exactly as it
-        //    always has. `firstMatch`, because the alert presents the button
-        //    nested inside itself.
-        let confirm = app.buttons["confirmShiftEndCorrectionButton"].firstMatch
-        XCTAssertTrue(confirm.waitForExistence(timeout: 5), "Destroying recorded route is still confirmed first")
-        confirm.tap()
-
-        XCTAssertTrue(scrollToTop(reaching: elapsed, in: app))
-        XCTAssertTrue(
-            waitForLabel(elapsed, toContain: "3 hours, 20 minutes"),
-            "The shift records the end the driver corrected it to. Showed: \(elapsed.label)"
-        )
-        let hourlyRate = app.descendants(matching: .any)["shiftDetailHourlyRate"]
-        XCTAssertTrue(scrollTo(hourlyRate, in: app))
-        XCTAssertTrue(
-            waitForLabel(hourlyRate, toContain: "$30.00"),
-            "and the hourly figure divides by the corrected working time. Showed: \(hourlyRate.label)"
-        )
-        let mileage = app.descendants(matching: .any)["shiftDetailRecordedMileage"]
-        XCTAssertTrue(scrollTo(mileage, in: app))
-        XCTAssertTrue(
-            waitForLabel(mileage, toContain: "4.5 miles"),
-            "measured again from the positions that remain. Showed: \(mileage.label)"
-        )
-    }
-
-    /// The correction is not offered while a shift is running, which is where
-    /// the driver may be at a wheel and where a mis-tapped completion is
-    /// reopened and finished properly instead.
-    @MainActor
-    func testDeliveryTimeCorrectionIsNotOfferedOnARunningShift() throws {
-        let app = launchWithActiveDelivery()
-
-        XCTAssertTrue(app.descendants(matching: .any)["activeShiftStatus"].waitForExistence(timeout: 10), "The shift is running")
-        XCTAssertFalse(
-            app.buttons["shiftDetailCorrectDeliveryTimesButton"].exists,
-            "A delivery on a running shift has no shift window to be corrected inside"
-        )
-    }
 
     // MARK: Delivery earnings, from detail
 
@@ -5782,61 +5277,6 @@ final class DashPilotUITests: XCTestCase {
 
         XCTAssertTrue(waitForLabel(row, toContain: "$9.50"), "The edited amount replaces the previous one")
         XCTAssertFalse(row.label.contains("$14.75"))
-    }
-
-    /// Cancelling an edit writes nothing, leaving the amount as it was.
-    @MainActor
-    func testCancellingADeliveryEarningsEditKeepsTheAmount() throws {
-        let app = launchWithFinishedDelivery()
-        openFirstShift(in: app)
-
-        let row = deliveryRow(containing: "Delivery 1, delivered", in: app)
-        XCTAssertTrue(scrollTo(row, in: app))
-        app.buttons["shiftDetailDeliveryEarningsButton"].firstMatch.tap()
-        typeDeliveryAmount("14.75", in: app)
-        app.buttons["saveDeliveryEarningsButton"].tap()
-        XCTAssertTrue(waitForLabel(row, toContain: "$14.75"))
-
-        app.buttons["shiftDetailDeliveryEarningsButton"].firstMatch.tap()
-        let field = app.textFields["deliveryEarningsAmountField"]
-        XCTAssertTrue(field.waitForExistence(timeout: 5))
-        clear(field, in: app)
-        enter("99.99", into: field, in: app)
-        app.buttons["cancelDeliveryEarningsButton"].tap()
-
-        XCTAssertTrue(waitForLabel(row, toContain: "$14.75"), "Cancel writes nothing: \(row.label)")
-        XCTAssertFalse(row.label.contains("99.99"))
-    }
-
-    /// Removing an amount returns the delivery to having none, which is not a
-    /// recorded zero.
-    @MainActor
-    func testRemovesDeliveryEarnings() throws {
-        let app = launchWithFinishedDelivery()
-        openFirstShift(in: app)
-
-        let row = deliveryRow(containing: "Delivery 1, delivered", in: app)
-        XCTAssertTrue(scrollTo(row, in: app))
-        app.buttons["shiftDetailDeliveryEarningsButton"].firstMatch.tap()
-        typeDeliveryAmount("14.75", in: app)
-        app.buttons["saveDeliveryEarningsButton"].tap()
-        XCTAssertTrue(waitForLabel(row, toContain: "$14.75"))
-
-        app.buttons["shiftDetailDeliveryEarningsButton"].firstMatch.tap()
-        let remove = app.buttons["removeDeliveryEarningsButton"].firstMatch
-        XCTAssertTrue(remove.waitForExistence(timeout: 5))
-        XCTAssertEqual(remove.label, "Remove gross earnings from Delivery 1")
-        remove.tap()
-
-        XCTAssertTrue(
-            app.buttons["shiftDetailDeliveryEarningsButton"].firstMatch.waitForExistence(timeout: 5)
-        )
-        XCTAssertEqual(
-            app.buttons["shiftDetailDeliveryEarningsButton"].firstMatch.label,
-            "Add gross earnings for Delivery 1",
-            "The delivery is back to having no amount recorded"
-        )
-        XCTAssertFalse(row.label.contains("Gross earnings"), "Removed is not $0.00: \(row.label)")
     }
 
     // MARK: Additional tips, from detail
@@ -5896,561 +5336,7 @@ final class DashPilotUITests: XCTestCase {
         )
     }
 
-    /// Two tips of different methods stay two records, and the delivery reports
-    /// all three of them.
-    @MainActor
-    func testADeliveryCanHoldSeveralAdditionalTips() throws {
-        let app = launchWithFinishedDelivery()
-        openFirstShift(in: app)
-
-        let row = deliveryRow(containing: "Delivery 1, delivered", in: app)
-        XCTAssertTrue(scrollTo(row, in: app))
-        recordDeliveryAmount("10.00", in: app)
-
-        app.buttons["shiftDetailDeliveryTipsButton"].firstMatch.tap()
-        addTip("3.00", method: "Cash", in: app)
-        addTip("5.00", method: "Platform", in: app)
-
-        XCTAssertTrue(
-            waitForCount(app.descendants(matching: .any).matching(identifier: "deliveryTipRow"), toEqual: 2),
-            "Two tips are two records rather than one doubled one"
-        )
-
-        let rows = app.descendants(matching: .any).matching(identifier: "deliveryTipRow")
-        XCTAssertTrue(rows.element(boundBy: 0).label.contains("$3.00"))
-        XCTAssertTrue(
-            rows.element(boundBy: 0).label.contains("by cash"),
-            "Each says how it arrived: \(rows.element(boundBy: 0).label)"
-        )
-        XCTAssertTrue(rows.element(boundBy: 1).label.contains("$5.00"))
-        XCTAssertTrue(rows.element(boundBy: 1).label.contains("by platform"))
-
-        XCTAssertTrue(
-            waitForLabel(app.descendants(matching: .any)["deliveryTipsEffectiveTotal"], toContain: "$18.00")
-        )
-
-        app.buttons["closeDeliveryTipsButton"].tap()
-        XCTAssertTrue(waitForLabel(row, toContain: "2 additional tips for Delivery 1, $8.00"))
-        XCTAssertTrue(row.label.contains("Total recorded for Delivery 1, $18.00"), "Showed: \(row.label)")
-    }
-
-    /// Correcting one tip replaces it, and removing one takes the record away
-    /// while leaving the platform amount exactly as it was.
-    @MainActor
-    func testEditsAndRemovesAnAdditionalTip() throws {
-        let app = launchWithFinishedDelivery()
-        openFirstShift(in: app)
-
-        let row = deliveryRow(containing: "Delivery 1, delivered", in: app)
-        XCTAssertTrue(scrollTo(row, in: app))
-        recordDeliveryAmount("10.00", in: app)
-
-        app.buttons["shiftDetailDeliveryTipsButton"].firstMatch.tap()
-        addTip("3.00", method: "Cash", in: app)
-
-        // Editing opens on the stored amount and replaces it.
-        let editTip = app.buttons["editDeliveryTipButton"].firstMatch
-        XCTAssertTrue(editTip.waitForExistence(timeout: 5))
-        XCTAssertEqual(editTip.label, "Edit tip 1 for Delivery 1", "The control names which tip it acts on")
-        editTip.tap()
-        let field = app.textFields["deliveryTipAmountField"]
-        XCTAssertTrue(field.waitForExistence(timeout: 5))
-        XCTAssertEqual(field.value as? String, "3", "The editor opens on the stored amount")
-        clear(field, in: app)
-        enter("4.50", into: field, in: app)
-        app.buttons["saveDeliveryTipButton"].tap()
-
-        XCTAssertTrue(
-            waitForLabel(app.descendants(matching: .any)["deliveryTipsEffectiveTotal"], toContain: "$14.50")
-        )
-
-        // Removing it takes the record away rather than reducing it to nothing.
-        XCTAssertTrue(waitForDisappearance(of: app.textFields["deliveryTipAmountField"]))
-        app.buttons["editDeliveryTipButton"].firstMatch.tap()
-        let remove = app.buttons["removeDeliveryTipButton"]
-        XCTAssertTrue(remove.waitForExistence(timeout: 5))
-        XCTAssertEqual(remove.label, "Remove this additional tip from Delivery 1")
-        remove.tap()
-
-        XCTAssertTrue(
-            waitForCount(app.descendants(matching: .any).matching(identifier: "deliveryTipRow"), toEqual: 0)
-        )
-        XCTAssertFalse(
-            app.descendants(matching: .any)["deliveryTipsAdditionalTotal"].exists,
-            "No tip recorded is not a tip of nothing, so there is no total of them"
-        )
-        XCTAssertTrue(
-            waitForLabel(app.descendants(matching: .any)["deliveryTipsPlatformPay"], toContain: "$10.00"),
-            "And what the platform paid is untouched by any of it"
-        )
-
-        app.buttons["closeDeliveryTipsButton"].tap()
-        XCTAssertTrue(waitForLabel(row, toContain: "Gross earnings for Delivery 1, $10.00"))
-        XCTAssertFalse(row.label.contains("additional tip"), "Showed: \(row.label)")
-    }
-
-    /// A tip of nothing is refused, in the words of a tip, and nothing is
-    /// recorded.
-    @MainActor
-    func testATipOfNothingIsRefused() throws {
-        let app = launchWithFinishedDelivery()
-        openFirstShift(in: app)
-
-        let row = deliveryRow(containing: "Delivery 1, delivered", in: app)
-        XCTAssertTrue(scrollTo(row, in: app))
-        recordDeliveryAmount("10.00", in: app)
-
-        app.buttons["shiftDetailDeliveryTipsButton"].firstMatch.tap()
-        app.buttons["addDeliveryTipButton"].tap()
-
-        let field = app.textFields["deliveryTipAmountField"]
-        XCTAssertTrue(field.waitForExistence(timeout: 5))
-        enter("0", into: field, in: app)
-        app.buttons["saveDeliveryTipButton"].tap()
-
-        let message = app.descendants(matching: .any)["deliveryTipValidationMessage"]
-        XCTAssertTrue(message.waitForExistence(timeout: 5))
-        XCTAssertTrue(
-            message.label.lowercased().contains("more than nothing"),
-            "The refusal says what a tip has to be: \(message.label)"
-        )
-
-        app.buttons["cancelDeliveryTipButton"].tap()
-        XCTAssertTrue(
-            waitForCount(app.descendants(matching: .any).matching(identifier: "deliveryTipRow"), toEqual: 0)
-        )
-    }
-
-    /// A delivery carrying tips and no platform amount says there is no total,
-    /// rather than showing the tips as what it earned.
-    @MainActor
-    func testTipsWithoutAPlatformAmountStateNoTotal() throws {
-        let app = launchWithFinishedDelivery()
-        openFirstShift(in: app)
-
-        let row = deliveryRow(containing: "Delivery 1, delivered", in: app)
-        XCTAssertTrue(scrollTo(row, in: app))
-
-        app.buttons["shiftDetailDeliveryTipsButton"].firstMatch.tap()
-        addTip("5.00", method: "Cash", in: app)
-
-        XCTAssertTrue(
-            waitForLabel(
-                app.descendants(matching: .any)["deliveryTipsPlatformPay"],
-                toContain: "No platform pay recorded for Delivery 1"
-            )
-        )
-        XCTAssertFalse(
-            app.descendants(matching: .any)["deliveryTipsEffectiveTotal"].exists,
-            "There is no total, because half of what the delivery paid was never written down"
-        )
-        let notice = app.descendants(matching: .any)["deliveryTipsNoPlatformPayNotice"]
-        XCTAssertTrue(notice.waitForExistence(timeout: 5))
-        XCTAssertTrue(notice.label.contains("no total"), "Showed: \(notice.label)")
-
-        app.buttons["closeDeliveryTipsButton"].tap()
-        XCTAssertTrue(waitForLabel(row, toContain: "1 additional tip for Delivery 1, $5.00"))
-        XCTAssertFalse(row.label.contains("Total recorded"), "Showed: \(row.label)")
-    }
-
-    /// The earnings editor states the tips already recorded, so a driver is not
-    /// invited to add them into the platform amount a second time.
-    @MainActor
-    func testTheEarningsEditorSaysTheTipsAreAlreadyRecorded() throws {
-        let app = launchWithFinishedDelivery()
-        openFirstShift(in: app)
-
-        let row = deliveryRow(containing: "Delivery 1, delivered", in: app)
-        XCTAssertTrue(scrollTo(row, in: app))
-        recordDeliveryAmount("10.00", in: app)
-
-        app.buttons["shiftDetailDeliveryTipsButton"].firstMatch.tap()
-        addTip("5.00", method: "Cash", in: app)
-        app.buttons["closeDeliveryTipsButton"].tap()
-
-        app.buttons["shiftDetailDeliveryEarningsButton"].firstMatch.tap()
-        let stated = app.descendants(matching: .any)["deliveryEarningsAdditionalTips"]
-        XCTAssertTrue(stated.waitForExistence(timeout: 5))
-        XCTAssertTrue(stated.label.contains("$5.00"), "Showed: \(stated.label)")
-        XCTAssertEqual(
-            app.textFields["deliveryEarningsAmountField"].value as? String,
-            "10",
-            "The field holds the platform amount alone, with the tip stated beside it rather than inside it"
-        )
-        app.buttons["cancelDeliveryEarningsButton"].tap()
-
-        XCTAssertTrue(waitForLabel(row, toContain: "Total recorded for Delivery 1, $15.00"))
-    }
-
-    /// Two deliveries the driver worked at the same time hold their own amounts,
-    /// and editing one leaves the other exactly as it was.
-    @MainActor
-    func testStackedDeliveriesKeepIndependentAmounts() throws {
-        let app = launchWithSeededHistory()
-        openFirstShift(in: app)
-
-        // The fixture's first and third deliveries carry amounts and its second
-        // carries none; the second and third overlap.
-        let first = deliveryRow(containing: "Delivery 1, delivered", in: app)
-        XCTAssertTrue(scrollTo(first, in: app))
-        XCTAssertTrue(
-            first.label.contains("Gross earnings for Delivery 1, $14.75"),
-            "Showed: \(first.label)"
-        )
-        XCTAssertTrue(
-            first.label.contains("$35.40 earned per recorded delivery hour"),
-            "The rate names its denominator in full: \(first.label)"
-        )
-
-        let second = deliveryRow(containing: "Delivery 2, cancelled", in: app)
-        XCTAssertTrue(scrollTo(second, in: app))
-        XCTAssertFalse(
-            second.label.contains("Gross earnings"),
-            "A delivery with no amount recorded shows none: \(second.label)"
-        )
-
-        let third = deliveryRow(containing: "Delivery 3, delivered", in: app)
-        XCTAssertTrue(scrollTo(third, in: app))
-        XCTAssertTrue(third.label.contains("Gross earnings for Delivery 3, $9.50"), "Showed: \(third.label)")
-
-        // Editing the third leaves the first alone.
-        let editThird = app.buttons
-            .matching(identifier: "shiftDetailDeliveryEarningsButton")
-            .matching(NSPredicate(format: "label CONTAINS %@", "Delivery 3"))
-            .firstMatch
-        XCTAssertTrue(editThird.exists)
-        editThird.tap()
-
-        let field = app.textFields["deliveryEarningsAmountField"]
-        XCTAssertTrue(field.waitForExistence(timeout: 5))
-        clear(field, in: app)
-        enter("20.00", into: field, in: app)
-        app.buttons["saveDeliveryEarningsButton"].tap()
-
-        XCTAssertTrue(waitForLabel(third, toContain: "$20.00"), "Showed: \(third.label)")
-        // The first card is above the third, and the scroll helpers only walk
-        // down, so the screen goes back to the top first.
-        XCTAssertTrue(scrollToTop(reaching: app.descendants(matching: .any)["shiftDetailEarnings"], in: app))
-        XCTAssertTrue(scrollTo(first, in: app))
-        XCTAssertTrue(
-            first.label.contains("$14.75"),
-            "One delivery's amount is its own, however far the lifecycles overlap: \(first.label)"
-        )
-    }
-
-    /// A finished delivery states what it paid per hour of its own lifecycle,
-    /// and that figure is nobody else's.
-    ///
-    /// The fixture makes all four claims assertable at once. Delivery 1 ran
-    /// twenty-five minutes for $14.75, so $35.40 an hour. Delivery 3 ran thirty
-    /// minutes for $9.50, so $19.00 an hour, and it was accepted while delivery
-    /// 2 was still open: two lifecycles over the same minutes, two independent
-    /// figures, neither dividing shared time between them. Delivery 2 was
-    /// cancelled and has no such figure at all, because there is no completion
-    /// to measure to.
-    ///
-    /// The rate is read off the row's own accessibility label, which is what a
-    /// VoiceOver user hears and where the denominator is named in full. "Per
-    /// hour" alone would be heard as a wage.
-    @MainActor
-    func testACompletedDeliveryStatesItsOwnEffectiveHourlyRate() throws {
-        let app = launchWithSeededHistory()
-        openFirstShift(in: app)
-
-        let first = deliveryRow(containing: "Delivery 1, delivered", in: app)
-        XCTAssertTrue(scrollTo(first, in: app))
-        XCTAssertTrue(
-            first.label.contains("$35.40 earned per recorded delivery hour"),
-            "$14.75 over twenty-five minutes, with the denominator named: \(first.label)"
-        )
-
-        let second = deliveryRow(containing: "Delivery 2, cancelled", in: app)
-        XCTAssertTrue(scrollTo(second, in: app))
-        XCTAssertFalse(
-            second.label.contains("per recorded delivery hour"),
-            "There is no such thing as a cancelled hourly rate: \(second.label)"
-        )
-
-        let third = deliveryRow(containing: "Delivery 3, delivered", in: app)
-        XCTAssertTrue(scrollTo(third, in: app))
-        XCTAssertTrue(
-            third.label.contains("$19.00 earned per recorded delivery hour"),
-            "$9.50 over its own thirty minutes, not over the time it shared with delivery 2: \(third.label)"
-        )
-    }
-
-    /// A tip recorded against a finished delivery moves its hourly figure
-    /// straight away, and moves nobody else's.
-    ///
-    /// $14.75 over twenty-five minutes is $35.40 an hour; a $5.00 cash tip makes
-    /// it $19.75 over the same twenty-five minutes, which is $47.40. Nothing is
-    /// recalculated on a schedule and nothing is stored: the figure is derived
-    /// from the rows every time the screen reads it.
-    @MainActor
-    func testRecordingATipMovesThatDeliverysHourlyRate() throws {
-        let app = launchWithSeededHistory()
-        openFirstShift(in: app)
-
-        let first = deliveryRow(containing: "Delivery 1, delivered", in: app)
-        XCTAssertTrue(scrollTo(first, in: app))
-        XCTAssertTrue(first.label.contains("$35.40 earned per recorded delivery hour"), "Showed: \(first.label)")
-
-        // From this delivery's own card rather than firstMatch over the screen,
-        // for the reason `openPickupHistory` scopes its query: five controls per
-        // card put the topmost one a long scroll away from the named row.
-        let card = deliveryCard(containing: "Delivery 1, delivered", in: app)
-        let tips = card.buttons["shiftDetailDeliveryTipsButton"]
-        XCTAssertTrue(tips.waitForExistence(timeout: 5))
-        XCTAssertTrue(scrollUntilHittable(tips, in: app), "and is somewhere a tap will land on it")
-        tips.tap()
-
-        addTip("5.00", method: "Cash", in: app)
-        app.buttons["closeDeliveryTipsButton"].tap()
-
-        XCTAssertTrue(scrollTo(first, in: app))
-        XCTAssertTrue(
-            waitForLabel(first, toContain: "$47.40 earned per recorded delivery hour"),
-            "The tip is half of what the delivery paid, so the rate divides both halves: \(first.label)"
-        )
-        XCTAssertTrue(
-            first.label.contains("Total recorded for Delivery 1, $19.75"),
-            "and the total it divides is on the same row: \(first.label)"
-        )
-
-        // The delivery it overlapped is untouched: a tip is a fact about one
-        // delivery, and no figure here is allocated across deliveries.
-        let third = deliveryRow(containing: "Delivery 3, delivered", in: app)
-        XCTAssertTrue(scrollTo(third, in: app))
-        XCTAssertTrue(
-            third.label.contains("$19.00 earned per recorded delivery hour"),
-            "Showed: \(third.label)"
-        )
-    }
-
-    /// Editing a delivery's amount does not touch what the shift recorded.
-    @MainActor
-    func testEditingADeliveryAmountLeavesTheShiftTotalUnchanged() throws {
-        let app = launchWithSeededHistory()
-        openFirstShift(in: app)
-
-        let shiftEarnings = app.descendants(matching: .any)["shiftDetailEarnings"]
-        XCTAssertTrue(shiftEarnings.waitForExistence(timeout: 10))
-        XCTAssertTrue(shiftEarnings.label.contains("86.25"), "The fixture's shift total: \(shiftEarnings.label)")
-
-        let row = deliveryRow(containing: "Delivery 1, delivered", in: app)
-        XCTAssertTrue(scrollTo(row, in: app))
-        app.buttons
-            .matching(identifier: "shiftDetailDeliveryEarningsButton")
-            .matching(NSPredicate(format: "label CONTAINS %@", "Delivery 1"))
-            .firstMatch
-            .tap()
-
-        let field = app.textFields["deliveryEarningsAmountField"]
-        XCTAssertTrue(field.waitForExistence(timeout: 5))
-        clear(field, in: app)
-        enter("50.00", into: field, in: app)
-        app.buttons["saveDeliveryEarningsButton"].tap()
-
-        XCTAssertTrue(waitForLabel(row, toContain: "$50.00"))
-
-        // Back up to the shift's own figure, which nothing recalculated.
-        XCTAssertTrue(scrollToTop(reaching: shiftEarnings, in: app))
-        XCTAssertTrue(
-            shiftEarnings.label.contains("86.25"),
-            "A delivery amount never adds up to, or corrects, the shift total: \(shiftEarnings.label)"
-        )
-    }
-
     // MARK: Expected pay
-
-    /// An amount is recorded against a delivery in progress, and the card states
-    /// it as what the delivery is *expected* to pay rather than as earnings.
-    ///
-    /// The distinction is the whole feature, so the journey asserts both halves:
-    /// that the figure the driver typed is on the card under its own name, and
-    /// that nothing anywhere on the running shift now reports a recorded amount.
-    @MainActor
-    func testRecordsExpectedPayOnARunningDelivery() throws {
-        let app = launchWithExpectedPay()
-
-        // The fixture's second delivery carries nothing, which is where the
-        // control has to offer to add rather than to change.
-        let card = deliveryStatus(containing: "Delivery 2", in: app)
-        let add = deliveryButton("expectedEarningsButton", containing: "Delivery 2", in: app)
-        XCTAssertTrue(scrollTo(add, in: app), "A delivery in progress offers expected pay")
-        XCTAssertEqual(add.label, "Add expected pay for Delivery 2")
-        XCTAssertFalse(
-            card.label.contains("Expected pay"),
-            "Nothing is expected until the driver records it: \(card.label)"
-        )
-
-        tapWithinReach(add, in: app)
-        let field = app.textFields["deliveryExpectedEarningsAmountField"]
-        XCTAssertTrue(field.waitForExistence(timeout: 5))
-        XCTAssertNotEqual(
-            field.value as? String,
-            "8.5",
-            "The editor opens on this delivery's own record rather than on the other card's amount"
-        )
-        XCTAssertFalse(
-            app.buttons["removeDeliveryExpectedEarningsButton"].exists,
-            "There is nothing to remove yet"
-        )
-        typeExpectedPay("12.25", in: app)
-        app.buttons["saveDeliveryExpectedEarningsButton"].tap()
-
-        XCTAssertTrue(
-            waitForLabel(card, toContain: "Expected pay for Delivery 2, $12.25"),
-            "The card states the amount with the delivery it belongs to: \(card.label)"
-        )
-        XCTAssertTrue(
-            card.label.contains("No gross earnings recorded yet"),
-            "And says in the same breath that it is not earnings: \(card.label)"
-        )
-        XCTAssertFalse(
-            card.label.contains("Gross earnings for Delivery 2, $12.25"),
-            "An expectation is never spoken as a recorded amount: \(card.label)"
-        )
-        XCTAssertEqual(
-            deliveryButton("expectedEarningsButton", containing: "Delivery 2", in: app).label,
-            "Change expected pay for Delivery 2",
-            "The control now offers to change what is recorded"
-        )
-
-        // The other delivery's own amount is untouched, so the figure went to
-        // the record the control named rather than to whichever card was handy.
-        XCTAssertTrue(
-            deliveryStatus(containing: "Delivery 1", in: app).label.contains("Expected pay for Delivery 1, $8.50")
-        )
-
-        // And nothing about the shift now reports earnings. The notice below is
-        // rendered after the amount and the rates would be, so reaching it is
-        // what makes their absence a real absence rather than an unrendered row.
-        let notice = app.descendants(matching: .any)["liveRateNotice"]
-        XCTAssertTrue(reachShiftControl(notice, in: app), "The shift's context below the deliveries is on screen")
-        XCTAssertEqual(notice.label, "This shift is still running. Rates are worked out once it ends.")
-        XCTAssertFalse(
-            app.descendants(matching: .any)["liveRecordedGross"].exists,
-            "An expected amount is not a recorded one, and no shift figure counts it"
-        )
-        XCTAssertEqual(rows(in: app).count, 0, "Nothing was finalized into history either")
-    }
-
-    /// A delivery carrying an expected amount is delivered through the real
-    /// lifecycle, is offered the chance to record what it actually paid, and is
-    /// left with none when the driver says not now.
-    ///
-    /// What the sheet must not do is turn the expectation into earnings by
-    /// itself, so the assertions after the dismissal are the point of the
-    /// journey: the delivery is terminal, the expectation survives into history,
-    /// and no gross amount exists anywhere.
-    @MainActor
-    func testDeliveringWithExpectedPayOffersItAndRecordsNothingWhenDismissed() throws {
-        let app = launchWithExpectedPay()
-
-        let action = deliveryButton("deliveryActionButton", containing: "Delivery 1", in: app)
-        XCTAssertTrue(scrollTo(action, in: app))
-        XCTAssertTrue(
-            deliveryStatus(containing: "Delivery 1", in: app).label.contains("Expected pay for Delivery 1, $8.50"),
-            "The fixture's first delivery carries an expectation"
-        )
-
-        // The step before the last one. The confirmation belongs to the
-        // delivered event alone, so picking the order up must raise nothing.
-        XCTAssertEqual(action.label, "Delivery 1. Mark order picked up")
-        tapWithinReach(action, in: app)
-        XCTAssertTrue(waitForLabel(action, toContain: "Mark delivery completed"))
-        XCTAssertFalse(
-            app.buttons["confirmEarningsRecordButton"].exists,
-            "Nothing is asked until the delivery is actually delivered"
-        )
-
-        tapWithinReach(action, in: app)
-
-        let expectedRow = app.descendants(matching: .any)["confirmEarningsExpectedAmount"]
-        XCTAssertTrue(expectedRow.waitForExistence(timeout: 5), "The confirmation is raised")
-        XCTAssertEqual(
-            expectedRow.label,
-            "Expected pay for Delivery 1, $8.50. No gross earnings recorded yet.",
-            "The sheet states the expectation as an expectation"
-        )
-        XCTAssertFalse(
-            app.textFields["confirmEarningsExpectedAmount"].exists,
-            "The expected figure is stated rather than offered as the field to type in"
-        )
-
-        // The editable amount is a different control, named for the fact it
-        // records. Seeded from the expectation, and that is all it is.
-        let amount = app.textFields["confirmEarningsAmountField"]
-        XCTAssertTrue(amount.exists)
-        XCTAssertEqual(amount.label, "Gross earnings for Delivery 1")
-        // `8.5` rather than `8.50`: an editor seeds a field with a number to be
-        // typed over, and `MoneyInput` writes it without trailing zeroes.
-        XCTAssertEqual(amount.value as? String, "8.5")
-        XCTAssertTrue(
-            app.navigationBars["Delivery 1 Delivered"].exists,
-            "The sheet names the delivery it is about"
-        )
-
-        let dismiss = app.buttons["confirmEarningsDismissButton"].firstMatch
-        XCTAssertEqual(dismiss.label, "Record no earnings for Delivery 1 now")
-        dismiss.tap()
-
-        XCTAssertTrue(
-            waitForDisappearance(of: app.buttons["confirmEarningsRecordButton"].firstMatch),
-            "Not Now closes the sheet"
-        )
-
-        // Terminal, and terminal because the lifecycle said so rather than
-        // because the sheet was answered.
-        XCTAssertTrue(
-            waitForCount(app.buttons.matching(identifier: "deliveryActionButton"), toEqual: 1),
-            "The delivered delivery has no next step and leaves the panel"
-        )
-        let status = app.descendants(matching: .any)["deliveryStatus"]
-        XCTAssertTrue(waitForLabel(status, toContain: "1 delivery completed"), "Status: \(status.label)")
-
-        // The rest of the shift is ordinary work, and only exists here so the
-        // shift can be ended and its history read.
-        let remaining = deliveryButton("deliveryActionButton", containing: "Delivery 2", in: app)
-        for expected in ["Mark order picked up", "Mark delivery completed"] {
-            XCTAssertTrue(waitForLabel(remaining, toContain: expected), "Showed: \(remaining.label)")
-            tapWithinReach(remaining, in: app)
-        }
-
-        let endShift = app.buttons["endShiftButton"]
-        XCTAssertTrue(reachShiftControl(endShift, in: app))
-        endShift.tap()
-        openFirstShift(in: app)
-
-        let row = deliveryRow(containing: "Delivery 1, delivered", in: app)
-        XCTAssertTrue(scrollTo(row, in: app))
-        XCTAssertTrue(
-            row.label.contains("Expected pay for Delivery 1, $8.50. No gross earnings recorded yet."),
-            "History keeps what was expected, and still says nothing was recorded: \(row.label)"
-        )
-        XCTAssertFalse(
-            row.label.contains("Gross earnings for Delivery 1"),
-            "Dismissing the confirmation recorded no amount: \(row.label)"
-        )
-        XCTAssertEqual(
-            app.buttons
-                .matching(identifier: "shiftDetailDeliveryEarningsButton")
-                .matching(NSPredicate(format: "label CONTAINS %@", "Delivery 1"))
-                .firstMatch
-                .label,
-            "Add gross earnings for Delivery 1",
-            "History offers the amount again rather than treating the question as answered"
-        )
-
-        let shiftEarnings = app.descendants(matching: .any)["shiftDetailEarnings"]
-        XCTAssertTrue(scrollToTop(reaching: shiftEarnings, in: app))
-        XCTAssertEqual(
-            shiftEarnings.label,
-            "No amount recorded",
-            "No shift figure was invented from a delivery's expectation either"
-        )
-    }
 
     /// A delivery with no expected amount is delivered exactly as it always was,
     /// and meets no confirmation on the way.
@@ -6511,499 +5397,11 @@ final class DashPilotUITests: XCTestCase {
 
     // MARK: Pickup identity
 
-    /// A pickup place is named on a running delivery, and the card shows it.
-    ///
-    /// The lifecycle assertions around it are the point as much as the name is:
-    /// the delivery's next step is still one tap away before and after, so the
-    /// identity is genuinely optional rather than a step in the flow.
-    @MainActor
-    func testAssignsAPickupPlaceToARunningDelivery() throws {
-        let app = launchWithEmptyStore()
-        startShiftAndDelivery(in: app)
-
-        let action = deliveryButton("deliveryActionButton", containing: "Delivery 1", in: app)
-        XCTAssertTrue(waitForLabel(action, toContain: "Mark arrived at pickup"))
-
-        let pickup = deliveryButton("pickupPlaceButton", containing: "Delivery 1", in: app)
-        XCTAssertTrue(scrollTo(pickup, in: app), "The card offers a pickup place control")
-        XCTAssertEqual(pickup.label, "Add pickup place for Delivery 1")
-        tapWithinReach(pickup, in: app)
-
-        typePickupPlace(Self.noodles, in: app)
-        app.buttons["savePickupPlaceButton"].tap()
-
-        let status = deliveryStatus(containing: "Delivery 1", in: app)
-        XCTAssertTrue(waitForLabel(status, toContain: Self.noodles), "The card names the place: \(status.label)")
-        XCTAssertTrue(waitForLabel(pickup, toContain: "Change pickup place"), "And the control now offers a change")
-        XCTAssertEqual(
-            action.label,
-            "Delivery 1. Mark arrived at pickup",
-            "Naming a pickup advances nothing"
-        )
-
-        // And the lifecycle still runs, one tap per event, exactly as before.
-        for expected in ["Mark arrived at pickup", "Mark order picked up", "Mark delivery completed"] {
-            XCTAssertTrue(waitForLabel(action, toContain: expected), "Showed: \(action.label)")
-            tapWithinReach(action, in: app)
-        }
-        XCTAssertFalse(app.buttons["deliveryActionButton"].exists)
-    }
-
-    /// A second delivery reuses the first delivery's place from the recent list,
-    /// in one tap and with no typing.
-    @MainActor
-    func testSecondDeliveryReusesARecentPickupPlace() throws {
-        let app = launchWithEmptyStore()
-        startShiftAndDelivery(in: app)
-
-        let first = deliveryButton("pickupPlaceButton", containing: "Delivery 1", in: app)
-        XCTAssertTrue(scrollTo(first, in: app))
-        tapWithinReach(first, in: app)
-        typePickupPlace(Self.noodles, in: app)
-        app.buttons["savePickupPlaceButton"].tap()
-
-        let startDelivery = app.buttons["startDeliveryButton"]
-        XCTAssertTrue(scrollTo(startDelivery, in: app))
-        startDelivery.tap()
-
-        let second = deliveryButton("pickupPlaceButton", containing: "Delivery 2", in: app)
-        XCTAssertTrue(second.waitForExistence(timeout: 5))
-        tapWithinReach(second, in: app)
-
-        // No keyboard: the place the first delivery named is offered as recent.
-        let recent = app.buttons
-            .matching(NSPredicate(format: "identifier == %@ AND label CONTAINS %@", "recentPickupPlaceButton", Self.noodles))
-            .firstMatch
-        XCTAssertTrue(recent.waitForExistence(timeout: 5), "The place used moments ago is offered")
-        recent.tap()
-
-        for number in ["Delivery 1", "Delivery 2"] {
-            let status = deliveryStatus(containing: number, in: app)
-            XCTAssertTrue(
-                waitForLabel(status, toContain: Self.noodles),
-                "\(number) should name the shared place, showed: \(status.label)"
-            )
-        }
-    }
-
-    /// A pickup place tapped onto the wrong delivery can be corrected.
-    @MainActor
-    func testChangesAPickupPlace() throws {
-        let app = launchWithEmptyStore()
-        startShiftAndDelivery(in: app)
-
-        let pickup = deliveryButton("pickupPlaceButton", containing: "Delivery 1", in: app)
-        XCTAssertTrue(scrollTo(pickup, in: app))
-        tapWithinReach(pickup, in: app)
-        typePickupPlace(Self.noodles, in: app)
-        app.buttons["savePickupPlaceButton"].tap()
-
-        let status = deliveryStatus(containing: "Delivery 1", in: app)
-        XCTAssertTrue(waitForLabel(status, toContain: Self.noodles))
-
-        XCTAssertTrue(waitForLabel(pickup, toContain: "Change pickup place"))
-        tapWithinReach(pickup, in: app)
-        let field = app.textFields["pickupPlaceNameField"]
-        XCTAssertTrue(field.waitForExistence(timeout: 5))
-        XCTAssertEqual(field.value as? String, Self.noodles, "The editor opens on what was recorded")
-        clear(field, in: app)
-        enter(Self.diner, into: field, in: app)
-        app.buttons["savePickupPlaceButton"].tap()
-
-        XCTAssertTrue(waitForLabel(status, toContain: Self.diner), "Showed: \(status.label)")
-        XCTAssertFalse(status.label.contains(Self.noodles), "The old place is gone from the card")
-    }
-
-    /// Removing a pickup place leaves the delivery and its lifecycle intact.
-    @MainActor
-    func testRemovesAPickupPlace() throws {
-        let app = launchWithEmptyStore()
-        startShiftAndDelivery(in: app)
-
-        let pickup = deliveryButton("pickupPlaceButton", containing: "Delivery 1", in: app)
-        XCTAssertTrue(scrollTo(pickup, in: app))
-        tapWithinReach(pickup, in: app)
-        typePickupPlace(Self.noodles, in: app)
-        app.buttons["savePickupPlaceButton"].tap()
-
-        let action = deliveryButton("deliveryActionButton", containing: "Delivery 1", in: app)
-        XCTAssertTrue(waitForLabel(action, toContain: "Mark arrived at pickup"))
-        tapWithinReach(action, in: app)
-        XCTAssertTrue(waitForLabel(action, toContain: "Mark order picked up"))
-
-        XCTAssertTrue(waitForLabel(pickup, toContain: "Change pickup place"))
-        tapWithinReach(pickup, in: app)
-        let remove = app.buttons["removePickupPlaceButton"]
-        XCTAssertTrue(remove.waitForExistence(timeout: 5))
-        remove.tap()
-
-        let status = deliveryStatus(containing: "Delivery 1", in: app)
-        XCTAssertTrue(waitForLabel(status, toContain: "waiting at the pickup"), "Showed: \(status.label)")
-        XCTAssertFalse(status.label.contains(Self.noodles), "The place is gone")
-        XCTAssertEqual(
-            action.label,
-            "Delivery 1. Mark order picked up",
-            "And the delivery is exactly where it was in its lifecycle"
-        )
-        XCTAssertTrue(waitForLabel(pickup, toContain: "Add pickup place"))
-    }
-
-    /// A completed shift's delivery log shows the place each delivery recorded,
-    /// and shows nothing where none was recorded.
-    @MainActor
-    func testCompletedShiftDetailShowsPickupPlaces() throws {
-        let app = launchWithSeededHistory()
-        openFirstShift(in: app)
-
-        let summary = app.descendants(matching: .any)["shiftDetailDeliverySummary"]
-        XCTAssertTrue(scrollTo(summary, in: app))
-
-        // The fixture's first and third deliveries share one place; the second
-        // carries a different one.
-        let first = deliveryRow(containing: "Delivery 1, delivered", in: app)
-        XCTAssertTrue(scrollTo(first, in: app))
-        XCTAssertTrue(
-            first.label.contains("Picked up from \(Self.noodles)"),
-            "The place is spoken with the delivery: \(first.label)"
-        )
-        XCTAssertTrue(first.label.contains("Accepted at"), "And supplements the record rather than replacing it")
-
-        let second = deliveryRow(containing: "Delivery 2, cancelled", in: app)
-        XCTAssertTrue(scrollTo(second, in: app))
-        XCTAssertTrue(second.label.contains("Picked up from \(Self.diner)"), "Showed: \(second.label)")
-
-        let third = deliveryRow(containing: "Delivery 3, delivered", in: app)
-        XCTAssertTrue(scrollTo(third, in: app))
-        XCTAssertTrue(
-            third.label.contains("Picked up from \(Self.noodles)"),
-            "Two deliveries share one local place: \(third.label)"
-        )
-
-        // And every delivery offers the control that corrects it.
-        XCTAssertTrue(
-            app.buttons.matching(identifier: "shiftDetailPickupPlaceButton").firstMatch.exists,
-            "A place recorded on the wrong delivery is fixable from history"
-        )
-    }
-
     // MARK: Pickup wait history
-
-    /// A completed delivery states the wait it recorded, as a fact about that
-    /// delivery rather than about the place.
-    @MainActor
-    func testCompletedDeliveryShowsItsOwnPickupWait() throws {
-        let app = launchWithPickupHistory()
-        openFirstShift(in: app)
-
-        let first = deliveryRow(containing: "Delivery 1, delivered", in: app)
-        XCTAssertTrue(scrollTo(first, in: app))
-        XCTAssertTrue(
-            first.label.contains("Waited at pickup 6 minutes"),
-            "The delivery's own wait is derived from its two recorded ends: \(first.label)"
-        )
-        XCTAssertFalse(
-            first.label.lowercased().contains("typical"),
-            "One delivery's wait is not a claim about the place: \(first.label)"
-        )
-        XCTAssertFalse(first.label.contains("median"))
-    }
-
-    /// A place with several recorded waits shows the median, says it is the
-    /// median, and says how many pickups it came from.
-    @MainActor
-    func testPickupPlaceHistoryShowsAMedianAndItsSampleCount() throws {
-        let app = launchWithPickupHistory()
-        openFirstShift(in: app)
-        openPickupHistory(from: "Delivery 1, delivered", in: app)
-
-        let summary = app.descendants(matching: .any)["pickupPlaceHistorySummary"]
-        XCTAssertTrue(summary.waitForExistence(timeout: 5))
-        XCTAssertTrue(
-            summary.label.contains("Typical recorded pickup wait, 11 minutes"),
-            "The middle of 6, 11 and 41 minutes: \(summary.label)"
-        )
-        XCTAssertTrue(
-            summary.label.contains("median of 3 recorded pickups"),
-            "The statistic and its sample count are spoken with the figure: \(summary.label)"
-        )
-        XCTAssertTrue(
-            summary.label.contains("longest 41 minutes"),
-            "A long wait is kept rather than trimmed away: \(summary.label)"
-        )
-
-        // The delivery that arrived and cancelled without picking up named this
-        // place too, and contributed nothing.
-        XCTAssertFalse(summary.label.contains("4 recorded pickups"), "Showed: \(summary.label)")
-
-        // Nothing on this screen ranks, grades or forecasts.
-        for overclaim in ["reliable", "accurate", "predict", "average", "score", "best", "fastest"] {
-            XCTAssertFalse(
-                summary.label.lowercased().contains(overclaim),
-                "The history must not claim \(overclaim): \(summary.label)"
-            )
-        }
-    }
-
-    /// A place with exactly one recorded wait says so, and refuses to call it
-    /// typical.
-    @MainActor
-    func testOneRecordedPickupIsNotPresentedAsATypicalWait() throws {
-        let app = launchWithPickupHistory()
-        openFirstShift(in: app)
-        openPickupHistory(from: "Delivery 5, delivered", in: app)
-
-        let summary = app.descendants(matching: .any)["pickupPlaceHistorySummary"]
-        XCTAssertTrue(summary.waitForExistence(timeout: 5))
-        XCTAssertTrue(
-            summary.label.contains("1 recorded pickup, 20 minutes"),
-            "The one wait is a fact and is stated: \(summary.label)"
-        )
-        XCTAssertTrue(
-            summary.label.contains("Not enough history for a typical wait"),
-            "And its smallness is stated with it: \(summary.label)"
-        )
-        XCTAssertFalse(
-            summary.label.lowercased().contains("typical recorded pickup wait"),
-            "One observation is never offered as the place's typical wait: \(summary.label)"
-        )
-        XCTAssertFalse(summary.label.contains("Median"), "Showed: \(summary.label)")
-    }
-
-    /// Two places recorded on one shift keep entirely separate histories.
-    @MainActor
-    func testTwoPickupPlacesDoNotShareAHistory() throws {
-        let app = launchWithPickupHistory()
-        openFirstShift(in: app)
-
-        openPickupHistory(from: "Delivery 1, delivered", in: app)
-        let summary = app.descendants(matching: .any)["pickupPlaceHistorySummary"]
-        XCTAssertTrue(summary.waitForExistence(timeout: 5))
-        XCTAssertTrue(app.navigationBars[Self.noodles].exists, "The sheet is titled by the place it describes")
-        XCTAssertTrue(summary.label.contains("3 recorded pickups"), "Showed: \(summary.label)")
-        closePickupHistory(in: app)
-
-        openPickupHistory(from: "Delivery 5, delivered", in: app)
-        XCTAssertTrue(summary.waitForExistence(timeout: 5))
-        XCTAssertTrue(app.navigationBars[Self.diner].exists)
-        XCTAssertTrue(summary.label.contains("1 recorded pickup"), "Showed: \(summary.label)")
-        XCTAssertFalse(
-            summary.label.contains("11 minutes"),
-            "The other place's median must not leak into this one: \(summary.label)"
-        )
-    }
-
-    /// A delivery that names no place offers no history to open, rather than an
-    /// empty one.
-    @MainActor
-    func testDeliveryWithoutAPickupPlaceHasNoHistoryToOpen() throws {
-        let app = launchWithPickupHistory()
-        openFirstShift(in: app)
-
-        let unattributed = deliveryRow(containing: "Delivery 6, delivered", in: app)
-        XCTAssertTrue(scrollTo(unattributed, in: app))
-        XCTAssertFalse(
-            unattributed.label.contains("Picked up from"),
-            "It named no place: \(unattributed.label)"
-        )
-        XCTAssertTrue(
-            unattributed.label.contains("Waited at pickup"),
-            "Its own wait is still recorded: \(unattributed.label)"
-        )
-        XCTAssertNil(
-            pickupHistoryButton(near: unattributed, in: app),
-            "A delivery with no place has no place history, and is offered none"
-        )
-    }
 
     // MARK: Correcting a pickup place
 
-    /// A misspelled place can be renamed, and the rename changes only its name.
-    @MainActor
-    func testRenamesAPickupPlaceFromItsHistory() throws {
-        let app = launchWithPickupHistory()
-        openFirstShift(in: app)
-        openPickupHistory(from: "Delivery 1, delivered", in: app)
-
-        let summary = app.descendants(matching: .any)["pickupPlaceHistorySummary"]
-        XCTAssertTrue(summary.waitForExistence(timeout: 5))
-        let before = summary.label
-
-        let rename = app.buttons["renamePickupPlaceButton"]
-        XCTAssertTrue(scrollTo(rename, in: app), "Managing the place is offered on the place's own screen")
-        XCTAssertEqual(rename.label, "Rename pickup place, \(Self.noodles)", "The control names its place")
-        rename.tap()
-
-        let field = app.textFields["pickupPlaceRenameField"]
-        XCTAssertTrue(field.waitForExistence(timeout: 5))
-        XCTAssertEqual(field.value as? String, Self.noodles, "The sheet opens on the recorded spelling")
-        clear(field, in: app)
-        enter(Self.renamedNoodles, into: field, in: app)
-        app.buttons["savePickupPlaceRenameButton"].tap()
-
-        XCTAssertTrue(
-            app.navigationBars[Self.renamedNoodles].waitForExistence(timeout: 5),
-            "The history is now titled by the new name"
-        )
-        XCTAssertEqual(summary.label, before, "And says exactly what it said before: a rename moves no wait")
-
-        closePickupHistory(in: app)
-        let row = deliveryRow(containing: "Delivery 1, delivered", in: app)
-        XCTAssertTrue(waitForLabel(row, toContain: "Picked up from \(Self.renamedNoodles)"))
-        XCTAssertTrue(row.label.contains("Waited at pickup 6 minutes"), "Its own record is untouched: \(row.label)")
-    }
-
-    /// Renaming onto a name another place already uses is refused, and the
-    /// refusal points at merging instead.
-    @MainActor
-    func testRenamingOntoAnExistingPlaceIsRefusedAndOffersMerge() throws {
-        let app = launchWithPickupHistory()
-        openFirstShift(in: app)
-        openPickupHistory(from: "Delivery 1, delivered", in: app)
-
-        let rename = app.buttons["renamePickupPlaceButton"]
-        XCTAssertTrue(scrollTo(rename, in: app))
-        rename.tap()
-
-        let field = app.textFields["pickupPlaceRenameField"]
-        XCTAssertTrue(field.waitForExistence(timeout: 5))
-        clear(field, in: app)
-        enter(Self.diner, into: field, in: app)
-        app.buttons["savePickupPlaceRenameButton"].tap()
-
-        // A `Label` mirrors its identifier onto both the icon and the text, so
-        // the text element is asked for by name rather than by `descendants`.
-        let message = app.staticTexts.matching(identifier: "pickupPlaceRenameMessage").firstMatch
-        XCTAssertTrue(message.waitForExistence(timeout: 5), "The rename is refused rather than silently merged")
-        XCTAssertTrue(message.label.contains(Self.diner), "It names what it collided with: \(message.label)")
-        XCTAssertTrue(
-            message.label.lowercased().contains("merge"),
-            "And offers the deliberate operation that would combine them: \(message.label)"
-        )
-        XCTAssertTrue(field.exists, "The sheet stays open with what was typed")
-
-        app.buttons["cancelPickupPlaceRenameButton"].tap()
-        XCTAssertTrue(
-            app.navigationBars[Self.noodles].waitForExistence(timeout: 5),
-            "And the place still has the name it had"
-        )
-    }
-
-    /// Two places a driver meant as one are merged, deliberately, and their
-    /// recorded waits are then read together.
-    @MainActor
-    func testMergesTwoPickupPlacesIntoOneHistory() throws {
-        let app = launchWithPickupHistory()
-        openFirstShift(in: app)
-        openPickupHistory(from: "Delivery 5, delivered", in: app)
-
-        let summary = app.descendants(matching: .any)["pickupPlaceHistorySummary"]
-        XCTAssertTrue(summary.waitForExistence(timeout: 5))
-        XCTAssertTrue(summary.label.contains("1 recorded pickup"), "Showed: \(summary.label)")
-
-        let merge = app.buttons["mergePickupPlaceButton"]
-        XCTAssertTrue(scrollTo(merge, in: app))
-        XCTAssertEqual(merge.label, "Merge pickup place, \(Self.diner)")
-        merge.tap()
-
-        // The destination control speaks the direction in full, so the merge
-        // cannot be read as symmetric.
-        let destination = app.buttons
-            .matching(identifier: "pickupPlaceMergeDestinationButton")
-            .matching(NSPredicate(format: "label == %@", "Merge \(Self.diner) into \(Self.noodles)"))
-            .firstMatch
-        XCTAssertTrue(destination.waitForExistence(timeout: 5))
-        destination.tap()
-
-        let confirmation = app.alerts.firstMatch
-        XCTAssertTrue(confirmation.waitForExistence(timeout: 5))
-        let spoken = confirmation.label + " " + confirmation.staticTexts.allElementsBoundByIndex.map(\.label).joined(separator: " ")
-        XCTAssertTrue(spoken.contains(Self.diner) && spoken.contains(Self.noodles), "Showed: \(spoken)")
-        XCTAssertTrue(spoken.contains("will move to"), "The deliveries move: \(spoken)")
-        XCTAssertFalse(
-            spoken.lowercased().contains("deliveries will be deleted"),
-            "Nothing recorded is destroyed: \(spoken)"
-        )
-        confirmation.buttons.matching(identifier: "confirmPickupPlaceMergeButton").firstMatch.tap()
-
-        // The merged-away place is gone, so its history closes with it.
-        XCTAssertTrue(waitForDisappearance(of: summary), "The source no longer exists to be shown")
-
-        let moved = deliveryRow(containing: "Delivery 5, delivered", in: app)
-        XCTAssertTrue(waitForLabel(moved, toContain: "Picked up from \(Self.noodles)"))
-        XCTAssertTrue(moved.label.contains("Waited at pickup 20 minutes"), "Keeping its own record: \(moved.label)")
-
-        // Read from the delivery that moved: its history button now names the
-        // surviving place, and opens the combined history.
-        openPickupHistory(from: "Delivery 5, delivered", in: app)
-        XCTAssertTrue(summary.waitForExistence(timeout: 5))
-        XCTAssertTrue(app.navigationBars[Self.noodles].exists, "Under the destination's name")
-        XCTAssertTrue(
-            summary.label.contains("median of 4 recorded pickups"),
-            "Three waits plus the one that moved: \(summary.label)"
-        )
-        // 6, 11, 20 and 41 minutes: the midpoint of the middle two, rounded for
-        // the screen. Neither place said this before the merge.
-        XCTAssertTrue(
-            summary.label.contains("Typical recorded pickup wait, 16 minutes"),
-            "Recomputed from the deliveries rather than from a stored figure: \(summary.label)"
-        )
-        XCTAssertTrue(
-            summary.label.contains("Shortest recorded wait 6 minutes")
-                && summary.label.contains("longest 41 minutes"),
-            "The spread spans both places' waits: \(summary.label)"
-        )
-    }
-
     // MARK: Deletion
-
-    /// Deletes a completed shift from its detail screen and returns to a history
-    /// that no longer holds it.
-    @MainActor
-    func testDeletesACompletedShift() throws {
-        let app = launchWithSeededHistory()
-        let history = revealHistoryRows(2, in: app)
-        XCTAssertEqual(history.count, 2)
-
-        history.element(boundBy: 0).tap()
-
-        let deleteButton = app.buttons["deleteShiftButton"]
-        XCTAssertTrue(scrollTo(deleteButton, in: app), "Deletion lives at the bottom of the detail screen")
-        deleteButton.tap()
-
-        // Destructive and explicit: the confirmation says the route goes too.
-        // `firstMatch` because SwiftUI mirrors the identifier onto the button's
-        // own label element as well as the button.
-        let confirm = app.buttons.matching(identifier: "confirmDeleteShiftButton").firstMatch
-        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
-        XCTAssertTrue(
-            app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "route positions")).count > 0,
-            "The confirmation must say the shift's route is deleted with it"
-        )
-        confirm.tap()
-
-        XCTAssertTrue(app.navigationBars["DashPilot"].waitForExistence(timeout: 5), "Detail returns to history")
-        let remaining = rows(in: app)
-        XCTAssertTrue(waitForCount(remaining, toEqual: 1), "The deleted shift is gone from history")
-        XCTAssertFalse(remaining.firstMatch.label.contains("$86.25"), "And the shift that remains is the other one")
-    }
-
-    /// Backing out of the confirmation deletes nothing.
-    @MainActor
-    func testCancellingDeletionKeepsTheShift() throws {
-        let app = launchWithSeededHistory()
-        openFirstShift(in: app)
-        let deleteButton = app.buttons["deleteShiftButton"]
-        XCTAssertTrue(scrollTo(deleteButton, in: app))
-        deleteButton.tap()
-
-        let cancel = app.buttons.matching(identifier: "Cancel").firstMatch
-        XCTAssertTrue(cancel.waitForExistence(timeout: 5))
-        cancel.tap()
-
-        XCTAssertTrue(app.buttons["deleteShiftButton"].waitForExistence(timeout: 5), "Detail is still open")
-        goBack(in: app)
-        XCTAssertEqual(revealHistoryRows(2, in: app).count, 2, "Both shifts are still in history")
-    }
 
     // MARK: Helpers
 
@@ -7235,344 +5633,7 @@ final class DashPilotUITests: XCTestCase {
 
     // MARK: Estimated fuel
 
-    /// Records the two fuel assumptions on a finished shift, then changes one of
-    /// them.
-    ///
-    /// The seeded fixture is the only way to reach this end to end: the estimate
-    /// divides a **recorded** mileage, and a UI test cannot drive a simulator
-    /// into recording a route. The exact cost is deliberately not asserted, for
-    /// the reason the per-recorded-mile rate is not: it comes from the fixture's
-    /// coordinates rather than from anything this journey does. What is asserted
-    /// is that a figure appears, that it says what it is based on, and that
-    /// doubling the fuel economy moves it.
-    @MainActor
-    func testAddsAndEditsFuelAssumptionsFromDetail() throws {
-        let app = launchWithSeededHistory()
-        openFirstShift(in: app)
-
-        let cost = app.descendants(matching: .any)["shiftDetailEstimatedFuelCost"]
-        XCTAssertTrue(scrollTo(cost, in: app), "The estimated fuel section should be reachable")
-        XCTAssertTrue(
-            cost.label.contains("Add your vehicle's miles per gallon"),
-            "A shift with no assumptions is told which one to add, not shown $0.00: \(cost.label)"
-        )
-        XCTAssertFalse(cost.label.contains("$0.00"))
-
-        let addButton = app.buttons["editFuelAssumptionsButton"]
-        XCTAssertTrue(scrollUntilHittable(addButton, in: app))
-        XCTAssertEqual(addButton.label, "Add Fuel Assumptions", "A shift with none offers to add them")
-        addButton.tap()
-
-        typeFuelAssumptions(milesPerGallon: "25", gasPrice: "3.50", in: app)
-        app.buttons["saveFuelAssumptionsButton"].tap()
-
-        XCTAssertTrue(scrollTo(cost, in: app))
-        XCTAssertTrue(
-            waitForLabel(cost, toContain: "estimated fuel cost, based on recorded mileage"),
-            "The estimate says what it is and what it is based on: \(cost.label)"
-        )
-        XCTAssertTrue(cost.label.contains("$"), "And it states an amount: \(cost.label)")
-        let firstEstimate = cost.label
-
-        let gallons = app.descendants(matching: .any)["shiftDetailEstimatedGallons"]
-        XCTAssertTrue(scrollTo(gallons, in: app))
-        XCTAssertTrue(
-            waitForLabel(gallons, toContain: "gallons estimated, from recorded mileage"),
-            "The gallons are spelled out for a listener: \(gallons.label)"
-        )
-
-        // Both assumptions are stated back, so a driver can see what the figure
-        // was worked out from.
-        let economy = app.descendants(matching: .any)["shiftDetailFuelMilesPerGallon"]
-        XCTAssertTrue(scrollTo(economy, in: app))
-        XCTAssertTrue(waitForLabel(economy, toContain: "25 miles per gallon assumed"), "Showed: \(economy.label)")
-        let price = app.descendants(matching: .any)["shiftDetailFuelGasPrice"]
-        XCTAssertTrue(scrollTo(price, in: app))
-        XCTAssertTrue(waitForLabel(price, toContain: "$3.50 per gallon assumed"), "Showed: \(price.label)")
-
-        // Editing replaces the assumptions rather than adding to them, and the
-        // estimate follows: twice the fuel economy is half the fuel.
-        let editButton = app.buttons["editFuelAssumptionsButton"]
-        XCTAssertTrue(scrollUntilHittable(editButton, in: app))
-        XCTAssertEqual(editButton.label, "Edit Fuel Assumptions")
-        editButton.tap()
-
-        let economyField = app.textFields["fuelMilesPerGallonField"]
-        XCTAssertTrue(economyField.waitForExistence(timeout: 5))
-        XCTAssertEqual(economyField.value as? String, "25", "The editor opens on the stored figures")
-        XCTAssertEqual(app.textFields["fuelGasPriceField"].value as? String, "3.5")
-        clear(economyField, in: app)
-        enter("50", into: economyField, in: app)
-        app.buttons["saveFuelAssumptionsButton"].tap()
-
-        XCTAssertTrue(scrollTo(cost, in: app))
-        XCTAssertTrue(
-            waitForLabel(cost, toContain: "estimated fuel cost"),
-            "The estimate is still stated: \(cost.label)"
-        )
-        XCTAssertNotEqual(cost.label, firstEstimate, "A more economical vehicle uses less fuel over the same miles")
-    }
-
-    /// One assumption alone is not an estimate, and the screen says which half
-    /// is missing rather than showing nothing.
-    @MainActor
-    func testFuelEstimateNamesTheMissingHalf() throws {
-        let app = launchWithSeededHistory()
-        openFirstShift(in: app)
-
-        let addButton = app.buttons["editFuelAssumptionsButton"]
-        XCTAssertTrue(scrollUntilHittable(addButton, in: app))
-        addButton.tap()
-
-        typeFuelAssumptions(milesPerGallon: "25", gasPrice: nil, in: app)
-        app.buttons["saveFuelAssumptionsButton"].tap()
-
-        let cost = app.descendants(matching: .any)["shiftDetailEstimatedFuelCost"]
-        XCTAssertTrue(scrollTo(cost, in: app))
-        XCTAssertTrue(
-            waitForLabel(cost, toContain: "Add what a gallon of fuel cost"),
-            "The half that is missing is the one named: \(cost.label)"
-        )
-        XCTAssertFalse(cost.label.contains("$0.00"), "A missing price is not free fuel")
-
-        // The half that was recorded is still shown, so the driver can see what
-        // is already there.
-        let economy = app.descendants(matching: .any)["shiftDetailFuelMilesPerGallon"]
-        XCTAssertTrue(scrollTo(economy, in: app))
-        XCTAssertTrue(waitForLabel(economy, toContain: "25 miles per gallon assumed"))
-
-        let price = app.descendants(matching: .any)["shiftDetailFuelGasPrice"]
-        XCTAssertTrue(scrollTo(price, in: app))
-        XCTAssertTrue(waitForLabel(price, toContain: "No gas price recorded"), "Showed: \(price.label)")
-    }
-
-    /// The fixture's route has a gap in it, so the estimate has to say it is a
-    /// floor rather than a total.
-    @MainActor
-    func testFuelEstimateKeepsThePartialRouteWording() throws {
-        let app = launchWithSeededHistory()
-        openFirstShift(in: app)
-
-        recordFuelAssumptions(milesPerGallon: "25", gasPrice: "3.50", in: app)
-
-        let cost = app.descendants(matching: .any)["shiftDetailEstimatedFuelCost"]
-        XCTAssertTrue(scrollTo(cost, in: app))
-        XCTAssertTrue(
-            waitForLabel(cost, toContain: "This route is partial"),
-            "The estimate carries the route's own caveat rather than reading as a total: \(cost.label)"
-        )
-        XCTAssertTrue(
-            cost.label.contains("more fuel was used than this estimates"),
-            "And says which way the figure is wrong: \(cost.label)"
-        )
-    }
-
-    /// A fuel economy of zero is refused, and refusing it records nothing.
-    @MainActor
-    func testInvalidFuelAssumptionsAreNotSaved() throws {
-        let app = launchWithSeededHistory()
-        openFirstShift(in: app)
-
-        let addButton = app.buttons["editFuelAssumptionsButton"]
-        XCTAssertTrue(scrollUntilHittable(addButton, in: app))
-        addButton.tap()
-
-        typeFuelAssumptions(milesPerGallon: "0", gasPrice: "3.50", in: app)
-        app.buttons["saveFuelAssumptionsButton"].tap()
-
-        let message = validationMessage("fuelAssumptionsValidationMessage", in: app)
-        XCTAssertTrue(message.waitForExistence(timeout: 5), "The driver should be told why it was refused")
-        XCTAssertTrue(
-            message.label.contains("more than zero"),
-            "And told the rule, which is that it is the divisor: \(message.label)"
-        )
-        XCTAssertTrue(
-            app.textFields["fuelGasPriceField"].exists,
-            "The editor stays open with what was typed rather than discarding it"
-        )
-
-        app.buttons["cancelFuelAssumptionsButton"].tap()
-
-        let button = app.buttons["editFuelAssumptionsButton"]
-        XCTAssertTrue(scrollUntilHittable(button, in: app))
-        XCTAssertEqual(
-            button.label,
-            "Add Fuel Assumptions",
-            "A refused pair leaves the shift with neither figure recorded, including the valid one"
-        )
-    }
-
-    /// The editor fills itself from the last shift that recorded assumptions, so
-    /// they are typed once rather than every shift.
-    ///
-    /// The fixture's second shift recorded nothing, which is what makes the
-    /// seeding visible: whatever appears in its fields came from the other
-    /// shift.
-    @MainActor
-    func testFuelAssumptionsSeedFromTheLastShiftThatRecordedThem() throws {
-        let app = launchWithSeededHistory()
-        openFirstShift(in: app)
-        recordFuelAssumptions(milesPerGallon: "25", gasPrice: "3.50", in: app)
-        goBack(in: app)
-
-        let history = revealHistoryRows(2, in: app)
-        history.element(boundBy: 1).tap()
-
-        let addButton = app.buttons["editFuelAssumptionsButton"]
-        XCTAssertTrue(scrollUntilHittable(addButton, in: app))
-        XCTAssertEqual(
-            addButton.label,
-            "Add Fuel Assumptions",
-            "This shift has recorded nothing of its own yet"
-        )
-        addButton.tap()
-
-        let economyField = app.textFields["fuelMilesPerGallonField"]
-        XCTAssertTrue(economyField.waitForExistence(timeout: 5))
-        XCTAssertEqual(economyField.value as? String, "25", "Filled in from the last pair recorded")
-        XCTAssertEqual(app.textFields["fuelGasPriceField"].value as? String, "3.5")
-
-        // And leaving without saving records nothing: a filled field is a
-        // suggestion, not a figure.
-        app.buttons["cancelFuelAssumptionsButton"].tap()
-        let button = app.buttons["editFuelAssumptionsButton"]
-        XCTAssertTrue(scrollUntilHittable(button, in: app))
-        XCTAssertEqual(button.label, "Add Fuel Assumptions")
-    }
-
-    /// Removing the assumptions leaves no estimate, which is not an estimate of
-    /// nothing.
-    @MainActor
-    func testRemovingFuelAssumptionsLeavesNoEstimate() throws {
-        let app = launchWithSeededHistory()
-        openFirstShift(in: app)
-        recordFuelAssumptions(milesPerGallon: "25", gasPrice: "3.50", in: app)
-
-        let editButton = app.buttons["editFuelAssumptionsButton"]
-        XCTAssertTrue(scrollUntilHittable(editButton, in: app))
-        editButton.tap()
-
-        let remove = app.buttons["removeFuelAssumptionsButton"]
-        XCTAssertTrue(remove.waitForExistence(timeout: 5))
-        remove.tap()
-
-        let cost = app.descendants(matching: .any)["shiftDetailEstimatedFuelCost"]
-        XCTAssertTrue(scrollTo(cost, in: app))
-        XCTAssertTrue(
-            waitForLabel(cost, toContain: "Add your vehicle's miles per gallon"),
-            "The shift is back to having no estimate at all: \(cost.label)"
-        )
-        XCTAssertFalse(cost.label.contains("$0.00"), "Removing figures is not recording that no fuel was used")
-    }
-
     // MARK: Estimated net
-
-    /// The estimated net reads as a ledger: what was recorded, what was
-    /// estimated, and what is left.
-    @MainActor
-    func testEstimatedNetShowsTheSubtractionItPerformed() throws {
-        let app = launchWithSeededHistory()
-        openFirstShift(in: app)
-        recordFuelAssumptions(milesPerGallon: "25", gasPrice: "3.50", in: app)
-
-        let earnings = app.descendants(matching: .any)["shiftDetailNetRecordedEarnings"]
-        XCTAssertTrue(scrollTo(earnings, in: app), "The estimated net section should be reachable")
-        XCTAssertTrue(
-            waitForLabel(earnings, toContain: "$86.25 recorded gross earnings for this shift"),
-            "The recorded half says it is recorded: \(earnings.label)"
-        )
-
-        let fuel = app.descendants(matching: .any)["shiftDetailNetEstimatedFuel"]
-        XCTAssertTrue(scrollTo(fuel, in: app))
-        XCTAssertTrue(
-            waitForLabel(fuel, toContain: "estimated fuel cost, based on recorded mileage"),
-            "The estimated half says it is estimated, and what from: \(fuel.label)"
-        )
-        XCTAssertTrue(fuel.label.contains("-$"), "And it is subtracted, which the figure shows: \(fuel.label)")
-
-        let net = app.descendants(matching: .any)["shiftDetailEstimatedNetAfterFuel"]
-        XCTAssertTrue(scrollTo(net, in: app))
-        XCTAssertTrue(
-            waitForLabel(net, toContain: "estimated net after fuel"),
-            "The result is named an estimate rather than a profit: \(net.label)"
-        )
-        XCTAssertFalse(net.label.lowercased().contains("profit"))
-
-        let hourly = app.descendants(matching: .any)["shiftDetailEstimatedNetPerWorkingHour"]
-        XCTAssertTrue(scrollTo(hourly, in: app))
-        XCTAssertTrue(
-            waitForLabel(hourly, toContain: "estimated net after fuel per working hour"),
-            "And the hourly figure names the same denominator the gross rate uses: \(hourly.label)"
-        )
-    }
-
-    /// A partial route makes the fuel a floor and the net a ceiling, and the
-    /// screen says so in that direction.
-    @MainActor
-    func testEstimatedNetStatesWhichWayAPartialRouteIsWrong() throws {
-        let app = launchWithSeededHistory()
-        openFirstShift(in: app)
-        recordFuelAssumptions(milesPerGallon: "25", gasPrice: "3.50", in: app)
-
-        let notice = app.descendants(matching: .any)["shiftDetailEstimatedNetPartialNotice"]
-        XCTAssertTrue(scrollTo(notice, in: app))
-        XCTAssertTrue(
-            waitForLabel(notice, toContain: "this net is a ceiling"),
-            "A floor on the fuel is a ceiling on what was left: \(notice.label)"
-        )
-    }
-
-    /// A shift with no fuel estimate is still entirely readable: every recorded
-    /// figure and every gross rate is where it was, and only the net says it is
-    /// unavailable.
-    @MainActor
-    func testShiftWithoutAFuelEstimateKeepsItsFinancialFigures() throws {
-        let app = launchWithSeededHistory()
-        openFirstShift(in: app)
-
-        let earnings = app.descendants(matching: .any)["shiftDetailEarnings"]
-        XCTAssertTrue(earnings.waitForExistence(timeout: 5))
-        XCTAssertTrue(waitForLabel(earnings, toContain: "86.25"), "The recorded amount is unaffected")
-
-        let hourlyGross = app.descendants(matching: .any)["shiftDetailHourlyRate"]
-        XCTAssertTrue(scrollTo(hourlyGross, in: app))
-        XCTAssertTrue(
-            waitForLabel(hourlyGross, toContain: "gross earnings per shift hour"),
-            "And so is every gross rate: \(hourlyGross.label)"
-        )
-
-        let net = app.descendants(matching: .any)["shiftDetailEstimatedNetAfterFuel"]
-        XCTAssertTrue(scrollTo(net, in: app))
-        XCTAssertTrue(
-            waitForLabel(net, toContain: "Add your miles per gallon and a gas price"),
-            "The net alone is unavailable, and says what would produce it: \(net.label)"
-        )
-        XCTAssertFalse(net.label.contains("$0.00"), "An absent net is not a net of nothing")
-    }
-
-    /// A shift with no recorded amount has no net either, and is told which
-    /// figure is missing.
-    @MainActor
-    func testEstimatedNetNamesMissingEarnings() throws {
-        let app = launchWithSeededHistory()
-        openFirstShift(in: app)
-        recordFuelAssumptions(milesPerGallon: "25", gasPrice: "3.50", in: app)
-        goBack(in: app)
-
-        // The fixture's second shift recorded no amount, and the assumptions
-        // above seed its editor, so it can reach a fuel estimate without
-        // reaching an amount.
-        let history = revealHistoryRows(2, in: app)
-        history.element(boundBy: 1).tap()
-
-        let net = app.descendants(matching: .any)["shiftDetailEstimatedNetAfterFuel"]
-        XCTAssertTrue(scrollTo(net, in: app))
-        XCTAssertTrue(
-            waitForLabel(net, toContain: "Add what this shift paid"),
-            "The missing half that is named is the earnings: \(net.label)"
-        )
-        XCTAssertFalse(net.label.contains("$0.00"))
-    }
 
     // MARK: Period estimated fuel
 
@@ -7628,549 +5689,13 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertTrue(fuel.label.localizedCaseInsensitiveContains("estimate"), "And it is an estimate: \(fuel.label)")
     }
 
-    /// The comparison declares no period more profitable on an estimate.
-    @MainActor
-    func testTheComparisonStatesNoEstimatedFigure() throws {
-        let app = XCUIApplication()
-        app.launchArguments.append(Self.seededPeriodComparisonArgument)
-        launchInPortrait(app)
-        openPeriodSummary(in: app)
-
-        let notes = app.descendants(matching: .any)["periodComparisonNotes"]
-        XCTAssertTrue(scrollTo(notes, in: app, maxSwipes: 16), "The comparison is on screen")
-
-        XCTAssertEqual(
-            elements(containing: "Estimated fuel", in: app)
-                .matching(NSPredicate(format: "identifier BEGINSWITH %@", "periodComparison")).count,
-            0,
-            "No estimate is compared between two periods"
-        )
-        XCTAssertEqual(
-            elements(containing: "Estimated net", in: app)
-                .matching(NSPredicate(format: "identifier BEGINSWITH %@", "periodComparison")).count,
-            0
-        )
-    }
-
     // MARK: The running shift's vehicle
-
-    /// The question the row exists to answer, driven end to end: *which vehicle
-    /// is this shift using?*, answered without leaving the driving screen.
-    @MainActor
-    func testTheRunningShiftNamesTheVehicleItRecorded() throws {
-        let app = launchWithEmptyStore()
-
-        openSettings(in: app)
-        addVehicle(named: "2020 Honda Civic", milesPerGallon: "34", in: app)
-        goBack(in: app)
-
-        let startShift = app.buttons["startShiftButton"]
-        XCTAssertTrue(startShift.waitForExistence(timeout: 10))
-        startShift.tap()
-
-        let vehicle = app.descendants(matching: .any)["activeShiftVehicle"]
-        XCTAssertTrue(scrollTo(vehicle, in: app), "The running shift says which vehicle it is using")
-        XCTAssertEqual(vehicle.label, "Shift vehicle")
-        XCTAssertEqual(
-            vehicle.value as? String,
-            "2020 Honda Civic, 34 miles per gallon",
-            "The unit is spelled out for a listener with no caption in view"
-        )
-    }
-
-    /// The invariant the whole snapshot exists for, on the surface where a
-    /// driver would most easily believe the opposite: Settings answers which
-    /// vehicle the **next** shift records, and the shift in progress does not
-    /// follow it.
-    @MainActor
-    func testChangingSettingsMidShiftLeavesTheRunningShiftsVehicleAlone() throws {
-        let app = launchWithEmptyStore()
-
-        openSettings(in: app)
-        addVehicle(named: "2020 Honda Civic", milesPerGallon: "34", in: app)
-        goBack(in: app)
-
-        let startShift = app.buttons["startShiftButton"]
-        XCTAssertTrue(startShift.waitForExistence(timeout: 10))
-        startShift.tap()
-
-        let vehicle = app.descendants(matching: .any)["activeShiftVehicle"]
-        XCTAssertTrue(scrollTo(vehicle, in: app))
-        XCTAssertEqual(vehicle.value as? String, "2020 Honda Civic, 34 miles per gallon")
-
-        // Add a second vehicle, select it, and correct the first one's figure.
-        openSettings(in: app)
-        addVehicle(named: "2012 Toyota Camry", milesPerGallon: "28", in: app)
-        let camry = vehicleRow(containing: "2012 Toyota Camry", in: app)
-        XCTAssertTrue(scrollUntilHittable(camry, in: app))
-        camry.tap()
-        XCTAssertTrue(waitForLabel(vehicleRow(containing: "2012 Toyota Camry", in: app), toContain: "Selected"))
-
-        let edit = app.buttons["Edit 2020 Honda Civic"]
-        XCTAssertTrue(scrollUntilHittable(edit, in: app))
-        edit.tap()
-        let economyField = app.textFields["vehicleMilesPerGallonField"]
-        XCTAssertTrue(economyField.waitForExistence(timeout: 5))
-        replaceTappedField(economyField, with: "41", in: app)
-        app.buttons["saveVehicleButton"].tap()
-        assertVehicleSheetClosed(in: app)
-        goBack(in: app)
-
-        let unmoved = app.descendants(matching: .any)["activeShiftVehicle"]
-        XCTAssertTrue(scrollTo(unmoved, in: app))
-        XCTAssertEqual(
-            unmoved.value as? String,
-            "2020 Honda Civic, 34 miles per gallon",
-            "The shift was worked under what it recorded, not under what is selected now"
-        )
-
-        // And it is still that after leaving the app and coming back, which is
-        // the closest a journey gets to a relaunch: the store is read again and
-        // nothing is held in the screen's own state.
-        XCUIDevice.shared.press(.home)
-        app.activate()
-        let returned = app.descendants(matching: .any)["activeShiftVehicle"]
-        XCTAssertTrue(scrollTo(returned, in: app))
-        XCTAssertEqual(returned.value as? String, "2020 Honda Civic, 34 miles per gallon")
-    }
-
-    /// A shift started with nothing selected says so, and keeps saying so after
-    /// a vehicle is selected: the absence is a fact about this shift.
-    @MainActor
-    func testAShiftStartedWithNoVehicleBorrowsNothingFromSettings() throws {
-        let app = launchWithEmptyStore()
-
-        let startShift = app.buttons["startShiftButton"]
-        XCTAssertTrue(startShift.waitForExistence(timeout: 10))
-        startShift.tap()
-
-        let vehicle = app.descendants(matching: .any)["activeShiftVehicle"]
-        XCTAssertTrue(scrollTo(vehicle, in: app))
-        XCTAssertEqual(vehicle.value as? String, "No vehicle recorded for this shift")
-
-        openSettings(in: app)
-        addVehicle(named: "2020 Honda Civic", milesPerGallon: "34", in: app)
-        goBack(in: app)
-
-        let stillEmpty = app.descendants(matching: .any)["activeShiftVehicle"]
-        XCTAssertTrue(scrollTo(stillEmpty, in: app))
-        XCTAssertEqual(
-            stillEmpty.value as? String,
-            "No vehicle recorded for this shift",
-            "Borrowing the current selection would claim a vehicle this shift never recorded"
-        )
-    }
 
     // MARK: The next shift's vehicle
 
-    /// Before a shift exists, Home says which vehicle Start Shift will record,
-    /// and Start Shift is still the plain action it was.
-    @MainActor
-    func testHomeNamesTheVehicleTheNextShiftWillRecord() throws {
-        let app = launchWithEmptyStore()
-
-        openSettings(in: app)
-        addVehicle(named: "2020 Honda Civic", milesPerGallon: "34", in: app)
-        goBack(in: app)
-
-        let next = app.descendants(matching: .any)["nextShiftVehicle"]
-        XCTAssertTrue(next.waitForExistence(timeout: 5), "Home says what the next shift will record")
-        XCTAssertEqual(next.label, "Next shift vehicle")
-        XCTAssertEqual(next.value as? String, "2020 Honda Civic, 34 miles per gallon")
-        XCTAssertTrue(app.buttons["startShiftButton"].isHittable, "Start Shift stays its own control")
-        XCTAssertFalse(
-            app.descendants(matching: .any)["activeShiftVehicle"].exists,
-            "The running shift's row and this one never share a screen or an identifier"
-        )
-    }
-
-    /// No shift exists yet, so a change in Settings is a change to what the next
-    /// shift will record, and Home follows it.
-    @MainActor
-    func testHomeFollowsTheSelectionUntilAShiftStarts() throws {
-        let app = launchWithEmptyStore()
-
-        openSettings(in: app)
-        addVehicle(named: "2020 Honda Civic", milesPerGallon: "34", in: app)
-        goBack(in: app)
-
-        let next = app.descendants(matching: .any)["nextShiftVehicle"]
-        XCTAssertTrue(next.waitForExistence(timeout: 5))
-        XCTAssertEqual(next.value as? String, "2020 Honda Civic, 34 miles per gallon")
-
-        openSettings(in: app)
-        addVehicle(named: "2012 Toyota Camry", milesPerGallon: "28", in: app)
-        let camry = vehicleRow(containing: "2012 Toyota Camry", in: app)
-        XCTAssertTrue(scrollUntilHittable(camry, in: app))
-        camry.tap()
-        XCTAssertTrue(waitForLabel(vehicleRow(containing: "2012 Toyota Camry", in: app), toContain: "Selected"))
-        goBack(in: app)
-
-        XCTAssertTrue(
-            waitForLabelValue(next, toEqual: "2012 Toyota Camry, 28 miles per gallon"),
-            "Home follows the selection while no shift has recorded one: \(String(describing: next.value))"
-        )
-        XCTAssertTrue(app.buttons["startShiftButton"].exists, "Changing a setting started nothing")
-        XCTAssertFalse(app.descendants(matching: .any)["activeShiftVehicle"].exists)
-    }
-
-    /// The source of truth changes at the tap: before it, Settings; after it,
-    /// the shift's own snapshot, which a later change in Settings does not move.
-    @MainActor
-    func testStartingAShiftSwitchesHomeToTheShiftsOwnVehicle() throws {
-        let app = launchWithEmptyStore()
-
-        openSettings(in: app)
-        addVehicle(named: "2020 Honda Civic", milesPerGallon: "34", in: app)
-        goBack(in: app)
-
-        let next = app.descendants(matching: .any)["nextShiftVehicle"]
-        XCTAssertTrue(next.waitForExistence(timeout: 5))
-        XCTAssertEqual(next.value as? String, "2020 Honda Civic, 34 miles per gallon")
-
-        app.buttons["startShiftButton"].tap()
-
-        let running = app.descendants(matching: .any)["activeShiftVehicle"]
-        XCTAssertTrue(scrollTo(running, in: app))
-        XCTAssertEqual(
-            running.value as? String,
-            "2020 Honda Civic, 34 miles per gallon",
-            "What Home said is what was recorded"
-        )
-        XCTAssertFalse(next.exists, "The next shift's row leaves with the Start Shift control")
-
-        openSettings(in: app)
-        addVehicle(named: "2012 Toyota Camry", milesPerGallon: "28", in: app)
-        let camry = vehicleRow(containing: "2012 Toyota Camry", in: app)
-        XCTAssertTrue(scrollUntilHittable(camry, in: app))
-        camry.tap()
-        XCTAssertTrue(waitForLabel(vehicleRow(containing: "2012 Toyota Camry", in: app), toContain: "Selected"))
-        goBack(in: app)
-
-        let unmoved = app.descendants(matching: .any)["activeShiftVehicle"]
-        XCTAssertTrue(scrollTo(unmoved, in: app))
-        XCTAssertEqual(
-            unmoved.value as? String,
-            "2020 Honda Civic, 34 miles per gallon",
-            "The running shift reads its snapshot, not the selection"
-        )
-        XCTAssertFalse(app.descendants(matching: .any)["nextShiftVehicle"].exists)
-    }
-
-    /// Nothing selected is said as that, and it refuses nothing.
-    @MainActor
-    func testHomeSaysNoVehicleIsSelectedAndStillStarts() throws {
-        let app = launchWithEmptyStore()
-
-        let next = app.descendants(matching: .any)["nextShiftVehicle"]
-        XCTAssertTrue(next.waitForExistence(timeout: 10))
-        XCTAssertEqual(next.value as? String, "No vehicle selected for the next shift")
-
-        let startShift = app.buttons["startShiftButton"]
-        XCTAssertTrue(startShift.isEnabled)
-        startShift.tap()
-
-        let running = app.descendants(matching: .any)["activeShiftVehicle"]
-        XCTAssertTrue(scrollTo(running, in: app), "The shift started")
-        XCTAssertEqual(running.value as? String, "No vehicle recorded for this shift", "And invented no vehicle")
-    }
-
-    /// A price with no vehicle: the known half is said, the missing half is
-    /// left out rather than written as zero, and Start Shift is still allowed.
-    @MainActor
-    func testHomeSaysOnlyWhatIsKnownAboutTheNextShift() throws {
-        let app = launchWithEmptyStore()
-
-        openSettings(in: app)
-        setCurrentGasPrice("3.29", in: app)
-        goBack(in: app)
-
-        let next = app.descendants(matching: .any)["nextShiftVehicle"]
-        XCTAssertTrue(next.waitForExistence(timeout: 5))
-        XCTAssertTrue(
-            waitForLabelValue(next, toEqual: "No vehicle selected for the next shift, gas $3.29 per gallon"),
-            "Showed: \(String(describing: next.value))"
-        )
-        let shown = (next.value as? String) ?? ""
-        XCTAssertFalse(shown.contains("miles per gallon"), "A missing economy is not written as 0 MPG")
-
-        app.buttons["startShiftButton"].tap()
-        let running = app.descendants(matching: .any)["activeShiftVehicle"]
-        XCTAssertTrue(scrollTo(running, in: app), "Incomplete defaults refuse nothing")
-        XCTAssertEqual(running.value as? String, "No vehicle recorded for this shift")
-    }
-
-    /// At the largest accessibility text size, a long vehicle name wraps inside
-    /// the screen rather than running off it, and Start Shift stays reachable.
-    @MainActor
-    func testTheNextShiftsVehicleWrapsAtLargeTextSizes() throws {
-        let app = XCUIApplication()
-        app.launchArguments.append(Self.inMemoryStoreArgument)
-        app.launchArguments += ["-UIPreferredContentSizeCategoryName", Self.accessibilityXXXLTextSize]
-        launchInPortrait(app)
-
-        let name = "2020 Honda Civic Hatchback Sport Touring"
-        openSettings(in: app)
-        let add = app.buttons["addVehicleButton"]
-        XCTAssertTrue(scrollUntilHittable(add, in: app, maxSwipes: 20))
-        add.tap()
-        let nameField = app.textFields["vehicleNameField"]
-        XCTAssertTrue(nameField.waitForExistence(timeout: 5))
-        enter(name, into: nameField, in: app)
-
-        // At this size the wrapped name pushes the economy field under the
-        // keyboard, where a synthesized tap does not focus it. Saving without
-        // an economy is refused, and the refusal focuses that field and scrolls
-        // it into view itself, so the figure is typed into a field the editor
-        // has focused rather than one a tap may have missed.
-        app.buttons["saveVehicleButton"].tap()
-        XCTAssertTrue(validationMessage("vehicleValidationMessage", in: app).waitForExistence(timeout: 5))
-        let economyField = app.textFields["vehicleMilesPerGallonField"]
-        let focused = XCTNSPredicateExpectation(
-            predicate: NSPredicate(format: "hasKeyboardFocus == true"),
-            object: economyField
-        )
-        XCTAssertEqual(XCTWaiter().wait(for: [focused], timeout: 5), .completed)
-        enter("34", into: economyField, in: app)
-        app.buttons["saveVehicleButton"].tap()
-        assertVehicleSheetClosed(in: app)
-        goBack(in: app)
-
-        let next = app.descendants(matching: .any)["nextShiftVehicle"]
-        XCTAssertTrue(next.waitForExistence(timeout: 5))
-        XCTAssertEqual(next.value as? String, "\(name), 34 miles per gallon", "The whole name is kept")
-        let window = app.windows.firstMatch.frame
-        XCTAssertLessThanOrEqual(next.frame.maxX, window.maxX, "The row wraps rather than running off the screen")
-        XCTAssertGreaterThan(next.frame.height, 60, "A name this long at this size takes more than one line")
-        XCTAssertTrue(scrollUntilHittable(app.buttons["startShiftButton"], in: app))
-    }
-
     // MARK: Correcting the running shift's vehicle
 
-    /// The whole correction, driven end to end: a shift started in the wrong
-    /// vehicle, moved to the right one before any driving, with Settings left
-    /// exactly as it was.
-    @MainActor
-    func testCorrectsTheRunningShiftsVehicleBeforeAnyDriving() throws {
-        let app = launchWithEmptyStore()
-
-        openSettings(in: app)
-        addVehicle(named: "2020 Honda Civic", milesPerGallon: "34", in: app)
-        addVehicle(named: "2012 Toyota Camry", milesPerGallon: "28", in: app)
-        goBack(in: app)
-
-        let startShift = app.buttons["startShiftButton"]
-        XCTAssertTrue(startShift.waitForExistence(timeout: 10))
-        startShift.tap()
-
-        let vehicle = app.descendants(matching: .any)["activeShiftVehicle"]
-        XCTAssertTrue(scrollTo(vehicle, in: app))
-        XCTAssertEqual(
-            vehicle.value as? String,
-            "2020 Honda Civic, 34 miles per gallon",
-            "The first vehicle added is the selected one, so the shift started under it"
-        )
-
-        let change = app.buttons["changeShiftVehicleButton"]
-        XCTAssertTrue(scrollUntilHittable(change, in: app), "Correction is offered before any driving")
-        change.tap()
-
-        // The sheet keeps what the shift recorded unless the driver chooses
-        // otherwise, so Save has nothing to write until something is picked.
-        let save = app.buttons["saveShiftVehicleButton"]
-        XCTAssertTrue(save.waitForExistence(timeout: 5))
-        XCTAssertFalse(save.isEnabled, "Saving the choices already recorded would report a change nobody made")
-
-        let camry = app.descendants(matching: .any)
-            .matching(identifier: "correctionVehicleRow")
-            .containing(NSPredicate(format: "label CONTAINS %@", "2012 Toyota Camry"))
-            .firstMatch
-        XCTAssertTrue(camry.waitForExistence(timeout: 5))
-        camry.tap()
-        XCTAssertTrue(waitForLabel(camry, toContain: "Chosen"), "The mark is said, not only drawn: \(camry.label)")
-        XCTAssertTrue(save.isEnabled)
-        save.tap()
-
-        let corrected = app.descendants(matching: .any)["activeShiftVehicle"]
-        XCTAssertTrue(scrollTo(corrected, in: app))
-        XCTAssertTrue(
-            waitForLabelValue(corrected, toEqual: "2012 Toyota Camry, 28 miles per gallon"),
-            "The running shift now says what it was corrected to: \(String(describing: corrected.value))"
-        )
-
-        // And it survives leaving the app, because the store is the only place
-        // it lives.
-        XCUIDevice.shared.press(.home)
-        app.activate()
-        let returned = app.descendants(matching: .any)["activeShiftVehicle"]
-        XCTAssertTrue(scrollTo(returned, in: app))
-        XCTAssertEqual(returned.value as? String, "2012 Toyota Camry, 28 miles per gallon")
-
-        // Settings is untouched: correcting a shift is not choosing a vehicle
-        // for the next one.
-        openSettings(in: app)
-        let civicRow = vehicleRow(containing: "2020 Honda Civic", in: app)
-        XCTAssertTrue(civicRow.waitForExistence(timeout: 5))
-        XCTAssertTrue(
-            civicRow.label.contains("Selected"),
-            "The selection is still the driver's own: \(civicRow.label)"
-        )
-        XCTAssertTrue(civicRow.label.contains("34 miles per gallon"), "And the profile is unchanged")
-        XCTAssertTrue(
-            vehicleRow(containing: "2012 Toyota Camry", in: app).label.contains("28 miles per gallon"),
-            "As is the one the shift was corrected to"
-        )
-    }
-
-    /// Once the route has recorded a distance the correction is gone, and the
-    /// row it was beside is still readable.
-    @MainActor
-    func testTheVehicleCorrectionClosesOnceDrivingIsRecorded() throws {
-        let app = launchWithSimulatedRoute()
-
-        openSettings(in: app)
-        addVehicle(named: "2020 Honda Civic", milesPerGallon: "34", in: app)
-        goBack(in: app)
-
-        let startShift = app.buttons["startShiftButton"]
-        XCTAssertTrue(startShift.waitForExistence(timeout: 10))
-        startShift.tap()
-
-        // The synthetic vehicle is already driving, so the correction may have
-        // closed before the first look. What matters is that it is closed once a
-        // distance exists, and that the row stays readable.
-        let miles = try XCTUnwrap(
-            waitForRecordedMiles(in: app),
-            "The panel never reported a measured distance while the route was being recorded"
-        )
-        XCTAssertGreaterThan(miles, 0)
-
-        let vehicle = app.descendants(matching: .any)["activeShiftVehicle"]
-        XCTAssertTrue(scrollTo(vehicle, in: app))
-        XCTAssertEqual(
-            vehicle.value as? String,
-            "2020 Honda Civic, 34 miles per gallon",
-            "The vehicle context is still readable after driving begins"
-        )
-        XCTAssertFalse(
-            app.buttons["changeShiftVehicleButton"].exists,
-            "A dead action is worse than no action, so the control is absent rather than disabled"
-        )
-    }
-
-    /// A shift started with nothing recorded can have its assumptions filled,
-    /// which is the case the snapshot itself can never reach.
-    @MainActor
-    func testFillsMissingVehicleAssumptionsOnAFreshShift() throws {
-        let app = launchWithEmptyStore()
-
-        let startShift = app.buttons["startShiftButton"]
-        XCTAssertTrue(startShift.waitForExistence(timeout: 10))
-        startShift.tap()
-
-        let vehicle = app.descendants(matching: .any)["activeShiftVehicle"]
-        XCTAssertTrue(scrollTo(vehicle, in: app))
-        XCTAssertEqual(vehicle.value as? String, "No vehicle recorded for this shift")
-
-        // A vehicle entered after the shift began, which the shift does not take
-        // on its own.
-        openSettings(in: app)
-        addVehicle(named: "The van", milesPerGallon: "18", in: app)
-        goBack(in: app)
-
-        let stillEmpty = app.descendants(matching: .any)["activeShiftVehicle"]
-        XCTAssertTrue(scrollTo(stillEmpty, in: app))
-        XCTAssertEqual(stillEmpty.value as? String, "No vehicle recorded for this shift")
-
-        let change = app.buttons["changeShiftVehicleButton"]
-        XCTAssertTrue(scrollUntilHittable(change, in: app))
-        change.tap()
-
-        let van = app.descendants(matching: .any)
-            .matching(identifier: "correctionVehicleRow")
-            .containing(NSPredicate(format: "label CONTAINS %@", "The van"))
-            .firstMatch
-        XCTAssertTrue(van.waitForExistence(timeout: 5))
-        van.tap()
-        // Save is disabled until a choice has landed, so a tap that arrives
-        // first does nothing. Wait for the choice, as the correction journey
-        // above does; this one failed a CI run (36293895027) without it.
-        XCTAssertTrue(waitForLabel(van, toContain: "Chosen"), "The choice is said: \(van.label)")
-        let save = app.buttons["saveShiftVehicleButton"]
-        XCTAssertTrue(waitForEnabled(save, true), "and Save can now write it")
-        save.tap()
-
-        let filled = app.descendants(matching: .any)["activeShiftVehicle"]
-        XCTAssertTrue(scrollTo(filled, in: app))
-        XCTAssertTrue(
-            waitForLabelValue(filled, toEqual: "The van, 18 miles per gallon"),
-            "Showed: \(String(describing: filled.value))"
-        )
-    }
-
-    /// Cancelling records nothing, which is what makes the sheet safe to open
-    /// while a shift is being worked.
-    @MainActor
-    func testCancellingTheVehicleCorrectionRecordsNothing() throws {
-        let app = launchWithEmptyStore()
-
-        openSettings(in: app)
-        addVehicle(named: "2020 Honda Civic", milesPerGallon: "34", in: app)
-        addVehicle(named: "2012 Toyota Camry", milesPerGallon: "28", in: app)
-        goBack(in: app)
-
-        let startShift = app.buttons["startShiftButton"]
-        XCTAssertTrue(startShift.waitForExistence(timeout: 10))
-        startShift.tap()
-
-        let change = app.buttons["changeShiftVehicleButton"]
-        XCTAssertTrue(scrollUntilHittable(change, in: app))
-        change.tap()
-
-        let camry = app.descendants(matching: .any)
-            .matching(identifier: "correctionVehicleRow")
-            .containing(NSPredicate(format: "label CONTAINS %@", "2012 Toyota Camry"))
-            .firstMatch
-        XCTAssertTrue(camry.waitForExistence(timeout: 5))
-        camry.tap()
-        app.buttons["cancelShiftVehicleButton"].tap()
-
-        let vehicle = app.descendants(matching: .any)["activeShiftVehicle"]
-        XCTAssertTrue(scrollTo(vehicle, in: app))
-        XCTAssertEqual(
-            vehicle.value as? String,
-            "2020 Honda Civic, 34 miles per gallon",
-            "Choosing a row is not recording it"
-        )
-    }
-
     // MARK: Settings, vehicles and fuel defaults
-
-    /// Settings is reachable from the main screen, and it says what it is for.
-    ///
-    /// The entry point is a gear in the navigation bar rather than a row in the
-    /// list, which is what keeps it out of the way of the shift workflow and off
-    /// the top of the History section.
-    @MainActor
-    func testSettingsIsReachableFromHome() throws {
-        let app = launchWithEmptyStore()
-
-        let settings = app.buttons["settingsLink"]
-        XCTAssertTrue(settings.waitForExistence(timeout: 10), "A gear should be on the main screen")
-        XCTAssertEqual(settings.label, "Settings", "A glyph alone says nothing to a listener")
-        settings.tap()
-
-        XCTAssertTrue(
-            app.navigationBars["Settings"].waitForExistence(timeout: 5),
-            "The gear opens the preferences screen"
-        )
-        XCTAssertTrue(
-            app.descendants(matching: .any)["vehiclesEmptyState"].waitForExistence(timeout: 5),
-            "A driver who has entered nothing is told so rather than shown an empty screen"
-        )
-        XCTAssertTrue(app.buttons["addVehicleButton"].exists)
-        XCTAssertTrue(app.descendants(matching: .any)["currentGasPriceRow"].exists)
-    }
 
     /// Creates two vehicles, corrects one, and selects the other.
     ///
@@ -8223,252 +5748,6 @@ final class DashPilotUITests: XCTestCase {
         )
     }
 
-    /// A vehicle with no name, and one with no fuel economy, are both refused
-    /// with the sentence that explains the rule.
-    @MainActor
-    func testRefusesAVehicleWithNoNameOrNoFuelEconomy() throws {
-        let app = launchWithEmptyStore()
-        openSettings(in: app)
-
-        app.buttons["addVehicleButton"].tap()
-        let nameField = app.textFields["vehicleNameField"]
-        XCTAssertTrue(nameField.waitForExistence(timeout: 5))
-
-        // No fuel economy at all.
-        enter("The van", into: nameField, in: app)
-        app.buttons["saveVehicleButton"].tap()
-        let message = validationMessage("vehicleValidationMessage", in: app)
-        XCTAssertTrue(message.waitForExistence(timeout: 5), "A vehicle with no economy is refused")
-        XCTAssertTrue(
-            message.label.contains("miles per gallon"),
-            "And the refusal names what is missing: \(message.label)"
-        )
-
-        // A fuel economy of zero, which is the divisor.
-        let economyField = app.textFields["vehicleMilesPerGallonField"]
-        enter("0", into: economyField, in: app)
-        app.buttons["saveVehicleButton"].tap()
-        XCTAssertTrue(
-            waitForLabel(message, toContain: "more than zero"),
-            "Zero is refused because it is what the recorded miles are divided by: \(message.label)"
-        )
-
-        // The name rule is not repeated here: a name of nothing but whitespace is
-        // refused by ``VehicleName`` and is pinned in the domain suite, where it
-        // costs no double tap on a two-word field to reach.
-        app.buttons["cancelVehicleButton"].tap()
-        XCTAssertTrue(
-            app.descendants(matching: .any)["vehiclesEmptyState"].waitForExistence(timeout: 5),
-            "Nothing refused was written"
-        )
-    }
-
-    /// Records a current gas price, corrects it, and removes it.
-    ///
-    /// Removing is deliberately not the same as recording zero: afterwards there
-    /// is no current price at all, and the row says so rather than showing
-    /// `$0.00`.
-    @MainActor
-    func testRecordsCorrectsAndRemovesTheCurrentGasPrice() throws {
-        let app = launchWithEmptyStore()
-        openSettings(in: app)
-
-        let row = app.descendants(matching: .any)["currentGasPriceRow"]
-        XCTAssertTrue(row.waitForExistence(timeout: 5))
-        XCTAssertTrue(waitForLabel(row, toContain: "Current gas price"), "Showed: \(row.label)")
-        XCTAssertEqual(row.value as? String, "Not set", "Nothing recorded is stated as nothing recorded")
-
-        row.tap()
-        let field = app.textFields["currentGasPriceField"]
-        XCTAssertTrue(field.waitForExistence(timeout: 5))
-        enter("3.19", into: field, in: app)
-        app.buttons["saveCurrentGasPriceButton"].tap()
-
-        XCTAssertTrue(row.waitForExistence(timeout: 5))
-        XCTAssertEqual(row.value as? String, "$3.19 per gallon", "The price says its unit to a listener")
-
-        row.tap()
-        let seeded = app.textFields["currentGasPriceField"]
-        XCTAssertTrue(seeded.waitForExistence(timeout: 5))
-        XCTAssertEqual(seeded.value as? String, "3.19", "The editor opens on the stored figure")
-        replaceTappedField(seeded, with: "3.35", in: app)
-        app.buttons["saveCurrentGasPriceButton"].tap()
-        XCTAssertTrue(row.waitForExistence(timeout: 5))
-        XCTAssertEqual(row.value as? String, "$3.35 per gallon")
-
-        row.tap()
-        let remove = app.buttons["removeCurrentGasPriceButton"]
-        XCTAssertTrue(remove.waitForExistence(timeout: 5))
-        remove.tap()
-        XCTAssertTrue(row.waitForExistence(timeout: 5))
-        XCTAssertEqual(row.value as? String, "Not set", "Removed is not a price of nothing")
-    }
-
-    /// The whole point of the feature, driven end to end: a shift started after
-    /// the defaults are set records them, and the shift before it does not.
-    @MainActor
-    func testANewShiftRecordsTheCurrentDefaultsAndAnOlderOneDoesNot() throws {
-        let app = launchWithEmptyStore()
-
-        // A shift worked before anything was set records nothing.
-        completeAShift(in: app)
-        openFirstShift(in: app)
-        let economy = app.descendants(matching: .any)["shiftDetailFuelMilesPerGallon"]
-        XCTAssertFalse(
-            economy.exists,
-            "A shift worked before the driver entered any defaults records none"
-        )
-        goBack(in: app)
-
-        openSettings(in: app)
-        addVehicle(named: "2020 Honda Civic", milesPerGallon: "34", in: app)
-        setCurrentGasPrice("3.19", in: app)
-        goBack(in: app)
-
-        // A shift worked afterwards carries the snapshot with no typing at all.
-        completeAShift(in: app)
-        openFirstShift(in: app)
-
-        let recorded = app.descendants(matching: .any)["shiftDetailFuelMilesPerGallon"]
-        XCTAssertTrue(scrollTo(recorded, in: app), "The new shift records the selected vehicle's economy")
-        XCTAssertTrue(waitForLabel(recorded, toContain: "34 miles per gallon assumed"), "Showed: \(recorded.label)")
-
-        let price = app.descendants(matching: .any)["shiftDetailFuelGasPrice"]
-        XCTAssertTrue(scrollTo(price, in: app))
-        XCTAssertTrue(waitForLabel(price, toContain: "$3.19 per gallon assumed"), "Showed: \(price.label)")
-
-        let vehicle = app.descendants(matching: .any)["shiftDetailFuelVehicle"]
-        XCTAssertTrue(scrollTo(vehicle, in: app))
-        XCTAssertTrue(
-            waitForLabel(vehicle, toContain: "2020 Honda Civic"),
-            "And the shift says which vehicle it was worked in: \(vehicle.label)"
-        )
-    }
-
-    /// Changing the settings after a shift is recorded leaves that shift exactly
-    /// as it was, and a vehicle deleted from Settings is still named by the
-    /// shifts worked in it.
-    ///
-    /// The invariant the whole feature rests on, driven through the interface
-    /// rather than only asserted in the domain suite.
-    @MainActor
-    func testChangingSettingsLeavesARecordedShiftAlone() throws {
-        let app = launchWithEmptyStore()
-
-        openSettings(in: app)
-        addVehicle(named: "2020 Honda Civic", milesPerGallon: "34", in: app)
-        setCurrentGasPrice("3.19", in: app)
-        goBack(in: app)
-
-        completeAShift(in: app)
-
-        // Now change everything: the economy, the price, and the vehicle itself.
-        openSettings(in: app)
-        let edit = app.buttons["Edit 2020 Honda Civic"]
-        XCTAssertTrue(scrollUntilHittable(edit, in: app))
-        edit.tap()
-        replaceTappedField(app.textFields["vehicleMilesPerGallonField"], with: "12", in: app)
-        app.buttons["saveVehicleButton"].tap()
-
-        setCurrentGasPrice("9.99", in: app)
-
-        let editAgain = app.buttons["Edit 2020 Honda Civic"]
-        XCTAssertTrue(scrollUntilHittable(editAgain, in: app))
-        editAgain.tap()
-        let delete = app.buttons["deleteVehicleButton"]
-        XCTAssertTrue(scrollUntilHittable(delete, in: app))
-        delete.tap()
-        // `.firstMatch`, because a confirmation dialog's button renders as an
-        // element containing its own text and both carry the identifier. An
-        // unqualified query is a multiple match, which is the lesson the fuel
-        // editor's validation message already taught this file.
-        app.buttons.matching(identifier: "confirmDeleteVehicleButton").firstMatch.tap()
-        XCTAssertTrue(
-            app.descendants(matching: .any)["vehiclesEmptyState"].waitForExistence(timeout: 5),
-            "The vehicle is gone from Settings"
-        )
-        goBack(in: app)
-
-        openFirstShift(in: app)
-        let recorded = app.descendants(matching: .any)["shiftDetailFuelMilesPerGallon"]
-        XCTAssertTrue(scrollTo(recorded, in: app))
-        XCTAssertTrue(
-            waitForLabel(recorded, toContain: "34 miles per gallon assumed"),
-            "The shift keeps the economy it recorded: \(recorded.label)"
-        )
-        let price = app.descendants(matching: .any)["shiftDetailFuelGasPrice"]
-        XCTAssertTrue(scrollTo(price, in: app))
-        XCTAssertTrue(
-            waitForLabel(price, toContain: "$3.19 per gallon assumed"),
-            "And the price: \(price.label)"
-        )
-        let vehicle = app.descendants(matching: .any)["shiftDetailFuelVehicle"]
-        XCTAssertTrue(scrollTo(vehicle, in: app))
-        XCTAssertTrue(
-            waitForLabel(vehicle, toContain: "2020 Honda Civic"),
-            "A shift stays intelligible with no profile behind it: \(vehicle.label)"
-        )
-    }
-
-    /// An older shift is filled from the current defaults only when the driver
-    /// asks, and the fields are filled rather than the store written.
-    @MainActor
-    func testUseCurrentDefaultsFillsAnOlderShiftOnlyWhenAsked() throws {
-        let app = launchWithSeededHistory()
-
-        openSettings(in: app)
-        addVehicle(named: "2020 Honda Civic", milesPerGallon: "34", in: app)
-        setCurrentGasPrice("3.19", in: app)
-        goBack(in: app)
-
-        openFirstShift(in: app)
-        let cost = app.descendants(matching: .any)["shiftDetailEstimatedFuelCost"]
-        XCTAssertTrue(scrollTo(cost, in: app))
-        XCTAssertTrue(
-            cost.label.contains("Add your vehicle's miles per gallon"),
-            "The seeded shift was worked before the defaults existed and is not filled in: \(cost.label)"
-        )
-
-        let editor = app.buttons["editFuelAssumptionsButton"]
-        XCTAssertTrue(scrollUntilHittable(editor, in: app))
-        editor.tap()
-
-        let defaults = app.buttons["useCurrentDefaultsButton"]
-        XCTAssertTrue(scrollUntilHittable(defaults, in: app), "An older shift is offered the current defaults")
-        defaults.tap()
-
-        XCTAssertEqual(
-            app.textFields["fuelMilesPerGallonField"].value as? String,
-            "34",
-            "The control fills the fields with the settings"
-        )
-        XCTAssertEqual(app.textFields["fuelGasPriceField"].value as? String, "3.19")
-
-        // Abandoning writes nothing: the shift is still as it was.
-        app.buttons["cancelFuelAssumptionsButton"].tap()
-        XCTAssertTrue(scrollTo(cost, in: app))
-        XCTAssertTrue(
-            waitForLabel(cost, toContain: "Add your vehicle's miles per gallon"),
-            "Filling a field is not recording it: \(cost.label)"
-        )
-
-        // Asking again and saving does record it, and names the vehicle.
-        XCTAssertTrue(scrollUntilHittable(app.buttons["editFuelAssumptionsButton"], in: app))
-        app.buttons["editFuelAssumptionsButton"].tap()
-        XCTAssertTrue(scrollUntilHittable(app.buttons["useCurrentDefaultsButton"], in: app))
-        app.buttons["useCurrentDefaultsButton"].tap()
-        app.buttons["saveFuelAssumptionsButton"].tap()
-
-        XCTAssertTrue(scrollTo(cost, in: app))
-        XCTAssertTrue(
-            waitForLabel(cost, toContain: "estimated fuel cost, based on recorded mileage"),
-            "Showed: \(cost.label)"
-        )
-        let vehicle = app.descendants(matching: .any)["shiftDetailFuelVehicle"]
-        XCTAssertTrue(scrollTo(vehicle, in: app))
-        XCTAssertTrue(waitForLabel(vehicle, toContain: "2020 Honda Civic"), "Showed: \(vehicle.label)")
-    }
-
     /// Replaces the whole contents of a field the journey reached by tapping.
     ///
     /// This cost a run to learn and is worth writing down. **A synthesized tap
@@ -8496,258 +5775,9 @@ final class DashPilotUITests: XCTestCase {
 
     // MARK: Target hourly earnings
 
-    /// A target set in Settings is what the next shift is compared with, and
-    /// moving it afterwards leaves that shift compared with the target it
-    /// started with. The comparison's wording, band and rounding are
-    /// `HourlyTargetComparisonTests`'; the snapshot is what only the whole app
-    /// can show.
-    @MainActor
-    func testATargetIsComparedWithTheShiftsThatStartedUnderIt() throws {
-        let app = launchWithEmptyStore()
-
-        func setTarget(_ amount: String) {
-            openSettings(in: app)
-            let row = app.descendants(matching: .any)["hourlyTargetRow"]
-            XCTAssertTrue(scrollUntilHittable(row, in: app))
-            row.tap()
-            let field = app.textFields["hourlyTargetField"]
-            XCTAssertTrue(field.waitForExistence(timeout: 5))
-            clear(field, in: app)
-            enter(amount, into: field, in: app)
-            app.buttons["saveHourlyTargetButton"].tap()
-            XCTAssertTrue(waitForDisappearance(of: field))
-            XCTAssertTrue(waitForLabelValue(row, toEqual: "$\(amount) per working hour"), "Showed: \(String(describing: row.value))")
-            goBack(in: app)
-        }
-
-        setTarget("25.00")
-        completeAShift(in: app)
-        openFirstShift(in: app)
-        app.buttons["editShiftEarningsButton"].tap()
-        type("80.00", into: app)
-        app.buttons["saveEarningsButton"].tap()
-
-        // A shift of seconds paid $80.00 is far above $25.00 an hour.
-        let target = app.descendants(matching: .any)["shiftDetailHourlyTarget"]
-        XCTAssertTrue(scrollTo(target, in: app))
-        XCTAssertTrue(waitForLabel(target, toContain: "Above target"), "Showed: \(target.label)")
-        XCTAssertTrue(target.label.contains("target of $25.00 a working hour"), "Showed: \(target.label)")
-        goBack(in: app)
-
-        // Moving the default reclassifies nothing already worked.
-        setTarget("30.00")
-        openFirstShift(in: app)
-        XCTAssertTrue(scrollTo(target, in: app))
-        XCTAssertTrue(target.label.contains("target of $25.00 a working hour"), "Showed: \(target.label)")
-    }
-
     // MARK: The completed shift's hierarchy
 
-    /// A finished shift leads with what it paid, then how long and how far, and
-    /// its corrections sit below every figure they change, with deletion apart
-    /// at the foot.
-    @MainActor
-    func testTheDetailLeadsWithWhatTheShiftPaidThenTimeAndDistance() throws {
-        let app = launchWithSeededHistory()
-        openFirstShift(in: app)
-
-        let earnings = app.descendants(matching: .any)["shiftDetailEarnings"]
-        XCTAssertTrue(earnings.waitForExistence(timeout: 5))
-        XCTAssertTrue(earnings.label.contains("Recorded gross earnings, $86.25"), "Showed: \(earnings.label)")
-
-        let working = app.descendants(matching: .any)["shiftDetailSummaryWorkingTime"]
-        let mileage = app.descendants(matching: .any)["shiftDetailSummaryMileage"]
-        XCTAssertTrue(working.waitForExistence(timeout: 5))
-        XCTAssertTrue(working.label.hasSuffix("working time"), "The duration says what it is: \(working.label)")
-        XCTAssertTrue(waitForLabel(mileage, toContain: "miles"), "The distance says its unit: \(mileage.label)")
-        XCTAssertLessThan(earnings.frame.minY, working.frame.minY, "What the shift paid leads")
-        attachScreenshot("detail-summary")
-
-        // The rates are the performance figures, under the summary rather than
-        // beside it, and the one that divides by working time is not repeated.
-        let hourly = app.descendants(matching: .any)["shiftDetailHourlyRate"]
-        XCTAssertTrue(scrollTo(hourly, in: app))
-        XCTAssertTrue(hourly.label.contains("gross earnings per shift hour"), "Showed: \(hourly.label)")
-
-        // The corrections come after the delivery log, and deletion after them.
-        let deliveries = app.descendants(matching: .any)["shiftDetailDeliverySummary"]
-        XCTAssertTrue(scrollTo(deliveries, in: app, maxSwipes: 15), "The deliveries are listed")
-        let correctEnd = app.buttons["correctShiftEndButton"]
-        XCTAssertTrue(scrollUntilHittable(correctEnd, in: app, maxSwipes: 15), "The corrections are below them")
-        let delete = app.buttons["deleteShiftButton"]
-        XCTAssertTrue(scrollUntilHittable(delete, in: app, maxSwipes: 6))
-        XCTAssertLessThan(correctEnd.frame.minY, delete.frame.minY, "Deletion stands apart, last")
-    }
-
-    /// A partial route says so where the distance is stated, and says it in the
-    /// summary too, so the figure never appears without its caveat.
-    @MainActor
-    func testTheDetailStatesAPartialRouteBesideItsDistance() throws {
-        let app = launchWithSeededHistory()
-        openFirstShift(in: app)
-
-        let summaryMileage = app.descendants(matching: .any)["shiftDetailSummaryMileage"]
-        XCTAssertTrue(summaryMileage.waitForExistence(timeout: 5))
-        XCTAssertTrue(
-            waitForLabel(summaryMileage, toContain: "more miles were driven than were recorded"),
-            "The summary's figure carries the partial route: \(summaryMileage.label)"
-        )
-
-        let mileage = app.descendants(matching: .any)["shiftDetailRecordedMileage"]
-        XCTAssertTrue(scrollUntilHittable(mileage, in: app), "Driving states the route")
-        XCTAssertTrue(mileage.label.contains("Partial route"), "Showed: \(mileage.label)")
-        attachScreenshot("detail-partial-route")
-    }
-
-    /// At the largest accessibility size the summary's figures stack whole, and
-    /// the rest of the screen is still reachable below them.
-    @MainActor
-    func testTheDetailSurvivesTheLargestTextSize() throws {
-        let app = launchWithSeededHistory(atTextSize: Self.accessibilityXXXLTextSize)
-        openFirstShift(in: app)
-
-        let earnings = app.descendants(matching: .any)["shiftDetailEarnings"]
-        XCTAssertTrue(earnings.waitForExistence(timeout: 5))
-        XCTAssertTrue(earnings.label.contains("$86.25"), "The figure is whole rather than shortened")
-        let working = app.descendants(matching: .any)["shiftDetailSummaryWorkingTime"]
-        XCTAssertTrue(scrollTo(working, in: app))
-        XCTAssertGreaterThan(onPixelGrid(working.frame.height), 44, "A stacked figure is never a tiny cell")
-        attachScreenshot("detail-xxxl")
-
-        let mileage = app.descendants(matching: .any)["shiftDetailRecordedMileage"]
-        XCTAssertTrue(scrollTo(mileage, in: app, maxSwipes: 30), "Driving is reachable further down")
-        let delete = app.buttons["deleteShiftButton"]
-        XCTAssertTrue(scrollTo(delete, in: app, maxSwipes: 60), "And so is the end of the screen")
-    }
-
     // MARK: Settings hierarchy
-
-    /// Settings leads with the vehicle the next shift will record, says so in
-    /// words, and says plainly when there is none.
-    @MainActor
-    func testSettingsLeadsWithTheDefaultVehicle() throws {
-        let app = launchWithEmptyStore()
-        openSettings(in: app)
-
-        let none = app.descendants(matching: .any)["noDefaultVehicleNotice"]
-        XCTAssertTrue(none.waitForExistence(timeout: 5), "No selection is stated rather than left empty")
-        XCTAssertTrue(none.label.contains("No vehicle selected"), "Showed: \(none.label)")
-        XCTAssertTrue(none.label.contains("next shift"), "And says what it means: \(none.label)")
-        attachScreenshot("settings-no-vehicle")
-
-        addVehicle(named: "2020 Honda Civic", milesPerGallon: "34", in: app)
-        let summary = app.descendants(matching: .any)["defaultVehicleSummary"]
-        XCTAssertTrue(summary.waitForExistence(timeout: 5), "The first vehicle becomes the default")
-        XCTAssertEqual(
-            summary.label,
-            "Default vehicle: 2020 Honda Civic, 34 miles per gallon. Used for your next shift."
-        )
-        XCTAssertFalse(none.exists)
-
-        let row = vehicleRow(containing: "2020 Honda Civic", in: app)
-        XCTAssertTrue(row.label.hasPrefix("Selected as the default vehicle."), "Showed: \(row.label)")
-
-        // A gas price of zero is a price, drawn and spoken as one.
-        setCurrentGasPrice("0", in: app)
-        let price = app.descendants(matching: .any)["currentGasPriceRow"]
-        XCTAssertEqual(price.value as? String, "$0.00 per gallon", "A recorded zero is not Not set")
-        attachScreenshot("settings-default-vehicle")
-
-        // Clearing the default is stated again rather than leaving a stale card.
-        row.tap()
-        XCTAssertTrue(none.waitForExistence(timeout: 5), "Tapping the default again clears it")
-        XCTAssertFalse(summary.exists)
-    }
-
-    /// The vehicle editor labels each field above it, and a refusal is a
-    /// sentence the shared helper reads rather than the symbol beside it.
-    @MainActor
-    func testTheVehicleEditorLabelsItsFieldsAndStatesARefusal() throws {
-        let app = launchWithEmptyStore()
-        openSettings(in: app)
-
-        let add = app.buttons["addVehicleButton"]
-        XCTAssertTrue(scrollUntilHittable(add, in: app))
-        add.tap()
-        let nameField = app.textFields["vehicleNameField"]
-        XCTAssertTrue(nameField.waitForExistence(timeout: 5))
-        XCTAssertEqual(nameField.label, "Vehicle name")
-        XCTAssertEqual(app.textFields["vehicleMilesPerGallonField"].label, "Miles per gallon")
-        attachScreenshot("vehicle-editor")
-
-        enter("The van", into: nameField, in: app)
-        app.buttons["saveVehicleButton"].tap()
-        let message = validationMessage("vehicleValidationMessage", in: app)
-        XCTAssertTrue(message.waitForExistence(timeout: 5))
-        XCTAssertTrue(message.label.contains("miles per gallon"), "The sentence, not a glyph: \(message.label)")
-        XCTAssertEqual(
-            app.descendants(matching: .any).matching(identifier: "vehicleValidationMessage").count,
-            1,
-            "One element carries the refusal, so no query can find a glyph called Warning instead"
-        )
-        attachScreenshot("vehicle-editor-validation")
-    }
-
-    /// A long vehicle name at the largest text size wraps whole on the default
-    /// card and in the list, rather than being shortened.
-    @MainActor
-    func testSettingsSurvivesTheLargestTextSizeWithALongName() throws {
-        let app = launchWithEmptyStore(textSize: Self.accessibilityXXXLTextSize)
-        let name = "2020 Honda Civic Hatchback Sport Touring"
-        openSettings(in: app)
-
-        let add = app.buttons["addVehicleButton"]
-        XCTAssertTrue(scrollUntilHittable(add, in: app, maxSwipes: 20))
-        add.tap()
-        let nameField = app.textFields["vehicleNameField"]
-        XCTAssertTrue(nameField.waitForExistence(timeout: 5))
-        enter(name, into: nameField, in: app)
-
-        // Saved once without an economy, so the refusal focuses the economy
-        // field itself: at this size a synthesized tap on a field under the
-        // keyboard does not focus it.
-        app.buttons["saveVehicleButton"].tap()
-        XCTAssertTrue(validationMessage("vehicleValidationMessage", in: app).waitForExistence(timeout: 5))
-        let economyField = app.textFields["vehicleMilesPerGallonField"]
-        let focused = XCTNSPredicateExpectation(
-            predicate: NSPredicate(format: "hasKeyboardFocus == true"),
-            object: economyField
-        )
-        XCTAssertEqual(XCTWaiter().wait(for: [focused], timeout: 5), .completed)
-        enter("34", into: economyField, in: app)
-        app.buttons["saveVehicleButton"].tap()
-        assertVehicleSheetClosed(in: app)
-
-        let summary = app.descendants(matching: .any)["defaultVehicleSummary"]
-        XCTAssertTrue(scrollToTop(reaching: summary, in: app), "The default card is at the top")
-        XCTAssertTrue(summary.label.contains(name), "The name is whole: \(summary.label)")
-        XCTAssertGreaterThan(onPixelGrid(summary.frame.height), 44)
-        attachScreenshot("settings-xxxl")
-
-        let row = vehicleRow(containing: name, in: app)
-        XCTAssertTrue(scrollTo(row, in: app, maxSwipes: 20), "And in the list below it")
-    }
-
-    /// Settings says which license DashPilot ships under, and that its text is
-    /// set in the system typeface with no font bundled.
-    @MainActor
-    func testAcknowledgementsNameTheLicenseAndTheSystemTypeface() throws {
-        let app = launchWithEmptyStore()
-        openSettings(in: app)
-
-        let link = app.buttons["acknowledgementsLink"]
-        XCTAssertTrue(scrollUntilHittable(link, in: app), "About is at the foot of Settings")
-        link.tap()
-        XCTAssertTrue(app.navigationBars["Acknowledgements"].waitForExistence(timeout: 5))
-
-        XCTAssertTrue(
-            elements(containing: "MIT License", in: app).firstMatch.waitForExistence(timeout: 5),
-            "DashPilot's own code is MIT"
-        )
-        let typeface = app.descendants(matching: .any)["typefaceAcknowledgement"]
-        XCTAssertTrue(scrollTo(typeface, in: app))
-        XCTAssertTrue(typeface.label.contains("bundles no font"), "Showed: \(typeface.label)")
-    }
 
     // MARK: Settings helpers
 
@@ -8888,6 +5918,7 @@ final class DashPilotUITests: XCTestCase {
             scrollUntilHittable(history.element(boundBy: count - 1), in: app),
             "History should reveal \(count) completed shifts"
         )
+        settleWhollyOnScreen(history.element(boundBy: count - 1), in: app)
         return history
     }
 
@@ -9228,10 +6259,20 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertTrue(waitForDisappearance(of: app.buttons["startDeliveryButton"]), "No shift is still running")
         let row = rows(in: app).firstMatch
         XCTAssertTrue(scrollUntilHittable(row, in: app, maxSwipes: 12), "History lists a completed shift")
-        // Wholly on screen, not merely touching it: a row whose frame only
-        // reaches into the home indicator's strip is reported hittable, and the
-        // tap lands below the list (seen in a recording, where the row was not
-        // yet visible when it was tapped).
+        settleWhollyOnScreen(row, in: app)
+        row.tap()
+    }
+
+    /// Brings a list row wholly on screen and waits for the list to stop
+    /// moving before it is tapped.
+    ///
+    /// Wholly on screen, not merely touching it: a row whose frame only
+    /// reaches into the home indicator's strip is reported hittable, and the
+    /// tap lands below the list (seen in two recordings, the first row of a
+    /// short history and the second of a longer one, tapped while still
+    /// settling and leaving Home on screen).
+    @MainActor
+    private func settleWhollyOnScreen(_ row: XCUIElement, in app: XCUIApplication) {
         XCTAssertTrue(waitForStillFrame(of: row), "The list has laid out")
         let limit = app.windows.firstMatch.frame.maxY - 60
         for _ in 0..<3 where row.frame.maxY > limit {
@@ -9244,7 +6285,6 @@ final class DashPilotUITests: XCTestCase {
             )
         }
         XCTAssertTrue(waitForStillFrame(of: row), "The list has settled")
-        row.tap()
     }
 
     /// Waits until an element's frame has read the same for a whole second of
@@ -9560,183 +6600,6 @@ final class DashPilotUITests: XCTestCase {
         picker.buttons[title].tap()
     }
 
-    /// One day's summary, read top to bottom: every figure states the coverage
-    /// behind it, and none claims more than its records.
-    ///
-    /// Eight journeys used to launch this fixture to read one figure each. The
-    /// arithmetic behind every number is pinned in `PeriodMetricsTests`,
-    /// `PeriodExpenseMetricsTests` and `PeriodFuelMetricsTests`; what only the
-    /// screen can show is that each figure reaches it with its wording and its
-    /// counts, which one pass down the list reads in the order it is drawn.
-    @MainActor
-    func testTheDaySummaryStatesEachFigureWithItsCoverage() throws {
-        let app = launchWithPeriodSummary()
-        openPeriodSummary(in: app)
-
-        // Earnings: a subtotal, called recorded, with the shifts behind it, and
-        // untouched by the expenses recorded beside it.
-        let earnings = app.descendants(matching: .any)["periodEarnings"]
-        XCTAssertTrue(earnings.waitForExistence(timeout: 5))
-        XCTAssertTrue(waitForLabel(earnings, toContain: "$86.25"), "Showed: \(earnings.label)")
-        XCTAssertTrue(
-            earnings.label.contains("1 of 2 completed shifts"),
-            "The day's other shift has no amount, and the screen says so: \(earnings.label)"
-        )
-        XCTAssertTrue(
-            earnings.label.contains("Recorded gross earnings"),
-            "A subtotal is called recorded, never the day's earnings: \(earnings.label)"
-        )
-        XCTAssertFalse(earnings.label.contains("$37.65"), "The net is a separate figure, in its own section")
-
-        // Recorded expenses and the net after them, which is not profit.
-        let expenses = app.descendants(matching: .any)["periodExpenses"]
-        XCTAssertTrue(scrollTo(expenses, in: app), "The summary reports what the day cost")
-        XCTAssertTrue(waitForLabel(expenses, toContain: "$48.60"), "Showed: \(expenses.label)")
-        XCTAssertTrue(expenses.label.contains("2 recorded expenses"), "Showed: \(expenses.label)")
-        let categories = app.descendants(matching: .any).matching(identifier: "periodExpenseCategory")
-        XCTAssertEqual(categories.count, 2, "Fuel and parking, and no category with nothing in it")
-
-        let net = app.descendants(matching: .any)["periodNetAfterExpenses"]
-        XCTAssertTrue(scrollTo(net, in: app))
-        XCTAssertTrue(waitForLabel(net, toContain: "$37.65"), "$86.25 less $48.60: \(net.label)")
-        XCTAssertTrue(net.label.contains("net after recorded expenses"), "Showed: \(net.label)")
-        XCTAssertTrue(net.label.contains("1 of 2 shifts"), "The earnings half is a subtotal: \(net.label)")
-        XCTAssertTrue(net.label.contains("not profit"), "And the figure states what it is not: \(net.label)")
-        XCTAssertFalse(net.label.contains("estimated fuel"), "No estimate is folded in: \(net.label)")
-
-        // Mileage is a floor, and the rate over it names its paired subset.
-        let mileage = app.descendants(matching: .any)["periodMileage"]
-        XCTAssertTrue(scrollTo(mileage, in: app, maxSwipes: 14))
-        XCTAssertTrue(mileage.label.contains("Recorded mileage"), "Showed: \(mileage.label)")
-        XCTAssertTrue(
-            mileage.label.contains("1 of 2 completed shifts"),
-            "The shift with no route is counted, not treated as zero miles: \(mileage.label)"
-        )
-        XCTAssertTrue(mileage.label.contains("partial route capture"), "Showed: \(mileage.label)")
-        XCTAssertFalse(mileage.label.lowercased().contains("driven"), "Showed: \(mileage.label)")
-
-        let rate = app.descendants(matching: .any)["periodPerMileRate"]
-        XCTAssertTrue(scrollTo(rate, in: app, maxSwipes: 14))
-        XCTAssertTrue(rate.label.contains("gross earnings per recorded mile"), "Showed: \(rate.label)")
-        XCTAssertTrue(
-            rate.label.contains("1 of 2 shifts with both earnings and a measurable route"),
-            "Only the shift carrying both halves is behind it: \(rate.label)"
-        )
-
-        // The estimates, after every recorded figure, each with its coverage.
-        let fuel = app.descendants(matching: .any)["periodEstimatedFuel"]
-        XCTAssertTrue(scrollTo(fuel, in: app, maxSwipes: 14))
-        XCTAssertTrue(waitForLabel(fuel, toContain: "Estimated fuel"), "Showed: \(fuel.label)")
-        XCTAssertTrue(fuel.label.contains("$"), "And it states an amount: \(fuel.label)")
-        XCTAssertTrue(fuel.label.contains("1 of 2 completed shifts"), "Showed: \(fuel.label)")
-        XCTAssertTrue(fuel.label.contains("recorded miles"), "Showed: \(fuel.label)")
-
-        let estimatedNet = app.descendants(matching: .any)["periodEstimatedNetAfterFuel"]
-        XCTAssertTrue(scrollTo(estimatedNet, in: app, maxSwipes: 14))
-        XCTAssertTrue(waitForLabel(estimatedNet, toContain: "Estimated net after fuel"), "Showed: \(estimatedNet.label)")
-        XCTAssertTrue(estimatedNet.label.contains("1 of 2 shifts"), "Showed: \(estimatedNet.label)")
-        XCTAssertTrue(
-            estimatedNet.label.contains("not this period's earnings less this period's fuel"),
-            "And refuses to be read as the period's: \(estimatedNet.label)"
-        )
-        XCTAssertTrue(estimatedNet.label.contains("never added together"), "Showed: \(estimatedNet.label)")
-    }
-
-    /// The week's earnings total its recorded amounts with their coverage, and
-    /// its pickup wait is a median of individual pickups with their count.
-    @MainActor
-    func testTheWeekSummaryStatesItsEarningsAndPickupWaitWithTheirBasis() throws {
-        let app = launchWithPeriodSummary()
-        openPeriodSummary(in: app)
-        selectPeriod("Week", in: app)
-
-        let earnings = app.descendants(matching: .any)["periodEarnings"]
-        XCTAssertTrue(earnings.waitForExistence(timeout: 5))
-        XCTAssertTrue(waitForLabel(earnings, toContain: "$206.25"), "Showed: \(earnings.label)")
-        XCTAssertTrue(earnings.label.contains("2 of 3 completed shifts"), "Showed: \(earnings.label)")
-
-        let wait = app.descendants(matching: .any)["periodPickupWait"]
-        XCTAssertTrue(scrollTo(wait, in: app))
-        XCTAssertTrue(waitForLabel(wait, toContain: "Median recorded pickup wait"), "Showed: \(wait.label)")
-        XCTAssertTrue(wait.label.contains("5 recorded pickups"), "Showed: \(wait.label)")
-        XCTAssertFalse(wait.label.lowercased().contains("typical"), "Showed: \(wait.label)")
-    }
-
-    /// A period nobody drove in shows a sentence, not a grid of zeroes.
-    @MainActor
-    func testEmptyPeriodShowsARealEmptyState() throws {
-        let app = launchWithPeriodSummary()
-        openPeriodSummary(in: app)
-        selectPeriod("Week", in: app)
-
-        app.buttons["periodPreviousButton"].tap()
-
-        let empty = app.descendants(matching: .any)["periodEmptyState"]
-        XCTAssertTrue(empty.waitForExistence(timeout: 5))
-        XCTAssertEqual(empty.label, "No completed shifts recorded this week.")
-        XCTAssertFalse(
-            app.descendants(matching: .any)["periodEarnings"].exists,
-            "An empty week shows no earnings figure at all, not $0.00"
-        )
-        XCTAssertFalse(app.descendants(matching: .any)["periodMileage"].exists)
-    }
-
-    /// Switching the unit changes which shifts are counted.
-    @MainActor
-    func testSwitchingBetweenDayAndWeekChangesTheShiftsCounted() throws {
-        let app = launchWithPeriodSummary()
-        openPeriodSummary(in: app)
-
-        let shiftCount = app.descendants(matching: .any)["periodShiftCount"]
-        XCTAssertTrue(shiftCount.waitForExistence(timeout: 5))
-        XCTAssertTrue(
-            waitForLabel(shiftCount, toContain: "2 completed shifts"),
-            "Today holds two of the fixture's shifts: \(shiftCount.label)"
-        )
-
-        selectPeriod("Week", in: app)
-        XCTAssertTrue(
-            waitForLabel(shiftCount, toContain: "3 completed shifts"),
-            "The week holds the third as well: \(shiftCount.label)"
-        )
-
-        selectPeriod("Day", in: app)
-        XCTAssertTrue(
-            waitForLabel(shiftCount, toContain: "2 completed shifts"),
-            "And switching back counts the day again: \(shiftCount.label)"
-        )
-    }
-
-    /// The amounts recorded against individual deliveries appear as their own
-    /// labelled subtotal, and never as the period's earnings.
-    @MainActor
-    func testDeliveryAmountsAreShownSeparatelyFromTheShiftTotal() throws {
-        let app = launchWithPeriodSummary()
-        openPeriodSummary(in: app)
-
-        let subtotal = app.descendants(matching: .any)["periodDeliveryEarnings"]
-        XCTAssertTrue(scrollTo(subtotal, in: app))
-        XCTAssertTrue(
-            subtotal.label.contains("$24.25"),
-            "The two delivery amounts, added: \(subtotal.label)"
-        )
-        XCTAssertTrue(
-            subtotal.label.contains("2 of 4 deliveries"),
-            "Stated across the deliveries that answered: \(subtotal.label)"
-        )
-        XCTAssertTrue(
-            subtotal.label.contains("separate record"),
-            "And named as a separate record from the shift amounts: \(subtotal.label)"
-        )
-
-        let earnings = app.descendants(matching: .any)["periodEarnings"]
-        XCTAssertTrue(scrollToTop(reaching: earnings, in: app))
-        XCTAssertTrue(
-            earnings.label.contains("$86.25"),
-            "The headline stays the shift amount: \(earnings.label)"
-        )
-    }
-
     // MARK: Period comparison
 
     /// Launches against a throwaway store holding three consecutive days of
@@ -9760,110 +6623,6 @@ final class DashPilotUITests: XCTestCase {
     @MainActor
     private func comparisonRow(_ metric: String, in app: XCUIApplication) -> XCUIElement {
         app.descendants(matching: .any)["periodComparison.\(metric)"]
-    }
-
-    /// A day is read beside the day before it, with both figures on screen and
-    /// the shifts behind each of them.
-    ///
-    /// Today is still in progress and one of its two shifts carries no amount,
-    /// so the difference is stated and a percentage is not: a part of a day
-    /// against the whole of one, over records that do not cover the day, is not
-    /// a ratio of anything.
-    @MainActor
-    func testADayIsComparedWithTheDayBeforeItAndBothCoveragesAreShown() throws {
-        let app = launchWithPeriodComparison()
-        openPeriodSummary(in: app)
-
-        let earnings = comparisonRow("recordedGrossEarnings", in: app)
-        XCTAssertTrue(scrollTo(earnings, in: app), "The comparison is on the summary")
-        XCTAssertTrue(
-            earnings.label.contains("$100.00") && earnings.label.contains("$80.00"),
-            "Both figures are printed, not only the difference: \(earnings.label)"
-        )
-        XCTAssertTrue(
-            earnings.label.contains("more recorded"),
-            "A total moves by more or less recorded, never by better or worse: \(earnings.label)"
-        )
-        XCTAssertTrue(
-            earnings.label.contains("1 of 2 shifts") && earnings.label.contains("1 of 1 shift"),
-            "The records behind both sides are stated: \(earnings.label)"
-        )
-        XCTAssertFalse(
-            earnings.label.contains("%"),
-            "No percentage against a day that has not finished: \(earnings.label)"
-        )
-
-        let notes = app.descendants(matching: .any)["periodComparisonNotes"]
-        XCTAssertTrue(scrollTo(notes, in: app))
-        XCTAssertTrue(
-            notes.label.contains("still in progress"),
-            "And the screen says why: \(notes.label)"
-        )
-    }
-
-    /// Stepping back to a finished day, whose records cover it and whose
-    /// predecessor's cover that one, is the case a percentage is stated in.
-    @MainActor
-    func testAFinishedDayWithCompleteRecordsStatesThePercentageChange() throws {
-        let app = launchWithPeriodComparison()
-        openPeriodSummary(in: app)
-
-        app.buttons["periodPreviousButton"].tap()
-
-        let earnings = comparisonRow("recordedGrossEarnings", in: app)
-        XCTAssertTrue(scrollTo(earnings, in: app))
-        XCTAssertTrue(
-            waitForLabel(earnings, toContain: "$64.00"),
-            "Yesterday is now read beside the day before it: \(earnings.label)"
-        )
-        XCTAssertTrue(
-            earnings.label.contains("$16.00 more recorded"),
-            "The difference between the two recorded amounts: \(earnings.label)"
-        )
-        XCTAssertTrue(
-            earnings.label.contains("25%"),
-            "Both days are complete and finished, so the percentage is stated: \(earnings.label)"
-        )
-        XCTAssertTrue(
-            earnings.label.contains("1 of 1 shift, compared with 1 of 1 shift"),
-            "Over all of both days' shifts: \(earnings.label)"
-        )
-    }
-
-    /// A day before which nothing was recorded is said to hold nothing. Its
-    /// earnings are missing rather than zero, and the counts are still compared.
-    @MainActor
-    func testAnEmptyPreviousDayIsStatedRatherThanShownAsNoEarnings() throws {
-        let app = launchWithPeriodComparison()
-        openPeriodSummary(in: app)
-
-        app.buttons["periodPreviousButton"].tap()
-        app.buttons["periodPreviousButton"].tap()
-
-        let previous = app.descendants(matching: .any)["periodComparisonPrevious"]
-        XCTAssertTrue(scrollTo(previous, in: app))
-        XCTAssertTrue(
-            waitForLabel(previous, toContain: "No completed shift and no recorded expense"),
-            "The day before this one holds nothing, and the screen says so: \(previous.label)"
-        )
-
-        let earnings = comparisonRow("recordedGrossEarnings", in: app)
-        XCTAssertTrue(scrollTo(earnings, in: app))
-        XCTAssertTrue(
-            earnings.label.contains("Not recorded"),
-            "A day with no amount recorded has no figure to compare: \(earnings.label)"
-        )
-        XCTAssertFalse(
-            earnings.label.contains("$0.00"),
-            "And is never read as a day that earned nothing: \(earnings.label)"
-        )
-
-        let shifts = comparisonRow("completedShifts", in: app)
-        XCTAssertTrue(scrollTo(shifts, in: app))
-        XCTAssertTrue(
-            shifts.label.contains("1 more recorded"),
-            "The counts are still compared, as counts of records: \(shifts.label)"
-        )
     }
 
     /// The authorization panel is on screen from launch, in whatever state the
@@ -9906,141 +6665,6 @@ final class DashPilotUITests: XCTestCase {
         app.descendants(matching: .any)["exportFileName"].label
     }
 
-    /// A completed shift offers an export, and JSON is what it writes first.
-    @MainActor
-    func testCompletedShiftExportsJSON() throws {
-        let app = launchWithSeededHistory()
-        openFirstShift(in: app)
-        openExport("exportShiftButton", in: app)
-
-        let name = exportFileName(in: app)
-        XCTAssertTrue(name.contains("DashPilot-Shift-"), "The file is named for its scope: \(name)")
-        XCTAssertTrue(name.contains(".json"), "JSON is the default format: \(name)")
-        XCTAssertTrue(name.contains("1 shift"), "The sheet says how much is in the file: \(name)")
-
-        XCTAssertTrue(
-            app.buttons["shareExportButton"].waitForExistence(timeout: 5),
-            "A written file is offered to the share sheet"
-        )
-        XCTAssertFalse(
-            app.descendants(matching: .any)["exportFailureMessage"].exists,
-            "Nothing failed"
-        )
-    }
-
-    /// Choosing CSV rewrites the file, and the name says so.
-    @MainActor
-    func testCompletedShiftExportsCSV() throws {
-        let app = launchWithSeededHistory()
-        openFirstShift(in: app)
-        openExport("exportShiftButton", in: app)
-        selectExportFormat("CSV", in: app)
-
-        let fileName = app.descendants(matching: .any)["exportFileName"]
-        XCTAssertTrue(
-            waitForLabel(fileName, toContain: ".csv"),
-            "The CSV file replaces the JSON one: \(fileName.label)"
-        )
-        XCTAssertTrue(app.buttons["shareExportButton"].exists, "And it is offered to the share sheet")
-    }
-
-    /// A period summary exports the period it is showing, named for it.
-    @MainActor
-    func testPeriodSummaryExportsTheSelectedPeriod() throws {
-        let app = launchWithPeriodSummary()
-        openPeriodSummary(in: app)
-        selectPeriod("Week", in: app)
-
-        openExport("exportPeriodButton", in: app)
-
-        let name = exportFileName(in: app)
-        XCTAssertTrue(name.contains("DashPilot-Week-"), "The file names the period it covers: \(name)")
-        XCTAssertTrue(name.contains("3 shifts"), "The week holds three completed shifts: \(name)")
-    }
-
-    /// Switching to Day exports a different period, with a different name.
-    @MainActor
-    func testDayAndWeekExportDifferentPeriods() throws {
-        let app = launchWithPeriodSummary()
-        openPeriodSummary(in: app)
-        selectPeriod("Day", in: app)
-
-        openExport("exportPeriodButton", in: app)
-        let day = exportFileName(in: app)
-        XCTAssertTrue(day.contains("DashPilot-Day-"), "\(day)")
-        XCTAssertTrue(day.contains("2 shifts"), "Today holds two of the three: \(day)")
-
-        app.buttons["dismissExportButton"].tap()
-        // The export control is at the bottom of the list, so dismissing leaves
-        // the screen scrolled past the picker at the top of it. The summary is
-        // longer than six swipes since its figures moved to the design system's
-        // larger roles, so this journey asks for more of them.
-        let picker = app.segmentedControls["periodUnitPicker"]
-        XCTAssertTrue(scrollToTop(reaching: picker, in: app, swipes: 12), "The summary is back")
-
-        selectPeriod("Week", in: app)
-        openExport("exportPeriodButton", in: app)
-        let week = exportFileName(in: app)
-
-        XCTAssertTrue(week.contains("DashPilot-Week-"), "\(week)")
-        XCTAssertTrue(week.contains("3 shifts"), "The week holds one more than today: \(week)")
-        XCTAssertNotEqual(day, week, "Each period exports its own records")
-    }
-
-    /// A period with nothing recorded in it offers no export at all, rather than
-    /// an export that would have to be refused.
-    @MainActor
-    func testEmptyPeriodOffersNoExport() throws {
-        let app = launchWithPeriodSummary()
-        openPeriodSummary(in: app)
-        selectPeriod("Day", in: app)
-
-        // Far enough back that the fixture's shifts cannot reach it.
-        let previous = app.buttons["periodPreviousButton"]
-        XCTAssertTrue(previous.waitForExistence(timeout: 5))
-        for _ in 0..<10 { previous.tap() }
-
-        XCTAssertTrue(
-            app.descendants(matching: .any)["periodEmptyState"].waitForExistence(timeout: 5),
-            "The period is empty"
-        )
-        XCTAssertFalse(
-            app.buttons["exportPeriodButton"].exists,
-            "An empty period must not offer an export it would have to refuse"
-        )
-    }
-
-    /// History as a whole can be exported, and the file holds every completed
-    /// shift.
-    @MainActor
-    func testExportsAllHistory() throws {
-        let app = launchWithSeededHistory()
-        openExport("exportAllHistoryButton", in: app)
-
-        let name = exportFileName(in: app)
-        XCTAssertTrue(name.contains("DashPilot-History-"), "\(name)")
-        XCTAssertTrue(name.contains("2 shifts"), "The seeded history holds two completed shifts: \(name)")
-    }
-
-    /// History's root lists one week and reads only that week from the store,
-    /// and exporting all history still means every completed shift there is.
-    @MainActor
-    func testExportAllHistoryIsNotScopedToTheWeekOnScreen() throws {
-        let app = launchWithOlderWeeks()
-        XCTAssertTrue(scrollUntilHittable(rows(in: app).firstMatch, in: app))
-        XCTAssertTrue(waitForCount(rows(in: app), toEqual: 1), "The root lists this week's one shift")
-
-        // The export control sits above History, and the scroll helpers only
-        // walk down, so the screen goes back to the top first.
-        XCTAssertTrue(scrollToTop(reaching: app.buttons["exportAllHistoryButton"], in: app))
-        openExport("exportAllHistoryButton", in: app)
-        let name = exportFileName(in: app)
-        XCTAssertTrue(
-            name.contains("4 shifts"),
-            "The file holds this week's shift and the three before it: \(name)"
-        )
-    }
-
     // MARK: Month and chosen ranges
 
     /// The number a period's summary reports, or `nil` if it is showing an
@@ -10058,38 +6682,6 @@ final class DashPilotUITests: XCTestCase {
         app.descendants(matching: .any)["periodTitle"].label
     }
 
-    /// A month holds at least everything its days do, and everything this week
-    /// does whenever the week lies inside it.
-    ///
-    /// Counted rather than asserted against a literal: the fixture is anchored
-    /// to whenever the test runs, so which of its shifts share a month with
-    /// today depends on the date. A week can straddle two months (the week of
-    /// 1 October 2026 began in September), and then it may hold shifts the month
-    /// does not, so `week <= month` is asserted only when the week is inside
-    /// the month. That case failed the suite on 1 October 2026; the claim that
-    /// the relation held on every date was wrong, not the app.
-    @MainActor
-    func testMonthSummaryIncludesTheWholeWeekAndMore() throws {
-        let app = launchWithPeriodSummary()
-        openPeriodSummary(in: app)
-
-        selectPeriod("Day", in: app)
-        let day = try XCTUnwrap(shiftCount(in: app), "Today holds completed shifts")
-
-        selectPeriod("Week", in: app)
-        let week = try XCTUnwrap(shiftCount(in: app), "So does this week")
-
-        selectPeriod("Month", in: app)
-        let month = try XCTUnwrap(shiftCount(in: app), "And so does this month")
-
-        XCTAssertLessThanOrEqual(day, week, "A week holds at least its days")
-        XCTAssertLessThanOrEqual(day, month, "A month holds at least its days")
-        if Self.currentWeekIsInsideCurrentMonth() {
-            XCTAssertLessThanOrEqual(week, month, "A month holds at least a week that lies inside it")
-        }
-        XCTAssertGreaterThanOrEqual(month, 2, "The fixture's shifts are all in the month it is anchored to")
-    }
-
     /// Whether today's week starts and ends in today's month, by the device's
     /// own calendar, which is the one Period Summary's weeks use (unlike
     /// History, which is Monday to Sunday). The journey runs on the same
@@ -10099,181 +6691,6 @@ final class DashPilotUITests: XCTestCase {
         guard let week = calendar.dateInterval(of: .weekOfYear, for: now),
               let month = calendar.dateInterval(of: .month, for: now) else { return false }
         return week.start >= month.start && week.end <= month.end
-    }
-
-    /// Stepping back from the current month changes which records are included.
-    /// The fixture only holds recent shifts, so the month before it is empty —
-    /// and says so, rather than showing a grid of zeroes.
-    @MainActor
-    func testPreviousMonthChangesTheRecordsIncluded() throws {
-        let app = launchWithPeriodSummary()
-        openPeriodSummary(in: app)
-        selectPeriod("Month", in: app)
-
-        let current = periodTitle(in: app)
-        XCTAssertNotNil(shiftCount(in: app), "This month holds the fixture's shifts")
-
-        let previous = app.buttons["periodPreviousButton"]
-        XCTAssertTrue(previous.waitForExistence(timeout: 5))
-        // Two steps back, so the month before is empty whichever day of the
-        // month the test runs on.
-        previous.tap()
-        previous.tap()
-
-        let empty = app.descendants(matching: .any)["periodEmptyState"]
-        XCTAssertTrue(empty.waitForExistence(timeout: 5), "An earlier month holds nothing")
-        XCTAssertTrue(
-            empty.label.contains("month"),
-            "The empty state names the period it is about: \(empty.label)"
-        )
-        XCTAssertNotEqual(periodTitle(in: app), current, "And the title moved with it")
-        XCTAssertFalse(app.buttons["exportPeriodButton"].exists, "An empty month offers no export")
-    }
-
-    /// The existing rule, applied to months: nothing is offered beyond the
-    /// period the driver is in.
-    @MainActor
-    func testCurrentMonthCannotStepForward() throws {
-        let app = launchWithPeriodSummary()
-        openPeriodSummary(in: app)
-        selectPeriod("Month", in: app)
-
-        let next = app.buttons["periodNextButton"]
-        XCTAssertTrue(next.waitForExistence(timeout: 5))
-        XCTAssertFalse(next.isEnabled, "A future month holds no records and is not offered")
-
-        app.buttons["periodPreviousButton"].tap()
-        XCTAssertTrue(next.isEnabled, "Once in the past, the way back to now is open")
-    }
-
-    /// Leaving the app and coming back keeps the period the driver had chosen.
-    ///
-    /// The summary re-reads the clock on returning to the foreground, so that a
-    /// screen opened before midnight does not go on calling yesterday `Today`.
-    /// That re-read must move the *naming* only: the period being read stays the
-    /// one the driver stepped to, and its figures do not change underneath them.
-    @MainActor
-    func testSummarySurvivesLeavingAndReturningToTheApp() throws {
-        let app = launchWithPeriodSummary()
-        openPeriodSummary(in: app)
-        selectPeriod("Month", in: app)
-
-        app.buttons["periodPreviousButton"].tap()
-        let chosen = periodTitle(in: app)
-
-        XCUIDevice.shared.press(.home)
-        app.activate()
-
-        let title = app.descendants(matching: .any)["periodTitle"]
-        XCTAssertTrue(title.waitForExistence(timeout: 10), "The summary is still the screen on show")
-        XCTAssertEqual(periodTitle(in: app), chosen, "The month the driver stepped to is still selected")
-        XCTAssertTrue(
-            app.buttons["periodNextButton"].isEnabled,
-            "And the way back to the current month is still open"
-        )
-    }
-
-    /// Choosing Custom and applying a range summarises the dates it covers.
-    @MainActor
-    func testCustomRangeSummarisesTheChosenDates() throws {
-        let app = launchWithPeriodSummary()
-        openPeriodSummary(in: app)
-        selectPeriod("Custom", in: app)
-
-        // No stepping for a chosen range: there is no neighbouring range to
-        // step to, so the chevrons are replaced by the way back to the picker.
-        XCTAssertFalse(app.buttons["periodPreviousButton"].exists)
-        XCTAssertFalse(app.buttons["periodNextButton"].exists)
-
-        let choose = app.buttons["periodCustomRangeButton"]
-        XCTAssertTrue(choose.waitForExistence(timeout: 5), "A range is chosen, not stepped to")
-        choose.tap()
-
-        let summary = app.descendants(matching: .any)["customRangeSummary"]
-        XCTAssertTrue(summary.waitForExistence(timeout: 5), "The sheet says what the dates select")
-        XCTAssertTrue(
-            summary.label.contains("Custom reporting range"),
-            "And says what kind of thing it is: \(summary.label)"
-        )
-
-        app.buttons["customRangeApplyButton"].tap()
-
-        XCTAssertNotNil(shiftCount(in: app), "The applied range holds the fixture's recent shifts")
-        XCTAssertTrue(
-            periodTitle(in: app).contains("selected day"),
-            "The chosen range says how many days it covers: \(periodTitle(in: app))"
-        )
-    }
-
-    /// Cancel is not a quiet Apply. The period on screen is the one that was
-    /// there before the sheet opened.
-    @MainActor
-    func testCancellingTheRangePickerChangesNothing() throws {
-        let app = launchWithPeriodSummary()
-        openPeriodSummary(in: app)
-        selectPeriod("Custom", in: app)
-
-        let before = periodTitle(in: app)
-        let count = shiftCount(in: app)
-
-        let choose = app.buttons["periodCustomRangeButton"]
-        XCTAssertTrue(choose.waitForExistence(timeout: 5))
-        choose.tap()
-        XCTAssertTrue(app.buttons["customRangeCancelButton"].waitForExistence(timeout: 5))
-        app.buttons["customRangeCancelButton"].tap()
-
-        XCTAssertTrue(choose.waitForExistence(timeout: 5), "Back on the summary")
-        XCTAssertEqual(periodTitle(in: app), before, "Cancel left the range exactly as it was")
-        XCTAssertEqual(shiftCount(in: app), count)
-    }
-
-    /// The chosen range survives a trip through the other period lengths, so a
-    /// driver can compare it against a week without choosing it again.
-    @MainActor
-    func testTheChosenRangeSurvivesSwitchingAway() throws {
-        let app = launchWithPeriodSummary()
-        openPeriodSummary(in: app)
-        selectPeriod("Custom", in: app)
-
-        let chosen = periodTitle(in: app)
-        XCTAssertFalse(chosen.isEmpty)
-
-        selectPeriod("Week", in: app)
-        selectPeriod("Month", in: app)
-        selectPeriod("Custom", in: app)
-
-        XCTAssertEqual(periodTitle(in: app), chosen, "The range came back as it was left")
-    }
-
-    /// Exporting a month names the month it covers.
-    @MainActor
-    func testExportMonthOpensTheExportFlow() throws {
-        let app = launchWithPeriodSummary()
-        openPeriodSummary(in: app)
-        selectPeriod("Month", in: app)
-
-        openExport("exportPeriodButton", in: app)
-
-        let name = exportFileName(in: app)
-        XCTAssertTrue(name.contains("DashPilot-Month-"), "The file names the month it covers: \(name)")
-        XCTAssertTrue(app.buttons["shareExportButton"].exists, "And it is offered to the share sheet")
-        XCTAssertFalse(app.descendants(matching: .any)["exportFailureMessage"].exists)
-    }
-
-    /// Exporting a chosen range names both of the days the driver selected.
-    @MainActor
-    func testExportCustomRangeOpensTheExportFlow() throws {
-        let app = launchWithPeriodSummary()
-        openPeriodSummary(in: app)
-        selectPeriod("Custom", in: app)
-
-        openExport("exportPeriodButton", in: app)
-
-        let name = exportFileName(in: app)
-        XCTAssertTrue(name.contains("DashPilot-Range-"), "The file names the range it covers: \(name)")
-        XCTAssertTrue(name.contains("-to-"), "Both selected days are in the name: \(name)")
-        XCTAssertTrue(app.buttons["shareExportButton"].exists)
-        XCTAssertFalse(app.descendants(matching: .any)["exportFailureMessage"].exists)
     }
 
     // MARK: Expenses
@@ -10308,200 +6725,6 @@ final class DashPilotUITests: XCTestCase {
         )
     }
 
-    /// Record a cost, and find it in the list with what was entered.
-    @MainActor
-    func testRecordsAnExpense() throws {
-        let app = launchWithEmptyStore()
-        openExpenses(in: app)
-
-        XCTAssertTrue(app.descendants(matching: .any)["expensesEmptyState"].exists)
-
-        recordExpense("42.10", in: app)
-
-        let row = app.descendants(matching: .any).matching(identifier: "expenseRow").firstMatch
-        XCTAssertTrue(row.waitForExistence(timeout: 5))
-        XCTAssertTrue(waitForLabel(row, toContain: "$42.10"), "The amount entered: \(row.label)")
-        XCTAssertTrue(row.label.contains("Fuel"), "And the category it was recorded under: \(row.label)")
-        XCTAssertFalse(app.descendants(matching: .any)["expensesEmptyState"].exists)
-    }
-
-    /// An amount the parser refuses is not written, and the sheet says why.
-    @MainActor
-    func testInvalidExpenseAmountIsNotSaved() throws {
-        let app = launchWithEmptyStore()
-        openExpenses(in: app)
-
-        app.buttons["addExpenseButton"].tap()
-        let field = app.textFields["expenseAmountField"]
-        XCTAssertTrue(field.waitForExistence(timeout: 5))
-        enter("-5", into: field, in: app)
-
-        app.buttons["saveExpenseButton"].tap()
-
-        let message = validationMessage("expenseValidationMessage", in: app)
-        XCTAssertTrue(message.waitForExistence(timeout: 5), "The refusal is explained rather than silent")
-        XCTAssertTrue(
-            message.label.lowercased().contains("negative"),
-            "And it names the rule that was broken: \(message.label)"
-        )
-
-        app.buttons["cancelExpenseButton"].tap()
-        XCTAssertTrue(app.descendants(matching: .any)["expensesEmptyState"].waitForExistence(timeout: 5))
-    }
-
-    /// A recorded cost can be corrected, and removed.
-    @MainActor
-    func testEditsAndDeletesAnExpense() throws {
-        let app = launchWithEmptyStore()
-        openExpenses(in: app)
-        recordExpense("42.10", in: app)
-
-        let row = app.descendants(matching: .any).matching(identifier: "expenseRow").firstMatch
-        XCTAssertTrue(row.waitForExistence(timeout: 5))
-        row.tap()
-
-        let field = app.textFields["expenseAmountField"]
-        XCTAssertTrue(field.waitForExistence(timeout: 5))
-        XCTAssertEqual(field.value as? String, "42.1", "The editor opens on what was recorded")
-        clear(field, in: app)
-        enter("50.00", into: field, in: app)
-        app.buttons["saveExpenseButton"].tap()
-        XCTAssertTrue(app.buttons["saveExpenseButton"].waitForNonExistence(timeout: 5))
-
-        XCTAssertTrue(waitForLabel(row, toContain: "$50.00"), "The correction is what the list shows")
-
-        row.tap()
-        let delete = app.buttons["deleteExpenseButton"]
-        XCTAssertTrue(delete.waitForExistence(timeout: 5))
-        delete.tap()
-
-        XCTAssertTrue(app.descendants(matching: .any)["expensesEmptyState"].waitForExistence(timeout: 5))
-    }
-
-    /// A cost recorded on a day with no shift is still that day's record.
-    @MainActor
-    func testExpenseOnADayWithoutAShiftIsStillSummarised() throws {
-        let app = launchWithEmptyStore()
-        openExpenses(in: app)
-        recordExpense("42.10", in: app)
-
-        app.navigationBars.buttons.element(boundBy: 0).tap()
-        openPeriodSummary(in: app)
-
-        XCTAssertTrue(
-            app.descendants(matching: .any)["periodEmptyState"].waitForExistence(timeout: 5),
-            "The day still holds no completed shift, and says so"
-        )
-
-        let expenses = app.descendants(matching: .any)["periodExpenses"]
-        XCTAssertTrue(scrollTo(expenses, in: app), "But the cost recorded on it is not hidden behind that")
-        XCTAssertTrue(waitForLabel(expenses, toContain: "$42.10"))
-
-        let net = app.descendants(matching: .any)["periodNetAfterExpenses"]
-        XCTAssertTrue(scrollTo(net, in: app))
-        XCTAssertTrue(
-            net.label.lowercased().contains("no net after recorded expenses"),
-            "With no recorded earnings there is nothing to net, rather than a negative figure: \(net.label)"
-        )
-    }
-
-    @MainActor
-    func testShowsLocationAuthorizationState() throws {
-        let app = launchWithEmptyStore()
-
-        let status = app.descendants(matching: .any)["locationAuthorizationStatus"]
-        XCTAssertTrue(status.waitForExistence(timeout: 10))
-    }
-
     // MARK: What a running shift says about recording
 
-    /// The status line states what recording promises, rather than a green label
-    /// and silence.
-    @MainActor
-    func testRunningShiftSaysWhatRecordingDoesAndDoesNotPromise() throws {
-        let app = launchWithStubbedLocation()
-
-        let startButton = app.buttons["startShiftButton"]
-        XCTAssertTrue(startButton.waitForExistence(timeout: 10))
-        startButton.tap()
-
-        let status = app.descendants(matching: .any)["routeCaptureStatus"]
-        XCTAssertTrue(status.waitForExistence(timeout: 5))
-
-        let label = status.label
-        XCTAssertTrue(
-            label.contains("Location tracking active"),
-            "With permission granted and a shift running, capture is running: \(label)"
-        )
-        // The two halves of the honest claim: it carries on off screen, and it
-        // is not guaranteed. Neither may be dropped for a tidier line.
-        XCTAssertTrue(
-            label.lowercased().contains("other apps") && label.lowercased().contains("locked"),
-            "The line has to say recording continues off screen: \(label)"
-        )
-        XCTAssertTrue(
-            label.lowercased().contains("ios can still stop it"),
-            "The line must not imply guaranteed recording: \(label)"
-        )
-    }
-
-    /// Leaving the app and coming back leaves the screen saying it is recording.
-    ///
-    /// What this reaches that a unit test cannot is the real chain: an actual
-    /// scene phase, `RootView`'s reaction to it, and a status line rebuilt from
-    /// whatever the capture service decided. What it deliberately does **not**
-    /// claim is that the capture session was continuous across the transition:
-    /// that is a fact about stored samples, and it is asserted where it can be
-    /// read, in `LocationTrackingServiceTests` and `RealWorldRecoveryTests`.
-    @MainActor
-    func testRecordingSurvivesLeavingAndReturningToTheApp() throws {
-        let app = launchWithStubbedLocation()
-
-        let startButton = app.buttons["startShiftButton"]
-        XCTAssertTrue(startButton.waitForExistence(timeout: 10))
-        startButton.tap()
-
-        let status = app.descendants(matching: .any)["routeCaptureStatus"]
-        XCTAssertTrue(status.waitForExistence(timeout: 5))
-        XCTAssertTrue(status.label.contains("Location tracking active"))
-
-        XCUIDevice.shared.press(.home)
-        app.activate()
-
-        XCTAssertTrue(app.buttons["endShiftButton"].waitForExistence(timeout: 10))
-        let returned = app.descendants(matching: .any)["routeCaptureStatus"]
-        XCTAssertTrue(returned.waitForExistence(timeout: 5))
-        XCTAssertTrue(
-            returned.label.contains("Location tracking active"),
-            "A session that was never stopped must not come back describing a pause: \(returned.label)"
-        )
-        XCTAssertFalse(
-            returned.label.contains("Route recording paused"),
-            "Returning claimed a break that did not happen: \(returned.label)"
-        )
-    }
-
-    /// The permission panel says which scope is asked for and what it limits.
-    @MainActor
-    func testLocationPanelStatesTheScopeAndItsLimit() throws {
-        let app = launchWithStubbedLocation()
-
-        let panel = app.descendants(matching: .any)["locationAuthorizationPanel"]
-        XCTAssertTrue(panel.waitForExistence(timeout: 10))
-        XCTAssertTrue(scrollTo(panel, in: app))
-
-        let text = panel.descendants(matching: .staticText).allElementsBoundByIndex
-            .map(\.label)
-            .joined(separator: " ")
-            .lowercased()
-
-        XCTAssertTrue(
-            text.contains("another app") || text.contains("screen is locked"),
-            "An authorized driver should be told recording carries on off screen: \(text)"
-        )
-        XCTAssertTrue(
-            text.contains("started with dashpilot open"),
-            "The limit of this scope is the thing a driver can be caught by: \(text)"
-        )
-    }
 }
