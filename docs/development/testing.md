@@ -444,6 +444,16 @@ Three lessons are worth repeating when adding journeys:
   27.0 puts the text first while iOS 26.5 puts the icon first, so a journey reading the sentence
   that way passed locally and read `Warning` in CI. Read it through `validationMessage(_:in:)`, which
   queries static texts only and so can never resolve to the icon.
+- **Query an element by its type when its type is known.** `descendants(matching: .any)` filtered
+  by identifier makes XCTest fault in every element on the screen one at a time, each with its own
+  round trip, so its cost grows with the screen and multiplies whatever slows a round trip. History's
+  rows were queried that way: in three regression runs that query made up 17 of the 27 queries
+  taking 5 s or more, up to 48 s for one evaluation, while a typed button query in the same second
+  took 0.24 s. They are `NavigationLink`s, reported as buttons in every journey, and are now queried
+  through `app.buttons`. Keep `.any` for elements whose type really varies.
+- A wait's timeout bounds the **condition**, not the time XCTest takes to read it. A reading that
+  returns after the deadline is still evaluated; `waitForStillFrame(of:)` once discarded it and
+  failed with the row still and wholly on screen.
 - Proving a sheet does **not** appear needs an ordering argument rather than a sleep. The
   expected-pay confirmation is raised by the same state change that removes the delivered card, so
   waiting for the card to go and then finding no sheet is a real negative; the journey then opens
@@ -561,9 +571,34 @@ leaves about half an hour over the slowest measured run. It is still a ceiling a
 under, not a target, and it is raised again only by a run that was making progress and reached it.
 
 The first `ui-regression.yml` run over the 82 audited journeys (run 37418449153, two journeys red)
-spent **97.7 minutes** in XCTest and **101.4 minutes** in the whole test step. The budget stays at
-210 until an all-green run gives a measurement to size it from, with headroom for the variance
-above.
+spent **97.7 minutes** in XCTest and **101.4 minutes** in the whole test step. The next (run
+37478065976, one journey red) spent **108.9 minutes** (6,534 s) in XCTest and **113.5 minutes**
+(6,809 s) in the whole test operation. The budget stays at 210 until an all-green run gives a
+measurement to size it from, with headroom for the variance above.
+
+### What the red regression runs had in common
+
+Runs 37418449153 and 37478065976 each failed a different History journey, and the journey before
+had been fixed, which looks like a suite degrading over two hours. The result bundles say otherwise:
+
+- **Nothing degrades with run length.** Launch time and the gaps between XCTest steps are slightly
+  *shorter* in the last third of each run than in the first, and the failures came at positions 2,
+  22 and 32 of 82.
+- **The slow stretches are the simulator's own background work.** The bundle's system log shows
+  Spotlight's on-device embedding pipeline (`spotlightknowledged`), scheduled by `dasd` about every
+  40 minutes on a fresh simulator, running through the worst stretch of both runs (positions 30 to
+  33). The app's main thread answered every XCTest request at once throughout; the time went
+  between the runner and the app.
+- **Each failure was a fixed short budget overlapping such a stretch**: a 5 s wait in
+  `openFirstShift`, an alert's Cancel read before the alert had closed, and an 8 s still-frame wait
+  spent entirely on one 25 s reading of the History row. Every journey is isolated (each launch
+  builds its own in-memory store, and only the welcome's flag lives in `UserDefaults`, which
+  throwaway launches ignore), and none of the three reproduced locally alone, in sequence, or in CI
+  order.
+
+Sharding the suite across fresh simulators would not help: each fresh simulator starts its own
+first-boot indexing, which is when the first journeys stall. The remedy is in the helpers: typed
+queries, and waits bounded by their condition rather than by how long one reading takes.
 
 The figures below are the history that set the number.
 

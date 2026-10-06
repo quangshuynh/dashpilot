@@ -237,5 +237,6 @@ is listed twice, or the list grows past 30 or past half the suite, and fails it 
 grows past 90 journeys. Add a journey to it only when a regression in it would
 stop a driver working and nothing faster would catch it.
 
-The smoke tier's measured length is in [Runtime](#runtime). The first `ui-regression.yml` run on
-the runner is the number still to record for the full suite.
+The smoke tier's measured length is in [Runtime](#runtime). The full suite on the runner took 97.7
+minutes of XCTest in run 37418449153 and 108.9 minutes in run 37478065976, both with a journey red;
+see [Testing](testing.md#how-long-a-run-takes-and-the-budget-it-is-given).

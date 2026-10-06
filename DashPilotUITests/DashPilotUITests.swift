@@ -5909,9 +5909,19 @@ final class DashPilotUITests: XCTestCase {
         )
     }
 
+    /// History's completed shift rows, queried as the buttons they are.
+    ///
+    /// Each row is a `NavigationLink`, which XCTest reports as a `Button` in
+    /// every journey that resolved one (33 of them, the largest text size
+    /// included, across runs 37406553911, 37418449153 and 37478065976). It was
+    /// queried as `.any`, which makes XCTest fault in every element on the
+    /// screen one at a time, and under a loaded runner that walk is the
+    /// slowest query in the suite: 17 of the 27 queries of 5 s or more in
+    /// those three runs, up to 48 s for one evaluation, while a typed button
+    /// query in the same second took 0.24 s.
     @MainActor
     private func rows(in app: XCUIApplication) -> XCUIElementQuery {
-        app.descendants(matching: .any).matching(identifier: "completedShiftRow")
+        app.buttons.matching(identifier: "completedShiftRow")
     }
 
     /// History's completed shift rows, scrolled until the first `count` of them
@@ -6332,21 +6342,32 @@ final class DashPilotUITests: XCTestCase {
     /// still laying out. Two quick readings were not enough: a list rebuilding
     /// after a shift ended reported the same stale frame twice, and the row was
     /// tapped below the screen.
+    ///
+    /// The timeout bounds how long the element may keep **moving**, not how
+    /// long XCTest takes to read it. A reading that ends past the deadline is
+    /// still compared: once the deadline has passed, a change fails at once
+    /// and a still frame gets its one-second window and its hittability
+    /// check. It used to stop at the deadline, and CI run 37478065976 showed
+    /// why that is wrong: in `testDeletingACompletedShiftIsConfirmed` the
+    /// first reading took 25 s, the 8 s budget was gone before a second one
+    /// was taken, and the wait failed with the recording showing both rows
+    /// still and wholly on screen from 53 s to the end.
     @MainActor
-    private func waitForStillFrame(of element: XCUIElement, timeout: TimeInterval = 8) -> Bool {
+    private func waitForStillFrame(of element: XCUIElement, timeout: TimeInterval = conditionTimeout) -> Bool {
         let deadline = Date.now.addingTimeInterval(timeout)
         var previous = element.frame
         var stableSince = Date.now
-        while Date.now < deadline {
+        while true {
             let current = element.frame
             if current != previous {
+                if Date.now >= deadline { return false }
                 previous = current
                 stableSince = .now
-            } else if Date.now.timeIntervalSince(stableSince) >= 1, element.isHittable {
-                return true
+            } else if Date.now.timeIntervalSince(stableSince) >= 1 {
+                if element.isHittable { return true }
+                if Date.now >= deadline { return false }
             }
         }
-        return false
     }
 
     @MainActor
