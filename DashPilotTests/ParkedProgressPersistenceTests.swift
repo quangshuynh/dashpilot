@@ -22,26 +22,8 @@ struct ParkedProgressPersistenceTests {
         )
     }
 
-    /// The plan's own shape, asserted here because v21 is the current version.
-    ///
-    /// The count of versions and stages lives in the suite belonging to
-    /// whichever version is current. It moved here from
-    /// `SharedStopPersistenceTests`, which owned it while v20 was current.
-    @Test("Version 21 is the current version, and it adds no entity")
-    func schemaVersion() throws {
-        #expect(DashPilotSchemaV21.versionIdentifier == Schema.Version(21, 0, 0))
-        #expect(DashPilotMigrationPlan.schemas.count == 21)
-        #expect(DashPilotMigrationPlan.stages.count == 20)
-        #expect(DashPilotMigrationPlan.schemas.last is DashPilotSchemaV21.Type)
-
-        let entities = Set(ModelContainerFactory.currentSchema.entities.map(\.name))
-        #expect(
-            entities == [
-                "Shift", "RouteSample", "RouteSuspension", "Delivery", "PickupPlace", "Expense",
-                "ShiftPause", "Offer", "DeliveryTip", "VehicleProfile", "DriverSettings"
-            ]
-        )
-    }
+    // The plan's shape (versions, stages, entities) moved to
+    // `HourlyTargetPersistenceTests` when v22 became the current version.
 
     @Test("The frozen v20 has no answer to the question; v21 has it on the settings row only")
     func theColumn() throws {

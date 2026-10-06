@@ -6,6 +6,8 @@ nonisolated enum DriverSettingsError: Error, Equatable {
     /// A negative gas price. Zero is allowed and means the fuel was recorded as
     /// costing nothing; a negative price is not a thing a pump charges.
     case negativeGasPrice
+    /// A target hourly earnings of zero or less. No target is `nil`.
+    case nonPositiveHourlyTarget
 }
 
 nonisolated extension DriverSettingsError: LocalizedError {
@@ -13,6 +15,8 @@ nonisolated extension DriverSettingsError: LocalizedError {
         switch self {
         case .negativeGasPrice:
             "A gas price cannot be a negative amount. Enter what a gallon costs."
+        case .nonPositiveHourlyTarget:
+            "A target must be more than $0.00 an hour. Clear it to have no target."
         }
     }
 }
@@ -128,6 +132,15 @@ nonisolated final class DriverSettings {
     /// done is ``ParkedStopCompletion``'s to say.
     private(set) var resumesDrivingAfterDeliveryProgress: Bool = false
 
+    /// The target gross earnings per working hour the **next** shift will
+    /// record, or `nil` for none.
+    ///
+    /// A default in exactly the sense the gas price is one: read once, when a
+    /// shift starts, and copied onto it. Nothing derived reads it, and
+    /// changing it reclassifies no shift already recorded. `nil` is no target,
+    /// never a target of zero, and every row migrated from v21 reads `nil`.
+    private(set) var targetGrossPerWorkingHourAmount: Decimal?
+
     init(
         id: UUID = DriverSettings.singletonID,
         gasPricePerGallon: Money? = nil,
@@ -142,6 +155,18 @@ nonisolated final class DriverSettings {
         self.usesParkAndResumeForPickups = usesParkAndResumeForPickups
         self.handlesStackedOrdersInOrder = handlesStackedOrdersInOrder
         self.resumesDrivingAfterDeliveryProgress = resumesDrivingAfterDeliveryProgress
+    }
+
+    /// The target the next shift will record, in the app's money vocabulary.
+    var hourlyTarget: Money? { targetGrossPerWorkingHourAmount.map(Money.init(amount:)) }
+
+    /// Records the target the next shift will start with, or clears it.
+    ///
+    /// - Throws: ``DriverSettingsError/nonPositiveHourlyTarget`` for zero or a
+    ///   negative amount.
+    func setHourlyTarget(_ target: Money?) throws {
+        if let target, target.amount <= .zero { throw DriverSettingsError.nonPositiveHourlyTarget }
+        targetGrossPerWorkingHourAmount = target?.amount
     }
 
     /// The current gas price, in the app's money vocabulary.

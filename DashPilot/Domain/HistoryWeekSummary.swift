@@ -272,6 +272,9 @@ nonisolated extension HistoryWeekSummary {
         let lines = lines(locale: locale)
         let ordered = lines.filter { $0.id == .activity } + lines.filter { $0.id != .activity }
         var sentences = ordered.map(\.spoken)
+        if let target = metrics.hourlyTarget.spokenStatement {
+            sentences.append("\(target).")
+        }
         if let weekTitle {
             sentences.insert("\(weekTitle).", at: 0)
         }

@@ -76,7 +76,7 @@ struct FuelAssumptionPersistenceTests {
             Set(current.properties.map(\.name)) == [
                 "id", "startedAt", "endedAt", "deliveries", "offers", "pauses", "routeSuspensions",
                 "grossEarningsAmount", "fuelMilesPerGallonValue", "fuelGasPricePerGallonAmount",
-                "fuelVehicleName"
+                "fuelVehicleName", "targetGrossPerWorkingHourAmount"
             ],
             "The shift keeps both fuel columns, and there is still exactly one pair per shift"
         )

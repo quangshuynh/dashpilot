@@ -18,6 +18,7 @@ version: **v18**.
 | `fuelMilesPerGallonValue` | `Decimal?` | The vehicle fuel economy this shift's fuel estimate is worked out under, as the driver typed it. A **snapshot**, never a reference to a current figure. Always greater than zero where present, because it is the divisor. `nil` means none recorded |
 | `fuelGasPricePerGallonAmount` | `Decimal?` | What a gallon cost, as the assumption this shift is estimated under. `nil` means none recorded; `0` means the fuel was recorded as costing nothing |
 | `fuelVehicleName` | `String?` | What the vehicle this shift's fuel economy came from was called, as recorded when the shift started. A **label**, never an input: no figure reads it. A copy rather than a reference, so a shift stays intelligible when the profile is renamed or deleted. `nil` where the economy was typed by hand |
+| `targetGrossPerWorkingHourAmount` | `Decimal?` | Private. Added by v22. The target gross earnings per working hour this shift is compared with, **copied from the driver's settings when the shift started** by `recordStartingHourlyTarget(_:)`, its only writer, and never re-read. A personal benchmark: no figure is derived from it and nothing sums it. `nil` means no target, which is not `$0.00`; a target of zero or less is refused |
 
 Derived, never stored:
 
@@ -193,7 +194,7 @@ none are kept, because nothing implemented reads them.
 | `offer` | `Offer?` | The accepted offer this delivery arrived in. Optional because SwiftData models a reference that way, and because a pre-v12 store had none until the migration gave each delivery its own. It groups and does not govern: no timestamp, figure, fetch or delete rule reads it |
 | `shift` | `Shift?` | The only place the relationship is declared; `Shift` holds no matching collection. Optional only because SwiftData models a reference that way. The initializer requires a shift. Carries no delete rule, so `ShiftService.deleteCompletedShift(_:)` removes a shift's positions explicitly |
 | `pickupPlace` | `PickupPlace?` | Optional and often absent. A reference, so two deliveries from one place share a row. Nullify on delete |
-| `sharedPickupID` | `UUID?` | Added by v20. An opaque identity the deliveries of one offer share when the driver said they are collected at the **same pickup**. Written only at creation by `beginOffer(deliveryCount:sharing:at:)` and by `Delivery.recordSharedStop(_:among:in:)`, held by two or more deliveries of one offer or by none. Read by Park under the pickup workflow. Never inferred; `nil` for every delivery recorded before v20 |
+| `sharedPickupID` | `UUID?` | Added by v20. An opaque identity deliveries of one shift share when the driver said they are collected at the **same pickup**, whether or not they arrived in one offer. Written at creation by `beginOffer(deliveryCount:sharing:at:)` and afterwards only through `Delivery.apply(_:for:to:)`, from Edit Stack or the offer's own screen, held by two or more deliveries or by none. Offer corrections leave it alone. Read by Park under the pickup workflow. Never inferred; `nil` for every delivery recorded before v20 |
 | `sharedDropOffID` | `UUID?` | Added by v20. The same for deliveries the driver said go to the **same drop-off**. Independent of `sharedPickupID`, and read by nothing that records an event |
 | `grossEarningsAmount` | `Decimal?` | Private. What this one delivery paid, as the driver typed it. `nil` means no amount recorded, which is not zero. Unrelated to `Shift.grossEarningsAmount` |
 | `expectedEarningsAmount` | `Decimal?` | Private. What the driver expects this delivery to pay, entered while it was active. **Not earnings**: nothing counts it, and it never becomes the column above. `nil` means none recorded, which is not zero |
@@ -422,12 +423,13 @@ preferences.
 | `usesParkAndResumeForPickups` | `Bool` | Added by v19. Whether Park may record `Arrived at Pickup` and Resume Driving `Picked Up`. Declared `false`; off unless the driver turns it on |
 | `resumesDrivingAfterDeliveryProgress` | `Bool` | Added by v21. Whether a `Picked Up` or `Delivered` recorded while parked may also record driving again once that stop has nothing left to record. Declared `false`; independent of the two above, and not exported |
 | `handlesStackedOrdersInOrder` | `Bool` | Added by v19. With the workflow on and more than one delivery in progress, whether Park may work on the lowest-numbered one still waiting for its pickup. Declared `false`, and inert while the workflow is off |
+| `targetGrossPerWorkingHourAmount` | `Decimal?` | Added by v22. The target the **next** shift will record when it starts. `nil` means none set; zero or less is refused. Read only by `ShiftService.startShift(at:)` |
 
 v19 removed v17's `recordsPickupWhenParking`, which let Park record `Picked Up`; its value was not
 carried into the workflow that replaced it.
 
-**Nothing derived reads this row.** The fuel figures are read at exactly one moment, when a shift
-starts, and copied onto that shift. The pickup workflow preferences are read at exactly one other
+**Nothing derived reads this row.** The fuel figures and the target are read at exactly one moment,
+when a shift starts, and copied onto that shift. The pickup workflow preferences are read at exactly one other
 moment, when Park or Resume Driving is pressed, and decide only whether that press may also record a
 lifecycle event through the delivery's ordinary operation. Changing a setting tomorrow changes nothing recorded today.
 
@@ -460,8 +462,9 @@ The row is created the first time the driver opens Settings. A migration never c
 | 17.0.0 | Adds `DriverSettings.recordsPickupWhenParking`, declared `false`. Lightweight, and nothing is backfilled: no build that wrote a v16 store could ask the question, so every migrated row reads off |
 | 18.0.0 | Adds `Delivery.pickupProvenanceRawValue`. Lightweight, and nothing is backfilled: a v17 store could already hold pickups recorded by Park and holds no trace of which, so every migrated pickup reads as unknown rather than manual |
 | 19.0.0 | Adds `RouteSuspension.pickupWorkflowDeliveryID`, `DriverSettings.usesParkAndResumeForPickups` and `DriverSettings.handlesStackedOrdersInOrder`; removes `DriverSettings.recordsPickupWhenParking`. Lightweight, and nothing is backfilled: no stretch is associated with a delivery by its instants, and the workflow reads off whatever the old switch said |
-
 | 20.0.0 | Adds `Delivery.sharedPickupID`, `Delivery.sharedDropOffID` and `RouteSuspension.pickupWorkflowSharedPickupDeliveryIDs`. Lightweight, and nothing is backfilled: one offer, one pickup place or nearby instants are what two unrelated orders look like too, so every migrated delivery is independent |
+| 21.0.0 | Adds `DriverSettings.resumesDrivingAfterDeliveryProgress`, declared `false`. Lightweight, and nothing is backfilled: agreeing to Park and Resume recording pickups was not agreeing to anything resuming the route, so every migrated driver has it off |
+| 22.0.0 | Adds `Shift.targetGrossPerWorkingHourAmount` and `DriverSettings.targetGrossPerWorkingHourAmount`, both optional. Lightweight, and nothing is backfilled: no shift recorded before v22 had a target, and inventing one would compare old work with a benchmark chosen later, so every migrated shift and row reads `nil`, which is no target rather than `$0.00` |
 
 Every step but 12.0.0 is a lightweight stage, and none but that one writes a value. See
 [Migrations](../architecture/migrations.md).

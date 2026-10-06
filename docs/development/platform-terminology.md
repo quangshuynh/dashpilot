@@ -24,9 +24,9 @@ Each term is classified as:
 | Restaurant | Code comments and a few documentation pages | B | No interface string says restaurant. The Settings footer did ("which restaurant you are at") and now says "where you are"; that is the only string changed. Documentation examples use it where a pickup is meant. |
 | Food, meal | One documentation phrase ("how long until I got the food") | B | A quoted example in the pickup-wait page. |
 | Merchant | Documentation only (no scoring, no merchant field) | B | Already phrased as something DashPilot does not do. |
-| DoorDash | README and documentation, always as "not integrated" | A | Named only to disclaim an integration. |
+| DoorDash, Uber, Amazon, Walmart | README, documentation and the welcome's last screen, always as "not connected" | A | Named only to disclaim an integration. |
 | The app's name | `DashPilot`, `DashDesign`, bundle identifiers | D | A product name, not a domain claim. Renaming it is a separate decision. |
-| Per-delivery lifecycle | `accepted`, `arrivedAtPickup`, `pickedUp`, `delivered`, `cancelled` | C | Fits one pickup per delivery. A Flex block has **one** pickup for dozens of drop-offs; today that would be dozens of deliveries each recording the same arrival and pickup, which `Same pickup` can express within one offer but which the UI bounds (the new-offer stepper stops at 10). |
+| Per-delivery lifecycle | `accepted`, `arrivedAtPickup`, `pickedUp`, `delivered`, `cancelled` | C | Fits one pickup per delivery. A Flex block has **one** pickup for dozens of drop-offs; today that would be dozens of deliveries each recording the same arrival and pickup, which `Same pickup` can express (now across offers, from Edit Stack) but which the UI bounds (the new-offer stepper stops at 10). |
 | Delivery pay | `grossEarningsAmount`, expected pay, tips | C | Per-delivery pay fits app-based food delivery. Flex and Spark pay per block or per batch; that is what shift gross already records, so the model holds it, but per-delivery figures would be missing for every such delivery. |
 | Pickup wait | Per pickup place, median of waits | A | A station's line-up wait is a pickup wait. |
 | Live Activity rows | Up to three order rows, within a per-state line budget | C (presentation) | Fine for two or three stacked orders; a route of 40 packages would be a row or two and "N more also active". |

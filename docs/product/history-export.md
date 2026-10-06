@@ -65,9 +65,26 @@ Exports are never called "v13".
 
 ### Version history
 
+#### Still 6: each shift's target, and stops shared across offers
+
+JSON gains `shifts[].targetGrossPerWorkingHour`: the
+[target hourly earnings](settings.md#target-hourly-earnings) the shift recorded when it started, as
+a decimal string like every amount, or an explicit `null` for a shift that recorded none, which is
+every shift recorded before targets existed. It is a benchmark the driver chose, never earnings, and
+nothing in the file is derived from it. The driver's **current** target is not exported. The CSV is
+unchanged at 42 columns.
+
+`sharedPickupGroup` and `sharedDropOffGroup` keep their meaning, shift-local numbers counted in
+delivery order, and may now group deliveries of different offers of one shift, said from
+[Edit Stack](delivery-lifecycle.md#saying-it). A reader that assumed a group never spans offers
+would have been relying on something the field never stated.
+
+The version was **evaluated and deliberately not moved**: a field was added, nothing existing
+changed meaning, nothing was removed or renamed, and no enumeration gained a value.
+
 #### Still 6: deliveries recorded as sharing a stop
 
-The driver can now record that deliveries of one offer are collected at the
+The driver can now record that deliveries are collected at the
 [same pickup](delivery-lifecycle.md#same-pickup-and-same-drop-off), or go to the same drop-off. JSON
 gains `shifts[].deliveries[].sharedPickupGroup` and `sharedDropOffGroup`: deliveries of one shift
 carrying the same number were recorded as sharing that stop, and `null` is an independent delivery,

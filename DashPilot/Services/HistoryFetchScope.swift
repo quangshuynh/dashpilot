@@ -135,14 +135,42 @@ nonisolated extension HistoryFetchScope {
         shiftIDs: [UUID],
         in container: ModelContainer
     ) -> HistoryWeekSummary {
+        weekPresentation(of: week, shiftIDs: shiftIDs, in: container).summary
+    }
+
+    /// One week's summary **and** each of its shifts' recorded distance, from
+    /// one pass over their routes, off the main actor.
+    ///
+    /// The rows under a week used to measure their own routes as they
+    /// appeared, on the main actor, and the summary above them measured the
+    /// same routes again. On a six-month store that was about 120 ms of main
+    /// actor per row, so a screenful of Older Weeks cost about a second and
+    /// scrolling stalled on every row (`HistoryFetchScopeMeasurementTests`).
+    /// Each route is now read once, here, and the rows are handed the result.
+    static func weekPresentation(
+        of week: HistoryWeek,
+        shiftIDs: [UUID],
+        in container: ModelContainer
+    ) -> HistoryWeekPresentation {
         let context = ModelContext(container)
         let descriptor = FetchDescriptor<Shift>(predicate: #Predicate { shiftIDs.contains($0.id) })
         let shifts = (try? context.fetch(descriptor)) ?? []
-        return HistoryWeekSummary(
-            week: week,
-            records: shifts.map { $0.periodRecord(for: $0.recordedDistance()) }
-        )
+        var distances: [UUID: RouteDistance] = [:]
+        var records: [PeriodShiftRecord] = []
+        for shift in shifts {
+            let distance = shift.recordedDistance()
+            distances[shift.id] = distance
+            records.append(shift.periodRecord(for: distance))
+        }
+        return HistoryWeekPresentation(summary: HistoryWeekSummary(week: week, records: records), distances: distances)
     }
+}
+
+/// What one week of History draws: its summary, and each shift's recorded
+/// distance for the rows under it, worked out together off the main actor.
+nonisolated struct HistoryWeekPresentation: Sendable {
+    let summary: HistoryWeekSummary
+    let distances: [UUID: RouteDistance]
 }
 
 /// How much History holds outside the week on screen.

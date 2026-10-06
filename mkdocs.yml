@@ -124,6 +124,7 @@ nav:
   - Development:
       - Building: development/building.md
       - Testing: development/testing.md
+      - UI suite audit: development/ui-suite-audit.md
       - Project structure: development/project-structure.md
       - Design system: development/design-system.md
       - Platform terminology: development/platform-terminology.md

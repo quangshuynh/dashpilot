@@ -359,6 +359,34 @@ The figure is honest about its own denominator. Recording now continues while Da
 screen, which narrows the gap between the two numbers, but it does not close it: iOS can still
 suspend or end the app, and a shift started by voice records nothing until the app is opened.
 
+## A personal target
+
+A driver can set a [target hourly earnings](settings.md#target-hourly-earnings) in Settings, and
+each shift records the target that was set when it started. A finished shift then compares **its own
+gross earnings per working hour**, the rate above, with **its own target**. There is no second hourly
+calculation.
+
+| Rate against a `$25.00` target | Says |
+| --- | --- |
+| `$27.42` | **Above target** · `$2.42/hr above your $25.00 target` |
+| `$24.50` to `$25.50` | **Near target** · `Within 2% of your $25.00 target` |
+| `$21.80` | **Below target** · `87% of your $25.00 target` |
+
+- **Compared as shown.** The rate is rounded to the cent it is displayed at before it is compared,
+  so a rate reading `$25.00` is never called below a `$25.00` target.
+- **A neutral band.** Within 2% either way, inclusive, a shift is near its target: a few cents is
+  noise in a figure built from a typed total and a clock, and should not flip a label.
+- **Words that judge nothing.** Above, near and below, with a symbol, never a colour alone and never
+  "good", "bad", "missed" or "failed".
+- **Missing is not zero.** A shift with no target, or with a target and no rate (no earnings recorded),
+  has no comparison and says so; it is not counted as below.
+
+It is shown under the rate on a finished shift's detail, and as a count in the week's summary and in
+[Period Summaries](period-summaries.md#against-your-target): `At or near target on 8 of 12 shifts`.
+Each shift is counted against the target it recorded, so a period whose shifts carry different
+targets is still answered truthfully, and a period rate is never compared with an averaged target.
+A running shift shows no comparison, because a shift's gross earnings are recorded once it ends.
+
 ## When a rate cannot be derived
 
 A missing rate is never filled in with a zero and never shown as a dash on the history row. The

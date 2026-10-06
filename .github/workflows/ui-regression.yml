@@ -1,0 +1,83 @@
+name: UI regression
+
+# The complete UI suite, every journey in DashPilotUITests, serially on one
+# simulator. Pull requests run the curated smoke journeys in ci.yml instead;
+# this keeps the broader regression protection without making every change
+# wait two hours for it.
+#
+# It runs after every merge to main, weekly against main so an image or
+# runtime change is noticed on a quiet week, on a release tag before anything
+# is published from it, and on demand from the Actions tab for a branch that
+# needs it before merging.
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  schedule:
+    # Mondays 07:00 UTC.
+    - cron: '0 7 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ui-regression-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ui-regression:
+    name: Full UI suite on iOS Simulator
+    runs-on: macos-26
+    # The suite took 2h17m to 2h34m of UI journeys on this runner with 242
+    # journeys (runs 36963445708 to 37088088371, the slowest job 2h54m). 210
+    # minutes is kept from that measurement; the suite is smaller now and the
+    # first runs of this workflow are what to re-measure it against. A ceiling
+    # for a hung run, not a target, inside the 6-hour cap of a hosted job.
+    timeout-minutes: 210
+    env:
+      XCODE_PROJECT: DashPilot.xcodeproj
+      XCODE_SCHEME: DashPilot
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v7
+
+      - name: Prepare an iOS simulator
+        uses: ./.github/actions/prepare-simulator
+
+      - name: Build the app and both test bundles
+        run: |
+          set -euo pipefail
+          xcodebuild build-for-testing \
+            -project "$XCODE_PROJECT" \
+            -scheme "$XCODE_SCHEME" \
+            -destination "platform=iOS Simulator,id=$SIMULATOR_ID" \
+            -derivedDataPath DerivedData \
+            -quiet \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO
+
+      - name: Run every UI journey (DashPilotUITests)
+        run: |
+          set -euo pipefail
+
+          rm -rf TestResults-UI.xcresult
+
+          xcodebuild test-without-building \
+            -project "$XCODE_PROJECT" \
+            -scheme "$XCODE_SCHEME" \
+            -destination "platform=iOS Simulator,id=$SIMULATOR_ID" \
+            -derivedDataPath DerivedData \
+            -only-testing:DashPilotUITests \
+            -parallel-testing-enabled NO \
+            -resultBundlePath TestResults-UI.xcresult
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-regression-results
+          path: TestResults-UI.xcresult
+          if-no-files-found: ignore

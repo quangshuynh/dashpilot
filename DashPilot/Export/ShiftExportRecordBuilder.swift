@@ -64,6 +64,9 @@ nonisolated extension Shift {
                 activeTime.nonDeliveryDuration(inElapsed: completedWorkingDuration)
             ),
             grossPerWorkingHour: ExportAmount.recorded(metrics.grossPerWorkingHour.amount),
+            // The snapshot the shift took when it started; never the current
+            // setting.
+            targetGrossPerWorkingHour: ExportAmount.recorded(hourlyTarget),
             grossPerDeliveryActiveHour: ExportAmount.recorded(metrics.grossPerDeliveryActiveHour.amount),
             grossPerRecordedMile: ExportAmount.recorded(metrics.grossPerRecordedMile.amount),
             deliveredCount: summary.completed,

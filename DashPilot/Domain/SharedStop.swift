@@ -1,6 +1,6 @@
 import Foundation
 
-/// Which stop two or more deliveries of one offer were recorded as sharing.
+/// Which stop two or more deliveries of one shift were recorded as sharing.
 ///
 /// ## Two kinds, because they are two facts
 ///
@@ -50,13 +50,128 @@ nonisolated enum SharedStopKind: String, CaseIterable, Hashable, Sendable {
 
 /// Why a shared stop could not be recorded as described.
 nonisolated enum SharedStopError: Error, Equatable {
-    /// A delivery named for the shared stop is not part of the offer it was
-    /// recorded in. A shared stop is a statement about deliveries accepted
-    /// together, so a delivery from another offer cannot join one.
+    /// A delivery named on the offer's own screen is not part of that offer.
+    /// That screen restates one offer, so it names only that offer's
+    /// deliveries; deliveries of different offers are joined from the running
+    /// shift's stack instead.
     case deliveryOutsideOffer
+    /// A delivery named is not part of the shift whose stops are being edited.
+    /// A stop is shared among one shift's deliveries, never across shifts.
+    case deliveryOutsideShift
+    /// The running shift's stack editor named a delivery that has finished.
+    /// That screen corrects the deliveries in progress; a finished one keeps
+    /// its stops and is corrected from Correct Grouping.
+    case deliveryNotInProgress
     /// Exactly one delivery was named. One delivery sharing a stop with nobody
     /// states nothing; naming none takes the statement back.
     case onlyOneDelivery
+    /// Nothing was named.
+    case noDeliveries
+}
+
+/// What the driver asks of some deliveries' shared stops, for one kind.
+nonisolated enum SharedStopEdit: Equatable, Sendable {
+    /// The named deliveries share this kind of stop.
+    ///
+    /// **Additive.** A stop is one place, so a delivery already sharing it with
+    /// another keeps that statement: joining Delivery 2 to Delivery 3, when the
+    /// driver had already said Delivery 2 and Delivery 1 share a pickup, is the
+    /// statement that all three do. Taking a delivery out of a group is
+    /// ``separate``, said explicitly.
+    case join
+    /// The named deliveries share this kind of stop with nobody. A group left
+    /// with one delivery stops claiming anything.
+    case separate
+}
+
+/// The shared-stop identities of one shift's deliveries after an edit, worked
+/// out before anything is written.
+///
+/// ## Scope: one shift, by the driver's statement
+///
+/// A shared stop is a fact about **stops**, not about acceptance. Two orders a
+/// platform offered separately, the second added while the driver waited at
+/// the first one's counter, are collected at one pickup all the same, and
+/// before this a driver who learned it mid-shift could only say so by
+/// cancelling both and recording them again as one offer (October 3 2026).
+/// So an identity may be held by any deliveries of one shift. It is still
+/// written only when the driver says so: nothing here reads offers, acceptance
+/// times, numbers, pickup places, states or positions.
+///
+/// ## What it never touches
+///
+/// Identities only. No lifecycle instant, number, offer, amount or route is an
+/// input or an output, so an edit cannot move any of them. The plan covers
+/// every delivery of the shift so that a group holding a finished delivery is
+/// kept whole rather than silently split by a screen that only shows the
+/// deliveries in progress.
+nonisolated struct SharedStopRegrouping: Equatable, Sendable {
+    /// Each delivery's identity after the edit; a delivery absent here shares
+    /// nothing.
+    let identities: [UUID: UUID]
+
+    /// - Parameters:
+    ///   - edit: what the driver asked.
+    ///   - selected: the deliveries named.
+    ///   - current: every delivery of the shift holding an identity for this
+    ///     kind now.
+    ///   - members: every delivery of the shift.
+    ///   - eligible: the deliveries this screen lets the driver name; `nil` for
+    ///     all of `members`.
+    ///   - fresh: the identity a new group takes; injected so tests can name it.
+    init(
+        _ edit: SharedStopEdit,
+        selecting selected: Set<UUID>,
+        current: [UUID: UUID],
+        members: Set<UUID>,
+        eligible: Set<UUID>? = nil,
+        fresh: UUID = UUID()
+    ) throws(SharedStopError) {
+        guard !selected.isEmpty else { throw .noDeliveries }
+        guard selected.isSubset(of: members) else { throw .deliveryOutsideShift }
+        if let eligible, !selected.isSubset(of: eligible) { throw .deliveryNotInProgress }
+
+        var result = current.filter { members.contains($0.key) }
+        switch edit {
+        case .join:
+            guard selected.count > 1 else { throw .onlyOneDelivery }
+            let touched = Set(selected.compactMap { result[$0] })
+            let group = selected.union(result.filter { touched.contains($0.value) }.keys)
+            for delivery in group { result[delivery] = fresh }
+        case .separate:
+            for delivery in selected { result[delivery] = nil }
+        }
+        identities = Self.dissolvingSingletons(result)
+    }
+
+    /// The offer screen's restatement: exactly `selected` share this kind of
+    /// stop among `scope` (one offer's deliveries), and nobody else in `scope`
+    /// shares it. Deliveries outside `scope` keep their own statements, except
+    /// that a group left holding one delivery stops claiming anything.
+    init(
+        restating selected: Set<UUID>,
+        within scope: Set<UUID>,
+        current: [UUID: UUID],
+        members: Set<UUID>,
+        fresh: UUID = UUID()
+    ) throws(SharedStopError) {
+        guard selected.isSubset(of: scope) else { throw .deliveryOutsideOffer }
+        guard selected.count != 1 else { throw .onlyOneDelivery }
+        var result = current.filter { members.contains($0.key) && !scope.contains($0.key) }
+        for delivery in selected { result[delivery] = fresh }
+        identities = Self.dissolvingSingletons(result)
+    }
+
+    /// The deliveries whose identity this plan changes, against `current`.
+    func changes(from current: [UUID: UUID], members: Set<UUID>) -> Set<UUID> {
+        Set(members.filter { identities[$0] != current[$0] })
+    }
+
+    /// An identity only states something when at least two deliveries hold it.
+    static func dissolvingSingletons(_ identities: [UUID: UUID]) -> [UUID: UUID] {
+        let counts = Dictionary(grouping: identities.values) { $0 }.mapValues(\.count)
+        return identities.filter { counts[$0.value, default: 0] > 1 }
+    }
 }
 
 /// Which stops one delivery shares, and with which of its siblings, in words.
@@ -78,8 +193,8 @@ nonisolated struct SharedStopDescription: Equatable, Sendable {
 
     /// - Parameters:
     ///   - numbered: the delivery described.
-    ///   - offer: every delivery of its offer, numbered as the shift numbers
-    ///     them.
+    ///   - offer: the deliveries to name siblings from, numbered as the shift
+    ///     numbers them: its shift's, or one offer's on the offer screen.
     init(of numbered: NumberedDelivery, among offer: [NumberedDelivery]) {
         func siblings(_ kind: SharedStopKind) -> [String] {
             guard let identity = numbered.delivery.sharedStopID(kind) else { return [] }
@@ -131,3 +246,17 @@ nonisolated struct SharedStopDescription: Equatable, Sendable {
         return names.dropLast().joined(separator: ", ") + " and \(last)"
     }
 }
+
+nonisolated extension NumberedDelivery {
+    /// Which stops this delivery shares, naming the other deliveries **of its
+    /// shift** that hold the same identity, numbered as the shift numbers them.
+    ///
+    /// The shift rather than the offer, because a stop may be shared by
+    /// deliveries of different offers (see ``SharedStopRegrouping``); a caption
+    /// that looked only inside the offer would say nothing about exactly the
+    /// case the stack editor exists for.
+    var sharedStops: SharedStopDescription {
+        SharedStopDescription(of: self, among: delivery.shift?.numberedDeliveries ?? [self])
+    }
+}
+

@@ -1,12 +1,12 @@
-# Settings: vehicles, fuel defaults, pickup and parking
+# Settings: vehicles, fuel defaults, target, pickup and parking
 
 DashPilot keeps a small set of reusable preferences so that figures a driver
 would otherwise retype on every shift are typed once. It is reached from the gear
 in the top left of the main screen.
 
 It opens with the **default vehicle** the next shift will record, then the
-**vehicles** the driver works in, the **gas price** they last paid, one
-**pickup workflow** switch, and an **About** section:
+**vehicles** the driver works in, the **gas price** they last paid, an optional
+**target hourly earnings**, the **pickup workflow** switches, and an **About** section:
 
 ```
 Settings
@@ -30,11 +30,16 @@ Fuel Defaults
   Current gas price               $3.19 / gallon
   Recorded on your next shift
 
+Personal Target
+  Target hourly earnings   $25.00 / working hour
+  Recorded on your next shift
+
 Pickup Workflow
   Pick up orders with Park & Resume          ( off )
   Handle stacked orders in order             ( off )
 
 About
+  Welcome to DashPilot
   Acknowledgements
 ```
 
@@ -159,6 +164,21 @@ it only ever happens because the driver saved. See
 
 The three switches below sit together under **Pickup & Parking**. Each says in one line under its
 name what it does, and the one that depends on another says on screen why it is unavailable.
+
+## Target hourly earnings
+
+An optional personal benchmark: what the driver would like a shift to come to in **gross earnings
+per working hour**, such as `$25.00`. It is not recorded earnings, not what a shift is expected to
+pay, and not a claim about what anybody should earn. It is `Not set` until the driver sets it, and
+`Remove Target` returns it to that. A target of `$0.00` is refused: no target is no target.
+
+It is a default for the next shift, exactly as the gas price is. **Each shift records the target
+when it starts**, and keeps it: moving the target from `$25.00` to `$30.00` later leaves every shift
+already worked compared with `$25.00`, and a shift running when the target is first set records
+none. Shifts recorded before targets existed have none, and are compared with nothing.
+
+What it is compared with, and where that is shown, is on
+[Earnings and metrics](earnings-and-metrics.md#a-personal-target).
 
 ## Pick up orders with Park & Resume
 
@@ -314,6 +334,15 @@ paused or ended. It is offered only in the app.
   its Undo control says which step it takes back and that the vehicle stays as
   it is.
 
+## Welcome to DashPilot
+
+`About` → `Welcome to DashPilot` opens the four-screen introduction a new driver sees on first
+launch: what DashPilot records, what that adds up to, how it keeps tapping down while driving, and
+that it is local-first and connected to no delivery platform. It asks for no permission and changes
+nothing. It is shown once, automatically, only to an install with no recorded shift; a driver
+updating with history already recorded is not stopped by it. Whether it has been seen is kept on the
+device, outside the store, and is never exported.
+
 ## Acknowledgements
 
 `About` → `Acknowledgements` states that DashPilot's own source code is MIT, and
@@ -341,7 +370,8 @@ Nothing here reaches the network, because there is no network code in DashPilot.
 ## In an export
 
 The driver's current preferences are **not** exported. Not the vehicle list, not
-the selection, not the gas price, and not the pickup-when-parking switch. An export is a record of work done, and what a
+the selection, not the gas price, not the current target, and not the pickup-when-parking switch.
+Each shift's own recorded target is, as `targetGrossPerWorkingHour`. An export is a record of work done, and what a
 driver has selected today says nothing about the shifts in it.
 
 A delivery picked up by the parking setting exports exactly as one picked up

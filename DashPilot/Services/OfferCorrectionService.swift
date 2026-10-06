@@ -61,9 +61,15 @@ nonisolated extension OfferCorrectionError: LocalizedError {
         case .invalidMembership(.cannotMergeIntoItself):
             "An offer cannot be combined with itself. Choose a different offer."
         case .invalidSharedStop(.deliveryOutsideOffer):
-            "Only deliveries accepted in the same offer can share a pickup or a drop-off."
+            "This screen changes one offer. Use Edit Stack on the running shift for deliveries of different offers."
+        case .invalidSharedStop(.deliveryOutsideShift):
+            "Only deliveries of the same shift can share a pickup or a drop-off."
+        case .invalidSharedStop(.deliveryNotInProgress):
+            "That delivery has finished. Its stops are corrected from Correct Grouping."
         case .invalidSharedStop(.onlyOneDelivery):
             "Choose at least two deliveries to share a stop, or none to record that they do not."
+        case .invalidSharedStop(.noDeliveries):
+            "Choose the deliveries this applies to."
         case .offerNoLongerExists:
             "That offer is no longer in DashPilot, so nothing was changed."
         case .deliveryNoLongerExists:
@@ -193,7 +199,6 @@ struct OfferCorrectionService {
             throw OfferCorrectionError.invalidMembership(error)
         }
 
-        dissolveUnsharedStops(in: [emptied, destination])
         removeIfEmptied(emptied)
         try save(describing: "move a delivery between offers")
 
@@ -261,7 +266,6 @@ struct OfferCorrectionService {
         // Explicitly, rather than letting a relationship carry it in: a failed
         // save must roll back exactly what this call put in.
         context.insert(offer)
-        dissolveUnsharedStops(in: [source, offer])
         try save(describing: "split deliveries into a new offer")
 
         AppLog.delivery.info("Deliveries split into a new offer")
@@ -310,7 +314,6 @@ struct OfferCorrectionService {
             throw OfferCorrectionError.invalidMembership(error)
         }
 
-        dissolveUnsharedStops(in: [destination])
         removeIfEmptied(source)
         try save(describing: "combine two offers")
 
@@ -358,7 +361,6 @@ struct OfferCorrectionService {
         }
 
         for new in created { context.insert(new) }
-        dissolveUnsharedStops(in: [offer] + created)
         try save(describing: "separate an offer into one-delivery offers")
 
         AppLog.delivery.info("An offer was separated into one-delivery offers")
@@ -384,27 +386,31 @@ struct OfferCorrectionService {
     /// Both kinds are written in **one save**, because they are answered on one
     /// screen with one Save, and a store holding the new pickup answer beside
     /// the old drop-off answer is a statement the driver never made. Each list
-    /// may be empty, which takes that kind back, and a list of one is refused.
+    /// may be empty, which takes that kind back, `nil`, which leaves that kind
+    /// exactly as it is, and a list of one is refused.
     ///
     /// - Throws: ``OfferCorrectionError/invalidSharedStop(_:)``,
     ///   ``OfferCorrectionError/offerNoLongerExists``,
     ///   ``OfferCorrectionError/deliveryNoLongerExists`` or
     ///   ``OfferCorrectionError/storeUnavailable(underlying:)``.
-    func recordSharedStops(pickup: [Delivery], dropOff: [Delivery], in offer: Offer) throws {
+    func recordSharedStops(pickup: [Delivery]?, dropOff: [Delivery]?, in offer: Offer) throws {
         try requireRecorded(offer)
-        for delivery in pickup + dropOff { try requireRecorded(delivery) }
+        for delivery in (pickup ?? []) + (dropOff ?? []) { try requireRecorded(delivery) }
 
         // Both kinds are judged before either is written, so a refusal of the
         // second leaves the first exactly as it was, in the store and in every
         // model a screen is holding.
-        if let refusal = Delivery.sharedStopRefusal(among: pickup, in: offer)
-            ?? Delivery.sharedStopRefusal(among: dropOff, in: offer) {
+        if let refusal = pickup.flatMap({ Delivery.sharedStopRefusal(among: $0, in: offer) })
+            ?? dropOff.flatMap({ Delivery.sharedStopRefusal(among: $0, in: offer) }) {
             AppLog.delivery.notice("Refused a shared stop: \(String(describing: refusal), privacy: .public)")
             throw OfferCorrectionError.invalidSharedStop(refusal)
         }
         do {
-            try Delivery.recordSharedStop(.pickup, among: pickup, in: offer)
-            try Delivery.recordSharedStop(.dropOff, among: dropOff, in: offer)
+            // A kind the screen did not change is not restated: restating it
+            // would take back a group a delivery of this offer shares with a
+            // delivery of another one.
+            if let pickup { try Delivery.recordSharedStop(.pickup, among: pickup, in: offer) }
+            if let dropOff { try Delivery.recordSharedStop(.dropOff, among: dropOff, in: offer) }
         } catch let error as SharedStopError {
             // Unreachable after the check above; rolled back rather than trusted.
             context.rollback()
@@ -417,8 +423,62 @@ struct OfferCorrectionService {
         // deliveries, and nothing about where either stop is.
         AppLog.delivery.info(
             """
-            Shared stops recorded: \(pickup.count, privacy: .public) sharing a pickup, \
-            \(dropOff.count, privacy: .public) sharing a drop-off
+            Shared stops recorded: \(pickup?.count ?? -1, privacy: .public) sharing a pickup, \
+            \(dropOff?.count ?? -1, privacy: .public) sharing a drop-off (-1 unchanged)
+            """
+        )
+    }
+
+    /// Joins or separates some of the running shift's deliveries in progress
+    /// for one kind of shared stop: the stack editor's one write.
+    ///
+    /// The deliveries may belong to different offers. The plan is
+    /// ``SharedStopRegrouping``'s, worked out over every delivery of the shift
+    /// before anything is written, so a group holding a finished delivery stays
+    /// whole, and it is written in **one save** through
+    /// ``Delivery/apply(_:for:to:)``. No lifecycle instant, offer, number,
+    /// amount or route moves, and no event is recorded: marking two deliveries
+    /// Same pickup after one of them was picked up says where it was collected,
+    /// and records no pickup for the other.
+    ///
+    /// A stretch already parked keeps the deliveries Park stored for it, so
+    /// this changes what the **next** Park chooses, never what Resume Driving
+    /// completes for the current one.
+    ///
+    /// - Throws: ``OfferCorrectionError/invalidSharedStop(_:)``,
+    ///   ``OfferCorrectionError/deliveryNoLongerExists`` or
+    ///   ``OfferCorrectionError/storeUnavailable(underlying:)``.
+    func editSharedStops(
+        _ edit: SharedStopEdit,
+        _ kind: SharedStopKind,
+        of selected: [Delivery],
+        on shift: Shift
+    ) throws {
+        for delivery in selected { try requireRecorded(delivery) }
+        let deliveries = shift.deliveries
+        let regrouping: SharedStopRegrouping
+        do {
+            regrouping = try SharedStopRegrouping(
+                edit,
+                selecting: Set(selected.map(\.id)),
+                current: Delivery.currentIdentities(kind, of: deliveries),
+                members: Set(deliveries.map(\.id)),
+                eligible: Set(deliveries.filter(\.isActive).map(\.id))
+            )
+        } catch {
+            AppLog.delivery.notice("Refused a stack edit: \(String(describing: error), privacy: .public)")
+            throw OfferCorrectionError.invalidSharedStop(error)
+        }
+
+        Delivery.apply(regrouping, for: kind, to: deliveries)
+        try save(describing: "edit which deliveries in progress share a stop")
+
+        // Structural: which edit, which kind and how many were named. Never
+        // which deliveries, and nothing about where either stop is.
+        AppLog.delivery.info(
+            """
+            Stack edit recorded: \(String(describing: edit), privacy: .public) \
+            \(kind.rawValue, privacy: .public) for \(selected.count, privacy: .public) deliveries
             """
         )
     }
@@ -463,18 +523,6 @@ struct OfferCorrectionService {
     }
 
     // MARK: Writing
-
-    /// Clears the shared stops a membership correction left held by fewer than
-    /// two deliveries of one offer, on every offer it touched.
-    ///
-    /// The rule is the model's (``Delivery/dissolveUnsharedStops(in:)``); this
-    /// only names the offers, before the one save that records the correction,
-    /// so a refused save rolls this back with everything else.
-    private func dissolveUnsharedStops(in offers: [Offer?]) {
-        for offer in offers.compactMap({ $0 }) where offer.modelContext != nil && !offer.isDeleted {
-            Delivery.dissolveUnsharedStops(in: offer)
-        }
-    }
 
     /// Removes an offer that a correction left holding nothing.
     ///

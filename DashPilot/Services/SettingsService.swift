@@ -323,6 +323,39 @@ struct SettingsService {
         AppLog.settings.info("Current gas price removed")
     }
 
+    // MARK: Target hourly earnings
+
+    /// The target the next shift will record, or `nil` when none is set, no
+    /// settings row exists, or the store cannot be read. Never creates a row.
+    ///
+    /// Read at exactly one moment that reaches a recorded fact: when a shift
+    /// starts (``ShiftService/startShift(at:)``). Nothing derived reads it.
+    func hourlyTarget() -> Money? {
+        do {
+            return try existingSettings()?.hourlyTarget
+        } catch {
+            AppLog.settings.error("Could not read the target hourly earnings")
+            return nil
+        }
+    }
+
+    /// Records the target the next shift will start with, or clears it with
+    /// `nil`. Shifts already recorded keep the target they started with.
+    ///
+    /// - Throws: ``SettingsError``.
+    func setHourlyTarget(_ target: Money?) throws {
+        let settings = try settings()
+        do {
+            try settings.setHourlyTarget(target)
+        } catch let error as DriverSettingsError {
+            AppLog.settings.notice("Refused a target: \(String(describing: error), privacy: .public)")
+            throw SettingsError.invalidSettings(error)
+        }
+        try save(describing: "set the target hourly earnings")
+        // Whether one is set, never the figure.
+        AppLog.settings.info("Target hourly earnings \(target == nil ? "cleared" : "set", privacy: .public)")
+    }
+
     // MARK: Pickup workflow
 
     /// The driver's answers about the Park and Resume pickup workflow.

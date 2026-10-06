@@ -1,7 +1,24 @@
 # Release notes draft
 
-A draft for the first versioned release, proposed as **0.1.0**. Not published: nothing has been
-tagged or released. See [Release readiness](release-readiness.md) for what remains before it can be.
+**0.1.0** was tagged and released on October 3, 2026, with the notes below. **0.1.1** is a draft:
+nothing has been tagged or released for it. See [Release readiness](release-readiness.md).
+
+---
+
+## DashPilot 0.1.1 (draft)
+
+A hardening release from a real shift on October 3, 2026.
+
+- **Edit Stack.** Two deliveries started one at a time that turn out to share a pickup or a drop-off
+  can be marked that way from the running shift, without cancelling and recording them again.
+  Nothing else about them changes.
+- **Older Weeks scrolls smoothly as your history grows.** Each week's routes are measured once, off
+  the main thread, and a route is fetched far more cheaply on a long history.
+- **An optional hourly target.** Set one in Settings; each finished shift is compared with the target
+  it started with, as above, near or below, and weeks and periods count the shifts at or near theirs.
+  Changing the target never changes how earlier shifts are compared.
+- **A welcome for new drivers.** Four short screens on first launch, reopenable from Settings, that
+  ask for nothing and explain what DashPilot keeps and that it stays on your iPhone.
 
 ---
 

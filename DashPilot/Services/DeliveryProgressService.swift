@@ -214,11 +214,11 @@ struct DeliveryProgressService {
 
         let departing: [RouteSample]
         do {
-            let shiftID = shift.id
+            let shiftKey = shift.persistentModelID
             let boundary = action.resumedAt
             departing = try context.fetch(
                 FetchDescriptor<RouteSample>(
-                    predicate: #Predicate { $0.shift?.id == shiftID && $0.timestamp >= boundary }
+                    predicate: #Predicate { $0.shift?.persistentModelID == shiftKey && $0.timestamp >= boundary }
                 )
             )
         } catch {

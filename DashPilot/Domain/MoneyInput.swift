@@ -67,6 +67,10 @@ nonisolated enum MoneyInputSubject: Sendable {
     /// means the fuel cost nothing, which is a different fact from no price
     /// having been recorded at all.
     case gasPricePerGallon
+    /// The gross earnings per working hour the driver sets as a personal
+    /// benchmark for their next shifts. Optional and removable; refused at zero
+    /// by the model rather than here, because no target is `nil`.
+    case hourlyTarget
 }
 
 nonisolated extension MoneyInputError {
@@ -80,6 +84,7 @@ nonisolated extension MoneyInputError {
             case .additionalTip: "Enter what the tip was, for example 5.00."
             case .expense: "Enter what this expense cost, for example 42.10."
             case .gasPricePerGallon: "Enter what a gallon of fuel cost, for example 3.29."
+            case .hourlyTarget: "Enter a target per working hour, for example 25.00, or remove it."
             }
         case .notANumber:
             "Enter an amount using numbers, for example 86.25."
@@ -92,6 +97,7 @@ nonisolated extension MoneyInputError {
             case .additionalTip: "A tip cannot be a negative amount. Enter what you received."
             case .expense: "An expense cannot be a negative amount. Enter what it cost."
             case .gasPricePerGallon: "A gas price cannot be a negative amount. Enter what a gallon cost."
+            case .hourlyTarget: "A target cannot be a negative amount."
             }
         case .tooLarge:
             "That is larger than any single amount DashPilot records."

@@ -1,0 +1,49 @@
+# The UI journeys every pull request and push runs, one test name per line.
+#
+# Chosen as the critical paths a driver's day depends on: a shift from start
+# to end, a delivery through its lifecycle, stacked work, parking, the pickup
+# workflow, grouping corrections, history and its detail, the corrections
+# made afterwards, export, settings, and the largest text size. Everything
+# else in DashPilotUITests runs in ui-regression.yml on main, weekly, before a
+# release tag and on demand. A name here that no journey has fails the domain
+# suite (ContinuousIntegrationWorkflowTests), so the list cannot rot silently.
+#
+# Add a journey here only when a regression in it would stop a driver working
+# and nothing faster would catch it. The selection rules are in
+# docs/development/testing.md.
+
+# Launch, the welcome and the shift
+testLaunchesIntoShiftScreen
+testFirstLaunchShowsTheWelcomeOnceAndFinishingItPersists
+testStartsAndEndsAShift
+testParkAndPauseAreDistinctStatesOfTheRunningShift
+testARecordedRouteGrowsFreezesWhilePausedAndLeavesTheBreakOut
+testARunningShiftOffersOnlyWhatItsStateAllows
+testTheRunningShiftAtTheLargestTextSize
+
+# Deliveries, stacked work and recovery
+testRecordsADeliveryThroughItsLifecycle
+testStartsASecondDeliveryWhileTheFirstIsRunning
+testRecoveredStackedDeliveriesStayDistinctAndSurviveLeavingTheApp
+testTheOfferSheetRecordsOneOfferOrNothing
+testUndoingADeliveryMarkedDeliveredByMistake
+testActiveDeliveriesBlockEndingUntilEachIsResolved
+
+# Parking, the pickup workflow and shared stops
+testParkAndResumeRecordThePickupAndUndoTakesEachBack
+testAnOfferIsIndependentUnlessMarkedSamePickupAndDropOff
+testCorrectingGroupingOnARunningShift
+testEditStackMarksSeparateDeliveriesSamePickupWithoutRecreatingThem
+
+# History, detail, corrections afterwards and export
+testHistoryShowsThisWeekWithItsOwnFiguresAndFollowsAnEdit
+testOlderWeeksAreGroupedSummarisedAndOpen
+testOpensTheDetailOfTheTappedShift
+testAddsAndEditsEarningsFromDetail
+testAShiftExportsAsJSONOrCSV
+
+# Summaries, settings, pickup places and expenses
+testTheDaySummaryStatesEachFigureWithItsCoverage
+testCreatesEditsAndSelectsVehicles
+testAPickupPlaceIsNamedReusedChangedAndRemoved
+testExpensesAreRecordedRefusedCorrectedAndSummarised

@@ -405,6 +405,7 @@ struct CompletedShiftDetailView: View {
                     rate: metrics.grossPerWorkingHour,
                     identifier: "shiftDetailHourlyRate"
                 )
+                hourlyTargetRow(metrics)
                 rateRow(
                     "Per active delivery hour",
                     spokenAs: "gross earnings per delivery active hour",
@@ -1184,6 +1185,44 @@ struct CompletedShiftDetailView: View {
         .accessibilityIdentifier(identifier)
     }
 
+    /// The rate above against the target this shift recorded when it started,
+    /// or nothing for a shift that recorded no target.
+    ///
+    /// Directly under the rate it is about, quieter than it, with the standing
+    /// said in words and a symbol so it never rests on colour. A shift with a
+    /// target and no rate says so rather than reading as below it.
+    @ViewBuilder
+    private func hourlyTargetRow(_ metrics: ShiftMetrics) -> some View {
+        if let target = shift.hourlyTarget {
+            Group {
+                if let comparison = HourlyTargetComparison(rate: metrics.grossPerWorkingHour.amount, target: target) {
+                    Label {
+                        VStack(alignment: .leading, spacing: DashSpacing.xs) {
+                            Text(comparison.standing.title)
+                                .dashFont(.emphasis)
+                            Text(comparison.statement(locale: locale))
+                                .dashFont(.supporting)
+                                .foregroundStyle(.secondary)
+                                .monospacedDigit()
+                        }
+                        .fixedSize(horizontal: false, vertical: true)
+                    } icon: {
+                        Image(systemName: comparison.standing.symbolName)
+                            .foregroundStyle(Color.accentColor)
+                    }
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(comparison.spokenStatement(locale: locale))
+                } else {
+                    Text("Your target for this shift was \(target.formatted(locale: locale)) a working hour. There is no rate to compare it with.")
+                        .dashFont(.supporting)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .accessibilityIdentifier("shiftDetailHourlyTarget")
+        }
+    }
+
     private func rateAccessibilityLabel(spokenTitle: String, rate: ShiftRate) -> String {
         switch rate {
         case let .available(amount):
@@ -1568,7 +1607,7 @@ private struct DeliveryHistoryRow: View {
                 }
 
                 // Which of those the driver recorded as sharing a stop with it.
-                if let shared = offer?.sharedStops(of: numbered).caption {
+                if let shared = numbered.sharedStops.caption {
                     Label(shared, systemImage: "link")
                         .dashFont(.supporting)
                         .foregroundStyle(.secondary)
@@ -2016,7 +2055,7 @@ private struct DeliveryHistoryRow: View {
         if let grouping = offer?.spokenGrouping(of: numbered) {
             sentences.append(grouping)
         }
-        if let shared = offer?.sharedStops(of: numbered).spokenCaption {
+        if let shared = numbered.sharedStops.spokenCaption {
             sentences.append(shared)
         }
         // The place is spoken as it is written. The key it is matched by is

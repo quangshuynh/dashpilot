@@ -58,6 +58,11 @@ struct HistoryWeekSummaryView: View {
 
     var placement: Placement = .olderWeek
 
+    /// Handed each shift's recorded distance once the week's routes have been
+    /// measured, so the rows under it draw from the same pass rather than
+    /// measuring their routes again on the main actor.
+    var measured: ([UUID: RouteDistance]) -> Void = { _ in }
+
     @Environment(\.modelContext) private var modelContext
     @Environment(\.locale) private var locale
 
@@ -93,6 +98,15 @@ struct HistoryWeekSummaryView: View {
                     VStack(alignment: .leading, spacing: DashSpacing.md) {
                         ForEach(rates) { line in
                             DashValueRow(title: line.title, value: line.value, detail: line.detail)
+                        }
+                        // Each shift against the target it started with, only
+                        // in a week where some shift had one.
+                        if let target = summary.metrics.hourlyTarget.statement {
+                            Label(target, systemImage: "target")
+                                .labelStyle(DashCompactLabelStyle())
+                                .dashFont(.supporting)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
                     }
                 }
@@ -195,10 +209,11 @@ struct HistoryWeekSummaryView: View {
         let ids = shifts.map(\.id)
         let container = modelContext.container
         let derived = await Task.detached(priority: .userInitiated) {
-            HistoryFetchScope.weekSummary(of: week, shiftIDs: ids, in: container)
+            HistoryFetchScope.weekPresentation(of: week, shiftIDs: ids, in: container)
         }.value
         guard !Task.isCancelled else { return }
-        summary = derived
+        summary = derived.summary
+        measured(derived.distances)
     }
 }
 

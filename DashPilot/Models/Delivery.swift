@@ -217,8 +217,9 @@ nonisolated final class Delivery {
     /// The Park and Resume pickup workflow, and only at Park: a delivery chosen
     /// by ``ParkPickupSelection`` brings the others sharing its pickup with it,
     /// because the driver said they are collected at one counter. It is written
-    /// by ``Delivery/recordSharedStop(_:among:in:)`` and at creation by
-    /// ``Shift/beginOffer(deliveryCount:sharing:at:)``, and nowhere else.
+    /// at creation by ``Shift/beginOffer(deliveryCount:sharing:at:)`` and
+    /// afterwards only through ``Delivery/apply(_:for:to:)``, and may be held by
+    /// deliveries of different offers of one shift: see ``SharedStopRegrouping``.
     private(set) var sharedPickupID: UUID?
 
     /// The same kind of identity for deliveries the driver said go to **the
@@ -1038,39 +1039,27 @@ extension Delivery {
     /// Records that exactly `selected`, all deliveries of `offer`, share one
     /// `kind` of stop, and that no other delivery of that offer shares it.
     ///
-    /// **The one place a shared stop is changed after an offer is recorded**, so
-    /// the rules below cannot be bypassed by a screen, a test or a future
-    /// caller. It lives here because the two columns' setters do.
-    ///
-    /// ## What it writes
-    ///
-    /// A **fresh** identity on every selected delivery, and `nil` for this
-    /// `kind` on every other delivery of the offer. Fresh rather than reused so
-    /// a correction can never leave a delivery that was taken out of a group
-    /// still matching one it was never meant to join. Selecting nothing clears
-    /// the offer's `kind` entirely, which is how a driver takes the statement
-    /// back.
+    /// The offer screen's restatement, through ``SharedStopRegrouping``.
+    /// Selecting nothing takes the offer's statement back. Deliveries of other
+    /// offers keep theirs, except that a group left holding one delivery stops
+    /// claiming anything.
     ///
     /// Nothing else moves: no lifecycle timestamp, no pickup place, no amount,
     /// no offer membership, and not the other `kind`. A parked stretch that has
     /// already stored the deliveries it is for keeps them, because Resume Driving
     /// acts on what Park chose rather than on what is grouped now.
     ///
-    /// ## What it refuses
-    ///
-    /// A delivery from outside the offer, because a shared stop is a statement
-    /// about deliveries accepted together; and a selection of exactly one,
-    /// because one delivery sharing a stop with nobody is not a fact.
-    ///
     /// - Throws: ``SharedStopError``.
     static func recordSharedStop(_ kind: SharedStopKind, among selected: [Delivery], in offer: Offer) throws {
         if let refusal = sharedStopRefusal(among: selected, in: offer) { throw refusal }
-
-        let chosen = Set(selected.map(\.id))
-        let identity: UUID? = chosen.isEmpty ? nil : UUID()
-        for delivery in offer.deliveries {
-            delivery.setSharedStopID(chosen.contains(delivery.id) ? identity : nil, for: kind)
-        }
+        let deliveries = offer.shift?.deliveries ?? offer.deliveries
+        let regrouping = try SharedStopRegrouping(
+            restating: Set(selected.map(\.id)),
+            within: Set(offer.deliveries.map(\.id)),
+            current: currentIdentities(kind, of: deliveries),
+            members: Set(deliveries.map(\.id))
+        )
+        apply(regrouping, for: kind, to: deliveries)
     }
 
     /// Why ``recordSharedStop(_:among:in:)`` would refuse `selected`, or `nil`
@@ -1082,26 +1071,25 @@ extension Delivery {
         return Set(selected.map(\.id)).count == 1 ? .onlyOneDelivery : nil
     }
 
-    /// Clears every shared stop in `offer` that fewer than two of its deliveries
-    /// still hold.
+    /// **The one place shared stops change after an offer is recorded**, for
+    /// either screen: writes `regrouping` onto `deliveries`, touching only the
+    /// ones whose identity it changes.
     ///
-    /// Run by ``OfferCorrectionService`` after membership moves, in the same
-    /// save, on every offer a correction touched. It keeps the one invariant
-    /// shared stops have: **a stop is shared only among deliveries of one
-    /// offer**, by at least two of them. A delivery moved out of an offer
-    /// therefore leaves its shared stops behind rather than carrying a claim
-    /// into an offer where nobody shares it, and a group left holding one
-    /// delivery stops claiming anything. Merging two offers loses nothing,
-    /// because every group arrives whole.
-    static func dissolveUnsharedStops(in offer: Offer) {
-        for kind in SharedStopKind.allCases {
-            let counts = Dictionary(grouping: offer.deliveries.compactMap { $0.sharedStopID(kind) }) { $0 }
-                .mapValues(\.count)
-            for delivery in offer.deliveries {
-                guard let identity = delivery.sharedStopID(kind), counts[identity, default: 0] < 2 else { continue }
-                delivery.setSharedStopID(nil, for: kind)
-            }
+    /// A **fresh** identity for every group an edit forms, so a delivery taken
+    /// out of a group can never go on matching one it was never meant to join.
+    static func apply(_ regrouping: SharedStopRegrouping, for kind: SharedStopKind, to deliveries: [Delivery]) {
+        for delivery in deliveries where delivery.sharedStopID(kind) != regrouping.identities[delivery.id] {
+            delivery.setSharedStopID(regrouping.identities[delivery.id], for: kind)
         }
+    }
+
+    /// Every delivery among `deliveries` holding an identity for `kind`.
+    static func currentIdentities(_ kind: SharedStopKind, of deliveries: [Delivery]) -> [UUID: UUID] {
+        var identities: [UUID: UUID] = [:]
+        for delivery in deliveries {
+            if let identity = delivery.sharedStopID(kind) { identities[delivery.id] = identity }
+        }
+        return identities
     }
 
     private func setSharedStopID(_ identity: UUID?, for kind: SharedStopKind) {

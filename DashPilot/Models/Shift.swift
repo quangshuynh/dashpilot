@@ -52,6 +52,12 @@ nonisolated enum ShiftError: Error, Equatable {
     /// consumed. Refusing is the conservative answer, and the remedy for a shift
     /// that has driven is the shift's own fuel editor once it has finished.
     case recordedDrivingHasBegun
+    /// A shift's starting target hourly earnings was recorded a second time.
+    /// The target a shift is compared with is the one it started with.
+    case hourlyTargetAlreadyRecorded
+    /// A target of zero or less. A target is a positive benchmark; no target
+    /// at all is `nil`, never `$0.00`.
+    case nonPositiveHourlyTarget
 }
 
 /// A single period of delivery work.
@@ -188,6 +194,23 @@ nonisolated final class Shift {
     /// The name is only ever recorded beside the economy it describes: see
     /// ``setFuelAssumptions(milesPerGallon:gasPricePerGallon:vehicleName:)``.
     private(set) var fuelVehicleName: String?
+
+    /// The target gross earnings per working hour this shift is compared with,
+    /// or `nil` when it recorded none.
+    ///
+    /// **A snapshot, taken when the shift starts** from the driver's settings,
+    /// exactly as the fuel defaults are, through
+    /// ``recordStartingHourlyTarget(_:)``. A driver who later moves their target
+    /// from `$25.00` to `$30.00` has not restated what this shift was aiming at,
+    /// so nothing re-reads the setting once the shift exists. A shift recorded
+    /// before targets existed, or started with none set, holds `nil`, which is
+    /// no target rather than a target of zero.
+    ///
+    /// A personal benchmark and nothing else: it is not earnings, not expected
+    /// pay and not a claim about what the shift should have paid. What it is
+    /// compared with is ``ShiftMetrics/grossPerWorkingHour``, through
+    /// ``HourlyTargetComparison``.
+    private(set) var targetGrossPerWorkingHourAmount: Decimal?
 
     init(id: UUID = UUID(), startedAt: Date) {
         self.id = id
@@ -326,11 +349,18 @@ extension Shift {
     ///
     /// An empty array is returned for a shift that is not in a store, which is
     /// a shift with no recorded route because nothing could have recorded one.
+    /// Fetched by the relationship's own key rather than by the shift's `id`
+    /// attribute. Comparing `shift.id` makes the store read the joined shift row
+    /// for every position it holds, so one route's fetch grew with the whole
+    /// history: measured on an on-disk store, 30 ms at a month of work and
+    /// 116 ms at six months for the same 1,500-position route, against 22 ms
+    /// and 44 ms by key (`HistoryFetchScopeMeasurementTests.routeFetchProbe`).
+    /// The walk over the positions is 3.5 ms either way. Same rows, same order.
     func routeSamples() -> [RouteSample] {
         guard let modelContext else { return [] }
-        let shiftID = id
+        let shiftKey = persistentModelID
         let descriptor = FetchDescriptor<RouteSample>(
-            predicate: #Predicate { $0.shift?.id == shiftID },
+            predicate: #Predicate { $0.shift?.persistentModelID == shiftKey },
             sortBy: [
                 SortDescriptor(\.timestamp),
                 SortDescriptor(\.latitude),
@@ -354,10 +384,10 @@ extension Shift {
     /// route does not load one.
     var routeSampleCount: Int {
         guard let modelContext else { return 0 }
-        let shiftID = id
+        let shiftKey = persistentModelID
         do {
             return try modelContext.fetchCount(
-                FetchDescriptor<RouteSample>(predicate: #Predicate { $0.shift?.id == shiftID })
+                FetchDescriptor<RouteSample>(predicate: #Predicate { $0.shift?.persistentModelID == shiftKey })
             )
         } catch {
             AppLog.routeCapture.error("Could not count a shift's stored route: \(error)")
@@ -383,9 +413,9 @@ extension Shift {
     /// where a count is being shown rather than where rows are being deleted.
     func routeSamples(after boundary: Date) -> [RouteSample] {
         guard let modelContext else { return [] }
-        let shiftID = id
+        let shiftKey = persistentModelID
         let descriptor = FetchDescriptor<RouteSample>(
-            predicate: #Predicate { $0.shift?.id == shiftID && $0.timestamp > boundary },
+            predicate: #Predicate { $0.shift?.persistentModelID == shiftKey && $0.timestamp > boundary },
             sortBy: [
                 SortDescriptor(\.timestamp),
                 SortDescriptor(\.latitude),
@@ -409,11 +439,11 @@ extension Shift {
     /// load a route to do it.
     func routeSampleCount(after boundary: Date) -> Int {
         guard let modelContext else { return 0 }
-        let shiftID = id
+        let shiftKey = persistentModelID
         do {
             return try modelContext.fetchCount(
                 FetchDescriptor<RouteSample>(
-                    predicate: #Predicate { $0.shift?.id == shiftID && $0.timestamp > boundary }
+                    predicate: #Predicate { $0.shift?.persistentModelID == shiftKey && $0.timestamp > boundary }
                 )
             )
         } catch {
@@ -621,6 +651,28 @@ extension Shift {
             gasPricePerGallon: defaults.assumptions.gasPricePerGallon,
             vehicleName: defaults.vehicleName
         )
+    }
+
+    /// The target this shift recorded when it started, in the app's money
+    /// vocabulary, or `nil`.
+    var hourlyTarget: Money? { targetGrossPerWorkingHourAmount.map(Money.init(amount:)) }
+
+    /// Copies the driver's current target onto a shift that has just started.
+    ///
+    /// The only writer of ``targetGrossPerWorkingHourAmount``. It fills an empty
+    /// value once, on a running shift, and refuses anything else, so a target
+    /// cannot be applied to a shift after the fact by any path. `nil` records
+    /// nothing, which is what a driver with no target set gets.
+    ///
+    /// - Throws: ``ShiftError/shiftAlreadyEnded``,
+    ///   ``ShiftError/hourlyTargetAlreadyRecorded`` or
+    ///   ``ShiftError/nonPositiveHourlyTarget``.
+    func recordStartingHourlyTarget(_ target: Money?) throws {
+        guard endedAt == nil else { throw ShiftError.shiftAlreadyEnded }
+        guard targetGrossPerWorkingHourAmount == nil else { throw ShiftError.hourlyTargetAlreadyRecorded }
+        guard let target else { return }
+        guard target.amount > .zero else { throw ShiftError.nonPositiveHourlyTarget }
+        targetGrossPerWorkingHourAmount = target.amount
     }
 
     /// The validation and the three writes, shared by the two callers above so

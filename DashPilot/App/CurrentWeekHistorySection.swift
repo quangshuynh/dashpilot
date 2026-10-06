@@ -49,6 +49,10 @@ struct CurrentWeekHistorySection: View {
 
     @Query private var shifts: [Shift]
 
+    /// Each row's recorded distance, from the week summary's one pass over the
+    /// routes off the main actor. See ``CompletedShiftRow/measuredDistance``.
+    @State private var distances: [UUID: RouteDistance] = [:]
+
     /// How many completed shifts sit outside the week, or `nil` before the
     /// first count. A count realises no row, so it is cheap to re-read.
     @State private var otherShiftCount: Int?
@@ -132,7 +136,8 @@ struct CurrentWeekHistorySection: View {
                     week: week,
                     shifts: shifts,
                     spokenWeekTitle: week.spokenTitle(asOf: now, calendar: calendar, locale: locale),
-                    placement: .currentWeek
+                    placement: .currentWeek,
+                    measured: { distances = $0 }
                 )
             }
 
@@ -140,7 +145,7 @@ struct CurrentWeekHistorySection: View {
                 // The whole row is one destination: a finished shift is a thing
                 // to open, not a row with controls scattered across it.
                 NavigationLink(value: shift) {
-                    CompletedShiftRow(shift: shift)
+                    CompletedShiftRow(shift: shift, measuredDistance: distances[shift.id])
                 }
                 .accessibilityIdentifier("completedShiftRow")
             }

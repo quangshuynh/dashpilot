@@ -59,9 +59,14 @@ test cannot see, such as a screen that renders a sentence the model never claime
 | Park pickup selection | The pure rule for which delivery Park works on: one delivery heading to or at its pickup, never one in the car or finished, D3 before D4 in every combination of states, three orders, input order never mattering, and stacked orders off choosing nothing among two in progress |
 | Park and Resume pickup workflow | Off by default and with no row, the stacked answer inert alone, Park marking Arrived and Resume marking Picked Up at the recorded instants, no duplicate arrival, a customer stop saying nothing, clamping, stacked off and on, the D3 then D4 sequence, three orders, a delivery cancelled or picked up by hand between Park and Resume, the workflow turned off while parked, refusals, an arrival or a pickup whose save fails leaving the vehicle state standing (read through a fresh context), the save order observed, and wording that claims no detection |
 | Automated pickup step undo | Undo after Park keeping the vehicle parked and after Resume keeping it driving, the card working afterwards, no other delivery moving, refusal after a later event, after delivery or cancellation, twice, after re-recording, for a manual pickup and for a missing delivery, a refused save, the step judged against the store from another context, and the spoken labels |
-| Shared stops | Independent by default, both switches recorded with an offer as two identities, a shared stop refused on an offer of one, a subset recorded and replaced with a fresh identity and taken back, one alone refused with both kinds judged before either is written, a delivery from another offer refused, nothing else moving, allowed on a finished shift, a refused save leaving the store as it was, membership corrections dissolving what no longer holds and keeping whole groups, and captions that name siblings and claim no customer, address or place |
+| Shared stops | Independent by default, both switches recorded with an offer as two identities, a shared stop refused on an offer of one, a subset recorded and replaced with a fresh identity and taken back, one alone refused with both kinds judged before either is written, the offer screen naming only its own offer, nothing else moving, allowed on a finished shift, a refused save leaving the store as it was, membership corrections (move, split, separate, merge) keeping the stops deliveries share, and captions that name siblings and claim no customer, address or place |
 | Resume driving after delivery progress | Off by default and with no row, persisted, changing it rewriting nothing; a parked pickup or Delivered resuming only when its stop has nothing left, a shared pickup or drop-off half done staying parked, Same drop-off never joining a pickup nor Same pickup a drop-off, an unmarked stacked order keeping it parked and left untouched, a paused or unparked shift untouched; one recorded pickup and one transition under Park and Resume, Resume's own pickup never recursing, a stretch chosen for a pickup still at Arrived holding the stop; a failed resume leaving the step and the parked vehicle, a failed step inventing no resume; working time unchanged; a new capture session after an automatic resume with nothing measured across the stretch; one Undo of step and driving that reopens the same stretch and drops the positions since, refused whole after a later event or parking again, leaving other deliveries alone, and a refused save changing nothing; the Siri and Lock Screen path |
-| Resume after delivery progress persistence | v21 as the current version with its plan counts, the one settings column on the settings row only, v20 and v19 stores migrating with it off and everything else kept, and the answer surviving a reopen |
+| Stack edits | The planner over every combination (joining two, joining additively through an existing group, two pickups in one stack, separating from a pair and from three, separating nothing, a finished member kept whole, each refusal named), restating one offer keeping other offers' statements; through the store: two separate offers marked Same pickup with no offer, number, instant or amount moving and no arrival manufactured, a larger stack regrouped, Same drop-off apart from the pickup, a picked-up delivery joinable with nothing recorded, delivered and cancelled deliveries refused with nothing written, a finished member kept, survival across a reopened on-disk store, a refused save, Park and Resume moving a cross-offer pair together, an edit while parked changing the next Park and not this Resume, captions naming cross-offer siblings, and export numbering one cross-offer group |
+| Hourly target comparison | Above, near and below a $25.00 target with the 2% band inclusive at both edges, the rate compared at the cent it is shown at, missing rate or target and a zero target giving no comparison, the three statements and their spoken forms, no judgement in any wording, and a period counting each shift against its own target apart from shifts with no target or no rate |
+| Hourly target snapshot | A shift keeping the target it started with when the setting moves or is removed, read back through a fresh context; no target recorded as none, a target set mid-shift reaching the next shift only, one writer on a running shift refusing zero, a second write and a finished shift, settings refusing zero and keeping the previous target, a week's count through the period calculator, and the export field with the format version unchanged |
+| Hourly target persistence | v22 as the current version with its plan counts, frozen v21 with no target column and v22 with it on the shift and the settings row only, v21 and v20 stores migrating with no target anywhere and nothing recorded moved, and the default and a snapshot surviving a reopen |
+| Onboarding policy | Welcomed only on a new install with no history, a driver with history recorded as having seen it, never shown twice, a newer welcome shown once, and the four screens' words, with platforms named only to disclaim an integration and no dollar figure anywhere |
+| Resume after delivery progress persistence | The one settings column on the settings row only (frozen v20 without it), v20 and v19 stores migrating with it off and everything else kept, and the answer surviving a reopen |
 | Shared stop persistence | v20 frozen with eleven models, the two delivery columns and the suspension's new list joining nothing, v19 frozen, v19 and v18 stores migrating with every delivery independent however alike, a migrated stretch resuming only the delivery it named, and shared stops surviving a reopen |
 | Shared pickup workflow | Same pickup moving both at Park and at Resume in one write, a shared drop-off alone moving only the lowest number, unrelated stacked orders unchanged, a lower unrelated order first, mixed states, a member already in the car, stacked orders off with one shared stop and with an unrelated order beside it, the workflow off, a delivery cancelled inside, a regrouping while parked not changing what Resume picks up, the stored set surviving a relaunch, a refused save at Park and at Resume recording none (read through a fresh context), a shared advance judged whole before writing, one Undo for both events, Undo never cascading, refused whole after later evidence and after a refused save, and wording |
 | Shared stop export | Two local grouping keys in JSON with explicit nulls, numbered within the shift, no stored identity or customer field in the bytes, the CSV unchanged at 42 columns, and the format version unchanged |
@@ -84,7 +89,7 @@ test cannot see, such as a screen that renders a sentence the model never claime
 | Shift export privacy | No coordinate in either format, the route reduced to a measurement and its coverage, no normalised pickup key, no catalogue bookkeeping and no store internals |
 | Expense record | What an expense accepts and refuses, a recorded zero distinct from none, an edit replacing every fact at once and a refused edit changing nothing, the note's trimming and length rule counted in characters, the closed category set and its stored words, no category implying a tax treatment, and an unrecognised stored word reading as `other` |
 | History weeks | The week History is scoped to, and the split that decides which screen a shift is drawn on: a week starting on Monday whatever the device's own first weekday is, Sunday closing the working week rather than opening the next one, a shift at Monday midnight in the week beginning, a week across New Year and one across a daylight-saving change, the time zone deciding which week a moment is in, older shifts grouped newest week first with two in one week under one heading and an unworked week absent rather than empty, a current week present but empty, the Monday transition moving a shift between the two sides, a shift dated after this week still listed rather than hidden, every shift claimed by exactly one side, and the wording following the Monday week rather than the device's |
-| History fetch scope | The two store reads History is drawn from, asserted against the partition they replaced: the week's own completed shifts newest first, a running shift in neither read, Monday 00:00 opening the week and Sunday 23:59:59 closing the one before, a 169-hour week across the autumn clock change, the rollover moving a shift from one read to the other, a shift dated after the week reachable under the other weeks, both reads equal to the partition's two sides row for row over nearly three years, the other weeks counted as Monday weeks, a week summarised through a context of its own equal to one summarised directly and skipping a deleted shift, and Export All History still carrying every completed shift whatever the screen reads |
+| History fetch scope | The two store reads History is drawn from, asserted against the partition they replaced: the week's own completed shifts newest first, a running shift in neither read, Monday 00:00 opening the week and Sunday 23:59:59 closing the one before, a 169-hour week across the autumn clock change, the rollover moving a shift from one read to the other, a shift dated after the week reachable under the other weeks, both reads equal to the partition's two sides row for row over nearly three years, the other weeks counted as Monday weeks, a week summarised through a context of its own equal to one summarised directly and skipping a deleted shift, a week's one off-main pass giving each row exactly its own route's distance and none for a shift with no route, a route fetched by the relationship's key whole, in order and without another shift's positions, and Export All History still carrying every completed shift whatever the screen reads |
 | History week summaries | What a week says above its shifts, derived twice to show it is the period calculator's own figures: the three primary figures and the secondary lines in reading order, the shift and delivery counts on one line, missing earnings and unmeasured miles never read as zero, complete fuel coverage stated, partial coverage never scaled up to the week, a partial route making the fuel a floor and the net a ceiling, a recorded zero gas price counted, the estimated net over its paired subset rather than week earnings less week fuel, recorded expenses reaching neither net so fuel is never subtracted twice, the spoken form naming its week first, the card bounded at eight lines, the two rates taken from the period's own paired subsets rather than one line divided by another and absent rather than zero where no shift carries both halves, only the fuel lines classified as estimates, the shifts and deliveries read as one line, and a figure that was never recorded marked as words so it is never drawn as a number |
 | History week refresh after an edit | An older week follows an edit to one of its shifts: an amount, an end correction (with the route after it gone), a missed pause, fuel assumptions, a completion corrected to a cancellation and a deletion each move the week's revision and the summary worked out through the same off-main path; an edit to another week, a running shift's route batch and a save changing nothing leave it alone |
 | Delivery time in state | How long a delivery has been at its current step, from that step's own recorded instant, for each active state; no clock for a contradictory chain or a clock reading earlier than the instant; and the reminder's evidence equal to the same span |
@@ -145,7 +150,9 @@ xcodebuild test \
 `HistoryFetchScopeMeasurementTests` is off by default, like the route-capture profile, because its
 numbers depend on the machine. It seeds on-disk stores holding one week to five years of synthetic
 work and writes what History's two screens cost, before and after the week-scoped read, to a report
-file:
+file. `olderWeeksCostByPhase` measures Older Weeks with routes the size a real shift records (1,500
+positions), phase by phase on the actor each runs on, and `routeFetchProbe` splits one row's cost
+into the route fetch (which grows with the store) and the walk (which does not):
 
 ```bash
 TEST_RUNNER_DASHPILOT_HISTORY_PROFILE=1 xcodebuild test -scheme DashPilot \
@@ -226,7 +233,7 @@ a period locale and a comma locale side by side.
 
 ## Launch arguments
 
-Debug builds accept fifteen arguments, all used only by UI tests and screenshots:
+Debug builds accept twenty-two arguments, all used only by UI tests and screenshots:
 
 | Argument | Effect |
 | --- | --- |
@@ -243,6 +250,10 @@ Debug builds accept fifteen arguments, all used only by UI tests and screenshots
 | `-dashpilot-seeded-paused-history` | Opens an in-memory store holding one completed shift that was paused twice, with one delivery between the two pauses, which is what the pause corrections are checked against |
 | `-dashpilot-seeded-late-end-history` | Opens an in-memory store holding one completed shift whose recorded end is twenty minutes later than the driver stopped, with a whole capture session and a delivery recorded before it |
 | `-dashpilot-seeded-late-delivery-history` | The same shift whose one delivery recorded its completion two hours after the order was handed over, which is the real recovery case: the shift end correction refuses and names it, and the same correction is accepted once the delivery is corrected |
+| `-dashpilot-seeded-finished-delivery` | Opens an in-memory store holding one finished shift in the current week with one delivered delivery that records no amount, tip, place or route: the state the earnings and tip journeys used to reach by driving a whole shift through the interface first |
+| `-dashpilot-onboarding-fresh` | Forgets that the welcome was finished and lets it show over a throwaway store. Every other throwaway-store launch never shows it |
+| `-dashpilot-onboarding-observe` | Lets the welcome show over a throwaway store **without** forgetting it was finished, which is how a relaunch proves completion persists |
+| `-dashpilot-onboarding-completed` | Treats the welcome as finished, for a journey over the real store whose subject is the store opening |
 | `-dashpilot-seeded-older-weeks` | Opens an in-memory store holding completed shifts in three different weeks: one in the current one, one in the week before it and two in the week three back, so History's scope can be asserted end to end |
 | `-dashpilot-seeded-older-weeks-only` | The same store without its current-week shift, which is the empty-current-week state |
 | `-dashpilot-seeded-long-history` | Opens an in-memory store holding about two and a half years of completed shifts, the latest week of three with measured routes and fuel recorded for two of them (one at a gas price of zero), a week three back whose one shift has its fuel estimated in full, and the oldest shift recording no vehicle, so a long History, partial and complete weekly fuel coverage and historical vehicle context can be reached end to end |
@@ -378,83 +389,25 @@ every one of them is another launch path to keep honest.
 
 ## UI journeys
 
-The UI target covers a handful of paths: launching, starting and ending a shift, pausing a running
-shift and resuming it, reading what a paused shift says about its stopped recording and its
-unavailable delivery control, a paused shift still being the shift in progress and still finishing as
-one shift in history, recording a delivery through its whole lifecycle, cancelling one, being refused a shift end while a delivery is
-running, recovering an already-running delivery at launch, opening a completed shift, adding and
-editing a shift's amount, adding, editing, cancelling an edit of and removing one delivery's amount,
-two stacked deliveries keeping independent amounts while the shift total stays untouched, reading the
-detail screen's delivery, route and rate statements, a finished delivery stating what it paid per
-hour of its own lifecycle while the delivery it overlapped states its own and the cancelled one
-states none, a tip moving that figure on the row as soon as it is recorded and moving nobody
-else's, opening a pickup place's recorded wait history,
-renaming a place and being refused a colliding rename, merging two places into one history,
-exporting a shift as JSON and as CSV, exporting a selected day and week, an empty period offering no
-export, exporting all history, a running shift offering none, switching between the four period
-lengths, stepping back to an empty month, being refused a step past the current month, choosing and
-applying a custom date range, cancelling that sheet without changing the period, a chosen range
-surviving a switch to another period length, exporting a month and a chosen range, recording an
-expense and finding it in the list, being refused a negative one, editing and deleting one, reading a
-period's recorded costs, its categories and the net after them, that net never calling itself profit,
-gross earnings unchanged beside it, an expense recorded on a day with no shift still being
-summarised, recording what a running delivery is expected to pay and reading it back on the card as
-expected rather than as earnings, delivering a delivery that carries an expectation and being offered
-the final amount, dismissing that offer and finding the delivery terminal with the expectation kept
-and no gross recorded, delivering one that carries no expectation and being asked nothing, reading a shift whose
-deliveries arrived in one offer and seeing exactly one heading over them with none over the add-on
-offer's card, hearing a card name the deliveries it was accepted with, advancing one delivery of an
-offer and finding its sibling where it was, recording an offer of two from the sheet and then a
-single delivery beside it, dismissing that sheet and recording nothing, combining two offers the
-driver recorded separately and finding one heading over all three deliveries afterwards, separating a
-grouped offer back into one offer per delivery, putting one delivery of a grouped offer into an offer
-of its own, combining two offers from a finished shift's history and finding both rows saying so with
-every recorded time kept, leaving the correction screen without changing anything, a shift of one delivery offering
-no correction at all, a store holding an offer with no deliveries being stated rather than crashed
-on, recording a tip a finished delivery received outside the platform's own amount and reading the three
-figures back off both the sheet and the row, a delivery holding two tips of different methods and
-reporting all three figures, correcting one tip and then removing it while the platform amount stays
-exactly as it was, a tip of nothing refused in the words of a tip, a delivery carrying tips and no
-platform amount saying there is no total rather than showing the tips as one, the earnings editor
-stating the tips already recorded beside a field that still holds the platform amount alone,
-correcting a recorded pause from a finished shift and watching the paused, working and hourly
-figures move while the elapsed, delivery and mileage figures do not, leaving that editor without
-writing anything, being refused a pause corrected over a recorded delivery and told which fact it
-collided with, deleting a pause recorded by mistake after a confirmation that states which way the
-working time moves, cancelling that confirmation, adding a pause that was never recorded and finding
-it opens refused rather than pre-filled, a shift with no pauses still offering to record one, none of
-those corrections being offered on a running or a paused shift, correcting the end of a shift
-DashPilot recorded as finishing late and watching the elapsed time, the recorded mileage, the capture
-segments and the hourly figure all follow while the mileage lands on what the retained positions
-support rather than on a figure scaled by the time removed, declining that confirmation and finding
-the shift and its whole route exactly as recorded, being refused an end corrected over recorded
-delivery work and told **which delivery and which event** it collided with, moving an end later and
-being told that no route or mileage comes with the extra time and then finding that none did, no end
-correction being offered on a running shift, correcting the times of a delivery DashPilot recorded
-two hours after the order was handed over and watching its duration and hourly figure follow while
-its wait, its amount, its terminal state and the shift's recorded mileage do not, being refused a
-delivery time corrected behind its own arrival and told to correct that one as well, no delivery time
-correction being offered on a running shift, driving the whole real recovery end to end (the shift
-end refused and the blocking delivery named, that delivery corrected, and the same end correction
-then accepted and trimming the route as it always did), reading a
-day beside the day before it with both figures and both coverages on screen,
-the percentage a finished and fully recorded pair of days states, the absence of one while a day is
-still in progress, an empty previous day said to hold nothing rather than shown as no earnings,
-finding every correction a completed delivery offers laid out in columns wide enough to read and
-each one hittable, the same controls becoming a single column at the largest accessibility text
-size,
-recording a fuel economy and a gas price on a finished shift and watching the estimate appear saying
-what it is based on and then move when the fuel economy doubles, one assumption alone naming the half
-that is missing while the half already recorded is still stated, the partial-route wording surviving
-onto the estimate, a fuel economy of zero refused with the editor holding what was typed and the
-shift left holding **neither** figure, the fields filling themselves from the last pair recorded and
-recording nothing when the driver leaves without saving, removing the pair leaving no estimate rather
-than one of nothing, reading the estimated net as the ledger it is with the recorded half saying it
-is recorded and the estimated half saying what it is based on, the partial route stated as a ceiling
-on the net rather than a floor, a shift with no estimate keeping every recorded figure and every
-gross rate while only the net says it is unavailable, a shift with no recorded amount having its
-missing earnings named, and
-deleting a shift through its confirmation.
+Testing is layered, and a behaviour is pinned at the lowest layer that can show it:
+
+1. **Domain and unit tests** (`DashPilotTests`, Swift Testing) prove every rule, figure, refusal,
+   wording and export field. They are fast, run whole on every pull request, and are where a new
+   behaviour is pinned first.
+2. **Integration tests** in the same target run the services against a real SwiftData store,
+   migrations from every frozen schema, and the seeded fixtures the journeys launch.
+3. **A smoke tier of UI journeys** (`.github/ui-smoke-journeys.txt`, at most 30) drives the critical
+   paths a driver's day depends on, on every pull request.
+4. **The rest of the UI suite** runs in the regression workflow and holds only what needs the
+   interface: navigation between screens, sheets and confirmations working together, focus and
+   keyboard behaviour, scroll reach, the largest accessibility text size, VoiceOver labels and
+   values, and state surviving leaving the app.
+
+A journey reads a whole screen or flow in one launch rather than one figure per launch: one pass
+down the screen in the order it is drawn, every refusal and cancellation on the way, and the
+arithmetic left to the domain suite it names in its documentation comment. The audit that brought
+the suite to this shape, the exact journeys it merged, removed and migrated, and why each remaining
+journey needs the interface, is on [UI suite audit](ui-suite-audit.md).
 
 The share sheet itself is never opened. `ShareLink` presents a system surface XCUITest cannot inspect
 reliably, and what the export journeys are for is proving DashPilot wrote a file and offered it — not
@@ -569,30 +522,34 @@ production change and needs its own scope.
 
 ## Continuous integration
 
-`ci.yml` runs on pull requests and pushes to `main`, on a GitHub-hosted `macos-26` runner, with
-`contents: read` and nothing more. Obsolete runs on the same ref are cancelled through a concurrency
-group.
-
-The workflow does four things in order:
+Two workflows run the tests, on a GitHub-hosted `macos-26` runner with `contents: read` and nothing
+more, and share `.github/actions/prepare-simulator` for the first three steps:
 
 1. **Selects an Xcode.** It reads `IPHONEOS_DEPLOYMENT_TARGET` out of the project and picks the
    newest installed Xcode whose iOS simulator SDK is at least that version, rather than hardcoding
-   one. If none qualifies, it fails with a message naming what it found.
+   one. If none qualifies, it fails with a message naming what it found. It is deliberately not
+   pinned; see [UI suite audit](ui-suite-audit.md#xcode-is-not-pinned).
 2. **Prints tool versions**, so a failure can be read against the exact toolchain that produced it.
 3. **Selects a simulator.** It queries `simctl` for available iPhone simulators on runtimes at or
-   above the deployment target and uses the newest, by UDID. `iPhone 17` exists on today's runner
-   image, but the workflow does not depend on that.
-4. **Builds and tests.** One `build-for-testing` produces the app and both test bundles; two
-   `test-without-building` steps then run the domain suite and the UI journeys separately.
+   above the deployment target and uses the newest, by UDID.
 
-Both test targets run in CI. The split into two steps is deliberate and visible: XCUITest under a
-virtualised simulator is the part most likely to fail for reasons that are not the code, so a red
-run says which kind of failure it was rather than reporting "tests failed". Nothing is excluded, and
-no test is retried to make a run pass.
+| Workflow | When | Tests | Budget |
+| --- | --- | --- | --- |
+| `ci.yml` | Pull requests and pushes to `main` | One `build-for-testing`, the **whole** domain suite, then the UI journeys named in `.github/ui-smoke-journeys.txt` | 75 min |
+| `ui-regression.yml` | Pushes to `main`, Mondays 07:00 UTC, `v*` tags, manual dispatch | One `build-for-testing`, then **every** UI journey | 210 min |
+
+The UI journeys run serially in both, and nothing is skipped, retried or excused. The split exists
+because the whole UI suite took two to three hours and made feedback on every change slower than the
+change: a pull request now runs the critical paths, and the broad regression runs after a merge,
+weekly and before a release tag, still in full. How the journeys were classified and which moved is
+on [UI suite audit](ui-suite-audit.md). Obsolete runs on the same ref are cancelled through each
+workflow's concurrency group, and both upload their result bundles under `if: always()`.
 
 ### How long a run takes, and the budget it is given
 
-The job's `timeout-minutes` is **210**, and the number is measured rather than chosen for comfort.
+`ui-regression.yml`'s `timeout-minutes` is **210**, and the number is measured rather than chosen
+for comfort; `ci.yml`'s is **75**, sized for a build, the domain suite and the smoke journeys at about
+35 s each on the runner.
 
 The latest measured runs, with 238 to 242 tests, took **2h28m to 2h42m** end to end (runs
 36963445708, 36947255282, 36946410015, 36916384792, 36916358022 and 36963465798): 2 to 4 minutes of
@@ -624,11 +581,14 @@ Two things follow from this and are worth stating, because a cancelled run reads
   well as on failure. That run's upload step ran and succeeded after the job was cancelled, which is
   what `if: always()` is there for.
 
-`ContinuousIntegrationWorkflowTests` in the domain suite reads `ci.yml` itself and pins what a
-cancelled run cannot: the budget is no longer 60, the three stages are all present and in order in
-one job, the UI journeys still run with parallel testing off, nothing is skipped, retried or allowed
-to fail, and both result bundles are still uploaded under `if: always()`. It finds the checkout
-through its own `#filePath` and disables itself where that checkout is not readable.
+`ContinuousIntegrationWorkflowTests` in the domain suite reads both workflows and the smoke list and
+pins what a cancelled run cannot: both budgets inside their ranges, the pull-request stages in order
+in one job with the domain suite never narrowed, every UI journey in the regression workflow and the
+triggers it runs on, parallel testing off for the UI journeys, nothing skipped, retried or allowed to
+fail, the result bundles uploaded under `if: always()`, and every smoke entry naming a real journey,
+once, in a list of at most 30 that is at most half the suite, and the suite itself at most 90
+journeys. It finds the checkout through its own `#filePath` and disables itself
+where that checkout is not readable.
 
 !!! warning "Known flakiness"
 

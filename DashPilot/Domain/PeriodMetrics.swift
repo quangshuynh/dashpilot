@@ -340,6 +340,11 @@ nonisolated struct PeriodMetrics: Equatable, Sendable {
     /// the same fuel.
     let estimatedNetAfterFuel: PeriodEstimatedNet
 
+    /// How the period's shifts stood against the targets **each** recorded
+    /// when it started: a count, never an average rate against an averaged
+    /// target. Empty for a period in which no shift recorded a target.
+    var hourlyTarget: PeriodHourlyTargetSummary = .none
+
     /// A period with no completed shift in it.
     ///
     /// Every figure is absent rather than zero. A week nobody drove is not a
