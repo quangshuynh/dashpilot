@@ -3683,19 +3683,30 @@ final class DashPilotUITests: XCTestCase {
         split.tap()
         XCTAssertTrue(alert.waitForExistence(timeout: 5))
         alert.buttons.matching(identifier: "confirmOfferCorrectionButton").firstMatch.tap()
-        // Offers are renumbered by acceptance time: Delivery 2, accepted before
-        // Delivery 3, now leads Offer 1 alone, and the pair left is Offer 2.
         XCTAssertTrue(waitForCount(offerHeaders, toEqual: 2))
-        XCTAssertTrue(waitForLabel(offerHeaders.element(boundBy: 0), toContain: "Offer 1. 1 delivery"))
-        XCTAssertTrue(offerHeaders.element(boundBy: 1).label.contains("Offer 2. 2 deliveries accepted together"))
+        // Which of the two is Offer 1 is not this journey's to assume. The new
+        // offer takes Delivery 2's acceptance, which is the instant Delivery 1
+        // was accepted in too, so the two offers tie on acceptance time and
+        // `Offer.acceptedBefore` settles the tie by identity. The journey reads
+        // the number Delivery 2 was given and asserts who is with whom.
+        let splitOut = try XCTUnwrap(offerNumber(of: "Delivery 2", in: app), "Delivery 2 is in an offer")
+        let pair = splitOut == 1 ? 2 : 1
+        XCTAssertEqual(offerNumber(of: "Delivery 1", in: app), pair, "Delivery 1 stayed where it was")
+        XCTAssertEqual(offerNumber(of: "Delivery 3", in: app), pair, "Delivery 3 stayed with Delivery 1")
+        let headerLabels = offerHeaders.allElementsBoundByIndex.map(\.label)
+        XCTAssertTrue(headerLabels.contains { $0.hasPrefix("Offer \(splitOut). 1 delivery") }, "\(headerLabels)")
+        XCTAssertTrue(
+            headerLabels.contains { $0.hasPrefix("Offer \(pair). 2 deliveries accepted together") },
+            "\(headerLabels)"
+        )
 
         let separate = app.buttons["offerCorrectionSeparateButton"]
         XCTAssertTrue(separate.waitForExistence(timeout: 5))
-        XCTAssertEqual(separate.label, "Separate Offer 2 into one offer per delivery")
+        XCTAssertEqual(separate.label, "Separate Offer \(pair) into one offer per delivery")
         separate.tap()
         XCTAssertTrue(alert.waitForExistence(timeout: 5))
         let separateConfirm = alert.buttons.matching(identifier: "confirmOfferCorrectionButton").firstMatch
-        XCTAssertEqual(separateConfirm.label, "Separate Offer 2")
+        XCTAssertEqual(separateConfirm.label, "Separate Offer \(pair)")
         separateConfirm.tap()
         XCTAssertTrue(waitForCount(app.buttons.matching(identifier: "offerCorrectionSeparateButton"), toEqual: 0))
         app.buttons["closeOfferCorrectionButton"].tap()
@@ -6557,6 +6568,20 @@ final class DashPilotUITests: XCTestCase {
             object: query
         )
         return XCTWaiter().wait(for: [expectation], timeout: Self.conditionTimeout) == .completed
+    }
+
+    /// The number of the offer the grouping correction screen lists `delivery`
+    /// under, read from its row's `Move Delivery 2 out of Offer 1` label, or
+    /// `nil` when no row names it.
+    @MainActor
+    private func offerNumber(of delivery: String, in app: XCUIApplication) -> Int? {
+        let prefix = "Move \(delivery) out of Offer "
+        let row = app.buttons
+            .matching(NSPredicate(format: "identifier == %@ AND label BEGINSWITH %@",
+                                  "offerCorrectionDeliveryButton", prefix))
+            .firstMatch
+        guard row.waitForExistence(timeout: 5) else { return nil }
+        return Int(row.label.dropFirst(prefix.count))
     }
 
     // MARK: Period summaries
