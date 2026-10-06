@@ -3032,6 +3032,11 @@ final class DashPilotUITests: XCTestCase {
         let shift = rows(in: app).firstMatch
         XCTAssertTrue(scrollTo(shift, in: app, maxSwipes: 15), "A completed shift is listed, further down")
         XCTAssertTrue(scrollUntilHittable(shift, in: app, maxSwipes: 5))
+        // At this size the row arrives at the very foot of the screen, and a
+        // local run's recording shows it tapped there while still sliding up:
+        // the tap opened nothing. Settled wholly on screen first, as
+        // `openFirstShift` does for the same reason.
+        settleWhollyOnScreen(shift, in: app)
         shift.tap()
 
         let earnings = app.descendants(matching: .any)["shiftDetailEarnings"]
