@@ -389,83 +389,25 @@ every one of them is another launch path to keep honest.
 
 ## UI journeys
 
-The UI target covers a handful of paths: launching, starting and ending a shift, pausing a running
-shift and resuming it, reading what a paused shift says about its stopped recording and its
-unavailable delivery control, a paused shift still being the shift in progress and still finishing as
-one shift in history, recording a delivery through its whole lifecycle, cancelling one, being refused a shift end while a delivery is
-running, recovering an already-running delivery at launch, opening a completed shift, adding and
-editing a shift's amount, adding, editing, cancelling an edit of and removing one delivery's amount,
-two stacked deliveries keeping independent amounts while the shift total stays untouched, reading the
-detail screen's delivery, route and rate statements, a finished delivery stating what it paid per
-hour of its own lifecycle while the delivery it overlapped states its own and the cancelled one
-states none, a tip moving that figure on the row as soon as it is recorded and moving nobody
-else's, opening a pickup place's recorded wait history,
-renaming a place and being refused a colliding rename, merging two places into one history,
-exporting a shift as JSON and as CSV, exporting a selected day and week, an empty period offering no
-export, exporting all history, a running shift offering none, switching between the four period
-lengths, stepping back to an empty month, being refused a step past the current month, choosing and
-applying a custom date range, cancelling that sheet without changing the period, a chosen range
-surviving a switch to another period length, exporting a month and a chosen range, recording an
-expense and finding it in the list, being refused a negative one, editing and deleting one, reading a
-period's recorded costs, its categories and the net after them, that net never calling itself profit,
-gross earnings unchanged beside it, an expense recorded on a day with no shift still being
-summarised, recording what a running delivery is expected to pay and reading it back on the card as
-expected rather than as earnings, delivering a delivery that carries an expectation and being offered
-the final amount, dismissing that offer and finding the delivery terminal with the expectation kept
-and no gross recorded, delivering one that carries no expectation and being asked nothing, reading a shift whose
-deliveries arrived in one offer and seeing exactly one heading over them with none over the add-on
-offer's card, hearing a card name the deliveries it was accepted with, advancing one delivery of an
-offer and finding its sibling where it was, recording an offer of two from the sheet and then a
-single delivery beside it, dismissing that sheet and recording nothing, combining two offers the
-driver recorded separately and finding one heading over all three deliveries afterwards, separating a
-grouped offer back into one offer per delivery, putting one delivery of a grouped offer into an offer
-of its own, combining two offers from a finished shift's history and finding both rows saying so with
-every recorded time kept, leaving the correction screen without changing anything, a shift of one delivery offering
-no correction at all, a store holding an offer with no deliveries being stated rather than crashed
-on, recording a tip a finished delivery received outside the platform's own amount and reading the three
-figures back off both the sheet and the row, a delivery holding two tips of different methods and
-reporting all three figures, correcting one tip and then removing it while the platform amount stays
-exactly as it was, a tip of nothing refused in the words of a tip, a delivery carrying tips and no
-platform amount saying there is no total rather than showing the tips as one, the earnings editor
-stating the tips already recorded beside a field that still holds the platform amount alone,
-correcting a recorded pause from a finished shift and watching the paused, working and hourly
-figures move while the elapsed, delivery and mileage figures do not, leaving that editor without
-writing anything, being refused a pause corrected over a recorded delivery and told which fact it
-collided with, deleting a pause recorded by mistake after a confirmation that states which way the
-working time moves, cancelling that confirmation, adding a pause that was never recorded and finding
-it opens refused rather than pre-filled, a shift with no pauses still offering to record one, none of
-those corrections being offered on a running or a paused shift, correcting the end of a shift
-DashPilot recorded as finishing late and watching the elapsed time, the recorded mileage, the capture
-segments and the hourly figure all follow while the mileage lands on what the retained positions
-support rather than on a figure scaled by the time removed, declining that confirmation and finding
-the shift and its whole route exactly as recorded, being refused an end corrected over recorded
-delivery work and told **which delivery and which event** it collided with, moving an end later and
-being told that no route or mileage comes with the extra time and then finding that none did, no end
-correction being offered on a running shift, correcting the times of a delivery DashPilot recorded
-two hours after the order was handed over and watching its duration and hourly figure follow while
-its wait, its amount, its terminal state and the shift's recorded mileage do not, being refused a
-delivery time corrected behind its own arrival and told to correct that one as well, no delivery time
-correction being offered on a running shift, driving the whole real recovery end to end (the shift
-end refused and the blocking delivery named, that delivery corrected, and the same end correction
-then accepted and trimming the route as it always did), reading a
-day beside the day before it with both figures and both coverages on screen,
-the percentage a finished and fully recorded pair of days states, the absence of one while a day is
-still in progress, an empty previous day said to hold nothing rather than shown as no earnings,
-finding every correction a completed delivery offers laid out in columns wide enough to read and
-each one hittable, the same controls becoming a single column at the largest accessibility text
-size,
-recording a fuel economy and a gas price on a finished shift and watching the estimate appear saying
-what it is based on and then move when the fuel economy doubles, one assumption alone naming the half
-that is missing while the half already recorded is still stated, the partial-route wording surviving
-onto the estimate, a fuel economy of zero refused with the editor holding what was typed and the
-shift left holding **neither** figure, the fields filling themselves from the last pair recorded and
-recording nothing when the driver leaves without saving, removing the pair leaving no estimate rather
-than one of nothing, reading the estimated net as the ledger it is with the recorded half saying it
-is recorded and the estimated half saying what it is based on, the partial route stated as a ceiling
-on the net rather than a floor, a shift with no estimate keeping every recorded figure and every
-gross rate while only the net says it is unavailable, a shift with no recorded amount having its
-missing earnings named, and
-deleting a shift through its confirmation.
+Testing is layered, and a behaviour is pinned at the lowest layer that can show it:
+
+1. **Domain and unit tests** (`DashPilotTests`, Swift Testing) prove every rule, figure, refusal,
+   wording and export field. They are fast, run whole on every pull request, and are where a new
+   behaviour is pinned first.
+2. **Integration tests** in the same target run the services against a real SwiftData store,
+   migrations from every frozen schema, and the seeded fixtures the journeys launch.
+3. **A smoke tier of UI journeys** (`.github/ui-smoke-journeys.txt`, at most 30) drives the critical
+   paths a driver's day depends on, on every pull request.
+4. **The rest of the UI suite** runs in the regression workflow and holds only what needs the
+   interface: navigation between screens, sheets and confirmations working together, focus and
+   keyboard behaviour, scroll reach, the largest accessibility text size, VoiceOver labels and
+   values, and state surviving leaving the app.
+
+A journey reads a whole screen or flow in one launch rather than one figure per launch: one pass
+down the screen in the order it is drawn, every refusal and cancellation on the way, and the
+arithmetic left to the domain suite it names in its documentation comment. The audit that brought
+the suite to this shape, the exact journeys it merged, removed and migrated, and why each remaining
+journey needs the interface, is on [UI suite audit](ui-suite-audit.md).
 
 The share sheet itself is never opened. `ShareLink` presents a system surface XCUITest cannot inspect
 reliably, and what the export journeys are for is proving DashPilot wrote a file and offered it — not
@@ -644,7 +586,8 @@ pins what a cancelled run cannot: both budgets inside their ranges, the pull-req
 in one job with the domain suite never narrowed, every UI journey in the regression workflow and the
 triggers it runs on, parallel testing off for the UI journeys, nothing skipped, retried or allowed to
 fail, the result bundles uploaded under `if: always()`, and every smoke entry naming a real journey,
-once, in a list of at most 45. It finds the checkout through its own `#filePath` and disables itself
+once, in a list of at most 30 that is at most half the suite, and the suite itself at most 90
+journeys. It finds the checkout through its own `#filePath` and disables itself
 where that checkout is not readable.
 
 !!! warning "Known flakiness"
