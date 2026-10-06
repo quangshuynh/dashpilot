@@ -79,6 +79,13 @@ struct SettingsView: View {
         .sheet(isPresented: $isEditingTarget) {
             HourlyTargetEditor()
         }
+        // On the list, beside the sheets, rather than on the row that opens it:
+        // a `List` row is loaded lazily, and a presentation attached to one
+        // stalled halfway up when the row was reached at the end of a long
+        // scroll at the largest text size.
+        .fullScreenCover(isPresented: $isShowingWelcome) {
+            OnboardingView(context: .revisit) { isShowingWelcome = false }
+        }
         .alert(
             "Setting Not Changed",
             isPresented: isShowingFailure,
@@ -368,9 +375,6 @@ struct SettingsView: View {
             }
             .accessibilityHint("Opens the introduction you saw when you first started DashPilot.")
             .accessibilityIdentifier("reopenOnboardingButton")
-            .fullScreenCover(isPresented: $isShowingWelcome) {
-                OnboardingView(context: .revisit) { isShowingWelcome = false }
-            }
 
             NavigationLink {
                 AcknowledgementsView()
