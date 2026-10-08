@@ -3,8 +3,7 @@ description: >-
   Selects the newest installed Xcode whose iOS Simulator SDK meets the project's
   deployment target, prints the tool versions, and chooses an available iPhone
   simulator on that runtime or newer. Sets DEVELOPER_DIR, REQUIRED_IOS_VERSION,
-  SIMULATOR_NAME and SIMULATOR_ID for the steps after it. Shared by ci.yml and
-  ui-regression.yml so the two runs build against the same choice.
+  SIMULATOR_NAME and SIMULATOR_ID for the steps after it. Used by ci.yml.
 
 # Xcode is deliberately not pinned. The runner image's newest Xcode is used,
 # and its version is printed below so a run says what it built with. Runs

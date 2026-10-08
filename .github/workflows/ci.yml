@@ -1,18 +1,25 @@
 name: CI
 
-# Builds DashPilot for an iOS simulator, runs the whole domain suite and the
-# curated UI smoke journeys listed in .github/ui-smoke-journeys.txt. No signing,
-# no archive, no Apple Developer account and no third-party CI service.
+# Builds DashPilot for an iOS simulator, runs the whole domain suite and then
+# the whole UI suite. No signing, no archive, no Apple Developer account and no
+# third-party CI service.
 #
-# The complete UI suite is not run here. It took 2h17m to 2h34m of a 2h28m to
-# 2h54m job on every pull request (runs 36963445708 to 37088088371), which made
-# feedback on a change slower than the change. It runs in ui-regression.yml on
-# main, weekly, on release tags and on demand, unchanged in what it covers.
+# There is one tier. The UI suite is the essential journeys only (see
+# docs/development/ui-suite-audit.md): everything a journey used to assert
+# that a domain or integration test can pin is pinned there, so every pull
+# request runs every journey and no second, larger suite exists to run later.
+# It also runs weekly against main, so a runner image or simulator runtime
+# change is noticed on a quiet week, on a release tag, and on demand.
 
 on:
   push:
     branches: [main]
+    tags: ['v*']
   pull_request:
+  schedule:
+    # Mondays 07:00 UTC.
+    - cron: '0 7 * * 1'
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -28,11 +35,11 @@ jobs:
     name: Build and test on iOS Simulator
     runs-on: macos-26
     # 2 to 4 minutes of build-for-testing and 5 to 8 of domain tests were
-    # measured on this runner; the smoke journeys are about 35 seconds each
-    # there, so about 20 minutes. 75 leaves room for a slow image without
-    # approaching the full suite's budget. A ceiling for a hung run, not a
-    # target.
-    timeout-minutes: 75
+    # measured on this runner. The 36 journeys took 2,377 s summed over their
+    # median durations in the last four full runs of the old regression
+    # workflow (37418449153 to 37614136154), about 40 minutes. 90 is a ceiling
+    # for a hung run with room for the slowest of those runs, not a target.
+    timeout-minutes: 90
     env:
       XCODE_PROJECT: DashPilot.xcodeproj
       XCODE_SCHEME: DashPilot
@@ -73,33 +80,18 @@ jobs:
             -only-testing:DashPilotTests \
             -resultBundlePath TestResults-Domain.xcresult
 
-      - name: Run the UI smoke journeys (DashPilotUITests)
+      - name: Run the UI journeys (DashPilotUITests)
         run: |
           set -euo pipefail
 
           rm -rf TestResults-UI.xcresult
-
-          # One -only-testing per listed journey; comments and blank lines are
-          # ignored. An empty selection would run every journey, so refuse it.
-          selection=()
-          while IFS= read -r journey; do
-            journey="${journey%%#*}"
-            journey="$(echo "$journey" | tr -d '[:space:]')"
-            [ -n "$journey" ] || continue
-            selection+=("-only-testing:DashPilotUITests/DashPilotUITests/$journey")
-          done < .github/ui-smoke-journeys.txt
-          if [ "${#selection[@]}" -eq 0 ]; then
-            echo "The smoke list selected no journeys." >&2
-            exit 1
-          fi
-          echo "Running ${#selection[@]} smoke journeys."
 
           xcodebuild test-without-building \
             -project "$XCODE_PROJECT" \
             -scheme "$XCODE_SCHEME" \
             -destination "platform=iOS Simulator,id=$SIMULATOR_ID" \
             -derivedDataPath DerivedData \
-            "${selection[@]}" \
+            -only-testing:DashPilotUITests \
             -parallel-testing-enabled NO \
             -resultBundlePath TestResults-UI.xcresult
 
