@@ -199,24 +199,14 @@ struct FuelAssumptionsEditor: View {
     private func seed() {
         currentDefaults = SettingsService(context: modelContext).currentFuelDefaults()
 
-        let recorded = shift.fuelAssumptions
-        let assumptions: FuelAssumptions
-        if recorded.hasAny {
-            assumptions = recorded
-            isSeededFromElsewhere = false
-        } else if currentDefaults.hasAny {
-            // The driver's own current defaults before an older shift's
-            // recorded pair: they said what they are driving and what fuel
-            // costs, and that is a better suggestion than a figure inferred
-            // from history.
-            assumptions = currentDefaults.assumptions
-            isSeededFromElsewhere = true
-        } else {
-            assumptions = ShiftService(context: modelContext).mostRecentFuelAssumptions()
-            isSeededFromElsewhere = assumptions.hasAny
-        }
+        let seed = FuelAssumptionsSeed.choose(
+            recorded: shift.fuelAssumptions,
+            currentDefaults: currentDefaults,
+            mostRecent: { ShiftService(context: modelContext).mostRecentFuelAssumptions() }
+        )
+        isSeededFromElsewhere = seed.isSuggestion
 
-        fill(from: assumptions)
+        fill(from: seed.assumptions)
         focusedField = .milesPerGallon
     }
 
