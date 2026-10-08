@@ -412,13 +412,11 @@ struct SettingsView: View {
     }
 
     private var gasPriceStatement: String {
-        guard let gasPrice else { return "Not set" }
-        return "\(gasPrice.formatted(locale: locale)) / gallon"
+        CurrentGasPriceWording.statement(gasPrice, locale: locale)
     }
 
     private var spokenGasPrice: String {
-        guard let gasPrice else { return "Not set" }
-        return "\(gasPrice.formatted(locale: locale)) per gallon"
+        CurrentGasPriceWording.spoken(gasPrice, locale: locale)
     }
 
     private var isShowingFailure: Binding<Bool> {

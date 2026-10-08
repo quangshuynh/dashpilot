@@ -62,6 +62,7 @@ test cannot see, such as a screen that renders a sentence the model never claime
 | Shared stops | Independent by default, both switches recorded with an offer as two identities, a shared stop refused on an offer of one, a subset recorded and replaced with a fresh identity and taken back, one alone refused with both kinds judged before either is written, the offer screen naming only its own offer, nothing else moving, allowed on a finished shift, a refused save leaving the store as it was, membership corrections (move, split, separate, merge) keeping the stops deliveries share, and captions that name siblings and claim no customer, address or place |
 | Resume driving after delivery progress | Off by default and with no row, persisted, changing it rewriting nothing; a parked pickup or Delivered resuming only when its stop has nothing left, a shared pickup or drop-off half done staying parked, Same drop-off never joining a pickup nor Same pickup a drop-off, an unmarked stacked order keeping it parked and left untouched, a paused or unparked shift untouched; one recorded pickup and one transition under Park and Resume, Resume's own pickup never recursing, a stretch chosen for a pickup still at Arrived holding the stop; a failed resume leaving the step and the parked vehicle, a failed step inventing no resume; working time unchanged; a new capture session after an automatic resume with nothing measured across the stretch; one Undo of step and driving that reopens the same stretch and drops the positions since, refused whole after a later event or parking again, leaving other deliveries alone, and a refused save changing nothing; the Siri and Lock Screen path |
 | Stack edits | The planner over every combination (joining two, joining additively through an existing group, two pickups in one stack, separating from a pair and from three, separating nothing, a finished member kept whole, each refusal named), restating one offer keeping other offers' statements; through the store: two separate offers marked Same pickup with no offer, number, instant or amount moving and no arrival manufactured, a larger stack regrouped, Same drop-off apart from the pickup, a picked-up delivery joinable with nothing recorded, delivered and cancelled deliveries refused with nothing written, a finished member kept, survival across a reopened on-disk store, a refused save, Park and Resume moving a cross-offer pair together, an edit while parked changing the next Park and not this Resume, captions naming cross-offer siblings, and export numbering one cross-offer group |
+| Fuel editor seed and gas price wording | What a finished shift's fuel editor opens on (the shift's own pair, else the current defaults, else the most recent shift's pair, only the first not a suggestion, and the store not read when it is not needed), and Settings stating no gas price as `Not set` and a recorded zero as `$0.00` |
 | Hourly target comparison | Above, near and below a $25.00 target with the 2% band inclusive at both edges, the rate compared at the cent it is shown at, missing rate or target and a zero target giving no comparison, the three statements and their spoken forms, no judgement in any wording, and a period counting each shift against its own target apart from shifts with no target or no rate |
 | Hourly target snapshot | A shift keeping the target it started with when the setting moves or is removed, read back through a fresh context; no target recorded as none, a target set mid-shift reaching the next shift only, one writer on a running shift refusing zero, a second write and a finished shift, settings refusing zero and keeping the previous target, a week's count through the period calculator, and the export field with the format version unchanged |
 | Hourly target persistence | v22 as the current version with its plan counts, frozen v21 with no target column and v22 with it on the shift and the settings row only, v21 and v20 stores migrating with no target anywhere and nothing recorded moved, and the default and a snapshot surviving a reopen |
@@ -396,18 +397,16 @@ Testing is layered, and a behaviour is pinned at the lowest layer that can show 
    behaviour is pinned first.
 2. **Integration tests** in the same target run the services against a real SwiftData store,
    migrations from every frozen schema, and the seeded fixtures the journeys launch.
-3. **A smoke tier of UI journeys** (`.github/ui-smoke-journeys.txt`, at most 30) drives the critical
-   paths a driver's day depends on, on every pull request.
-4. **The rest of the UI suite** runs in the regression workflow and holds only what needs the
-   interface: navigation between screens, sheets and confirmations working together, focus and
-   keyboard behaviour, scroll reach, the largest accessibility text size, VoiceOver labels and
-   values, and state surviving leaving the app.
+3. **The essential UI suite** (`DashPilotUITests`, 36 journeys, at most 40) drives what only a
+   running app can show: flows across screens and sheets, confirmations guarding a write, navigation,
+   state surviving leaving or relaunching the app, onboarding, the Live Activity's controls, and the
+   driving surface at the largest accessibility text size. Every pull request runs all of it.
 
 A journey reads a whole screen or flow in one launch rather than one figure per launch: one pass
 down the screen in the order it is drawn, every refusal and cancellation on the way, and the
-arithmetic left to the domain suite it names in its documentation comment. The audit that brought
-the suite to this shape, the exact journeys it merged, removed and migrated, and why each remaining
-journey needs the interface, is on [UI suite audit](ui-suite-audit.md).
+arithmetic left to the domain suite it names in its documentation comment. Which product risk each
+journey covers, which suites pin the rest, and how each of the 82 journeys before it was classified,
+is on [UI suite audit](ui-suite-audit.md).
 
 The share sheet itself is never opened. `ShareLink` presents a system surface XCUITest cannot inspect
 reliably, and what the export journeys are for is proving DashPilot wrote a file and offered it — not
@@ -451,9 +450,15 @@ Three lessons are worth repeating when adding journeys:
   taking 5 s or more, up to 48 s for one evaluation, while a typed button query in the same second
   took 0.24 s. They are `NavigationLink`s, reported as buttons in every journey, and are now queried
   through `app.buttons`. Keep `.any` for elements whose type really varies.
-- A wait's timeout bounds the **condition**, not the time XCTest takes to read it. A reading that
-  returns after the deadline is still evaluated; `waitForStillFrame(of:)` once discarded it and
-  failed with the row still and wholly on screen.
+- A wait's timeout bounds the **condition**, not the time XCTest takes to read it. Wait through
+  `waitUntil` (or `appears()` and `disappears()`, which use it), never `XCTNSPredicateExpectation` or
+  `waitForExistence`: on a loaded runner one reading can outlast the whole budget, and those give a
+  slow condition a single reading. `waitUntil` decides on at least two, the second begun after the
+  first returned. `waitForStillFrame(of:)` follows the same rule for a frame that has to stop moving.
+- Tap a confirmation or alert button with `tapClosingDialog`, which waits for the dialog to close. A
+  synthesized tap can land on the right pixel and still not be acted on under load (PR run
+  37525485173), and without the wait the journey fails several steps later on a figure that rightly
+  did not move.
 - Proving a sheet does **not** appear needs an ordering argument rather than a sleep. The
   expected-pay confirmation is raised by the same state change that removes the delivered card, so
   waiting for the card to go and then finding no sheet is a real negative; the journey then opens
@@ -532,103 +537,68 @@ production change and needs its own scope.
 
 ## Continuous integration
 
-Two workflows run the tests, on a GitHub-hosted `macos-26` runner with `contents: read` and nothing
-more, and share `.github/actions/prepare-simulator` for the first three steps:
+One workflow runs the tests, on a GitHub-hosted `macos-26` runner with `contents: read` and nothing
+more. `.github/actions/prepare-simulator` does its first three steps:
 
 1. **Selects an Xcode.** It reads `IPHONEOS_DEPLOYMENT_TARGET` out of the project and picks the
    newest installed Xcode whose iOS simulator SDK is at least that version, rather than hardcoding
    one. If none qualifies, it fails with a message naming what it found. It is deliberately not
-   pinned; see [UI suite audit](ui-suite-audit.md#xcode-is-not-pinned).
+   pinned: no failure has been traced to a toolchain change.
 2. **Prints tool versions**, so a failure can be read against the exact toolchain that produced it.
 3. **Selects a simulator.** It queries `simctl` for available iPhone simulators on runtimes at or
    above the deployment target and uses the newest, by UDID.
 
 | Workflow | When | Tests | Budget |
 | --- | --- | --- | --- |
-| `ci.yml` | Pull requests and pushes to `main` | One `build-for-testing`, the **whole** domain suite, then the UI journeys named in `.github/ui-smoke-journeys.txt` | 75 min |
-| `ui-regression.yml` | Pushes to `main`, Mondays 07:00 UTC, `v*` tags, manual dispatch | One `build-for-testing`, then **every** UI journey | 210 min |
+| `ci.yml` | Pull requests, pushes to `main`, Mondays 07:00 UTC, `v*` tags, manual dispatch | One `build-for-testing`, the **whole** domain suite, then **every** UI journey | 90 min |
 
-The UI journeys run serially in both, and nothing is skipped, retried or excused. The split exists
-because the whole UI suite took two to three hours and made feedback on every change slower than the
-change: a pull request now runs the critical paths, and the broad regression runs after a merge,
-weekly and before a release tag, still in full. How the journeys were classified and which moved is
-on [UI suite audit](ui-suite-audit.md). Obsolete runs on the same ref are cancelled through each
-workflow's concurrency group, and both upload their result bundles under `if: always()`.
+The UI journeys run serially, and nothing is skipped, retried or excused. There is one tier because
+the UI suite holds only the essential journeys: a second, larger suite would repeat it or repeat the
+domain suite. Why, and what each journey covers, is on [UI suite audit](ui-suite-audit.md). Obsolete
+runs on the same ref are cancelled through the workflow's concurrency group, and both result bundles
+are uploaded under `if: always()`.
 
 ### How long a run takes, and the budget it is given
 
-`ui-regression.yml`'s `timeout-minutes` is **210**, and the number is measured rather than chosen
-for comfort; `ci.yml`'s is **75**, sized for a build, the domain suite and the smoke journeys at about
-35 s each on the runner.
+Before the suite was reduced, a full run of 82 journeys spent 5,861 to 6,534 s in XCTest on the
+runner (runs 37418449153, 37478065976, 37525515201, 37614136154), and pull requests ran 26 of them.
+The 36 essential journeys come to about 2,290 s summed over their medians in those runs; the first
+run of the essential suite on the runner is the figure to size from. 2 to 4 minutes of
+`build-for-testing` and 5 to 8 of domain tests come before it.
 
-The latest measured runs, with 238 to 242 tests, took **2h28m to 2h42m** end to end (runs
-36963445708, 36947255282, 36946410015, 36916384792, 36916358022 and 36963465798): 2 to 4 minutes of
-`build-for-testing`, 5 to 8 of domain tests and 2h17m to 2h26m of UI journeys, about 35 seconds a
-journey on the runner against about 28 locally. Main's run 37007996270, on the same 242 tests, then
-took **2h54m**, with the UI journeys alone at 2h34m: six minutes inside the previous budget of 180,
-while runs of one tree vary by about a quarter of an hour. That is what raised it to 210, which
-leaves about half an hour over the slowest measured run. It is still a ceiling a healthy run stays
-under, not a target, and it is raised again only by a run that was making progress and reached it.
+**The budget is a ceiling for a hung run, not a target.** A healthy run finishes well inside it. If a
+run reaches it, read the result bundle first: a run that had stopped making progress is a defect to
+find, and only one that was still passing journeys is evidence for a larger number. A cancelled run's
+last log line is not a diagnosis either: `main` run 35553963157, cancelled by an earlier 60-minute
+budget, stopped on a journey that was passing. The bundle is uploaded on cancellation as well as on
+failure, which is what `if: always()` is there for.
 
-The first `ui-regression.yml` run over the 82 audited journeys (run 37418449153, two journeys red)
-spent **97.7 minutes** in XCTest and **101.4 minutes** in the whole test step. The next (run
-37478065976, one journey red) spent **108.9 minutes** (6,534 s) in XCTest and **113.5 minutes**
-(6,809 s) in the whole test operation. The budget stays at 210 until an all-green run gives a
-measurement to size it from, with headroom for the variance above.
+### Reading a red run
 
-### What the red regression runs had in common
+The UI suite is sensitive to the simulator's own background work. On a fresh CI simulator,
+`mediaanalysisd`, `searchd` and Spotlight's embedding pipeline run in bursts, and during a burst one
+accessibility reading or one synthesized event can take tens of seconds while the app itself answers
+at once. The red runs of the 82-journey suite each failed a different journey, at a step that
+overlapped such a burst; the evidence, per run, is in [UI suite audit](ui-suite-audit.md#what-the-red-runs-had-in-common).
+So:
 
-Runs 37418449153 and 37478065976 each failed a different History journey, and the journey before
-had been fixed, which looks like a suite degrading over two hours. The result bundles say otherwise:
-
-- **Nothing degrades with run length.** Launch time and the gaps between XCTest steps are slightly
-  *shorter* in the last third of each run than in the first, and the failures came at positions 2,
-  22 and 32 of 82.
-- **The slow stretches are the simulator's own background work.** The bundle's system log shows
-  Spotlight's on-device embedding pipeline (`spotlightknowledged`), scheduled by `dasd` about every
-  40 minutes on a fresh simulator, running through the worst stretch of both runs (positions 30 to
-  33). The app's main thread answered every XCTest request at once throughout; the time went
-  between the runner and the app.
-- **Each failure was a fixed short budget overlapping such a stretch**: a 5 s wait in
-  `openFirstShift`, an alert's Cancel read before the alert had closed, and an 8 s still-frame wait
-  spent entirely on one 25 s reading of the History row. Every journey is isolated (each launch
-  builds its own in-memory store, and only the welcome's flag lives in `UserDefaults`, which
-  throwaway launches ignore), and none of the three reproduced locally alone, in sequence, or in CI
-  order.
+- Open the failing journey's activities and its **Screen at failure** attachment first; the
+  recording is per journey and a few minutes long.
+- Compare the failing step's time with the bundle's system log (`log show --archive` on the
+  `system.logarchive` under the diagnostics) for `mediaanalysisd`, `searchd` or
+  `spotlightknowledged` activity.
+- A failure that does not repeat, at a step whose recording shows the app in the right state, is the
+  host. One that repeats, or whose recording shows the wrong state, is the product or the journey.
 
 Sharding the suite across fresh simulators would not help: each fresh simulator starts its own
-first-boot indexing, which is when the first journeys stall. The remedy is in the helpers: typed
-queries, and waits bounded by their condition rather than by how long one reading takes.
+first-boot indexing.
 
-The figures below are the history that set the number.
-
-`main` run 35553963157 was cancelled by an earlier 60-minute budget with the UI journeys still
-executing. It had spent 3m25s on `build-for-testing`, 5m43s on the domain suite and 50m37s on the UI
-journeys, in which **87 of the 151 journeys had passed and none had failed**. Finishing the rest at
-that rate projects a UI step of about 88 minutes and a whole job of about 100. A virtualised runner
-is slower and more variable than a developer's machine, so the budget is set well above the
-projection rather than beside it, and stays far inside the six hours a GitHub-hosted job is capped
-at.
-
-Two things follow from this and are worth stating, because a cancelled run reads like a failing one:
-
-- **The budget is a ceiling for a hung run, not a target.** A healthy run finishes well inside it.
-  If a run reaches the budget, read the result bundle first: a run that had stopped making progress
-  is a defect to find, and only one that was still passing journeys is evidence for a larger number.
-- **A cancelled run's last log line is not a diagnosis.** Run 35553963157 was cancelled while a
-  journey naming `fuelMilesPerGallonField` was on screen, and that journey was not failing; it was
-  simply the one the clock landed on. Read the result bundle, which is uploaded on cancellation as
-  well as on failure. That run's upload step ran and succeeded after the job was cancelled, which is
-  what `if: always()` is there for.
-
-`ContinuousIntegrationWorkflowTests` in the domain suite reads both workflows and the smoke list and
-pins what a cancelled run cannot: both budgets inside their ranges, the pull-request stages in order
-in one job with the domain suite never narrowed, every UI journey in the regression workflow and the
-triggers it runs on, parallel testing off for the UI journeys, nothing skipped, retried or allowed to
-fail, the result bundles uploaded under `if: always()`, and every smoke entry naming a real journey,
-once, in a list of at most 30 that is at most half the suite, and the suite itself at most 90
-journeys. It finds the checkout through its own `#filePath` and disables itself
-where that checkout is not readable.
+`ContinuousIntegrationWorkflowTests` in the domain suite reads the workflow and pins what a cancelled
+run cannot: the budget inside its range, the stages in order in one job with neither suite narrowed,
+the five triggers, no second UI workflow, parallel testing off for the UI journeys, nothing skipped,
+retried or allowed to fail, the result bundles uploaded under `if: always()`, the UI suite at most 40
+journeys, and the audit's traceability table naming exactly the journeys that exist. It finds the
+checkout through its own `#filePath` and disables itself where that checkout is not readable.
 
 !!! warning "Known flakiness"
 

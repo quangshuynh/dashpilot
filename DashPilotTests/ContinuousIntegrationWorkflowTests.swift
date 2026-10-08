@@ -27,128 +27,102 @@ import Testing
 /// checked here is meaning, not shape.
 @Suite("Continuous integration workflow", .enabled(if: CIWorkflow.isReadable))
 struct ContinuousIntegrationWorkflowTests {
-    private func pullRequestWorkflow() throws -> String {
-        try #require(CIWorkflow.contents(of: CIWorkflow.pullRequestURL))
+    private func workflow() throws -> String {
+        try #require(CIWorkflow.contents(of: CIWorkflow.workflowURL))
     }
 
-    private func regressionWorkflow() throws -> String {
-        try #require(CIWorkflow.contents(of: CIWorkflow.regressionURL))
-    }
-
-    /// The pull-request budget fits a build, the domain suite and the smoke
-    /// journeys, and is far below the full suite's: if it ever has to grow
-    /// toward that, the smoke list has stopped being a smoke list.
-    @Test("The pull-request job has a budget sized for the smoke journeys")
-    func pullRequestBudgetIsSized() throws {
-        let budget = try #require(CIWorkflow.jobTimeoutMinutes(in: try pullRequestWorkflow()))
-        #expect(budget >= 30)
+    /// The budget fits a build, the domain suite and the essential journeys.
+    /// 60 is the number that cancelled run 35553963157 with journeys still
+    /// executing, and the ceiling stops the suite growing back toward the
+    /// two-hour run it replaced without anyone deciding to.
+    @Test("The job has a budget sized for the essential suite")
+    func budgetIsSized() throws {
+        let budget = try #require(CIWorkflow.jobTimeoutMinutes(in: try workflow()))
+        #expect(budget > 60)
         #expect(budget <= 120)
     }
 
-    /// The full suite keeps the budget measured for it. 60 is the number that
-    /// cancelled run 35553963157 with journeys still executing.
-    @Test("The full UI suite keeps a budget it can finish in")
-    func regressionBudgetIsRealistic() throws {
-        let budget = try #require(CIWorkflow.jobTimeoutMinutes(in: try regressionWorkflow()))
-        #expect(budget != 60)
-        #expect(budget >= 120)
-        #expect(budget <= 360)
-    }
-
-    /// Build, the whole domain suite, then the smoke journeys, in one job, in
+    /// Build, the whole domain suite, then the whole UI suite, in one job, in
     /// that order, and the UI journeys one at a time.
-    @Test("Pull requests build, run every domain test, then the smoke journeys")
-    func pullRequestStagesSurvive() throws {
-        let contents = try pullRequestWorkflow()
+    @Test("Every run builds, runs every domain test, then every UI journey")
+    func stagesSurvive() throws {
+        let contents = try workflow()
 
         let build = try #require(contents.range(of: "xcodebuild build-for-testing"))
-        let domain = try #require(contents.range(of: "-only-testing:DashPilotTests"))
-        let ui = try #require(contents.range(of: "ui-smoke-journeys.txt\n"))
+        let domain = try #require(contents.range(of: "-only-testing:DashPilotTests \\"))
+        let ui = try #require(contents.range(of: "-only-testing:DashPilotUITests \\"))
 
         #expect(build.lowerBound < domain.lowerBound)
         #expect(domain.lowerBound < ui.lowerBound)
         #expect(CIWorkflow.jobNames(in: contents) == ["build-and-test"])
         #expect(contents.contains("-parallel-testing-enabled NO"))
-        // The domain suite is never narrowed to a subset.
+        // Neither suite is ever narrowed to a subset.
         #expect(!contents.contains("-only-testing:DashPilotTests/"))
-        // An empty selection would silently run everything or nothing.
-        #expect(contents.contains("The smoke list selected no journeys."))
+        #expect(!contents.contains("-only-testing:DashPilotUITests/"))
     }
 
-    /// The broad regression still runs every journey, serially, and runs on
-    /// the occasions it exists for.
-    @Test("The full UI suite runs every journey on main, weekly, on tags and on demand")
-    func regressionRunsEverything() throws {
-        let contents = try regressionWorkflow()
-
-        let build = try #require(contents.range(of: "xcodebuild build-for-testing"))
-        // The whole target, with the line continuing to the next flag.
-        let ui = try #require(contents.range(of: "-only-testing:DashPilotUITests \\"))
-        #expect(build.lowerBound < ui.lowerBound)
-        #expect(!contents.contains("-only-testing:DashPilotUITests/"))
-        #expect(contents.contains("-parallel-testing-enabled NO"))
-        #expect(CIWorkflow.jobNames(in: contents) == ["ui-regression"])
-
+    /// One tier: the workflow that gates a pull request is the one that runs
+    /// on main, weekly, on a release tag and on demand, and no second UI
+    /// workflow exists beside it.
+    @Test("The one workflow runs on pull requests, main, weekly, tags and on demand")
+    func triggersSurvive() throws {
+        let contents = try workflow()
+        #expect(contents.contains("pull_request:"))
         #expect(contents.contains("branches: [main]"))
         #expect(contents.contains("schedule:"))
         #expect(contents.contains("workflow_dispatch:"))
         #expect(contents.contains("tags: ['v*']"))
+        #expect(CIWorkflow.contents(of: CIWorkflow.root.appending(path: ".github/workflows/ui-regression.yml")) == nil)
     }
 
-    /// Selection is not weakened, and nothing is excused from failing, in
-    /// either workflow.
+    /// Selection is not weakened, and nothing is excused from failing.
     @Test("No test is skipped, retried or allowed to fail")
     func selectionIsNotWeakened() throws {
-        for contents in [try pullRequestWorkflow(), try regressionWorkflow()] {
-            #expect(!contents.contains("-skip-testing"))
-            #expect(!contents.contains("continue-on-error"))
-            #expect(!contents.contains("-retry-tests-on-failure"))
-            #expect(!contents.contains("test-iterations"))
-        }
+        let contents = try workflow()
+        #expect(!contents.contains("-skip-testing"))
+        #expect(!contents.contains("continue-on-error"))
+        #expect(!contents.contains("-retry-tests-on-failure"))
+        #expect(!contents.contains("test-iterations"))
     }
 
     /// Run 35553963157 proves the upload survives a cancellation.
     @Test("Result bundles are uploaded whatever the run did")
     func resultsAreUploadedOnFailureAndCancellation() throws {
-        for contents in [try pullRequestWorkflow(), try regressionWorkflow()] {
-            let upload = try #require(contents.range(of: "actions/upload-artifact"))
-            let always = try #require(contents.range(of: "if: always()"))
-            #expect(always.lowerBound < upload.lowerBound)
-            #expect(contents.contains("TestResults-UI.xcresult"))
-        }
-        #expect(try pullRequestWorkflow().contains("TestResults-Domain.xcresult"))
+        let contents = try workflow()
+        let upload = try #require(contents.range(of: "actions/upload-artifact"))
+        let always = try #require(contents.range(of: "if: always()"))
+        #expect(always.lowerBound < upload.lowerBound)
+        #expect(contents.contains("TestResults-UI.xcresult"))
+        #expect(contents.contains("TestResults-Domain.xcresult"))
     }
 
-    /// The whole UI suite stays a suite of journeys only the interface can
-    /// check. A behaviour the domain suite can pin belongs there; the audit
-    /// that brought the suite to this size, and the rules for adding to it, are
-    /// in docs/development/ui-suite-audit.md. Raise the ceiling deliberately,
-    /// not to make room.
+    /// The UI suite stays the essential journeys: a behaviour the domain suite
+    /// can pin belongs there. The audit that brought the suite to this size,
+    /// the risk each journey covers and the rules for adding one are in
+    /// docs/development/ui-suite-audit.md. Raise the ceiling deliberately, not
+    /// to make room.
     @Test("The UI suite stays below its ceiling")
     func uiSuiteStaysSmall() throws {
         let source = try #require(CIWorkflow.contents(of: CIWorkflow.uiTestSourceURL))
         let suite = source.components(separatedBy: "    func test").count - 1
         #expect(suite > 0)
-        #expect(suite <= 90, "\(suite) UI journeys")
+        #expect(suite <= 40, "\(suite) UI journeys")
     }
 
-    /// Every listed journey exists, none is listed twice, and the list stays a
-    /// smoke list: at most 30 journeys and at most half the suite. A renamed journey left in the list would otherwise make
-    /// `-only-testing` select nothing for it and pass without running it.
-    @Test("The smoke list names real journeys, once each, and stays short")
-    func smokeListIsValid() throws {
-        let journeys = try #require(CIWorkflow.smokeJourneys())
+    /// Every journey is named in the traceability table, and the table names
+    /// no journey that is gone, so the record of which risk each one covers
+    /// cannot drift from the suite it describes.
+    @Test("Every journey is in the traceability table, and the table names no other")
+    func traceabilityNamesTheSuite() throws {
         let source = try #require(CIWorkflow.contents(of: CIWorkflow.uiTestSourceURL))
-
-        let suite = source.components(separatedBy: "    func test").count - 1
-        #expect(journeys.count >= 10)
-        #expect(journeys.count <= 30)
-        #expect(journeys.count * 2 <= suite, "The smoke tier is the critical half of the suite at most")
-        #expect(Set(journeys).count == journeys.count, "A journey is listed twice")
-        for journey in journeys {
-            #expect(journey.hasPrefix("test"), "\(journey) is not a test name")
-            #expect(source.contains("func \(journey)()"), "\(journey) is listed but no journey has that name")
-        }
+        let audit = try #require(CIWorkflow.contents(of: CIWorkflow.auditURL))
+        let journeys = Set(CIWorkflow.names(matching: "    func (test[A-Za-z0-9]+)\\(\\)", in: source))
+        let section = try #require(audit.components(separatedBy: "## Traceability").dropFirst().first)
+        let table = section.components(separatedBy: "\n## ").first ?? section
+        let listed = Set(CIWorkflow.names(matching: "`(test[A-Za-z0-9]+)`", in: table))
+        #expect(!journeys.isEmpty)
+        #expect(journeys.subtracting(listed).isEmpty, "Missing from the table: \(journeys.subtracting(listed).sorted())")
+        #expect(listed.subtracting(journeys).isEmpty, "No such journey: \(listed.subtracting(journeys).sorted())")
     }
 }
 
@@ -164,25 +138,22 @@ enum CIWorkflow {
         URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
     }
 
-    static var pullRequestURL: URL { root.appending(path: ".github/workflows/ci.yml") }
-    static var regressionURL: URL { root.appending(path: ".github/workflows/ui-regression.yml") }
-    static var smokeListURL: URL { root.appending(path: ".github/ui-smoke-journeys.txt") }
+    static var workflowURL: URL { root.appending(path: ".github/workflows/ci.yml") }
     static var uiTestSourceURL: URL { root.appending(path: "DashPilotUITests/DashPilotUITests.swift") }
+    static var auditURL: URL { root.appending(path: "docs/development/ui-suite-audit.md") }
 
-    static var isReadable: Bool { contents(of: pullRequestURL) != nil }
+    static var isReadable: Bool { contents(of: workflowURL) != nil }
 
     static func contents(of url: URL) -> String? {
         try? String(contentsOf: url, encoding: .utf8)
     }
 
-    /// The listed journey names, without comments or blank lines, in file
-    /// order: the same reading the workflow's shell loop performs.
-    static func smokeJourneys() -> [String]? {
-        guard let contents = contents(of: smokeListURL) else { return nil }
-        return contents.split(separator: "\n", omittingEmptySubsequences: false).compactMap { line in
-            let uncommented = line.split(separator: "#", maxSplits: 1, omittingEmptySubsequences: false).first ?? ""
-            let name = uncommented.trimmingCharacters(in: .whitespaces)
-            return name.isEmpty ? nil : name
+    /// Every first capture group of `pattern` in `contents`, in order.
+    static func names(matching pattern: String, in contents: String) -> [String] {
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
+        let range = NSRange(contents.startIndex..., in: contents)
+        return regex.matches(in: contents, range: range).compactMap { match in
+            Range(match.range(at: 1), in: contents).map { String(contents[$0]) }
         }
     }
 
