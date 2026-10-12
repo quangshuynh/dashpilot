@@ -72,6 +72,7 @@ struct ShiftEarningsEditor: View {
                     }
                 }
             }
+            .dashCanvas()
             .navigationTitle(hasRecordedEarnings ? "Edit Earnings" : "Add Earnings")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

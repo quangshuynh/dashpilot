@@ -91,6 +91,7 @@ struct ExpenseListView: View {
                 }
             }
         }
+        .dashCanvas()
         .navigationTitle("Expenses")
         .navigationBarTitleDisplayMode(.inline)
         .sheet(item: $editing) { subject in

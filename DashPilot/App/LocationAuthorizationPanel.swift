@@ -47,7 +47,7 @@ struct LocationAuthorizationPanel: View {
             } label: {
                 Text("Enable Location").frame(maxWidth: .infinity)
             }
-            .buttonStyle(.borderedProminent)
+            .dashPrimaryAction()
             .controlSize(.large)
             .accessibilityIdentifier("enableLocationButton")
 

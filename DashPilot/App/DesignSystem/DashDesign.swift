@@ -1,30 +1,9 @@
 import SwiftUI
 
-/// DashPilot's visual rules, in the handful of places they are stable enough to
-/// name.
-///
-/// ## What this is, and what it deliberately is not
-///
-/// A small vocabulary, not a framework. The app is built from ordinary SwiftUI:
-/// `List` sections are its surfaces, system button styles are its controls, and
-/// semantic colours carry light and dark mode. What had drifted was the numbers
-/// between them (padding of 10 in one card and 12 in the next, radii of 10 and
-/// 12, spacings picked per view), and the one question every screen has to
-/// answer the same way: which figure is the headline, and what is quieter.
-///
-/// So this holds a spacing scale, two radii, the surface treatments, a status
-/// vocabulary that never relies on colour alone, and DashPilot's one motif: a
-/// delivery as a numbered stop on a route. Typography lives beside it in
-/// ``DashTypography``. Nothing here hides composition: a view still reads as a
-/// `VStack` of `Text`s with modifiers on them. The rules are written out in
-/// `docs/development/design-system.md`.
-///
-/// ## Colour
-///
-/// One accent, the asset catalog's teal `AccentColor`, for the primary action,
-/// active progress and a selected choice, and nothing decorative. Every other
-/// hue is a status from ``DashStatusTint``, and each travels with a symbol and a
-/// word.
+/// A small native vocabulary: open financial figures on cloud-blue surfaces,
+/// compact operational figures on system surfaces, and outlined estimates.
+/// Navigation, controls, spacing during delivery work, and status meanings stay
+/// native. The shared palette also reaches the Live Activity.
 enum DashSpacing {
     /// Between a figure and the caption that qualifies it.
     static let xs: CGFloat = 2
@@ -44,7 +23,7 @@ enum DashRadius {
     /// Chips and small badges.
     static let small: CGFloat = 8
     /// Inset, status and estimate surfaces inside a list row.
-    static let surface: CGFloat = 12
+    static let surface: CGFloat = 16
 }
 
 /// The status hues, named once so a state reads the same on every screen and
@@ -68,14 +47,17 @@ extension View {
     /// so this is for the one thing inside it that has to read as set apart,
     /// not for every group of lines.
     ///
-    /// Filled with the **tertiary grouped** background, which is the system's
-    /// colour for content inside a grouped cell. The secondary system
-    /// background it used before is the same colour as the cell itself in dark
-    /// mode, so the surface vanished there; in light mode the two are the same.
+    /// Cloud fill and a quiet boundary distinguish a supporting action without
+    /// adding elevation. Increase Contrast strengthens that boundary.
     func dashInsetSurface() -> some View {
         padding(DashSpacing.lg)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(.tertiarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: DashRadius.surface))
+            .background(ShiftActivityPalette.cloud, in: RoundedRectangle(cornerRadius: DashRadius.surface))
+            .overlay {
+                RoundedRectangle(cornerRadius: DashRadius.surface)
+                    .strokeBorder(ShiftActivityPalette.outline, lineWidth: 1)
+                    .accessibilityHidden(true)
+            }
     }
 }
 
@@ -91,7 +73,7 @@ extension View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .overlay {
                 RoundedRectangle(cornerRadius: DashRadius.surface)
-                    .strokeBorder(Color.secondary.opacity(0.6), style: StrokeStyle(lineWidth: 1, dash: [5, 4]))
+                    .strokeBorder(ShiftActivityPalette.estimateOutline, style: StrokeStyle(lineWidth: 1, dash: [5, 4]))
                     .accessibilityHidden(true)
             }
     }
@@ -151,11 +133,11 @@ struct DashStopMarker: View {
     var body: some View {
         Text("\(number)")
             .dashFont(.metric)
-            .foregroundStyle(.white)
-            .lineLimit(1)
-            .minimumScaleFactor(0.5)
-            .frame(width: diameter, height: diameter)
-            .background(Circle().fill(isMuted ? Color.secondary : Color.accentColor))
+            .foregroundStyle(ShiftActivityPalette.onAction)
+            .fixedSize()
+            .frame(minWidth: diameter, minHeight: diameter)
+            .padding(.horizontal, DashSpacing.xs)
+            .background(Capsule().fill(isMuted ? ShiftActivityPalette.mutedFill : ShiftActivityPalette.actionFill))
             .accessibilityHidden(true)
     }
 }
@@ -300,11 +282,13 @@ struct DashMetric: View {
     /// of the figures under it.
     enum Emphasis {
         case hero
+        case financial
         case standard
 
         var role: DashTypography.Role {
             switch self {
             case .hero: .metricHero
+            case .financial: .financialHero
             case .standard: .metric
             }
         }
@@ -318,7 +302,7 @@ struct DashMetric: View {
     var emphasis: Emphasis = .standard
 
     var body: some View {
-        VStack(alignment: .leading, spacing: DashSpacing.xs) {
+        VStack(alignment: .leading, spacing: DashSpacing.sm) {
             Text(value)
                 .dashFont(isFigure ? emphasis.role : .body)
                 .foregroundStyle(isFigure ? .primary : .secondary)
@@ -498,5 +482,22 @@ struct DashMetricRow<Content: View>: View {
                 VStack(alignment: .leading, spacing: DashSpacing.lg) { content }
             }
         }
+    }
+}
+
+
+extension View {
+    /// An opaque, restrained blue canvas. List/Form still own their native rows.
+    func dashCanvas() -> some View {
+        scrollContentBackground(.hidden)
+            .background(ShiftActivityPalette.canvas)
+    }
+
+    /// Keep native pressed/disabled feedback while separating a filled action
+    /// from the lighter foreground accent used by dark-mode links.
+    func dashPrimaryAction() -> some View {
+        buttonStyle(.borderedProminent)
+            .tint(ShiftActivityPalette.actionFill)
+            .foregroundStyle(ShiftActivityPalette.onAction)
     }
 }

@@ -35,7 +35,7 @@ struct HistoryWeekSummaryView: View {
 
         var headline: DashMetric.Emphasis {
             switch self {
-            case .currentWeek: .hero
+            case .currentWeek: .financial
             case .olderWeek: .standard
             }
         }
@@ -158,7 +158,8 @@ struct HistoryWeekSummaryView: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .padding(.vertical, DashSpacing.sm)
+        .padding(.vertical, DashSpacing.md)
+        .listRowBackground(ShiftActivityPalette.cloud)
         // Keyed on the week **and** what its shifts record, so editing one of
         // them works this week out again and nothing else. Reading the
         // revision here is also what makes this body observe those facts. The

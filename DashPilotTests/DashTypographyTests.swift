@@ -5,7 +5,7 @@ import Testing
 import UIKit
 @testable import DashPilot
 
-/// The text roles: figures condensed and tabular, words standard and
+/// The text roles: operational figures condensed, financial figures open, words
 /// proportional, every role anchored to a Dynamic Type style.
 ///
 /// The roles are set in the system face, so there is no registration to
@@ -15,16 +15,16 @@ import UIKit
 @MainActor
 @Suite("Dash typography")
 struct DashTypographyTests {
-    @Test("Only the changing figures ask for tabular digits")
+    @Test("Operational and financial figures ask for tabular digits")
     func tabularIsForMetricsOnly() {
         let tabular = DashTypography.Role.allCases.filter(\.usesTabularFigures)
-        #expect(tabular == [.metricHero, .metric])
+        #expect(tabular == [.metricHero, .financialHero, .metric])
     }
 
-    @Test("Figures are condensed and words are not")
+    @Test("Only operational figures are condensed")
     func onlyFiguresAreCondensed() {
         for role in DashTypography.Role.allCases {
-            #expect((role.width == .condensed) == role.usesTabularFigures, "\(role)")
+            #expect((role.width == .condensed) == (role == .metricHero || role == .metric), "\(role)")
         }
     }
 
@@ -68,6 +68,7 @@ struct DashTypographyTests {
     @Test("Roles are anchored to text styles, so they scale with Dynamic Type")
     func rolesFollowTextStyles() {
         #expect(DashTypography.Role.metricHero.textStyle == .largeTitle)
+        #expect(DashTypography.Role.financialHero.textStyle == .largeTitle)
         #expect(DashTypography.Role.metricLabel.textStyle == .footnote)
         #expect(DashTypography.Role.supporting.textStyle == .caption)
         #expect(DashTypography.Role.control.textStyle == .headline)

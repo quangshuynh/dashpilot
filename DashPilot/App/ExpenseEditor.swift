@@ -56,6 +56,7 @@ struct ExpenseEditor: View {
                 noteSection
                 if isEditing { deleteSection }
             }
+            .dashCanvas()
             .navigationTitle(isEditing ? "Edit Expense" : "Add Expense")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

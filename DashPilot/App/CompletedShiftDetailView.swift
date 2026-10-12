@@ -139,6 +139,7 @@ struct CompletedShiftDetailView: View {
             exportSection
             deleteSection
         }
+        .dashCanvas()
         .navigationTitle(shift.startedAt.formatted(date: .abbreviated, time: .omitted))
         .navigationBarTitleDisplayMode(.inline)
         // Keyed by the shift **and its recorded end**, because correcting the end
@@ -239,7 +240,8 @@ struct CompletedShiftDetailView: View {
                     mileageMetric
                 }
             }
-            .padding(.vertical, DashSpacing.sm)
+            .padding(.vertical, DashSpacing.md)
+            .listRowBackground(ShiftActivityPalette.cloud)
         } header: {
             Text("Summary")
         } footer: {
@@ -260,7 +262,7 @@ struct CompletedShiftDetailView: View {
                 DashMetric(
                     value: earnings.formatted(locale: locale),
                     label: "Recorded earnings",
-                    emphasis: .hero
+                    emphasis: .financial
                 )
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel("Recorded gross earnings, \(earnings.formatted(locale: locale))")

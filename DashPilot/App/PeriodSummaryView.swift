@@ -185,6 +185,7 @@ struct PeriodSummaryView: View {
                 }
             }
         }
+        .dashCanvas()
         .navigationTitle("Summary")
         .navigationBarTitleDisplayMode(.inline)
         .task(id: measurementToken) { measureRoutes() }
@@ -406,7 +407,7 @@ struct PeriodSummaryView: View {
                         value: earnings.formatted(locale: locale),
                         label: "Recorded gross earnings",
                         detail: metrics.earningsCoverageStatement,
-                        emphasis: .hero
+                        emphasis: .financial
                     )
                 } else {
                     DashMetric(value: "No amount recorded", label: "Recorded gross earnings", isFigure: false)
@@ -416,6 +417,7 @@ struct PeriodSummaryView: View {
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(metrics.spokenEarningsStatement(locale: locale))
             .accessibilityIdentifier("periodEarnings")
+            .listRowBackground(ShiftActivityPalette.cloud)
 
             rateRow(metrics, .perWorkingHour, identifier: "periodWorkingHourRate")
             // How the shifts stood against their own targets, under the rate
@@ -450,7 +452,8 @@ struct PeriodSummaryView: View {
                     DashMetric(
                         value: total.formatted(locale: locale),
                         label: "Recorded expenses",
-                        detail: metrics.expenseBasisStatement
+                        detail: metrics.expenseBasisStatement,
+                        emphasis: .financial
                     )
                 } else {
                     DashMetric(value: "No expenses recorded", label: "Recorded expenses", isFigure: false)
@@ -459,6 +462,7 @@ struct PeriodSummaryView: View {
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(metrics.spokenExpenseStatement(locale: locale))
             .accessibilityIdentifier("periodExpenses")
+            .listRowBackground(ShiftActivityPalette.cloud)
 
             // Only the categories with a record in them. A category listed at
             // $0.00 would say the driver recorded that it cost nothing.

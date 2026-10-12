@@ -68,6 +68,7 @@ struct SettingsView: View {
             pickupWorkflowSection
             aboutSection
         }
+        .dashCanvas()
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
         .sheet(item: $editingVehicle) { subject in

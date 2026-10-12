@@ -129,7 +129,7 @@ struct NewOfferSheet: View {
                         .fixedSize(horizontal: false, vertical: true)
                         .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.borderedProminent)
+                .dashPrimaryAction()
                 .controlSize(.large)
                 .disabled(hasStarted)
                 .accessibilityIdentifier("confirmStartOfferButton")

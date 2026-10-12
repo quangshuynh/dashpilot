@@ -178,7 +178,7 @@ struct OnboardingView: View {
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity, minHeight: 50)
         }
-        .buttonStyle(.borderedProminent)
+        .dashPrimaryAction()
         .buttonBorderShape(.roundedRectangle(radius: DashRadius.surface))
         .accessibilityIdentifier(isLast ? "finishOnboardingButton" : "nextOnboardingButton")
     }
@@ -257,16 +257,9 @@ nonisolated struct OnboardingPage: Identifiable, Sendable {
     ]
 }
 
-/// The welcome's own background: warmer than the operational screens, still
-/// quiet enough for text at every size, in both appearances.
+/// The welcome shares the quiet canvas used by the main app in both appearances.
 enum OnboardingPalette {
-    static let background = Color(
-        UIColor { traits in
-            traits.userInterfaceStyle == .dark
-                ? UIColor(red: 0x1F / 255, green: 0x1A / 255, blue: 0x17 / 255, alpha: 1)
-                : UIColor(red: 0xFF / 255, green: 0xF8 / 255, blue: 0xEF / 255, alpha: 1)
-        }
-    )
+    static let background = ShiftActivityPalette.canvas
 }
 
 #if DEBUG

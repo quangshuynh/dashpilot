@@ -181,6 +181,7 @@ struct RootView: View {
             } message: { error in
                 Text(error.errorDescription ?? "The step could not be undone.")
             }
+            .dashCanvas()
             .navigationTitle("DashPilot")
             .toolbar {
                 // The conventional place for preferences, and the conventional
@@ -578,7 +579,7 @@ private struct StartShiftPanel: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.borderedProminent)
+            .dashPrimaryAction()
             .controlSize(.large)
             .accessibilityIdentifier("startShiftButton")
 

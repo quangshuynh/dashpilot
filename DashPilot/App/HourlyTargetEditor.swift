@@ -65,6 +65,7 @@ struct HourlyTargetEditor: View {
                     }
                 }
             }
+            .dashCanvas()
             .navigationTitle("Target")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

@@ -117,7 +117,7 @@ struct ShiftExportSheet: View {
                         .dashFont(.emphasis)
                         .frame(maxWidth: .infinity, minHeight: 44)
                 }
-                .buttonStyle(.borderedProminent)
+                .dashPrimaryAction()
                 .accessibilityLabel(format.spokenShareLabel)
                 .accessibilityIdentifier("shareExportButton")
             } else {
