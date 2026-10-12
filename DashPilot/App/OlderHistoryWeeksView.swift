@@ -45,6 +45,7 @@ struct OlderHistoryWeeksView: View {
 
     var body: some View {
         OlderHistoryWeeksList(week: HistoryWeek(containing: now, calendar: calendar), now: now)
+            .dashCanvas()
             .navigationTitle("Older Weeks")
             .navigationBarTitleDisplayMode(.inline)
             .onChange(of: scenePhase) { _, phase in

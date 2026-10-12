@@ -93,6 +93,7 @@ struct VehicleProfileEditor: View {
                     }
                 }
             }
+            .dashCanvas()
             .navigationTitle(isEditing ? "Edit Vehicle" : "Add Vehicle")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

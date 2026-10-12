@@ -162,6 +162,7 @@ struct DeliveryEarningsEditor: View {
                     }
                 }
             }
+            .dashCanvas()
             .navigationTitle(numbered.earningsActionTitle(hasEarnings: hasRecordedEarnings))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

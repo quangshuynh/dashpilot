@@ -1,5 +1,6 @@
 import SwiftUI
 import Testing
+import UIKit
 @testable import DashPilot
 
 /// The stop track draws a delivery's state; it must agree with the lifecycle
@@ -41,5 +42,51 @@ struct DashDesignTests {
         #expect(DashStatusTint.running == ShiftActivityPalette.tint(for: .running))
         #expect(DashStatusTint.paused == ShiftActivityPalette.tint(for: .paused))
         #expect(DashStatusTint.parked == ShiftActivityPalette.tint(for: .parked))
+    }
+}
+
+
+/// Measured color contracts, including the separately compiled widget palette.
+/// These catch a bright dark-mode link color accidentally becoming a white-text
+/// fill, and drift between the asset catalog and the extension.
+@MainActor
+@Suite("Design contrast")
+struct DashContrastTests {
+    @Test("Text pairs retain ordinary-text contrast in both appearances and contrast settings")
+    func textContrast() throws {
+        for style in [UIUserInterfaceStyle.light, .dark] {
+            for contrast in [UIAccessibilityContrast.normal, .high] {
+                let traits = UITraitCollection { traits in
+                    traits.userInterfaceStyle = style
+                    traits.accessibilityContrast = contrast
+                }
+                let pairs: [(Color, Color)] = [
+                    (ShiftActivityPalette.onAction, ShiftActivityPalette.actionFill),
+                    (ShiftActivityPalette.onAction, ShiftActivityPalette.mutedFill),
+                    (ShiftActivityPalette.accent, ShiftActivityPalette.cloud),
+                    (ShiftActivityPalette.accent, ShiftActivityPalette.canvas),
+                    (Color(uiColor: .label), ShiftActivityPalette.cloud)
+                ]
+                for (foreground, background) in pairs {
+                    let a = try luminance(UIColor(foreground).resolvedColor(with: traits))
+                    let b = try luminance(UIColor(background).resolvedColor(with: traits))
+                    let ratio = (max(a, b) + 0.05) / (min(a, b) + 0.05)
+                    #expect(ratio >= 4.5, "Text contrast \(ratio), appearance \(style.rawValue), contrast \(contrast.rawValue)")
+                }
+                let asset = try #require(UIColor(named: "AccentColor", in: .main, compatibleWith: traits))
+                let shared = UIColor(ShiftActivityPalette.accent).resolvedColor(with: traits)
+                #expect(abs(try luminance(asset.resolvedColor(with: traits)) - luminance(shared)) < 0.0001)
+            }
+        }
+    }
+
+    private func luminance(_ color: UIColor) throws -> Double {
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        #expect(color.getRed(&r, green: &g, blue: &b, alpha: &a))
+        let channels = [r, g, b].map { value -> Double in
+            let value = Double(value)
+            return value <= 0.04045 ? value / 12.92 : pow((value + 0.055) / 1.055, 2.4)
+        }
+        return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722
     }
 }

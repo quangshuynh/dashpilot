@@ -419,7 +419,7 @@ struct ActiveShiftPanel: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.borderedProminent)
+            .dashPrimaryAction()
             .controlSize(.large)
             .accessibilityIdentifier("resumeShiftButton")
         } else if isRouteSuspended {
@@ -430,7 +430,7 @@ struct ActiveShiftPanel: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.borderedProminent)
+            .dashPrimaryAction()
             .controlSize(.large)
             .accessibilityLabel("Resume driving. DashPilot starts recording your route again.")
             .accessibilityIdentifier("resumeDrivingButton")

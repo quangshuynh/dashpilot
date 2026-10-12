@@ -138,6 +138,7 @@ struct FuelAssumptionsEditor: View {
                     }
                 }
             }
+            .dashCanvas()
             .navigationTitle(hasRecordedAssumptions ? "Edit Fuel" : "Add Fuel")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

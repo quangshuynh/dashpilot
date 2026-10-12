@@ -63,7 +63,7 @@ struct DeliveryEntryBar: View {
         // hidden by it rather than read through it, and the list is inset by
         // the bar's height so every row can still be scrolled clear of it.
         .background {
-            Color(.systemGroupedBackground)
+            ShiftActivityPalette.canvas
                 .ignoresSafeArea(edges: .bottom)
                 .overlay(alignment: .top) { Divider() }
         }
@@ -101,7 +101,7 @@ struct DeliveryEntryBar: View {
         .accessibilityIdentifier("startDeliveryButton")
 
         if isProminent {
-            button.buttonStyle(.borderedProminent)
+            button.dashPrimaryAction()
         } else {
             button.buttonStyle(.bordered)
         }

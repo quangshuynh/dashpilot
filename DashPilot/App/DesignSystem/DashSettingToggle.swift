@@ -37,6 +37,7 @@ struct DashSettingToggle: View {
         Toggle(isOn: isOn) {
             DashSettingLabel(isDependent: isDependent, title: title, detail: showingDetail ? detail : nil)
         }
+        .tint(ShiftActivityPalette.actionFill)
         .disabled(!isAvailable)
         .accessibilityHint(hint)
         .accessibilityIdentifier(identifier)

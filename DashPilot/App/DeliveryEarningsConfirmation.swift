@@ -109,7 +109,7 @@ struct DeliveryEarningsConfirmation: View {
                         Text("Record as Gross Earnings")
                             .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.borderedProminent)
+                    .dashPrimaryAction()
                     .controlSize(.large)
                     .accessibilityLabel("Record gross earnings for \(numbered.title)")
                     .accessibilityIdentifier("confirmEarningsRecordButton")

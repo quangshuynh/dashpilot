@@ -812,7 +812,7 @@ private struct ActiveDeliveryCard: View {
                             .fixedSize(horizontal: false, vertical: true)
                             .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.borderedProminent)
+                    .dashPrimaryAction()
                     .controlSize(.large)
                     .accessibilityLabel(numbered.spokenLabel(for: action))
                     .accessibilityIdentifier("deliveryActionButton")

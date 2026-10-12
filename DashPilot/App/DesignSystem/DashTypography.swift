@@ -1,35 +1,15 @@
 import SwiftUI
 
-/// The text roles every DashPilot screen is written in, set in the system face.
-///
-/// ## Why the system face
-///
-/// Manrope, bundled before, and the system face were set side by side on
-/// DashPilot's own content (earnings, an hourly rate, a ticking clock, a
-/// delivery's title and state, a Settings explanation, a week's summary line, a
-/// delivery card at the largest accessibility size). The system face's tabular
-/// figures are tighter (Manrope's tabular one leaves gaps around each `1` in a
-/// clock), it follows Bold Text and Dynamic Type natively, it is the face the
-/// Live Activity already uses, and its condensed width sets a figure about a
-/// fifth narrower without bundling anything. See `docs/development/design-system.md`.
-///
-/// The app therefore bundles no font, and nothing here can fail to load.
-///
-/// ## Roles, not sizes
-///
-/// Each role is a system text style, a weight and, for figures, a width.
-/// Nothing outside this file names a point size. Views write
-/// `.dashFont(.metricHero)`.
-///
-/// ## Numbers
-///
-/// The metric roles are for figures that change while a driver watches them.
-/// ``DashFontModifier`` asks for tabular figures on those roles only, so a
-/// ticking value does not move sideways while ordinary text stays proportional.
+/// Semantic SF Pro roles shared by the existing screens. Operational figures
+/// use condensed tabular digits; financial headlines use open-width tabular
+/// digits. Words stay proportional. Every role follows Dynamic Type without
+/// a bundled font or fixed point size.
 enum DashTypography {
     enum Role: CaseIterable {
         /// The one figure a panel leads with.
         case metricHero
+        /// A recorded financial headline: open width, precise tabular figures.
+        case financialHero
         /// A figure in a row of figures under the hero.
         case metric
         /// What a figure is, under it.
@@ -51,7 +31,7 @@ enum DashTypography {
 
         var textStyle: Font.TextStyle {
             switch self {
-            case .metricHero: .largeTitle
+            case .metricHero, .financialHero: .largeTitle
             case .metric: .title3
             case .metricLabel: .footnote
             case .eyebrow: .footnote
@@ -67,6 +47,7 @@ enum DashTypography {
         var weight: Font.Weight {
             switch self {
             case .metricHero: .bold
+            case .financialHero: .semibold
             case .metric: .semibold
             case .metricLabel: .medium
             case .eyebrow: .semibold
@@ -79,18 +60,17 @@ enum DashTypography {
             }
         }
 
-        /// Figures are set condensed: denser, and read like an instrument.
-        /// Words never are.
+        /// Only operational figures use the compact instrument width.
         var width: Font.Width {
-            isFigure ? .condensed : .standard
+            self == .metricHero || self == .metric ? .condensed : .standard
         }
 
-        /// Figures that change while a driver watches them.
+        /// Keep monetary columns and changing timers aligned.
         var usesTabularFigures: Bool { isFigure }
 
         private var isFigure: Bool {
             switch self {
-            case .metricHero, .metric: true
+            case .metricHero, .financialHero, .metric: true
             default: false
             }
         }

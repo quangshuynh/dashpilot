@@ -1,36 +1,48 @@
 import SwiftUI
 import UIKit
 
-/// The Live Activity's colours: the app's status tints and its route accent,
-/// so the Lock Screen and the Dynamic Island say each state in the same hue the
-/// app does.
-///
-/// Compiled into the app and into the widget extension, like everything in this
-/// folder. The extension has no asset catalog, so the accent is spelled out
-/// here with the same light and dark values as the app's `AccentColor`, and
-/// `DashStatusTint` in the app reads its status hues from here, so the two can
-/// never drift apart. Each hue is the third signal after a symbol and a word.
+/// Shared appearance roles for the app and its Live Activity. The extension
+/// has no asset catalog. AccentColor mirrors the foreground accent here;
+/// filled controls deliberately use their own background and foreground pair.
 nonisolated enum ShiftActivityPalette {
-    /// The route accent: a control's tint, never decoration.
-    static let accent = Color(uiColor: UIColor { traits in
-        traits.userInterfaceStyle == .dark
-            ? UIColor(red: 0x1E / 255, green: 0x9C / 255, blue: 0x8B / 255, alpha: 1)
-            : UIColor(red: 0x0F / 255, green: 0x76 / 255, blue: 0x6E / 255, alpha: 1)
-    })
+    static let accent = adaptive(light: 0x315FCC, dark: 0x8EADFF, highLight: 0x244B9F, highDark: 0xB7CAFF)
+    static let actionFill = adaptive(light: 0x315FCC, dark: 0x315FCC, highLight: 0x244B9F, highDark: 0x244B9F)
+    static let onAction = Color.white
+    static let canvas = adaptive(light: 0xF5F7FB, dark: 0x161A22)
+    static let cloud = adaptive(light: 0xEBF0F8, dark: 0x222D40)
+    static let outline = adaptive(light: 0xCBD5E5, dark: 0x475773, highLight: 0x65758E, highDark: 0x99ABC9)
+    static let estimateOutline = adaptive(light: 0x65758E, dark: 0x99ABC9)
+    static let mutedFill = adaptive(light: 0x566174, dark: 0x566174)
 
-    /// Recording: the convention for it.
+    // State is always also named and given a symbol. Brand blue never replaces
+    // the recording red, paused orange, or parking-sign blue.
     static let running = Color.red
-    /// Working time stopped.
     static let paused = Color.orange
-    /// The vehicle parked, route not recording: the parking-sign convention.
     static let parked = Color.blue
 
-    /// The hue for a state the island and the card's header draw.
     static func tint(for status: ShiftActivityCompactStatus) -> Color {
         switch status {
         case .running: running
         case .paused: paused
         case .parked: parked
         }
+    }
+
+    private static func adaptive(
+        light: UInt32, dark: UInt32, highLight: UInt32? = nil, highDark: UInt32? = nil
+    ) -> Color {
+        Color(uiColor: UIColor { traits in
+            let isDark = traits.userInterfaceStyle == .dark
+            let highContrast = traits.accessibilityContrast == .high
+            let value = isDark
+                ? (highContrast ? highDark ?? dark : dark)
+                : (highContrast ? highLight ?? light : light)
+            return UIColor(
+                red: CGFloat((value >> 16) & 0xFF) / 255,
+                green: CGFloat((value >> 8) & 0xFF) / 255,
+                blue: CGFloat(value & 0xFF) / 255,
+                alpha: 1
+            )
+        })
     }
 }
