@@ -1,5 +1,11 @@
 # UI suite audit and CI
 
+Interval 2A retains the same 36 journeys. Existing journeys now also verify Home cold launch,
+Work recovery and Home start, workspace and Settings access, foreground selection retention,
+capture growth across tab navigation, Undo from Home, and AX5 controls above the native tab bar.
+Historical fixture helpers explicitly enter Work; financial helpers enter Money. The older test
+names below are retained so CI identifiers remain stable.
+
 DashPilot's UI suite is **36 essential journeys**, and every pull request runs all of them after the
 build and the whole domain suite. This page records why the suite has that shape: what the red runs
 before it had in common, how each of the 82 journeys it replaced was classified, which product risk

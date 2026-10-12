@@ -4,6 +4,47 @@ DashPilot is a SwiftUI app with no third-party runtime dependencies: one applica
 widget extension that draws the running shift's Live Activity and holds no logic of its own. The
 structure is kept flat and explicit; layers are introduced when a concrete problem calls for one.
 
+## Workspace and session ownership
+
+The native tabs are **Home**, **Work**, and **Money**, each with its own navigation stack.
+Settings uses one shared toolbar route on all three roots. The public app remains DashPilot.
+
+| Owner | Responsibility |
+| --- | --- |
+| `DashPilotApp` | The existing process store, authorization service, route capture service, and shared Live Activity service |
+| `RootView` | Unfinished-shift query, cold-launch selection, scene and authorization reconciliation, onboarding, week boundary clock, lifecycle actions, transient Undo and export presentation |
+| `HomeWorkspace` | Welcome, next-shift vehicle context, Start or Continue Shift, and links into Work History and Money |
+| `WorkWorkspace` | Existing shift and delivery panels, pinned delivery entry, current-week History, Older Weeks, completed-shift details and corrections |
+| `MoneyWorkspace` | Entry points to the existing expense ledger and period summaries, including comparisons and period export |
+
+Cold launch opens Work when any shift is unfinished, including a paused shift; otherwise it opens
+Home. Starting on Home calls the same `ShiftService` action as Work and selects Work only after a
+successful write. Continue Shift reveals Work without changing pause or parking state. Home's
+History action reveals Work's History. Both actions clear Work's pushed navigation path. Ordinary
+tab changes retain each stack; foreground return retains the selected tab.
+
+Tab appearance never starts or stops capture. Scene changes and authoritative shift changes still
+reconcile the existing services from above the tabs. The existing background App Intents and Live
+Activity actions are unchanged. There is no URL entry handler or new deep-link contract: a cold
+launch from the activity recovers into Work, and an already-open scene keeps its selection.
+
+Transient Undo is held and timed by the shell, and is available on all three workspace roots while
+the shift runs. The existing twenty-second window counts active-scene ticks and pauses during the
+post-delivery earnings confirmation. Tab changes neither clear nor restart it; pause, end, and a
+change of shift still clear it. Park feedback keeps its existing separate window. Undo remains
+ephemeral and does not survive process termination.
+
+Work presents grouping correction, Edit Stack, and delivery reopening from one item-driven sheet
+outside its List. Their existing editors keep their navigation and confirmation state when a
+delivery row is refreshed or recycled. The delivery panel requests the review destination; the
+workspace owns its presentation.
+
+Home reads no completed shifts or financial aggregates. Work retains the current-week query and
+off-main History measurements; its existing summary is reused until its week or record revision
+changes. The active route reading survives tab changes and extends from accepted samples rather
+than restarting the route walk. Money loads existing financial destinations only when opened.
+No schema, export, financial calculation, or persisted navigation preference changes.
+
 ## Layers
 
 | Layer | Rule |
@@ -57,8 +98,8 @@ duration.
 - Finding more than one unfinished shift is treated as a damaged store: the most recent is reported
   as active, the anomaly is logged as a fault, and starting another shift is still refused.
 
-The root view reads both lists through `@Query` (unfinished shifts, completed shifts) and calls the
-service to mutate, so SwiftData stays the single source of truth for what is displayed. Elapsed time
+The root view queries unfinished shifts; Work's current-week History section queries completed
+shifts in that week. Services perform mutations, so SwiftData stays the single source of truth. Elapsed time
 is rendered by a `TimelineView` that recomputes `Shift.elapsed(asOf:)` each second; no changing
 duration is stored, and VoiceOver reads the value to the minute rather than announcing seconds.
 
