@@ -22,6 +22,7 @@ struct WorkWorkspace: View {
 
     @Environment(LocationTrackingService.self) private var routeCapture
     @State private var handledFocusRequest: WorkFocusRequest?
+    @State private var activeReview: ActiveDeliveryReview?
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -66,7 +67,8 @@ struct WorkWorkspace: View {
                             DeliveryControlPanel(
                                 shift: activeShift,
                                 transientUndo: $transientUndo,
-                                pendingEarningsConfirmation: $pendingEarningsConfirmation
+                                pendingEarningsConfirmation: $pendingEarningsConfirmation,
+                                review: { activeReview = $0 }
                             )
                         }
                     } header: {
@@ -121,6 +123,17 @@ struct WorkWorkspace: View {
             .onChange(of: focusRequest) { _, _ in revealRequestedSection(using: proxy) }
             .onAppear { revealRequestedSection(using: proxy) }
         }
+        // Keep review state outside the List's recycled row. A row refresh
+        // must not discard navigation or the correction awaiting confirmation.
+        .sheet(item: $activeReview) { review in
+            if let activeShift {
+                switch review {
+                case .grouping: OfferCorrectionView(shift: activeShift)
+                case .stack: StackEditorView(shift: activeShift)
+                case .recovery: DeliveryRecoveryView(shift: activeShift)
+                }
+            }
+        }
     }
 
     private func revealRequestedSection(using proxy: ScrollViewProxy) {
@@ -128,4 +141,10 @@ struct WorkWorkspace: View {
         proxy.scrollTo(focusRequest.destination, anchor: .top)
         handledFocusRequest = focusRequest
     }
+}
+
+nonisolated enum ActiveDeliveryReview: String, Identifiable {
+    case grouping, stack, recovery
+
+    var id: String { rawValue }
 }

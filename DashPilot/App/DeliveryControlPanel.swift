@@ -47,6 +47,7 @@ struct DeliveryControlPanel: View {
     /// that its arriving and leaving move no card; see ``TransientUndoBar``.
     @Binding var transientUndo: TransientUndo?
     @Binding var pendingEarningsConfirmation: PendingDeliveryEarningsConfirmation?
+    let review: (ActiveDeliveryReview) -> Void
 
     @Environment(\.modelContext) private var modelContext
     /// Write-only from here, like ``RootView``'s: a delivery starting or
@@ -72,17 +73,6 @@ struct DeliveryControlPanel: View {
     /// delivery itself rather than as a flag, so the confirmation can name which
     /// one it is about and act on that record.
     @State private var pendingCancellation: NumberedDelivery?
-
-    /// Whether the sheet that corrects which deliveries arrived together is up.
-    @State private var isCorrectingOffers = false
-
-    /// Whether the sheet that marks which deliveries in progress share a stop
-    /// is up.
-    @State private var isEditingStack = false
-
-    /// Whether the sheet that reopens a delivery marked delivered by mistake is
-    /// up.
-    @State private var isReopeningDelivery = false
 
     /// The instant the progress reminders are derived against.
     ///
@@ -213,24 +203,6 @@ struct DeliveryControlPanel: View {
         } message: { error in
             Text(error.errorDescription ?? "The delivery could not be updated.")
         }
-        // A review action, reached from one control rather than from a button on
-        // every card, and writing nothing until a correction is confirmed inside
-        // it.
-        .sheet(isPresented: $isCorrectingOffers) {
-            OfferCorrectionView(shift: shift)
-        }
-        // The same kind of review action, for the stack in progress: which
-        // deliveries share a pickup or a drop-off, across offers. Each action
-        // inside writes identities only.
-        .sheet(isPresented: $isEditingStack) {
-            StackEditorView(shift: shift)
-        }
-        // The deliberate way back from a mis-tap, for the driver who did not
-        // catch the offer above. Like the correction sheet, it writes nothing
-        // until a reopening is confirmed inside it.
-        .sheet(isPresented: $isReopeningDelivery) {
-            DeliveryRecoveryView(shift: shift)
-        }
     }
 
     /// The reminders, above everything else on the panel.
@@ -291,7 +263,7 @@ struct DeliveryControlPanel: View {
     private var stackControl: some View {
         if activeDeliveries.count > 1 {
             Button {
-                isEditingStack = true
+                review(.stack)
             } label: {
                 Label("Edit Stack", systemImage: "link")
                     .labelStyle(DashCompactLabelStyle())
@@ -322,7 +294,7 @@ struct DeliveryControlPanel: View {
     private var correctionControl: some View {
         if shift.deliveries.count > 1 {
             Button {
-                isCorrectingOffers = true
+                review(.grouping)
             } label: {
                 Label("Correct Grouping", systemImage: "arrow.triangle.branch")
                     .labelStyle(DashCompactLabelStyle())
@@ -351,7 +323,7 @@ struct DeliveryControlPanel: View {
     private var recoveryControl: some View {
         if shift.deliveries.contains(where: { $0.state == .delivered }) {
             Button {
-                isReopeningDelivery = true
+                review(.recovery)
             } label: {
                 Label("Reopen a Delivered Delivery", systemImage: "arrow.uturn.backward.circle")
                     .labelStyle(DashCompactLabelStyle())
