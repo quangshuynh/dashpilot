@@ -155,7 +155,9 @@ struct ActiveShiftPanel: View {
         // them would be work proportional to the length of the shift, paid for
         // nothing.
         .task(id: shift.id) {
-            routeMeasurement = nil
+            // Returning to Work extends the existing reading. A new shift
+            // starts a new walk; switching tabs never does.
+            if routeMeasurement?.shiftID != shift.id { routeMeasurement = nil }
             measureRoute()
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(Self.refreshInterval))

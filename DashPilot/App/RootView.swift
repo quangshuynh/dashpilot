@@ -1,7 +1,7 @@
 import SwiftData
 import SwiftUI
 
-/// Entry screen: the shift control on top, completed shifts below.
+/// Stable scene shell. Session orchestration outlives each workspace presentation.
 struct RootView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(LocationAuthorizationService.self) private var locationAuthorization
@@ -22,6 +22,11 @@ struct RootView: View {
     /// the anomaly rather than the screen hiding it.
     @Query(filter: #Predicate<Shift> { $0.endedAt == nil }, sort: \Shift.startedAt, order: .reverse)
     private var unfinishedShifts: [Shift]
+
+    @State private var navigation = WorkspaceNavigation()
+    @State private var workFocus: WorkFocusRequest?
+    @State private var workPath = NavigationPath()
+    @State private var pendingEarningsConfirmation: PendingDeliveryEarningsConfirmation?
 
     @State private var lifecycleError: ShiftLifecycleError?
 
@@ -67,267 +72,210 @@ struct RootView: View {
         HistoryWeek(containing: now, calendar: calendar)
     }
 
+    private var workspaceTabs: some View {
+        TabView(selection: $navigation.selection) {
+            Tab("Home", systemImage: "house", value: Workspace.home) {
+                NavigationStack {
+                    HomeWorkspace(
+                        activeShift: activeShift,
+                        start: startShift,
+                        continueShift: {
+                            workFocus = WorkFocusRequest(destination: .activeShift)
+                            workPath = NavigationPath()
+                            navigation.selection = .work
+                        },
+                        history: {
+                            workPath = NavigationPath()
+                            workFocus = WorkFocusRequest(destination: .history)
+                            navigation.selection = .work
+                        },
+                        money: { navigation.selection = .money }
+                    )
+                    .safeAreaInset(edge: .bottom) { sharedUndoBar }
+                }
+            }
+            Tab("Work", systemImage: "briefcase", value: Workspace.work) {
+                NavigationStack(path: $workPath) {
+                    WorkWorkspace(
+                        activeShift: activeShift,
+                        routeReading: routeReading,
+                        pickupWorkflow: pickupWorkflow,
+                        currentWeek: currentWeek,
+                        now: now,
+                        focusRequest: workFocus,
+                        transientUndo: $transientUndo,
+                        pendingEarningsConfirmation: $pendingEarningsConfirmation,
+                        startShift: startShift,
+                        resumeShift: resumeShift,
+                        park: park,
+                        resumeDriving: resumeDriving,
+                        pauseShift: pauseShift,
+                        endShift: endShift,
+                        undoPickupWorkflowStep: undoPickupWorkflowStep,
+                        takeBackTransientUndo: takeBackTransientUndo,
+                        exportAllHistory: { isExportingHistory = true }
+                    )
+                }
+            }
+            Tab("Money", systemImage: "creditcard", value: Workspace.money) {
+                NavigationStack {
+                    MoneyWorkspace()
+                        .safeAreaInset(edge: .bottom) { sharedUndoBar }
+                }
+            }
+        }
+    }
+
     var body: some View {
-        NavigationStack {
-            List {
-                #if DEBUG
-                if let activeShift, LaunchArgument.isPresent(LaunchArgument.liveActivityPreview) {
-                    LiveActivityPreviewSection(shift: activeShift)
-                }
-                #endif
-
-                Section {
-                    if let activeShift {
-                        ActiveShiftPanel(
-                            shift: activeShift,
-                            routeReading: routeReading,
-                            resume: resumeShift,
-                            park: park,
-                            resumeDriving: resumeDriving,
-                            pickupWorkflow: pickupWorkflow.flatMap { $0.describes(activeShift) ? $0 : nil },
-                            undoPickupWorkflowStep: undoPickupWorkflowStep
-                        )
-                    } else {
-                        StartShiftPanel(start: startShift)
-                    }
-                }
-
-                if let activeShift {
-                    Section {
-                        // A paused shift is one the driver has said they are not
-                        // working, and a delivery started on it would be time
-                        // the app is simultaneously reporting as not worked. The
-                        // control is replaced by the reason rather than removed,
-                        // so the section does not silently vanish.
-                        if activeShift.isPaused {
-                            Text("Deliveries are not recorded while the shift is paused. Resume the shift to start one.")
-                                .dashFont(.body)
-                                .foregroundStyle(.secondary)
-                                .fixedSize(horizontal: false, vertical: true)
-                                .accessibilityIdentifier("pausedDeliveryNotice")
-                        } else {
-                            DeliveryControlPanel(shift: activeShift, transientUndo: $transientUndo)
-                        }
-                    } header: {
-                        Text("Deliveries")
-                    } footer: {
-                        Text("DashPilot records only what you tap. It is not connected to any delivery platform.")
-                    }
-
-                    // Below the deliveries: Pause and End are tapped once a
-                    // shift, and the vehicle and capture lines are context.
-                    Section {
-                        ActiveShiftControlsPanel(
-                            shift: activeShift,
-                            routeReading: routeReading,
-                            captureState: routeCapture.state,
-                            pause: pauseShift,
-                            end: endShift
-                        )
-                    } header: {
-                        Text("Shift")
-                    }
-                }
-
-                Section {
-                    LocationAuthorizationPanel()
-                } header: {
-                    Text("Location")
-                }
-
-                CurrentWeekHistorySection(week: currentWeek, now: now) {
-                    isExportingHistory = true
-                }
+        workspaceTabs
+        // Selection is decided only once for this scene, never on foreground return.
+        .onAppear { navigation.chooseInitialWorkspace(hasUnfinishedShift: activeShift != nil) }
+        .task(id: transientUndo?.id) {
+            guard transientUndo != nil else { return }
+            var remaining = DeliveryControlPanel.undoSeconds
+            while remaining > 0 {
+                try? await Task.sleep(for: .seconds(1))
+                guard !Task.isCancelled else { return }
+                guard scenePhase == .active, pendingEarningsConfirmation == nil else { continue }
+                remaining -= 1
             }
-            // Below the list rather than in it, so arriving and leaving move no
-            // delivery card under a driver's thumb. Only while the shift runs:
-            // a paused or ended shift has nothing it could take back.
-            .safeAreaInset(edge: .bottom) {
-                if let transientUndo, activeShift?.lifecycleState == .running {
-                    TransientUndoBar(undo: transientUndo, perform: takeBackTransientUndo)
-                }
+            transientUndo = nil
+        }
+        // The window an automated step can be taken back in, which is the
+        // one the app's immediate undo of a Delivered already keeps, counted
+        // in one-second ticks for the reason that one is. Restarted by each
+        // Park. When it passes, the Park line stays for as long as the
+        // vehicle is parked, without its Undo. (Resume Driving's line is in
+        // the bar below the list, which keeps its own window.)
+        .task(id: pickupWorkflow?.id) {
+            guard pickupWorkflow != nil else { return }
+            for _ in 0..<DeliveryControlPanel.undoSeconds {
+                try? await Task.sleep(for: .seconds(1))
+                guard !Task.isCancelled else { return }
             }
-            // Recording a newly accepted order, reachable from wherever the
-            // list has been scrolled to. A safe-area bar rather than an overlay:
-            // the list is inset by its height, so the last row scrolls fully
-            // above it and nothing stays hidden underneath. Applied after the
-            // Undo line, so the bar is at the very bottom and the line sits on
-            // it. Not drawn while paused, when no delivery can be started.
-            .safeAreaBar(edge: .bottom) {
-                if let activeShift, activeShift.lifecycleState == .running {
-                    DeliveryEntryBar(shift: activeShift)
-                }
+            pickupWorkflow?.undoableAction = nil
+        }
+        .alert(
+            "Step Not Undone",
+            isPresented: isShowingUndoError,
+            presenting: undoError
+        ) { _ in
+            Button("OK", role: .cancel) { undoError = nil }
+        } message: { error in
+            Text(error.errorDescription ?? "The step could not be undone.")
+        }
+        // The delivered record and its captured expectation survive workspace
+        // presentation changes. The Undo window waits until this sheet closes.
+        .sheet(item: $pendingEarningsConfirmation) { pending in
+            DeliveryEarningsConfirmation(numbered: pending.numbered, expected: pending.expected)
+        }
+        .sheet(isPresented: $isExportingHistory) {
+            ShiftExportSheet(scope: .allHistory)
+        }
+        .fullScreenCover(isPresented: $isShowingOnboarding) {
+            OnboardingView(context: .firstLaunch) {
+                OnboardingRecord.markCompleted()
+                isShowingOnboarding = false
             }
-            // The window an automated step can be taken back in, which is the
-            // one the app's immediate undo of a Delivered already keeps, counted
-            // in one-second ticks for the reason that one is. Restarted by each
-            // Park. When it passes, the Park line stays for as long as the
-            // vehicle is parked, without its Undo. (Resume Driving's line is in
-            // the bar below the list, which keeps its own window.)
-            .task(id: pickupWorkflow?.id) {
-                guard pickupWorkflow != nil else { return }
-                for _ in 0..<DeliveryControlPanel.undoSeconds {
-                    try? await Task.sleep(for: .seconds(1))
-                    guard !Task.isCancelled else { return }
-                }
-                pickupWorkflow?.undoableAction = nil
-            }
-            .alert(
-                "Step Not Undone",
-                isPresented: isShowingUndoError,
-                presenting: undoError
-            ) { _ in
-                Button("OK", role: .cancel) { undoError = nil }
-            } message: { error in
-                Text(error.errorDescription ?? "The step could not be undone.")
-            }
-            .dashCanvas()
-            .navigationTitle("DashPilot")
-            .toolbar {
-                // The conventional place for preferences, and the conventional
-                // glyph, so a driver finds it where every other app keeps it.
-                // Leading rather than beside Expenses, because the two answer
-                // different questions and a bar with two trailing controls
-                // invites a mis-tap with a thumb on the move.
-                //
-                // In the bar rather than in the list for the reason Expenses is:
-                // every row this screen gains pushes the shift history further
-                // down, and a setting is something a driver touches when they
-                // change vehicle, not something they read.
-                ToolbarItem(placement: .topBarLeading) {
-                    NavigationLink {
-                        SettingsView()
-                    } label: {
-                        Image(systemName: "gearshape")
-                    }
-                    .accessibilityLabel("Settings")
-                    .accessibilityHint("Your vehicles and the gas price new shifts are recorded under.")
-                    .accessibilityIdentifier("settingsLink")
-                }
-
-                // In the bar rather than in the list, for two reasons. An
-                // expense belongs to no shift, so there is no section of this
-                // screen it is part of — and every row this screen gains pushes
-                // the shift history further down, which is the list a driver
-                // opens the app to read. The bar keeps it reachable from
-                // wherever they have scrolled to.
-                ToolbarItem(placement: .topBarTrailing) {
-                    NavigationLink {
-                        ExpenseListView()
-                    } label: {
-                        // The word, not a glyph. A `Label` here renders as its
-                        // icon alone in the navigation bar, and a credit-card
-                        // symbol in a corner does not say "the costs you
-                        // recorded" to anyone who has not already found the
-                        // screen once.
-                        Text("Expenses")
-                    }
-                    .accessibilityLabel("Recorded expenses")
-                    .accessibilityIdentifier("expensesLink")
-                }
-            }
-            .navigationDestination(for: Shift.self) { shift in
-                CompletedShiftDetailView(shift: shift)
-            }
-            .sheet(isPresented: $isExportingHistory) {
-                ShiftExportSheet(scope: .allHistory)
-            }
-            .fullScreenCover(isPresented: $isShowingOnboarding) {
-                OnboardingView(context: .firstLaunch) {
-                    OnboardingRecord.markCompleted()
-                    isShowingOnboarding = false
-                }
-            }
+        }
+        // A shift that was still running when the app was terminated is
+        // still running now, so capture resumes here rather than waiting for
+        // the driver to touch anything.
+        .task {
+            decideOnboarding()
+            routeCapture.synchronize()
             // A shift that was still running when the app was terminated is
-            // still running now, so capture resumes here rather than waiting for
-            // the driver to touch anything.
-            .task {
-                decideOnboarding()
-                routeCapture.synchronize()
-                // A shift that was still running when the app was terminated is
-                // still running now, and the activity it had may or may not have
-                // survived with it. Reconciling adopts the one that did, starts
-                // one that did not, and ends a card left behind by a shift that
-                // has since ended.
-                liveActivity.reconcile()
-                // A share that was interrupted by termination can leave a file
-                // in the temporary export directory. It is cleared once per
-                // launch so the app never holds a copy of a driver's history
-                // they did not ask it to keep.
-                ShiftExportService(context: modelContext).purgeTemporaryExports()
-            }
-            // Restarted whenever the week on screen changes, which is what makes
-            // one sleep enough: the task for the week that has just begun is
-            // started by the same state change that ended the last one.
-            .task(id: currentWeek?.end) {
-                guard let end = currentWeek?.end else { return }
-                await advancePastWeekEnd(end)
-            }
-            .onChange(of: scenePhase) { _, phase in
-                switch phase {
-                case .active:
-                    // The week History is scoped to is decided by the clock, and
-                    // a driver can leave the app on Sunday night and return on
-                    // Monday. Re-read here as well as at the boundary itself,
-                    // because a suspended device does not run the sleep above on
-                    // time.
-                    now = .now
-                    // Location permission and the system-wide Location Services
-                    // switch are changed outside the app, and Core Location
-                    // reports neither while DashPilot is backgrounded, so both
-                    // the panel and capture are re-read on return rather than
-                    // left showing a stale state.
-                    locationAuthorization.refresh()
-                    routeCapture.enterForeground()
-                    // The driver can turn Live Activities off in Settings, and
-                    // can dismiss the card by hand. Neither is reported to the
-                    // app, so the surface is reconciled on return like the
-                    // permission beside it.
-                    liveActivity.reconcile()
-                case .background:
-                    routeCapture.enterBackground()
-                case .inactive:
-                    // Transient: the app switcher, a call banner, the
-                    // notification shade. Stopping here would chop the route
-                    // into fragments for interruptions the driver never left
-                    // the app for. `.background` is the state that means the app
-                    // is no longer running in the foreground.
-                    break
-                @unknown default:
-                    break
-                }
-            }
-            // Capture follows the store's shift state, so it is reconciled
-            // whenever the active shift changes — including changes this screen
-            // did not make.
-            .onChange(of: activeShift?.id) { _, _ in routeCapture.synchronize() }
-            // Pausing does not change which shift is active, so the line above
-            // does not fire for it. This one catches a pause or resume recorded
-            // from anywhere, including an App Intent run while this screen is
-            // open, without waiting for the next position to be rejected.
-            .onChange(of: activeShift?.lifecycleState) { _, _ in
-                routeCapture.synchronize()
-                // A Delivered's Undo belongs to the running shift it was
-                // recorded on; pausing or ending moves past it.
-                transientUndo = nil
-            }
-            .onChange(of: activeShift?.id) { _, _ in transientUndo = nil }
-            // Parking and driving again do not change the lifecycle state, so
-            // neither line above fires for them. This catches a stretch closed
-            // by a delivery step under the driver's resume-after-progress
-            // setting, and one closed from the Lock Screen while this screen
-            // is open, without waiting for the next position to be judged.
-            .onChange(of: activeShift?.isRouteSuspended) { _, _ in routeCapture.synchronize() }
-            .onChange(of: locationAuthorization.authorization) { _, _ in routeCapture.synchronize() }
-            .alert(
-                "Shift Not Updated",
-                isPresented: isShowingLifecycleError,
-                presenting: lifecycleError
-            ) { _ in
-                Button("OK", role: .cancel) { lifecycleError = nil }
-            } message: { error in
-                Text(error.errorDescription ?? "The shift could not be updated.")
-            }
+            // still running now, and the activity it had may or may not have
+            // survived with it. Reconciling adopts the one that did, starts
+            // one that did not, and ends a card left behind by a shift that
+            // has since ended.
+            liveActivity.reconcile()
+            // A share that was interrupted by termination can leave a file
+            // in the temporary export directory. It is cleared once per
+            // launch so the app never holds a copy of a driver's history
+            // they did not ask it to keep.
+            ShiftExportService(context: modelContext).purgeTemporaryExports()
+        }
+        // Restarted whenever the week on screen changes, which is what makes
+        // one sleep enough: the task for the week that has just begun is
+        // started by the same state change that ended the last one.
+        .task(id: currentWeek?.end) {
+            guard let end = currentWeek?.end else { return }
+            await advancePastWeekEnd(end)
+        }
+        .onChange(of: scenePhase) { _, phase in handleScenePhase(phase) }
+        // Capture follows the store's shift state, so it is reconciled
+        // whenever the active shift changes — including changes this screen
+        // did not make.
+        .onChange(of: activeShift?.id) { _, _ in routeCapture.synchronize() }
+        // Pausing does not change which shift is active, so the line above
+        // does not fire for it. This one catches a pause or resume recorded
+        // from anywhere, including an App Intent run while this screen is
+        // open, without waiting for the next position to be rejected.
+        .onChange(of: activeShift?.lifecycleState) { _, _ in
+            routeCapture.synchronize()
+            // A Delivered's Undo belongs to the running shift it was
+            // recorded on; pausing or ending moves past it.
+            transientUndo = nil
+        }
+        .onChange(of: activeShift?.id) { _, _ in transientUndo = nil }
+        // Parking and driving again do not change the lifecycle state, so
+        // neither line above fires for them. This catches a stretch closed
+        // by a delivery step under the driver's resume-after-progress
+        // setting, and one closed from the Lock Screen while this screen
+        // is open, without waiting for the next position to be judged.
+        .onChange(of: activeShift?.isRouteSuspended) { _, _ in routeCapture.synchronize() }
+        .onChange(of: locationAuthorization.authorization) { _, _ in routeCapture.synchronize() }
+        .alert(
+            "Shift Not Updated",
+            isPresented: isShowingLifecycleError,
+            presenting: lifecycleError
+        ) { _ in
+            Button("OK", role: .cancel) { lifecycleError = nil }
+        } message: { error in
+            Text(error.errorDescription ?? "The shift could not be updated.")
+        }
+    }
+
+    private func handleScenePhase(_ phase: ScenePhase) {
+        switch phase {
+        case .active:
+            // The week History is scoped to is decided by the clock, and
+            // a driver can leave the app on Sunday night and return on
+            // Monday. Re-read here as well as at the boundary itself,
+            // because a suspended device does not run the sleep above on
+            // time.
+            now = .now
+            // Location permission and the system-wide Location Services
+            // switch are changed outside the app, and Core Location
+            // reports neither while DashPilot is backgrounded, so both
+            // the panel and capture are re-read on return rather than
+            // left showing a stale state.
+            locationAuthorization.refresh()
+            routeCapture.enterForeground()
+            // The driver can turn Live Activities off in Settings, and
+            // can dismiss the card by hand. Neither is reported to the
+            // app, so the surface is reconciled on return like the
+            // permission beside it.
+            liveActivity.reconcile()
+        case .background:
+            routeCapture.enterBackground()
+        case .inactive:
+            // Transient: the app switcher, a call banner, the
+            // notification shade. Stopping here would chop the route
+            // into fragments for interruptions the driver never left
+            // the app for. `.background` is the state that means the app
+            // is no longer running in the foreground.
+            break
+        @unknown default:
+            break
+        }
+    }
+
+    @ViewBuilder
+    private var sharedUndoBar: some View {
+        if let transientUndo, activeShift?.lifecycleState == .running {
+            TransientUndoBar(undo: transientUndo, perform: takeBackTransientUndo)
         }
     }
 
@@ -378,7 +326,12 @@ struct RootView: View {
     }
 
     private func startShift() {
-        perform { try ShiftService(context: modelContext).startShift() }
+        perform {
+            try ShiftService(context: modelContext).startShift()
+            workFocus = WorkFocusRequest(destination: .activeShift)
+            workPath = NavigationPath()
+            navigation.selection = .work
+        }
         // After, not before: capture starts only once the store holds a running
         // shift, so a refused or failed start cannot leave it recording.
         routeCapture.synchronize()
@@ -542,98 +495,6 @@ struct RootView: View {
         } catch {
             lifecycleError = .storeUnavailable(underlying: error)
         }
-    }
-}
-
-private struct StartShiftPanel: View {
-    let start: () -> Void
-
-    @Environment(\.locale) private var locale
-
-    // Observed rather than read once, so a driver who changes vehicle in
-    // Settings and comes back sees the new one without anything to refresh.
-    // Reading them writes nothing: no settings row is created by looking.
-    @Query private var vehicles: [VehicleProfile]
-    @Query private var settingsRows: [DriverSettings]
-
-    /// What the next shift will record, through the same rule the start copies.
-    private var nextVehicle: NextShiftVehicleContext {
-        NextShiftVehicleContext(
-            defaults: SettingsService.fuelDefaults(settings: settingsRows.first, vehicles: vehicles)
-        )
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: DashSpacing.xl) {
-            // The state, said once and quietly: there is nothing running.
-            DashStatusLabel(title: "No shift in progress", symbol: "circle.dashed", tint: .secondary)
-
-            // What starting now would record, as the block the button sits
-            // under rather than a caption beside it.
-            nextVehicleBlock
-
-            Button(action: start) {
-                Text("Start Shift")
-                    .dashFont(.control)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity)
-            }
-            .dashPrimaryAction()
-            .controlSize(.large)
-            .accessibilityIdentifier("startShiftButton")
-
-            Text("DashPilot records a shift's start and end times on this device.")
-                .dashFont(.supporting)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .padding(.vertical, DashSpacing.md)
-    }
-
-    /// The vehicle the shift about to be started will record.
-    ///
-    /// Titled for what it is, `Next shift records`, so the name under it reads
-    /// as the assumption about to be copied rather than as a setting. With
-    /// nothing selected it says so in the quieter role and blocks nothing: a
-    /// shift started with nothing to copy records no assumptions, as it always
-    /// has. A separate element from the button, so `Start Shift` stays the
-    /// plain action it was.
-    private var nextVehicleBlock: some View {
-        let vehicle = nextVehicle
-
-        return HStack(alignment: .firstTextBaseline, spacing: DashSpacing.md) {
-            Image(systemName: "car.fill")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .accessibilityHidden(true)
-
-            VStack(alignment: .leading, spacing: DashSpacing.xs) {
-                Text("Next shift records")
-                    .dashFont(.eyebrow)
-                    .foregroundStyle(.secondary)
-
-                Text(vehicle.title)
-                    .dashFont(vehicle.hasVehicle ? .title : .body)
-                    // Secondary where none is selected, because an absence
-                    // should not read with the weight of a fact.
-                    .foregroundStyle(vehicle.hasVehicle ? .primary : .secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                if let detail = vehicle.detail(locale: locale) {
-                    Text(detail)
-                        .dashFont(.supporting)
-                        .monospacedDigit()
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-        }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(vehicle.spokenLabel)
-        .accessibilityValue(vehicle.spokenValue(locale: locale))
-        .accessibilityHint("Recorded on the shift when you start it. Change it in Settings.")
-        .accessibilityIdentifier("nextShiftVehicle")
     }
 }
 

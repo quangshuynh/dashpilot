@@ -63,6 +63,8 @@ struct HistoryWeekSummaryView: View {
     /// measuring their routes again on the main actor.
     var measured: ([UUID: RouteDistance]) -> Void = { _ in }
 
+    @State private var derivedKey: SummaryKey?
+
     @Environment(\.modelContext) private var modelContext
     @Environment(\.locale) private var locale
 
@@ -164,7 +166,12 @@ struct HistoryWeekSummaryView: View {
         // them works this week out again and nothing else. Reading the
         // revision here is also what makes this body observe those facts. The
         // previous figures stay on screen until the new ones arrive.
-        .task(id: SummaryKey(week: week.id, revision: HistoryWeekRevision(shifts))) { await derive() }
+        .task(id: SummaryKey(week: week.id, revision: HistoryWeekRevision(shifts))) {
+            let key = SummaryKey(week: week.id, revision: HistoryWeekRevision(shifts))
+            guard key != derivedKey else { return }
+            await derive()
+            if !Task.isCancelled { derivedKey = key }
+        }
         // One element, so a listener hears the week as a week rather than as a
         // dozen unrelated fragments, and hears each unit and each coverage said
         // in full.
