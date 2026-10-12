@@ -1,291 +1,159 @@
 # Design system
 
-DashPilot's visual rules are a small vocabulary in `DashPilot/App/DesignSystem/`, not a framework.
-Screens are ordinary SwiftUI: `List` sections are the surfaces, system button styles are the
-controls, and semantic colours carry light and dark mode. The vocabulary fixes the numbers between
-them and answers the same questions on every screen: what state is this in, which figure is the
-headline, what is the next action, and what is quieter.
+DashPilot's third visual foundation prepares for the working name **Worklane** while keeping the
+public app name, icon, navigation, and technical identifiers unchanged. It adapts the existing
+`Dash*` components rather than introducing a second component library.
 
-This page describes version 2 of that vocabulary.
+## Character
 
-## What DashPilot should feel like
+The signature is an open financial figure on a quiet cloud-blue surface, followed immediately by
+its meaning and coverage. Ordinary records stay on native list surfaces. Estimates keep their
+labelled dashed boundary. This gives facts, supporting actions, and estimates distinct treatments
+without shadows, gradients, or a dashboard made of nested cards.
 
-A driver reads DashPilot in a cradle, at a kerb and in a car park, often in sun and often with a
-second app in front. So the app is **focused, calm, precise and slightly technical**: a working
-instrument for one shift, not a dashboard and not a game. It should never look playful, neon,
-trading-app-like, or like a delivery platform's own app.
+Two complementary densities share the same vocabulary:
 
-Its identity comes from the thing it records, a route made of stops:
+- **Business clarity:** open-width financial headlines, tabular digits, a little more space between
+  the value and its explanation, and soft blue summary rows. Used in completed-shift summaries,
+  period earnings and expenses, and the current week's earnings headline.
+- **Operational clarity:** condensed tabular timers and compact metrics, the existing control order,
+  numbered deliveries, and a four-stop progress track. Driving controls retain their position,
+  native feedback, and large targets. Visual breathing room must not bury the next action.
 
-- **Numbered stop markers.** A delivery in progress is introduced by a small round marker holding
-  its number, the way a stop is numbered on a route. Stacked orders are told apart by their
-  markers before any sentence is read.
-- **A stop track.** Under each delivery in progress, four stops on a line (accepted, at the pickup,
-  picked up, delivered): filled where the delivery has been, a ring where it is now, hollow where it
-  is going. It repeats the state line for the eye and is hidden from VoiceOver, which already hears
-  the state.
-- **Solid is recorded, dashed is estimated.** A route map draws the road travelled as a solid line
-  and a planned one dashed. DashPilot uses the same convention: recorded figures sit on ordinary
-  surfaces, and estimates (fuel, net after fuel) sit inside a dashed outline that is labelled as an
-  estimate in words.
-- **Condensed figures.** Figures are set in the system face's condensed width with tabular digits,
-  which reads like an instrument and keeps a ticking value from moving sideways.
+The [Bevel reference](https://styles.refero.design/style/c0717d1a-b446-4166-a445-6497fe287fea)
+informed the restrained blue surfaces, readable hierarchy, and approachable tone. Its marketing
+layouts, assets, fixed display sizes, and web spacing were not copied.
 
-These four are the whole motif. Nothing decorative is drawn for its own sake: no route lines
-across backgrounds, no illustrations, no gradients.
+## Semantic color roles
 
-## Research: Caldera
+`DashPilotActivity/ShiftActivityPalette.swift` supplies the app and Live Activity's shared roles.
+The extension has no asset catalog; the app's `AccentColor` asset mirrors the foreground accent.
+A contrast test checks the catalog and shared value in both appearances and contrast settings.
 
-Version 2 studied the [Caldera reference on Refero](https://styles.refero.design/style/fe8cdcf9-c850-4d52-be07-5ad269bf9ebf)
-as design research, not as a template.
+| Role | Light | Dark | Use |
+| --- | --- | --- | --- |
+| Foreground accent | `#315FCC` | `#8EADFF` | Links, selected controls, delivery progress |
+| Foreground accent, Increase Contrast | `#244B9F` | `#B7CAFF` | Same meanings, stronger separation |
+| Filled action | `#315FCC` | `#315FCC` | Prominent actions and enabled switch fill |
+| Filled action, Increase Contrast | `#244B9F` | `#244B9F` | Stronger white-text pairing |
+| On action | White | White | Text and delivery numbers on the explicit fill |
+| Canvas | `#F5F7FB` | `#161A22` | Principal lists, financial editors, onboarding |
+| Cloud | `#EBF0F8` | `#222D40` | Financial summary rows, inset supporting actions |
+| Quiet outline | `#CBD5E5` | `#475773` | Inset surface boundaries |
+| Strong outline | `#65758E` | `#99ABC9` | Estimates, and inset boundaries with Increase Contrast |
+| Muted marker fill | `#566174` | `#566174` | Cancelled delivery markers with white text |
 
-**Principles borrowed:**
+Primary and secondary text remain the system's semantic text colors. Native List/Form rows,
+separators, sheet behavior, destructive controls, and materials retain platform rendering.
 
-- **Hierarchy carried by type and tone, not by boxes.** Caldera separates content with flat tonal
-  steps and no shadows. DashPilot keeps `List`'s flat grouped surfaces, uses no shadows, and stops
-  wrapping groups inside a row in extra rectangles.
-- **One accent with one job.** Caldera spends its single vivid colour on primary actions and the
-  most important figures. DashPilot's accent marks the primary action, active progress and what is
-  selected, and nothing else.
-- **Figures as structure.** Caldera lets heavy, condensed display type carry the page. DashPilot
-  applies the idea to the numbers a driver glances at: condensed, heavy, tabular figures with quiet
-  labels under them.
-- **A small, fixed shape vocabulary.** Caldera uses a few radii consistently. DashPilot uses two.
-- **Medium weight for small labels**, so a label stays legible beside a heavy figure.
+The proposed brand blue `#4375E8` is not the action fill: white on it measures about 4.24:1.
+White on `#315FCC` measures about 5.77:1. The candidate earnings green `#43B98B` is not used for
+ordinary text on white (about 2.46:1), or as a blanket financial success signal. A recorded amount
+is not evidence of profitability. Future uses need a concrete meaning and a tested text pair.
 
-**Principles rejected as wrong for DashPilot:**
+The darker filled action is intentionally separate from the lighter dark-mode foreground accent.
+A bright dark-mode link color must not become the background for white button text.
 
-- Architectural display sizes and fixed pixel type. DashPilot's type follows Dynamic Type at every
-  size, and a figure must still fit a phone at the largest accessibility setting.
-- Decorative signature artwork (halftone fields, gradients, illustration). A driving screen has no
-  room for decoration.
-- Very large corner radii and pill-shaped everything. DashPilot keeps the platform's own control
-  shapes, which drivers already recognise.
-- Generous editorial spacing. A shift screen is dense on purpose; the next action has to be on the
-  first screen.
-- A warm tinted canvas and a vivid orange accent. DashPilot's statuses already use red and orange
-  for meaning, so an orange accent would collide with them.
+### Status is separate from brand
 
-**Made deliberately different:** the typeface (the system face, not a custom display family), the
-colours (a teal route accent, system semantic colours elsewhere), the shapes (system controls and
-list cells), and the motif (stops and routes rather than halftone).
+The established system colors remain: red for running/recording, orange for paused, blue for
+parked, green for completed, and red for destructive/error roles. Every state is also named and
+has its own symbol. Parked still means working time continues while route capture stops. Paused
+still means working time stops. Neither meaning depends on a blue or orange pixel.
+
+Validation retains its warning symbol and explanatory words. Estimates are labelled explicitly;
+there is no new green/red judgment of earnings, targets, or historical performance.
 
 ## Typography
 
-Every role is set in **SF Pro, the system face**, through `.dashFont(_:)`. The app bundles no font.
-
 ### Why the system face
 
-Version 2 compared the families actually available on `main` (Manrope, bundled until then, and the
-system face with its width variants) on DashPilot's own content: `$127.43`, `$24.61/hr`, `3h 48m`,
-a ticking `1:30:04`, `Delivery 3`, `Arrived at pickup`, `Resume Driving`, `Estimated net after fuel`,
-a Settings explanation, a week's summary line, and a delivery card at the largest accessibility
-size. DM Sans, IBM Plex Sans and Space Grotesk were removed from the repository earlier and were not
-restored for the study.
+SF Pro remains the only family. No font is bundled. All roles use semantic Dynamic Type styles.
+The system face keeps native text scaling, familiar glyphs, and consistent app/Live Activity typography.
 
-| | Manrope | SF Pro | SF Pro, condensed figures |
+| Role | Text style | Weight | Width / figures |
 | --- | --- | --- | --- |
-| `$127.43`, 34 pt bold, tabular | 137 pt wide | 143 pt | **113 pt** |
-| `$24.61/hr`, 34 pt bold, tabular | 166 pt | 164 pt | **131 pt** |
-| Tabular `1:11:11` | wide gaps around each 1 | even | even |
-| Bold Text | needs a manual weight step; Bold cannot get heavier | native | native |
-| Dynamic Type | scaled through `relativeTo:` | native | native |
-| Matches the Live Activity | no (the widget uses the system face) | yes | yes |
-| Ships a file and a license | yes | no | no |
+| `metricHero` | Large Title | Bold | Condensed, tabular; operational timer |
+| `financialHero` | Large Title | Semibold | Standard, tabular; financial headline |
+| `metric` | Title 3 | Semibold | Condensed, tabular; compact metrics |
+| `metricLabel` | Footnote | Medium | Standard |
+| `eyebrow` | Footnote | Semibold | Standard; existing short operational labels |
+| `title` | Title 3 | Bold | Standard |
+| `status` | Subheadline | Semibold | Standard |
+| `body` | Subheadline | Regular | Standard |
+| `emphasis` | Subheadline | Semibold | Standard |
+| `supporting` | Caption | Regular | Standard |
+| `control` | Headline | Semibold | Standard |
 
-Both faces draw `I` and `l` alike; neither wins on that. SF Pro Rounded was also tried and read as
-playful, which DashPilot should not be.
+`DashMetric.Emphasis.financial` selects the financial role explicitly. Nothing guesses whether a
+formatted string is money. A missing amount remains ordinary explanatory text, never a financial
+headline displaying zero. Metric values, labels, and coverage wrap rather than shrinking.
 
-The decision is **one family, the system face**, with the **condensed width for figures only**. It
-gives figures a denser, more instrument-like character than Manrope did, about a fifth narrower so a
-row of three fits at larger sizes, while body text keeps the face iOS tunes for reading at small
-sizes. The app and its Live Activity now share one face.
+The stop marker no longer scales its number down to fit. It has a scaled minimum size and can grow
+horizontally for longer delivery numbers. The full delivery title remains the accessible name.
 
-### Roles
+## Surfaces and spacing
 
-Each role is a text style, a weight and, for figures, a width. Nothing outside
-`DashTypography.swift` names a point size.
+The existing 2, 4, 8, 12, 16, and 24-point rhythm remains. There is no global spacing increase on
+the active-work screen. Financial metric captions use a four-point gap; History and completed-shift
+summary rows gain modest vertical breathing room.
 
-| Role | Style, weight | For |
-| --- | --- | --- |
-| `metricHero` | Large Title, Bold, condensed, tabular | The one figure a surface leads with |
-| `metric` | Title 3, Semibold, condensed, tabular | A figure under the headline |
-| `metricLabel` | Footnote, Medium | What a figure is |
-| `eyebrow` | Footnote, Semibold | A short label above a group, such as `Next` |
-| `title` | Title 3, Bold | A surface's heading line, such as `Delivery 3` |
-| `status` | Subheadline, Semibold | The state a shift or delivery is in |
-| `body` | Subheadline, Regular | An ordinary line |
-| `emphasis` | Subheadline, Semibold | A line that stands out from its neighbours |
-| `supporting` | Caption, Regular | A short qualifier under another line |
-| `control` | Headline, Semibold | The title of a large action button |
+- **Native rows:** ordinary records and controls. List/Form still own grouping and outer shape.
+- **Cloud summary rows:** financial highlights, applied with `listRowBackground`; no nested card.
+- **Supporting inset:** `dashInsetSurface()`, cloud fill with a one-point outline and 16-point radius.
+  Used for an Undo offer or reminder, not around every block.
+- **Estimate inset:** `dashEstimateSurface()`, no fill and a dashed strong outline with a 16-point
+  radius. The title and spoken explanation carry its meaning independently of the outline.
+- **State banner:** existing symbol, title, detail, and state-tinted fill; same 16-point inset radius.
+- **Canvas:** `dashCanvas()` hides the scroll background and supplies an opaque blue-tinted canvas.
+  The pinned entry bar uses the same canvas and retains its separating rule.
 
-Tabular digits are asked for on the metric roles, so a changing value keeps its width. A figure
-inside an ordinary line (`DashValueRow`'s value, a row's amount) adds `.monospacedDigit()` itself.
+Small-radius tokens remain available at eight points. Prominent actions use `dashPrimaryAction()`,
+a thin modifier over the native bordered-prominent style with the explicit fill/foreground pair.
+The system still owns pressed and disabled feedback. No custom gesture or animation is added.
 
-## Spacing
+## Components retained
 
-| Token | Value | Use |
-| --- | --- | --- |
-| `DashSpacing.xs` | 2 | Between a figure and the caption that qualifies it |
-| `DashSpacing.sm` | 4 | Between lines of one group |
-| `DashSpacing.md` | 8 | Between groups inside one block |
-| `DashSpacing.lg` | 12 | Between blocks of a panel |
-| `DashSpacing.xl` | 16 | Between the major regions of a panel |
-| `DashSpacing.xxl` | 24 | Between panels that share one list row |
+`DashMetric`, `DashMetricRow`, `DashValueRow`, `DashNotice`, `DashValidationMessage`,
+`DashStatusLabel`, `DashStateBanner`, `DashSettingToggle`, `DashStopMarker`, and `DashStopTrack`
+remain the shared vocabulary. Native stacks, lists, forms, sheets, alerts, and button styles remain
+in charge of interaction. No new navigation, chart, financial rule, or persistence field is needed.
 
-A value outside the scale needs a reason in a comment beside it (a 44-point target is one).
+The Live Activity adopts the shared foreground accent without changing its snapshot, control order,
+layout budget, intents, or existing text-size cap. The app's entry bar also retains its existing
+accessibility-size cap; those established constraints are not expanded by this visual interval.
 
-## Surfaces and radii
+Onboarding uses the shared canvas and filled action treatment. Its four illustrations, pages, skip,
+completion key, VoiceOver focus, and Reduce Motion behavior remain intact. The artwork is retained,
+so this interval does not constitute a full illustration rebrand.
 
-| Surface | Use | Treatment |
-| --- | --- | --- |
-| Page | Behind everything | The system grouped background |
-| Grouped | A list section: the normal container | The system cell |
-| Inset | The one thing in a row that must read as set apart (an Undo, a reminder) | `dashInsetSurface()`: tertiary grouped fill |
-| Status | A state that changes what the screen means (paused, parked) | `DashStateBanner`: the state's tint at low opacity, plus symbol and words |
-| Estimate | Estimated figures beside recorded ones | `dashEstimateSurface()`: no fill, dashed outline, titled as an estimate |
-| Destructive | Deleting a record | A section of its own, a red text button, a confirmation |
+## Accessibility and verification
 
-Inset surfaces are never nested, and a list section is never wrapped in one.
+Use [Apple's accessibility guidance](https://developer.apple.com/design/human-interface-guidelines/accessibility)
+and the [WCAG contrast benchmark](https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html)
+when evaluating the rendered result. Automated palette checks cover explicit text pairs, not every
+translucent system control or every physical lighting condition.
 
-| Radius | Value | Use |
-| --- | --- | --- |
-| `DashRadius.small` | 8 | Markers' neighbours: chips and small badges |
-| `DashRadius.surface` | 12 | Inset, status and estimate surfaces |
+Verify light and dark appearances, default and AX5 text, Bold Text, Increase Contrast, Reduce Motion,
+iPhone and iPad. Inspect stacked deliveries, Park versus Pause, Undo and entry bars, financial
+coverage, onboarding, empty states, and validation. A screenshot proves only the captured state;
+VoiceOver interaction and outdoor readability also require device evaluation.
 
-Cells and buttons keep the system's own shapes.
+Keep at least 44-point controls and larger primary driving actions. Do not remove labels or coverage
+to make a screenshot cleaner. Preserve the existing accessible summaries and semantic control roles.
+The native system continues to handle keyboard, sheet, back-navigation, and interaction feedback.
 
-## Colour
+## Future W-monogram exploration
 
-The palette is semantic colours plus **one accent**, defined in the asset catalog:
+These are concepts, not approved or generated assets:
 
-| Token | Light | Dark | Purpose |
-| --- | --- | --- | --- |
-| Accent (`AccentColor`) | `#0F766E` | `#1E9C8B` | Primary actions, the active stop, route recording, a selected choice |
+1. **Continuous W:** one rounded stroke with two broad valleys. Strongest starting candidate for a
+   small app icon and monochrome use. Distinct proportions are needed to avoid a waveform reading.
+2. **Converging lanes:** several rounded paths meeting into a W, suggesting income streams joining.
+   The meaning is clear, but narrow gaps may disappear at small sizes.
+3. **Folded ribbon W:** a broad silhouette formed through positive and negative space. Works without
+   color, but folds must avoid a corporate or overly dimensional treatment.
 
-The light accent holds 5.5:1 against white button text and 4.9:1 as text on the grouped
-background; the dark accent holds 5.0:1 as text on a dark cell and 3.4:1 under white bold button
-titles (the large-text threshold), the same trade the system blue makes in dark mode.
-
-The accent is not decoration. A heading, an icon beside a fact, or a figure is never tinted with
-it. Every other hue is a status colour from the table below, and none of them is ever the only
-signal.
-
-## Status language
-
-| State | Symbol | Words | Tint |
-| --- | --- | --- | --- |
-| Shift running | `record.circle` | `Shift in Progress` | red |
-| Shift paused | `pause.circle.fill` | `Paused`, and `working time stopped` | orange |
-| Vehicle parked | `parkingsign.circle.fill` | `Parked`, and `working time still counting` | blue |
-| No shift | `circle.dashed` | `No shift in progress` | secondary |
-| Delivery in progress | its stage's symbol | the stage and how long | accent |
-| Delivered / completed | `checkmark.circle.fill` | `Delivered` | green |
-| Partial route | `circle.lefthalf.filled` | `partial route` | secondary |
-| Estimated | dashed outline | `Estimated` in the title | none |
-| Warning or refusal | `exclamationmark.triangle.fill` | the sentence | red or orange |
-
-**Paused and parked never look alike.** Paused stops working time and is orange with a pause
-symbol; parked keeps working time running, stops only the route, and is blue with the parking
-sign. Each banner says which clock is still running, so the difference does not depend on colour.
-Parked is blue in the app and on the Live Activity alike.
-
-## Metrics
-
-- **Primary metric**: `metricHero`, one per surface (working time on a running shift, earnings on a
-  week or a period).
-- **Supporting metrics**: `metric`, side by side in a `DashMetricRow`, a column at accessibility
-  sizes.
-- **Labels and units**: under the figure in `metricLabel`. A unit that is part of the formatted
-  value (`mi`, `/hr`) stays in the figure.
-- **Coverage and provenance**: `supporting`, directly under the figure it qualifies (`1 of 2
-  shifts`, `partial route`). Never only in a footer.
-- **Absence**: words in the quieter body role (`No amount recorded`), never a zero and never a
-  dash.
-
-## Controls
-
-| Role | Treatment | Example |
-| --- | --- | --- |
-| Primary | `borderedProminent`, large, full width, accent | Start Shift, a delivery's next step, Resume Driving |
-| Secondary | `bordered`, large, full width | Park for a Pickup, Pause Shift, Add Delivery beside cards |
-| Pinned | in a bottom safe-area bar with an opaque background and a rule, never an overlay | Home's delivery entry, the offer sheet's Start N Deliveries |
-| Quiet | borderless, body role, 44-point row | Add Pickup Place, Correct Grouping |
-| Destructive | bordered and red for a lifecycle end (End Shift); red text in its own section for a delete; borderless red for a cancel | End Shift, Delete Shift, Cancel Delivery 3 |
-| Workflow progression | Primary, under the `Next` eyebrow, one per delivery | Arrived at Pickup |
-
-A screen has one primary action at a time. On a running shift it is each delivery's next step; when
-nothing is in progress it is Start Delivery; while paused it is Resume Shift; while parked it is
-Resume Driving.
-
-## Components
-
-- **`DashMetric`**: a value, what it is, and an optional qualifier. `emphasis: .hero` for the
-  headline. An absence is passed as words with `isFigure: false`.
-- **`DashMetricRow`**: figures side by side where they fit, a column where they do not, always a
-  column at accessibility sizes.
-- **`DashValueRow`**: one secondary figure, title beside value, with its coverage under both;
-  stacks where the pair does not fit. `isProminent` marks the result a group arrives at.
-- **`DashStatusLabel`**: a state as symbol, word and tint, in that order of importance.
-- **`DashStateBanner`**: a status surface for a state that changes what the screen means.
-- **`DashStopMarker`** and **`DashStopTrack`**: the numbered stop marker and the four-stop track.
-- **`DashNotice`**: every empty, missing and unavailable state, as one accessibility element.
-- **`DashValidationMessage`**: why something could not be saved, with the identifier on the
-  sentence alone.
-- **`dashInsetSurface()`**, **`dashEstimateSurface()`**: the two surface modifiers.
-
-## Rules every screen keeps
-
-- **Missing is never drawn as zero.**
-- **Nothing shrinks to fit and nothing clips to one line.** Text wraps; a row that cannot hold its
-  content stacks.
-- **No state rests on colour alone.** Every state has a symbol and a word.
-- **Figures speak their units** and their coverage, as one accessibility element.
-- **Estimates are set apart from recorded figures**, in words first and then by the dashed
-  surface or a section of their own.
-- **Explanation follows the figure.** A section shows its figures first; general explanation goes
-  after them, and on Period Summaries it gathers in one section at the end.
-- **Corrections are quieter than data**, and destructive actions stand apart.
-- **Growing content goes last.**
-
-## Dark mode
-
-Every colour is semantic or has a dark variant, so nothing is checked by eye per screen. Two traps
-are worth knowing: `secondarySystemBackground` is the grouped cell's own colour in dark mode, so an
-inset surface uses `tertiarySystemGroupedBackground`; and a status tint at low opacity must still
-sit under a full-strength symbol and words.
-
-## Live Activity
-
-The Lock Screen card and the Dynamic Island share the vocabulary's words, symbols and status tints
-(parked is blue there too) but not its implementation: the widget extension has its own measured
-layout, keeps the system face (which is now the app's face as well), and bundles no font.
-
-## Visual validation
-
-Layout is judged on simulator screenshots, not only on passing journeys. Each screen is checked in
-light and dark mode, at the default size and the largest accessibility size, and with Bold Text, for
-truncation, words broken across lines, a title shrinking to a word a line, clipped controls and
-contrast. Things worth knowing from doing it:
-
-- `ViewThatFits` and a lazy grid both mis-measured inside a list row (an empty block with Bold Text;
-  a wrapped title drawn over the line below). Plain stacks that switch at accessibility sizes are
-  used instead.
-- Large control titles wrap rather than truncate, so a delivery's next step is never `Arrived at…`.
-- The Undo line floats over the bottom of the list on purpose, so a card's step can sit under it.
-- A pinned bar (`safeAreaBar`) insets the list by its height, so the last row always scrolls fully
-  above it. Its background is opaque so a row passing beneath is hidden rather than read through.
-  A journey that taps near the bottom reaches its control with `scrollUntilHittable`, which drags it
-  clear of the bar and any Undo line on it: XCUITest reports a covered control hittable.
-
-![A running shift with stacked deliveries](../images/screenshots/home-stacked-deliveries.png){ width="240" }
-![A parked shift](../images/screenshots/home-parked.png){ width="240" }
-![A period summary](../images/screenshots/period-summary.png){ width="240" }
-
-## Testing the layout
-
-Anything added above a list moves the rows below it, and a `List` renders only rows near the
-viewport. Journeys scroll to what they read rather than assuming it is on screen, and reach a
-control by searching for it (`reachShiftControl`, `scrollUntilHittable`) rather than by a fixed
-number of swipes. `DashTypographyTests` pins the roles; `FontBundleInvariantTests` pins that the app
-and the widget bundle no font.
+Explore the Continuous W first with a readable lowercase `worklane` wordmark. Check light, dark,
+tinted, monochrome, and small sizes. Do not depend on gradients or fine linework. The current
+DashPilot icon and public name remain unchanged until a separately approved rebrand and name review.
