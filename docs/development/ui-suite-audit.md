@@ -1,12 +1,19 @@
 # UI suite audit and CI
 
-Interval 2A retains the same 36 journeys. Existing journeys now also verify Home cold launch,
+Interval 2B extends the History correction journey to assert Home's authoritative earnings, recent
+shift detail navigation and refresh after correction. The new AX5 journey checks the exact synthetic
+weekly earnings ($206.25), paired hourly rate ($25.78), two-of-three coverage, scrolling and Money.
+All earlier lifecycle and financial assertions remain. Screenshot capture uses these journeys rather
+than adding screenshot-only tests.
+
+Interval 2B retains all 36 existing journeys and adds one Home AX5 journey, for 37 total. Existing
+journeys now also verify Home cold launch,
 Work recovery and Home start, workspace and Settings access, foreground selection retention,
 capture growth across tab navigation, Undo from Home, and AX5 controls above the native tab bar.
 Historical fixture helpers explicitly enter Work; financial helpers enter Money. The older test
 names below are retained so CI identifiers remain stable.
 
-DashPilot's UI suite is **36 essential journeys**, and every pull request runs all of them after the
+DashPilot's UI suite is **37 essential journeys**, and every pull request runs all of them after the
 build and the whole domain suite. This page records why the suite has that shape: what the red runs
 before it had in common, how each of the 82 journeys it replaced was classified, which product risk
 each remaining journey covers and which domain or integration suite covers the rest, and the CI that
@@ -174,6 +181,7 @@ section names one that no longer exists.
 
 | Risk | Journey | Below the UI |
 | --- | --- | --- |
+| Home states exact weekly earnings and paired hourly coverage at AX5, with Money reachable | `testHomeFinancialCoverageAtLargestTextSize` | `PeriodDataLoaderTests`, `PeriodMetricsTests`, `HourlyTargetTests` |
 | The real store opens rather than the failure screen | `testLaunchesIntoShiftScreen` | `PersistenceTests`, every migration suite |
 | A new driver is welcomed once, and finishing it persists across a relaunch | `testFirstLaunchShowsTheWelcomeOnceAndFinishingItPersists` | `OnboardingPolicyTests` |
 | The welcome reopens from Settings and is usable at the largest text size | `testTheWelcomeReopensFromSettingsAtTheLargestTextSize` | `OnboardingPolicyTests` |

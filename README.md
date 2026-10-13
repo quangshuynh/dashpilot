@@ -35,8 +35,9 @@ measure.
 
 ## What it does
 
-Home welcomes you and starts or continues a shift. Work holds delivery controls and History.
-Money opens recorded expenses and period summaries. Settings is in each workspace toolbar.
+Home shows completed-week recorded gross earnings, working time, hourly performance and recent work,
+with coverage beside each figure. It also starts or continues a shift. Work holds delivery controls
+and History. Money opens recorded expenses and period summaries. Settings is in each workspace toolbar.
 
 - **Shift tracking.** Start, pause, resume and end a shift, with relaunch recovery if iOS ends the
   app mid-shift. Paused time is excluded from working time and from every hourly figure.
