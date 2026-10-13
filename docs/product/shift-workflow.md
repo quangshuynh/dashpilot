@@ -31,7 +31,7 @@ flowchart TD
 
 ## Starting a shift
 
-The root screen offers a start control while no shift is running. The panel answers what starting now
+Home and Work offer a start control while no shift is running. Starting from Home opens Work. The panel answers what starting now
 would record: a quiet `No shift in progress`, then **Next shift records** with the selected vehicle's
 name and, under it, its fuel economy and the current gas price, then `Start Shift`. With nothing
 selected it says `No vehicle selected` in the quieter style and still starts a shift. Starting records a start
@@ -566,6 +566,7 @@ time — can be corrected afterwards. See [Correcting a shift's end time](#corre
 
 ## History
 
+Work contains History; Home's **View Work History** action opens it directly.
 History shows **the week the driver is in**, Monday through Sunday, and nothing else. The heading
 says which week, the section opens with that week's own figures, and the footer under the list says
 which days:

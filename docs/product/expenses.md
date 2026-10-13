@@ -204,12 +204,10 @@ sentence about shifts, and the day can be exported.
 
 ## Recording and correcting
 
-Expenses live on their own screen, reached from the **Expenses** button in the
-main screen's navigation bar. It is in the bar rather than in the list because an
-expense belongs to no shift, so there is no section of that screen it is part of,
-and because every row added above the shift history pushes the list a driver
-opens the app to read further down. There is no expense control on a shift, and
-none inside a delivery.
+Expenses live on their own screen, reached from **Money > Recorded Expenses**. Money also opens
+**Period Summaries**, including existing period comparisons and export. An expense belongs to a
+date, not a shift or delivery; there is still one ledger and one editor. Settings is available from
+the toolbar on each workspace root.
 
 - **Adding is a draft.** Nothing is written until Save; Cancel writes nothing.
 - **Editing replaces every fact at once**, so a refused edit leaves the record

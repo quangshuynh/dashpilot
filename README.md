@@ -24,9 +24,9 @@ shift ran, what it paid, how far the recorded route went, and what those facts i
 per mile. It replaces a notebook and a spreadsheet, not the delivery app.
 
 <p align="center">
-  <img src="docs/images/screenshots/home-stacked-deliveries.png" alt="A running shift with stacked deliveries, each with its numbered stop, progress track and next step" width="250">
-  <img src="docs/images/screenshots/home-parked.png" alt="A parked shift: the route is not recording and working time is still counting, with Resume Driving under it" width="250">
-  <img src="docs/images/screenshots/period-summary.png" alt="A day's period summary leading with recorded earnings and their coverage" width="250">
+  <img src="docs/images/screenshots/home-workspace.png" alt="Home offers Start Shift, Work History and Money" width="250">
+  <img src="docs/images/screenshots/work-workspace.png" alt="Work shows the running shift and stacked deliveries above the pinned entry controls and native tabs" width="250">
+  <img src="docs/images/screenshots/money-workspace.png" alt="Money opens recorded expenses and period summaries" width="250">
 </p>
 
 It is a general driver tool. It has **no integration with DoorDash or any other platform**, never
@@ -34,6 +34,9 @@ observes or automates those apps, and asks the driver for anything a phone canno
 measure.
 
 ## What it does
+
+Home welcomes you and starts or continues a shift. Work holds delivery controls and History.
+Money opens recorded expenses and period summaries. Settings is in each workspace toolbar.
 
 - **Shift tracking.** Start, pause, resume and end a shift, with relaunch recovery if iOS ends the
   app mid-shift. Paused time is excluded from working time and from every hourly figure.

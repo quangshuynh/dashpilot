@@ -1,8 +1,20 @@
 # Design system
 
 DashPilot's third visual foundation prepares for the working name **Worklane** while keeping the
-public app name, icon, navigation, and technical identifiers unchanged. It adapts the existing
+public app name, icon, and technical identifiers unchanged. It adapts the existing
 `Dash*` components rather than introducing a second component library.
+
+## Workspace navigation
+
+Home, Work, and Money use the native tab bar with an independent navigation stack per workspace.
+Home pairs a quiet blue welcome surface with the existing next-shift panel or a Continue Shift
+action. Work preserves the operational hierarchy and pinned delivery entry. Money offers two
+clear routes into the existing records and summaries. A shared toolbar Settings route appears on
+all three roots. Labels, symbols, native selected-tab semantics, and headings identify each place.
+
+The system lays out the tab bar, delivery-entry bar, and transient Undo using safe areas. No device
+height or inset is hardcoded. The existing entry-bar accessibility1 text cap remains; the rest of
+the Work list can grow to AX5 and scroll. Home and Money introduce no custom animation.
 
 ## Character
 
@@ -117,7 +129,7 @@ The system still owns pressed and disabled feedback. No custom gesture or animat
 `DashMetric`, `DashMetricRow`, `DashValueRow`, `DashNotice`, `DashValidationMessage`,
 `DashStatusLabel`, `DashStateBanner`, `DashSettingToggle`, `DashStopMarker`, and `DashStopTrack`
 remain the shared vocabulary. Native stacks, lists, forms, sheets, alerts, and button styles remain
-in charge of interaction. No new navigation, chart, financial rule, or persistence field is needed.
+in charge of interaction. The visual foundation introduces no chart, financial rule, or persistence field.
 
 The Live Activity adopts the shared foreground accent without changing its snapshot, control order,
 layout budget, intents, or existing text-size cap. The app's entry bar also retains its existing

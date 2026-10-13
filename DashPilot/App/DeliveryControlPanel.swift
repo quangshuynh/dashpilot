@@ -46,6 +46,8 @@ struct DeliveryControlPanel: View {
     /// parked, leaves. Drawn by ``RootView`` below the list rather than here, so
     /// that its arriving and leaving move no card; see ``TransientUndoBar``.
     @Binding var transientUndo: TransientUndo?
+    @Binding var pendingEarningsConfirmation: PendingDeliveryEarningsConfirmation?
+    let review: (ActiveDeliveryReview) -> Void
 
     @Environment(\.modelContext) private var modelContext
     /// Write-only from here, like ``RootView``'s: a delivery starting or
@@ -71,28 +73,6 @@ struct DeliveryControlPanel: View {
     /// delivery itself rather than as a flag, so the confirmation can name which
     /// one it is about and act on that record.
     @State private var pendingCancellation: NumberedDelivery?
-
-    /// The delivery just marked delivered, and the amount it was expected to
-    /// pay, when it had one recorded.
-    ///
-    /// Captured **before** the transition and held here, rather than re-read
-    /// from the delivery afterwards, for two reasons. The delivered delivery
-    /// leaves ``activeDeliveries`` the moment the write lands, so its card is
-    /// gone and there is nothing left on screen to hang the sheet off; and the
-    /// figure being offered has to be the one the driver entered, not whatever
-    /// the store happens to say a moment later.
-    @State private var pendingEarningsConfirmation: PendingEarningsConfirmation?
-
-    /// Whether the sheet that corrects which deliveries arrived together is up.
-    @State private var isCorrectingOffers = false
-
-    /// Whether the sheet that marks which deliveries in progress share a stop
-    /// is up.
-    @State private var isEditingStack = false
-
-    /// Whether the sheet that reopens a delivery marked delivered by mistake is
-    /// up.
-    @State private var isReopeningDelivery = false
 
     /// The instant the progress reminders are derived against.
     ///
@@ -184,25 +164,6 @@ struct DeliveryControlPanel: View {
             recoveryControl
         }
         .padding(.vertical, DashSpacing.md)
-        // The window the immediate undo is offered for, counted in one-second
-        // ticks while the line is actually on screen. It restarts with each
-        // completion, because the offer names the latest one.
-        .task(id: transientUndo?.id) {
-            guard transientUndo != nil else { return }
-            var remaining = Self.undoSeconds
-
-            while !Task.isCancelled, remaining > 0 {
-                try? await Task.sleep(for: .seconds(1))
-                guard !Task.isCancelled else { return }
-                // A second the driver cannot see does not count: the earnings
-                // confirmation is raised by the same tap and covers this.
-                guard pendingEarningsConfirmation == nil else { continue }
-                remaining -= 1
-            }
-
-            guard !Task.isCancelled else { return }
-            transientUndo = nil
-        }
         // The reminders' clock. It only advances while the shift is actually
         // running, so a paused or finished shift costs nothing, and it advances
         // slowly because the thresholds are measured in tens of minutes and a
@@ -241,30 +202,6 @@ struct DeliveryControlPanel: View {
             Button("OK", role: .cancel) { lifecycleError = nil }
         } message: { error in
             Text(error.errorDescription ?? "The delivery could not be updated.")
-        }
-        // Raised only by a delivery that carried an expectation, and only after
-        // the delivered event is already in the store. A driver who records no
-        // expected amounts never meets it.
-        .sheet(item: $pendingEarningsConfirmation) { pending in
-            DeliveryEarningsConfirmation(numbered: pending.numbered, expected: pending.expected)
-        }
-        // A review action, reached from one control rather than from a button on
-        // every card, and writing nothing until a correction is confirmed inside
-        // it.
-        .sheet(isPresented: $isCorrectingOffers) {
-            OfferCorrectionView(shift: shift)
-        }
-        // The same kind of review action, for the stack in progress: which
-        // deliveries share a pickup or a drop-off, across offers. Each action
-        // inside writes identities only.
-        .sheet(isPresented: $isEditingStack) {
-            StackEditorView(shift: shift)
-        }
-        // The deliberate way back from a mis-tap, for the driver who did not
-        // catch the offer above. Like the correction sheet, it writes nothing
-        // until a reopening is confirmed inside it.
-        .sheet(isPresented: $isReopeningDelivery) {
-            DeliveryRecoveryView(shift: shift)
         }
     }
 
@@ -326,7 +263,7 @@ struct DeliveryControlPanel: View {
     private var stackControl: some View {
         if activeDeliveries.count > 1 {
             Button {
-                isEditingStack = true
+                review(.stack)
             } label: {
                 Label("Edit Stack", systemImage: "link")
                     .labelStyle(DashCompactLabelStyle())
@@ -357,7 +294,7 @@ struct DeliveryControlPanel: View {
     private var correctionControl: some View {
         if shift.deliveries.count > 1 {
             Button {
-                isCorrectingOffers = true
+                review(.grouping)
             } label: {
                 Label("Correct Grouping", systemImage: "arrow.triangle.branch")
                     .labelStyle(DashCompactLabelStyle())
@@ -386,7 +323,7 @@ struct DeliveryControlPanel: View {
     private var recoveryControl: some View {
         if shift.deliveries.contains(where: { $0.state == .delivered }) {
             Button {
-                isReopeningDelivery = true
+                review(.recovery)
             } label: {
                 Label("Reopen a Delivered Delivery", systemImage: "arrow.uturn.backward.circle")
                     .labelStyle(DashCompactLabelStyle())
@@ -445,7 +382,7 @@ struct DeliveryControlPanel: View {
                     // record what it paid would be the screen disagreeing with
                     // the store about whether it is over.
                     if let expected {
-                        pendingEarningsConfirmation = PendingEarningsConfirmation(
+                        pendingEarningsConfirmation = PendingDeliveryEarningsConfirmation(
                             numbered: numbered,
                             expected: expected
                         )
@@ -567,20 +504,6 @@ struct DeliveryControlPanel: View {
         guard let notice = parked.notice else { return }
         transientUndo = .parked(notice, action: action)
         AccessibilityNotification.Announcement(notice.spokenLabel).post()
-    }
-
-    /// A delivery that has just been recorded as delivered, together with the
-    /// amount it was expected to pay.
-    ///
-    /// The expectation is carried rather than looked up so the sheet is
-    /// unpresentable without one: there is no state in which the confirmation
-    /// appears offering nothing, and no path by which it could show a figure
-    /// read back out of the recorded gross column.
-    private struct PendingEarningsConfirmation: Identifiable {
-        let numbered: NumberedDelivery
-        let expected: Money
-
-        var id: UUID { numbered.id }
     }
 
     private var isConfirmingCancellation: Binding<Bool> {
@@ -1089,3 +1012,17 @@ private struct ActiveDeliveryCard: View {
     PreviewSupport.rootView(container: PreviewSupport.stackedOfferContainer())
 }
 #endif
+
+/// A delivery that has just been recorded as delivered, together with the
+/// amount it was expected to pay.
+///
+/// The expectation is carried rather than looked up so the sheet is
+/// unpresentable without one: there is no state in which the confirmation
+/// appears offering nothing, and no path by which it could show a figure
+/// read back out of the recorded gross column.
+struct PendingDeliveryEarningsConfirmation: Identifiable {
+    let numbered: NumberedDelivery
+    let expected: Money
+
+    var id: UUID { numbered.id }
+}

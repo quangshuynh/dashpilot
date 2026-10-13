@@ -104,9 +104,7 @@ struct CurrentWeekHistorySection: View {
             // Named for what the screen is rather than for the four lengths it
             // offers: listing them here would have to be corrected every time
             // one is added, and the screen already says which one it is showing.
-            NavigationLink {
-                PeriodSummaryView()
-            } label: {
+            NavigationLink(value: WorkspaceDestination.periodSummary) {
                 Label("Period Summaries", systemImage: "calendar")
                     .dashFont(.body)
             }
@@ -159,9 +157,7 @@ struct CurrentWeekHistorySection: View {
             // screen. Absent when there is nothing else, because a screen that
             // would open on an empty list is not worth offering.
             if hasOtherWeeks {
-                NavigationLink {
-                    OlderHistoryWeeksView()
-                } label: {
+                NavigationLink(value: WorkspaceDestination.olderWeeks) {
                     Label {
                         VStack(alignment: .leading, spacing: DashSpacing.xs) {
                             Text("View Older Weeks")

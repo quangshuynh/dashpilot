@@ -96,6 +96,18 @@ final class DashPilotUITests: XCTestCase {
         app.launch()
     }
 
+    @MainActor
+    private func selectWorkspace(_ title: String, in app: XCUIApplication) {
+        let tab = app.tabBars.buttons[title]
+        XCTAssertTrue(tab.appears())
+        if !tab.isSelected {
+            let start = Date.now
+            tab.tap()
+            XCTAssertTrue(tab.isSelected)
+            print("Workspace transition to \(title): \(Date.now.timeIntervalSince(start)) s (XCTest tap and selection read)")
+        }
+    }
+
     /// Keeps a screenshot of the whole screen in the result bundle, for review.
     ///
     /// Not an assertion and not a snapshot comparison: it is the record a
@@ -139,6 +151,7 @@ final class DashPilotUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments.append(Self.seededHistoryArgument)
         launchInPortrait(app)
+        selectWorkspace("Work", in: app)
         return app
     }
 
@@ -154,6 +167,7 @@ final class DashPilotUITests: XCTestCase {
         app.launchArguments.append(Self.seededHistoryArgument)
         app.launchArguments += ["-UIPreferredContentSizeCategoryName", category]
         launchInPortrait(app)
+        selectWorkspace("Work", in: app)
         return app
     }
 
@@ -229,6 +243,7 @@ final class DashPilotUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments.append(Self.seededPausedHistoryArgument)
         launchInPortrait(app)
+        selectWorkspace("Work", in: app)
         return app
     }
 
@@ -254,6 +269,7 @@ final class DashPilotUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments.append(Self.seededLateDeliveryHistoryArgument)
         launchInPortrait(app)
+        selectWorkspace("Work", in: app)
         return app
     }
 
@@ -307,17 +323,23 @@ final class DashPilotUITests: XCTestCase {
         return recordedMiles(in: app)
     }
 
-    /// The app launches into the shift screen rather than the persistence failure state.
+    /// Cold launch without work welcomes the driver and exposes all destinations.
     @MainActor
     func testLaunchesIntoShiftScreen() throws {
-        let app = XCUIApplication()
-        // The real store, so the welcome would show on a fresh simulator; this
-        // journey is about the store opening, so the welcome counts as seen.
-        app.launchArguments.append(Self.onboardingCompletedArgument)
-        launchInPortrait(app)
-
-        XCTAssertTrue(app.navigationBars["DashPilot"].appears())
+        let app = launchWithEmptyStore()
+        XCTAssertTrue(app.navigationBars["Home"].appears())
+        XCTAssertTrue(app.tabBars.buttons["Home"].isSelected)
         XCTAssertFalse(app.staticTexts["Local Data Unavailable"].exists)
+        attachScreenshot("home-without-shift")
+        app.buttons["homeMoneyButton"].tap()
+        XCTAssertTrue(app.navigationBars["Money"].appears())
+        attachScreenshot("money-workspace")
+        openSettings(in: app)
+        goBack(in: app)
+        selectWorkspace("Home", in: app)
+        app.buttons["homeHistoryButton"].tap()
+        XCTAssertTrue(app.navigationBars["Work"].appears())
+        XCTAssertTrue(app.descendants(matching: .any)["emptyHistoryNotice"].appears())
     }
 
     // MARK: The welcome
@@ -395,11 +417,17 @@ final class DashPilotUITests: XCTestCase {
     @MainActor
     func testStartsAndEndsAShift() throws {
         let app = launchWithEmptyStore()
+        XCTAssertTrue(app.tabBars.buttons["Home"].isSelected)
+        selectWorkspace("Work", in: app)
+        openSettings(in: app)
+        selectWorkspace("Home", in: app)
 
         let startButton = app.buttons["startShiftButton"]
         XCTAssertTrue(startButton.appears())
 
         startButton.tap()
+        XCTAssertTrue(app.navigationBars["Work"].appears())
+        XCTAssertTrue(app.tabBars.buttons["Work"].isSelected)
 
         let endButton = app.buttons["endShiftButton"]
         XCTAssertTrue(endButton.appears())
@@ -852,7 +880,7 @@ final class DashPilotUITests: XCTestCase {
         let counts = app.descendants(matching: .any)["liveDeliveryCounts"]
         XCTAssertTrue(scrollTo(counts, in: app, maxSwipes: 10))
         XCTAssertGreaterThanOrEqual(counts.frame.minY, mileage.frame.maxY - 1, "The figures stack rather than share a row")
-        attachScreenshot("home-active-xxxl")
+        attachScreenshot("work-active-ax5")
 
         let card = deliveryCard("Delivery 2", in: app)
         XCTAssertTrue(scrollTo(card, in: app, maxSwipes: 25))
@@ -862,7 +890,11 @@ final class DashPilotUITests: XCTestCase {
         ).firstMatch
         XCTAssertTrue(scrollUntilHittable(action, in: app, maxSwipes: 25))
         XCTAssertGreaterThanOrEqual(onPixelGrid(action.frame.height), 44)
-        attachScreenshot("home-delivery-xxxl")
+        let entry = app.buttons["startDeliveryButton"]
+        XCTAssertTrue(entry.isHittable)
+        XCTAssertLessThanOrEqual(entry.frame.maxY, app.tabBars.firstMatch.frame.minY)
+        XCTAssertLessThanOrEqual(action.frame.maxY, entry.frame.minY)
+        attachScreenshot("work-delivery-ax5")
         let cancel = app.buttons.matching(
             NSPredicate(format: "identifier == %@ AND label CONTAINS %@", "cancelDeliveryButton", "Delivery 2")
         ).firstMatch
@@ -884,7 +916,24 @@ final class DashPilotUITests: XCTestCase {
     /// Was four journeys over the same fixture.
     @MainActor
     func testRecoveredStackedDeliveriesStayDistinctAndSurviveLeavingTheApp() throws {
+        let launchBeganAt = Date.now
         let app = launchWithActiveDelivery()
+        XCTAssertTrue(app.navigationBars["Work"].appears(), "Cold recovery opens Work")
+        XCTAssertTrue(app.tabBars.buttons["Work"].isSelected)
+        XCTAssertTrue(scrollUntilHittable(app.buttons["endShiftButton"], in: app))
+        openSettings(in: app)
+        selectWorkspace("Home", in: app)
+        XCTAssertTrue(app.staticTexts["homeShiftStatus"].appears())
+        attachScreenshot("home-with-active-shift")
+        selectWorkspace("Money", in: app)
+        XCUIDevice.shared.press(.home)
+        app.activate()
+        XCTAssertTrue(app.tabBars.buttons["Money"].isSelected, "Foreground return preserves the selected workspace")
+        selectWorkspace("Home", in: app)
+        app.buttons["continueShiftButton"].tap()
+        XCTAssertTrue(app.navigationBars["Work"].appears())
+        XCTAssertTrue(app.descendants(matching: .any)["activeShiftStatus"].isHittable,
+                      "Continue reveals the active controls after leaving Work scrolled or pushed")
 
         let accepted = deliveryButton("deliveryActionButton", containing: "Delivery 2", in: app)
         let carrying = deliveryButton("deliveryActionButton", containing: "Delivery 3", in: app)
@@ -903,11 +952,11 @@ final class DashPilotUITests: XCTestCase {
         let third = deliveryCard("Delivery 3", in: app)
         XCTAssertTrue(scrollTo(second, in: app))
         XCTAssertTrue(second.label.contains("Next step, mark arrived at pickup"), "Showed: \(second.label)")
-        XCTAssertTrue(second.label.contains("In this state for 25 minutes"), "Its own clock: \(second.label)")
+        assertDeliveryClock(second, initialMinutes: 25, launchBeganAt: launchBeganAt)
         XCTAssertTrue(scrollTo(third, in: app))
         XCTAssertTrue(third.label.contains("Next step, mark delivery completed"), "Showed: \(third.label)")
-        XCTAssertTrue(third.label.contains("In this state for 4 minutes"), "And this one its own: \(third.label)")
-        attachScreenshot("home-two-stacked-deliveries")
+        assertDeliveryClock(third, initialMinutes: 4, launchBeganAt: launchBeganAt)
+        attachScreenshot("work-stacked-deliveries")
 
         // The card leads with its state, then the step, then cancelling.
         let cancel = deliveryButton("cancelDeliveryButton", containing: "Delivery 2", in: app)
@@ -940,6 +989,22 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertTrue(waitForLabel(status, toContain: "2 deliveries completed"), "Status: \(status.label)")
     }
 
+    /// The fixture clocks keep advancing while the navigation journey runs.
+    /// Bound each against its own seeded duration and actual elapsed test time.
+    @MainActor
+    private func assertDeliveryClock(_ card: XCUIElement, initialMinutes: Int, launchBeganAt: Date) {
+        let label = card.label
+        let clock = label.components(separatedBy: "In this state for ").last ?? ""
+        guard label.contains("In this state for "), clock.contains("minute"),
+              let value = clock.split(separator: " ").first.flatMap({ Int($0) }) else {
+            XCTFail("No minute clock in delivery label: \(label)")
+            return
+        }
+        let elapsedMinutes = Int(ceil(Date.now.timeIntervalSince(launchBeganAt) / 60))
+        XCTAssertGreaterThanOrEqual(value, initialMinutes, label)
+        XCTAssertLessThanOrEqual(value, initialMinutes + elapsedMinutes, label)
+    }
+
     /// One simulated drive through the live figures: recorded mileage grows
     /// while positions are accepted and says it is recorded; the running shift
     /// shows no earnings or rate and says why; pausing freezes both mileage and
@@ -964,6 +1029,10 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertTrue(mileage.appears())
         let first = try XCTUnwrap(waitForRecordedMiles(in: app), "No measured distance while recording")
         XCTAssertGreaterThan(first, 0)
+        selectWorkspace("Money", in: app)
+        openSettings(in: app)
+        goBack(in: app)
+        selectWorkspace("Work", in: app)
         let deadline = Date().addingTimeInterval(30)
         var grown: Double?
         while Date() < deadline, grown == nil {
@@ -972,6 +1041,7 @@ final class DashPilotUITests: XCTestCase {
         }
         XCTAssertNotNil(grown, "Recorded mileage did not grow while the route was being recorded")
         let spoken = try XCTUnwrap(mileage.value as? String)
+        XCTAssertTrue(spoken.contains("1 capture segment"), "Tab switches must not restart capture: \(spoken)")
         XCTAssertTrue(spoken.contains("recorded"), "The figure has to say what it is: \(spoken)")
         XCTAssertFalse(spoken.lowercased().contains("total"), "Recorded mileage is not a total: \(spoken)")
 
@@ -1073,6 +1143,7 @@ final class DashPilotUITests: XCTestCase {
             includingCurrentWeek ? Self.seededOlderWeeksArgument : Self.seededOlderWeeksOnlyArgument
         )
         launchInPortrait(app)
+        selectWorkspace("Work", in: app)
         return app
     }
 
@@ -1290,7 +1361,7 @@ final class DashPilotUITests: XCTestCase {
             "The confirmation says the shift's route is deleted with it"
         )
         tapClosingDialog(confirm)
-        XCTAssertTrue(app.navigationBars["DashPilot"].appears(), "Detail returns to history")
+        XCTAssertTrue(app.navigationBars["Work"].appears(), "Detail returns to history")
         let remaining = rows(in: app)
         XCTAssertTrue(waitForCount(remaining, toEqual: 1), "The deleted shift is gone from history")
         XCTAssertFalse(remaining.firstMatch.label.contains("$86.25"), "And the one that remains is the other")
@@ -1367,6 +1438,8 @@ final class DashPilotUITests: XCTestCase {
         // One primary action per state, in order, each naming its own event and
         // its own delivery.
         let action = deliveryButton("deliveryActionButton", containing: "Delivery 1", in: app)
+        XCTAssertTrue(scrollUntilHittable(action, in: app))
+        attachScreenshot("work-active-delivery")
         for expected in ["Mark arrived at pickup", "Mark order picked up", "Mark delivery completed"] {
             XCTAssertTrue(
                 waitForLabel(action, toContain: expected),
@@ -2308,6 +2381,7 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertTrue(banner.appears(), "The offer to take it back is on screen")
         XCTAssertEqual(banner.label, "Delivery 3 marked delivered", "It names the delivery it is about")
 
+        selectWorkspace("Home", in: app)
         let undo = app.buttons["undoDeliveredButton"]
         XCTAssertTrue(undo.exists)
         XCTAssertEqual(
@@ -2317,6 +2391,7 @@ final class DashPilotUITests: XCTestCase {
         )
         XCTAssertTrue(scrollUpUntilHittable(undo, in: app), "and it can be pressed where it sits")
         undo.tap()
+        selectWorkspace("Work", in: app)
 
         XCTAssertTrue(
             waitForCount(app.buttons.matching(identifier: "deliveryActionButton"), toEqual: 2),
@@ -3355,8 +3430,9 @@ final class DashPilotUITests: XCTestCase {
 
     @MainActor
     private func goBack(in app: XCUIApplication) {
+        let workspace = app.tabBars.buttons.matching(NSPredicate(format: "isSelected == true")).firstMatch.label
         app.navigationBars.buttons.element(boundBy: 0).tap()
-        XCTAssertTrue(app.navigationBars["DashPilot"].appears())
+        XCTAssertTrue(app.navigationBars[workspace].appears())
     }
 
     /// Runs one shift with one delivery taken start to finish.
@@ -3596,8 +3672,9 @@ final class DashPilotUITests: XCTestCase {
 
     @MainActor
     private func openPeriodSummary(in app: XCUIApplication) {
+        selectWorkspace("Money", in: app)
         let link = app.buttons["periodSummaryLink"]
-        XCTAssertTrue(link.appears(), "History offers a way into the summaries")
+        XCTAssertTrue(link.appears(), "Money offers a way into the summaries")
         link.tap()
         XCTAssertTrue(app.descendants(matching: .any)["periodTitle"].appears())
     }
@@ -3673,10 +3750,9 @@ final class DashPilotUITests: XCTestCase {
     /// Opens the expense list from the root screen.
     @MainActor
     private func openExpenses(in app: XCUIApplication) {
-        // In the navigation bar, so it is reachable wherever the list has been
-        // scrolled to and costs the shift history no room.
+        selectWorkspace("Money", in: app)
         let link = app.buttons["expensesLink"].firstMatch
-        XCTAssertTrue(link.appears(), "The root screen offers a way into recorded expenses")
+        XCTAssertTrue(link.appears(), "Money offers a way into recorded expenses")
         link.tap()
         XCTAssertTrue(app.buttons["addExpenseButton"].appears())
     }

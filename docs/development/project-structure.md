@@ -2,7 +2,7 @@
 
 ```text
 DashPilot/
-  App/            SwiftUI entry point, root screen, delivery controls, editors, shift detail, failure state, preview fixtures
+  App/            SwiftUI scene shell, Home/Work/Money workspaces, delivery controls, editors, shift detail, failure state, preview fixtures
   Domain/         Framework-independent value types and calculations
   Export/         The external file contract: export records, encoders, file writing
   Intents/        App Intents: the six lifecycle actions performable with no screen
