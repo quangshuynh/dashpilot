@@ -1,3 +1,4 @@
+import Combine
 import SwiftData
 import SwiftUI
 
@@ -23,7 +24,7 @@ struct PeriodLoading: ViewModifier {
             }
             .onAppear { isVisible = true }
             .onDisappear { isVisible = false }
-            .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave)) { notification in
+            .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave).receive(on: RunLoop.main)) { notification in
                 if PeriodSaveInvalidation.affectsPeriods(notification) { revision += 1 }
             }
             .onChange(of: scenePhase) { _, phase in
