@@ -3,6 +3,7 @@ import SwiftUI
 
 struct StartShiftPanel: View {
     let start: () -> Void
+    var compact = false
 
     @Environment(\.locale) private var locale
 
@@ -20,7 +21,7 @@ struct StartShiftPanel: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: DashSpacing.xl) {
+        VStack(alignment: .leading, spacing: compact ? DashSpacing.md : DashSpacing.xl) {
             // The state, said once and quietly: there is nothing running.
             DashStatusLabel(title: "No shift in progress", symbol: "circle.dashed", tint: .secondary)
 
@@ -39,12 +40,14 @@ struct StartShiftPanel: View {
             .controlSize(.large)
             .accessibilityIdentifier("startShiftButton")
 
-            Text("DashPilot records a shift's start and end times on this device.")
-                .dashFont(.supporting)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            if !compact {
+                Text("DashPilot records a shift's start and end times on this device.")
+                    .dashFont(.supporting)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
-        .padding(.vertical, DashSpacing.md)
+        .padding(.vertical, compact ? 0 : DashSpacing.md)
     }
 
     /// The vehicle the shift about to be started will record.

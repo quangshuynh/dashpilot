@@ -331,15 +331,36 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertTrue(app.tabBars.buttons["Home"].isSelected)
         XCTAssertFalse(app.staticTexts["Local Data Unavailable"].exists)
         attachScreenshot("home-without-shift")
+        XCTAssertTrue(scrollUntilHittable(app.buttons["homeMoneyButton"], in: app))
         app.buttons["homeMoneyButton"].tap()
         XCTAssertTrue(app.navigationBars["Money"].appears())
         attachScreenshot("money-workspace")
         openSettings(in: app)
         goBack(in: app)
         selectWorkspace("Home", in: app)
+        XCTAssertTrue(scrollToTop(reaching: app.buttons["homeHistoryButton"], in: app))
         app.buttons["homeHistoryButton"].tap()
         XCTAssertTrue(app.navigationBars["Work"].appears())
         XCTAssertTrue(app.descendants(matching: .any)["emptyHistoryNotice"].appears())
+    }
+
+    @MainActor
+    func testHomeFinancialCoverageAtLargestTextSize() throws {
+        let app = launchWithPeriodSummary(atTextSize: Self.accessibilityXXXLTextSize)
+        let earnings = app.descendants(matching: .any)["homeEarnings"]
+        XCTAssertTrue(scrollUntilHittable(earnings, in: app))
+        XCTAssertTrue(waitForLabel(earnings, toContain: "$206.25"))
+        XCTAssertTrue(earnings.label.contains("2 of 3 completed shifts"))
+        attachScreenshot("home-ax5-earnings")
+        let rate = app.descendants(matching: .any)["homeHourlyRate"]
+        XCTAssertTrue(scrollUntilHittable(rate, in: app))
+        XCTAssertTrue(rate.label.contains("$25.78"))
+        XCTAssertTrue(rate.label.contains("2 of 3 completed shifts"))
+        XCTAssertTrue(rate.label.contains("positive working time"))
+        attachScreenshot("home-ax5-hourly-rate")
+        XCTAssertTrue(scrollUntilHittable(app.buttons["homeMoneyButton"], in: app))
+        app.buttons["homeMoneyButton"].tap()
+        XCTAssertTrue(app.navigationBars["Money"].appears())
     }
 
     // MARK: The welcome
@@ -448,6 +469,12 @@ final class DashPilotUITests: XCTestCase {
             scrollUntilHittable(rows(in: app).firstMatch, in: app),
             "The finished shift should appear in history"
         )
+        selectWorkspace("Home", in: app)
+        let completedTime = app.descendants(matching: .any)["homeWorkingTime"]
+        XCTAssertTrue(scrollUntilHittable(completedTime, in: app))
+        XCTAssertTrue(completedTime.label.contains("1 of 1 completed shift"))
+        XCTAssertFalse(app.descendants(matching: .any)["homeEmptyWeek"].exists)
+
     }
 
     // MARK: Home
@@ -815,6 +842,11 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertFalse(app.descendants(matching: .any)["pausedShiftStatus"].exists, "Parked is not paused")
         XCTAssertTrue(entry.isHittable, "Parked: an accepted offer can still be recorded")
         attachScreenshot("home-parked")
+        selectWorkspace("Home", in: app)
+        XCTAssertTrue(waitForLabel(app.descendants(matching: .any)["homeShiftStatus"], toContain: "Vehicle parked"))
+        attachScreenshot("dashboard-parked")
+        app.buttons["continueShiftButton"].tap()
+        XCTAssertTrue(parked.appears(), "Continue preserves Park")
         pressResumeDriving(in: app)
 
         let pause = app.buttons["pauseShiftButton"]
@@ -843,6 +875,11 @@ final class DashPilotUITests: XCTestCase {
             "The capture line says recording stopped, not that something failed: \(capture.label)"
         )
         attachScreenshot("home-paused")
+        selectWorkspace("Home", in: app)
+        XCTAssertTrue(waitForLabel(app.descendants(matching: .any)["homeShiftStatus"], toContain: "Shift paused"))
+        attachScreenshot("dashboard-paused")
+        app.buttons["continueShiftButton"].tap()
+        XCTAssertTrue(app.descendants(matching: .any)["pausedShiftStatus"].appears(), "Continue preserves Pause")
 
         XCTAssertTrue(scrollToTop(reaching: resume, in: app))
         resume.tap()
@@ -1185,6 +1222,19 @@ final class DashPilotUITests: XCTestCase {
     @MainActor
     func testHistoryShowsThisWeekWithItsOwnFiguresAndFollowsAnEdit() throws {
         let app = launchWithOlderWeeks()
+        selectWorkspace("Home", in: app)
+        let homeEarnings = app.descendants(matching: .any)["homeEarnings"]
+        XCTAssertTrue(scrollUntilHittable(homeEarnings, in: app))
+        XCTAssertTrue(waitForLabel(homeEarnings, toContain: "$70.00"))
+        attachScreenshot("home-completed-work")
+        let recent = app.buttons.matching(identifier: "homeRecentShiftRow").firstMatch
+        XCTAssertTrue(scrollUntilHittable(recent, in: app))
+        attachScreenshot("home-recent-work")
+        recent.tap()
+        XCTAssertTrue(waitForLabel(app.descendants(matching: .any)["shiftDetailEarnings"], toContain: "$70.00"))
+        goBack(in: app)
+        XCTAssertTrue(scrollUntilHittable(app.buttons["homeHistoryButton"], in: app))
+        app.buttons["homeHistoryButton"].tap()
 
         let history = rows(in: app)
         XCTAssertTrue(scrollUntilHittable(history.firstMatch, in: app), "This week's shift is listed")
@@ -1234,6 +1284,11 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertTrue(scrollToTop(reaching: summary, in: app, swipes: 12))
         XCTAssertTrue(waitForLabel(summary, toContain: "Recorded gross earnings, $90.00"), "Showed: \(summary.label)")
         XCTAssertFalse(summary.label.contains("$70.00"), "The previous figure is gone: \(summary.label)")
+        selectWorkspace("Home", in: app)
+        XCTAssertTrue(scrollToTop(reaching: homeEarnings, in: app))
+        XCTAssertTrue(waitForLabel(homeEarnings, toContain: "$90.00"))
+        XCTAssertFalse(homeEarnings.label.contains("$70.00"))
+        attachScreenshot("home-after-correction")
     }
 
     /// Older Weeks groups every other shift by its week, newest first, with no

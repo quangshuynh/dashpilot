@@ -13,7 +13,7 @@ Settings uses one shared toolbar route on all three roots. The public app remain
 | --- | --- |
 | `DashPilotApp` | The existing process store, authorization service, route capture service, and shared Live Activity service |
 | `RootView` | Unfinished-shift query, cold-launch selection, scene and authorization reconciliation, onboarding, week boundary clock, lifecycle actions, transient Undo and export presentation |
-| `HomeWorkspace` | Welcome, next-shift vehicle context, Start or Continue Shift, and links into Work History and Money |
+| `HomeWorkspace` | Current-calendar-week completed financial overview, three recent completed shifts, next-shift vehicle context, Start or Continue Shift, and links into Work History and Money |
 | `WorkWorkspace` | Existing shift and delivery panels, pinned delivery entry, current-week History, Older Weeks, completed-shift details and corrections |
 | `MoneyWorkspace` | Entry points to the existing expense ledger and period summaries, including comparisons and period export |
 
@@ -39,11 +39,32 @@ outside its List. Their existing editors keep their navigation and confirmation 
 delivery row is refreshed or recycled. The delivery panel requests the review destination; the
 workspace owns its presentation.
 
-Home reads no completed shifts or financial aggregates. Work retains the current-week query and
-off-main History measurements; its existing summary is reused until its week or record revision
-changes. The active route reading survives tab changes and extends from accepted samples rather
-than restarting the route walk. Money loads existing financial destinations only when opened.
-No schema, export, financial calculation, or persisted navigation preference changes.
+Home and Period Summaries share `PeriodDataLoader`, a bounded read through a separate model
+context. Only immutable Sendable results cross back to the main actor. Home requests earnings,
+working time, their coverage, the existing hourly-target summary, and the expense-record count.
+It never reads route samples or deliveries. Full summaries request their selected and preceding
+periods, measuring routes and adapting delivery records off main before calling the same calculator.
+Neither view aggregates in its body. Home separately fetches at most three completed shift models
+for the existing row and detail navigation, ordered by start time and stable identifier.
+
+`PeriodLoading` owns screen-local invalidation. Relevant `ModelContext.didSave` notifications change
+a revision; route-sample-only, settings-only and vehicle-only saves do not. This is conservative:
+a saved historical edit outside the selection can also reload its bounded results. Hidden screens
+retain the dirty revision and defer work until visible. Foreground return refreshes from the store.
+Home rereads the calendar on appearance, foreground return and calendar-day changes. Its week follows
+the device calendar, while Work History retains its established Monday-to-Sunday week.
+
+`PeriodLoadStore` reuses a successful unchanged selection on warm appearance. Changed selections or
+revisions show a loading state, never zero placeholders. Cancellation reaches the detached worker,
+which checks between shifts; a generation check also rejects late results from superseded work.
+Failed reads show an explicit retry action rather than empty history. No aggregate is persisted.
+Route measurement within one shift is still an indivisible operation.
+
+Work retains its current-week query, off-main History measurements, and existing revision behavior.
+The active route reading survives tab changes and extends from accepted samples rather than
+restarting the route walk. Money loads existing financial destinations only when opened.
+Schema v22, export v6, financial definitions, lifecycle ownership and navigation persistence remain
+unchanged.
 
 ## Layers
 

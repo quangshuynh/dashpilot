@@ -1,64 +1,14 @@
 import SwiftData
 import SwiftUI
 
-/// What the completed shifts of one day, week, month or chosen date range add
-/// up to.
-///
-/// ## What this screen is for
-///
-/// Answering *"what do the records DashPilot actually has say about this
-/// period?"* — never *"what happened this week"*. Every figure here is followed
-/// by the shifts it came from, because a subtotal over three of four shifts read
-/// as a week's earnings is the one way this screen could lie.
-///
-/// ## Where the work happens
-///
-/// Nothing is calculated in this view. ``PeriodMetricsCalculator`` owns every
-/// rule, including which figures exist at all; this reads the store, hands over
-/// plain records, and writes down the result.
-///
-/// The four period lengths differ **only** in which shifts they select. A month
-/// is not summarised from its weeks and a range is not summarised from its days:
-/// each one hands the same calculator the underlying shift records it contains,
-/// so a month's per-hour rate is its own amounts over its own hours rather than
-/// an average of smaller periods' rates.
-///
-/// The routes are measured in a task rather than in `body`, for the reason the
-/// history row measures in one: a week can hold several shifts and each holds
-/// thousands of positions. The arithmetic over the measured result stays in the
-/// body, which is what keeps the summary correct the moment a driver edits an
-/// amount and comes back.
-///
-/// ## The period before this one
-///
-/// The comparison section reads the equivalent period immediately before the
-/// selected one through the **same** calculator, over the same records, and
-/// hands the two finished results to ``PeriodComparisonCalculator``. There is
-/// one aggregation on this screen; the comparison is not a second one, and every
-/// figure in it is the figure above it. Measuring both periods' routes is what
-/// makes that true and is why a selection costs two measurements.
+/// Completed-period reports and comparisons use the shared bounded, off-main
+/// loader. Route measurements and aggregation run once per selection or saved
+/// revision, never during rendering. Export retains its independent explicit read.
 struct PeriodSummaryView: View {
     @Environment(\.calendar) private var calendar
     @Environment(\.locale) private var locale
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-
-    /// Every completed shift. The period's own shifts are selected from these by
-    /// ``ReportingPeriod/contains(_:)``, which is also the rule the calculator
-    /// applies — this filter exists to avoid measuring routes the period will
-    /// not use, not to decide membership.
-    @Query(filter: #Predicate<Shift> { $0.endedAt != nil }, sort: \Shift.startedAt, order: .reverse)
-    private var completedShifts: [Shift]
-
-    /// Every recorded expense. Selected into the period by its **own** date, by
-    /// the same half-open rule a shift is selected by — an expense belongs to no
-    /// shift, so nothing here reads one through the work.
-    ///
-    /// Unfiltered by the query for the reason the shifts are: the calculator
-    /// applies the membership rule, and reading them all costs nothing to
-    /// measure.
-    @Query(sort: \Expense.occurredAt, order: .reverse)
-    private var recordedExpenses: [Expense]
 
     @State private var unit: ReportingPeriodUnit = .day
 
@@ -100,14 +50,14 @@ struct PeriodSummaryView: View {
     /// Whether the custom range has been given its opening dates yet.
     @State private var hasSeededCustomRange = false
 
-    /// The measured routes, and the selection they were measured for.
-    @State private var measurement: RouteMeasurement?
+    /// Immutable results for the selected and preceding periods.
+    @State private var loader = PeriodLoadStore()
+    @State private var retryRevision = 0
 
     /// Exporting the selected period. The sheet writes the file when it opens,
     /// so this stays false until the driver asks.
     @State private var isExporting = false
 
-    private let calculator = PeriodMetricsCalculator()
 
     /// The comparison between the selected period and the one before it. It
     /// aggregates nothing: it is handed the two results the calculator above
@@ -177,6 +127,8 @@ struct PeriodSummaryView: View {
                 // footer, which at the largest text sizes pushed the next
                 // figure a screen further down.
                 explanationsSection(metrics)
+            } else if loader.state == .failed {
+                PeriodLoadFailure(retry: { retryRevision += 1 })
             } else {
                 Section {
                     Text("Working out this period…")
@@ -188,7 +140,7 @@ struct PeriodSummaryView: View {
         .dashCanvas()
         .navigationTitle("Summary")
         .navigationBarTitleDisplayMode(.inline)
-        .task(id: measurementToken) { measureRoutes() }
+        .modifier(PeriodLoading(request: loadRequest, store: loader, retryRevision: retryRevision))
         .onAppear(perform: seedCustomRangeIfNeeded)
         .onChange(of: scenePhase) { _, phase in
             // `.inactive` is deliberately not included, for the reason
@@ -1036,101 +988,19 @@ struct PeriodSummaryView: View {
         period?.precedingEquivalent(using: calendar)
     }
 
-    /// The completed shifts belonging to the selected period.
-    private var shiftsInPeriod: [Shift] {
-        shifts(in: period)
+    private var loadRequest: PeriodLoadRequest? {
+        period.map { PeriodLoadRequest(period: $0, previous: comparisonPeriod, includesRouteDetails: true) }
     }
 
-    /// The completed shifts belonging to the period before it.
-    private var shiftsInComparisonPeriod: [Shift] {
-        shifts(in: comparisonPeriod)
-    }
-
-    private func shifts(in period: ReportingPeriod?) -> [Shift] {
-        guard let period else { return [] }
-        return completedShifts.filter { period.contains($0.startedAt) }
-    }
-
-    /// What the period adds up to, or `nil` while its routes are still being
-    /// measured.
-    ///
-    /// Absent rather than partial during measurement: a summary built over
-    /// unmeasured routes would say "No route measured" for a fraction of a
-    /// second, which is a claim rather than a loading state.
     private var metrics: PeriodMetrics? {
-        metrics(of: shiftsInPeriod, in: period)
+        guard case .loaded(let snapshot) = loader.state, snapshot.current?.period == period else { return nil }
+        return snapshot.current
     }
 
-    /// The same figures for the period before the selected one, or `nil` while
-    /// its routes are still being measured.
-    private var comparisonMetrics: PeriodMetrics? {
-        metrics(of: shiftsInComparisonPeriod, in: comparisonPeriod)
-    }
-
-    /// The two results side by side, or `nil` when either is not ready or the
-    /// calendar cannot name the period before this one.
-    ///
-    /// Built from the finished results rather than from the records, which is
-    /// what keeps a compared figure identical to the figure above it: there is
-    /// one aggregation in this screen, and the comparison is not a second one.
     private var comparison: PeriodComparison? {
-        guard let metrics, let comparisonMetrics else { return nil }
-        return comparisons.comparison(of: metrics, with: comparisonMetrics, asOf: now, calendar: calendar)
-    }
-
-    private func metrics(of shifts: [Shift], in period: ReportingPeriod?) -> PeriodMetrics? {
-        guard let period, let measurement, measurement.token == measurementToken else { return nil }
-        let records = shifts.map { shift in
-            shift.periodRecord(for: measurement.distances[shift.id] ?? .none)
-        }
-        return calculator.metrics(
-            of: records,
-            // Every recorded expense, selected into the period by the calculator
-            // on its own date. Nothing is measured for them, so they are not
-            // part of the measurement token: adding one updates the figures on
-            // the next body without a re-measure.
-            expenses: recordedExpenses.map(\.expenseRecord),
-            in: period
-        )
-    }
-
-    /// Identifies the measurement the screen currently needs: which shifts, in
-    /// which period. A route changes only while its shift is running, and a
-    /// running shift is never in here, so this is the whole of what invalidates
-    /// a measurement.
-    ///
-    /// Both bounds are in the token, not just the start: two custom ranges can
-    /// begin on the same day and cover different numbers of shifts. The
-    /// preceding period's shifts are in it too, because the comparison measures
-    /// their routes as well and a selection that changes only the earlier of the
-    /// two spans still needs a re-measure.
-    private var measurementToken: String {
-        let span = period.map {
-            "\($0.unit.rawValue)@\($0.start.timeIntervalSince1970)-\($0.end.timeIntervalSince1970)"
-        } ?? "none"
-        let ids = (shiftsInPeriod + shiftsInComparisonPeriod).map(\.id.uuidString)
-        return ([span] + ids).joined(separator: "|")
-    }
-
-    /// Measures both periods' routes in one pass.
-    ///
-    /// The comparison doubles the work a selection costs, which is the price of
-    /// its second column being the same measurement as the first rather than a
-    /// cheaper estimate of it. Measuring is why this runs in a task rather than
-    /// in `body`.
-    private func measureRoutes() {
-        let token = measurementToken
-        var distances: [UUID: RouteDistance] = [:]
-        for shift in shiftsInPeriod + shiftsInComparisonPeriod {
-            distances[shift.id] = shift.recordedDistance()
-        }
-        measurement = RouteMeasurement(token: token, distances: distances)
-    }
-
-    /// Measured routes, tagged with the selection they belong to.
-    private struct RouteMeasurement {
-        let token: String
-        let distances: [UUID: RouteDistance]
+        guard let metrics, case .loaded(let snapshot) = loader.state,
+              let previous = snapshot.previous, previous.period == comparisonPeriod else { return nil }
+        return comparisons.comparison(of: metrics, with: previous, asOf: now, calendar: calendar)
     }
 }
 

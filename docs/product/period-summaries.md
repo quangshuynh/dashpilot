@@ -1,5 +1,33 @@
 # Period summaries
 
+## Home's weekly overview
+
+Home opens with the next work action and a **This Week** overview of completed shifts. The week
+uses the device's calendar boundaries and assigns each completed shift by its start, including an
+overnight shift in full. Running shifts never contribute, even if they already have earnings.
+Work History continues to use its established Monday-to-Sunday grouping; Home prints its date range
+so the two calendars remain explicit.
+
+The headline is recorded **shift gross earnings**, independent of delivery amounts. Working time
+excludes pauses. Gross per working hour uses the sum of recorded shift earnings divided by the sum
+of positive working hours from the same contributing shifts. Each metric states its coverage.
+Missing earnings say **Earnings not recorded**; explicit zero is a recorded amount. Without a valid
+positive denominator the hourly rate is unavailable. Home does not infer expenses or show profit.
+
+If completed shifts have hourly-target snapshots, Home uses the existing count against each shift's
+own starting target, including its unavailable-rate explanation. It introduces no weekly dollar goal.
+Three recent completed shifts reuse the existing detail and correction paths, across all weeks.
+Home omits mileage from these rows so opening the dashboard requires no route read. **View History**
+opens Work's existing History, and **Open Money** reaches recorded expenses and deeper summaries.
+Expenses recorded without completed work still receive that Money entry point. No expenses recorded
+means no records, not no actual costs.
+
+New users see an invitation to start a shift and a completed-history empty state. With active work,
+Home names running, parked or paused status and offers **Continue Shift**. Parked time remains working
+time; paused time does not. Start and Continue use the shell's existing actions. Loading has its own
+progress label; a failed read has a retry action and cannot be mistaken for an empty week. Saved
+corrections and completed shifts invalidate visible data without requiring a tab switch or relaunch.
+
 DashPilot summarises completed shifts over one **day**, one **week**, one
 calendar **month**, or a **custom** range of dates the driver chooses. The
 summary answers one question:
@@ -494,12 +522,11 @@ driver stepped to, and its figures do not change underneath them.
   count.
 - **No comparison between period *types*.** A month is not shown beside its weeks,
   and nothing states how a range compares with the month it sits in.
-- **No tax summaries and no estimated costs.** The only costs shown are the ones
-  the driver entered; nothing is derived from mileage or hours, and no figure is
-  a deduction figure.
+- **No tax summaries.** Recorded costs and separately labelled fuel estimates are not
+  deduction figures or claims of tax accuracy.
 - **No cost per hour, per mile or per delivery**, and no shift-level net figure.
   See [Recorded expenses](expenses.md).
-- **No projection, target or goal.**
+- **No projection or cumulative earnings goal.** Optional hourly-target snapshots remain contextual.
 - **No quarters, years or all-time totals**, and no recurring or saved report.
 
 ## Accessibility

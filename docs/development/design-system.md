@@ -7,8 +7,10 @@ public app name, icon, and technical identifiers unchanged. It adapts the existi
 ## Workspace navigation
 
 Home, Work, and Money use the native tab bar with an independent navigation stack per workspace.
-Home pairs a quiet blue welcome surface with the existing next-shift panel or a Continue Shift
-action. Work preserves the operational hierarchy and pinned delivery entry. Money offers two
+Home pairs a compact next-shift panel or Continue Shift action with one cloud-blue recorded-gross
+headline, two supporting time and hourly-rate rows, and three recent completed shifts. Coverage stays
+beside each figure. Empty and failed reads use explanatory text rather than fabricated numbers.
+Work preserves the operational hierarchy and pinned delivery entry. Money offers two
 clear routes into the existing records and summaries. A shared toolbar Settings route appears on
 all three roots. Labels, symbols, native selected-tab semantics, and headings identify each place.
 

@@ -1,5 +1,24 @@
 # Testing
 
+## Home dashboard and shared loading
+
+`PeriodDataLoaderTests` checks bounded calendar/DST membership, running-shift exclusion, missing and
+zero earnings, paired-rate and target parity with the full report, paused time, partial routes,
+expense-only history, corrections and deletion through fresh contexts, recent-fetch limits, save
+invalidation, failure/retry, warm reuse and cancellation races. Existing calculator suites remain the
+authority for financial edge cases.
+
+The essential UI suite has 37 journeys. Existing navigation and History correction journeys now
+exercise Home's recent work and refreshed earnings. One new Home journey verifies exact earnings and
+rate coverage at AX5. The app, widgets and both test bundles must be built and warning-audited together.
+
+For diagnostic timing, set `TEST_RUNNER_DASHPILOT_HOME_PROFILE=1` and run
+`DashPilotTests/PeriodDataLoaderMeasurementTests` serially. The simulator temporary directory receives
+`dashpilot-home-profile.md`. It measures cold bounded loading, warm result reuse, unchanged return
+from Work and reload after a saved earnings correction against 3,124 synthetic shifts and 12,000 route
+positions. These are loader timings, not frame latency or XCTest duration-based speedup claims.
+History's existing four opt-in probes remain available under `DASHPILOT_HISTORY_PROFILE`.
+
 Tests exist to hold the claims this project makes. The rules that matter (a route never measured
 across a gap, a missing amount never becoming zero, a running shift never deleted, an older store
 never losing data) are each asserted somewhere that fails loudly.
@@ -397,7 +416,7 @@ Testing is layered, and a behaviour is pinned at the lowest layer that can show 
    behaviour is pinned first.
 2. **Integration tests** in the same target run the services against a real SwiftData store,
    migrations from every frozen schema, and the seeded fixtures the journeys launch.
-3. **The essential UI suite** (`DashPilotUITests`, 36 journeys, at most 40) drives what only a
+3. **The essential UI suite** (`DashPilotUITests`, 37 journeys, at most 40) drives what only a
    running app can show: flows across screens and sheets, confirmations guarding a write, navigation,
    state surviving leaving or relaunching the app, onboarding, the Live Activity's controls, and the
    driving surface at the largest accessibility text size. Every pull request runs all of it.
