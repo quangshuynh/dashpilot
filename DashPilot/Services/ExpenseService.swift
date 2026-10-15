@@ -64,9 +64,11 @@ nonisolated extension ExpenseRecordingError: LocalizedError {
 @MainActor
 struct ExpenseService {
     private let context: ModelContext
+    private let commit: (ModelContext) throws -> Void
 
-    init(context: ModelContext) {
+    init(context: ModelContext, commit: @escaping (ModelContext) throws -> Void = { try $0.save() }) {
         self.context = context
+        self.commit = commit
     }
 
     /// Records a new expense.
@@ -156,7 +158,7 @@ struct ExpenseService {
     func allExpenses() throws -> [Expense] {
         do {
             return try context.fetch(
-                FetchDescriptor<Expense>(sortBy: [SortDescriptor(\.occurredAt, order: .reverse)])
+                FetchDescriptor<Expense>(sortBy: [SortDescriptor(\.occurredAt, order: .reverse), SortDescriptor(\.id)])
             )
         } catch {
             AppLog.expenses.error("Failed to read expenses: \(error)")
@@ -178,7 +180,7 @@ struct ExpenseService {
             return try context.fetch(
                 FetchDescriptor<Expense>(
                     predicate: #Predicate { $0.occurredAt >= start && $0.occurredAt < end },
-                    sortBy: [SortDescriptor(\.occurredAt, order: .reverse)]
+                    sortBy: [SortDescriptor(\.occurredAt, order: .reverse), SortDescriptor(\.id)]
                 )
             )
         } catch {
@@ -206,7 +208,7 @@ struct ExpenseService {
 
     private func save(afterFailing operation: String) throws {
         do {
-            try context.save()
+            try commit(context)
         } catch {
             // Leave nothing in memory that the store does not hold: the list is
             // read straight from the context, so a kept-but-unsaved change would

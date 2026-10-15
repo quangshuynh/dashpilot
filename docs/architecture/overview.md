@@ -13,9 +13,9 @@ Settings uses one shared toolbar route on all three roots. The public app remain
 | --- | --- |
 | `DashPilotApp` | The existing process store, authorization service, route capture service, and shared Live Activity service |
 | `RootView` | Unfinished-shift query, cold-launch selection, scene and authorization reconciliation, onboarding, week boundary clock, lifecycle actions, transient Undo and export presentation |
-| `HomeWorkspace` | Current-calendar-week completed financial overview, three recent completed shifts, next-shift vehicle context, Start or Continue Shift, and links into Work History and Money |
+| `HomeWorkspace` | Current Monday-to-Sunday completed financial overview, three recent completed shifts, next-shift vehicle context, Start or Continue Shift, and links into Work History and Money |
 | `WorkWorkspace` | Existing shift and delivery panels, pinned delivery entry, current-week History, Older Weeks, completed-shift details and corrections |
-| `MoneyWorkspace` | Entry points to the existing expense ledger and period summaries, including comparisons and period export |
+| `MoneyWorkspace` | Selected-week recorded finances, filtered expense rows, existing editor, optional fuel estimates and routes into reports |
 
 Cold launch opens Work when any shift is unfinished, including a paused shift; otherwise it opens
 Home. Starting on Home calls the same `ShiftService` action as Work and selects Work only after a
@@ -39,7 +39,7 @@ outside its List. Their existing editors keep their navigation and confirmation 
 delivery row is refreshed or recycled. The delivery panel requests the review destination; the
 workspace owns its presentation.
 
-Home and Period Summaries share `PeriodDataLoader`, a bounded read through a separate model
+Home, Money and Period Summaries share `PeriodDataLoader`, a bounded read through a separate model
 context. Only immutable Sendable results cross back to the main actor. Home requests earnings,
 working time, their coverage, the existing hourly-target summary, and the expense-record count.
 It never reads route samples or deliveries. Full summaries request their selected and preceding
@@ -51,8 +51,9 @@ for the existing row and detail navigation, ordered by start time and stable ide
 a revision; route-sample-only, settings-only and vehicle-only saves do not. This is conservative:
 a saved historical edit outside the selection can also reload its bounded results. Hidden screens
 retain the dirty revision and defer work until visible. Foreground return refreshes from the store.
-Home rereads the calendar on appearance, foreground return and calendar-day changes. Its week follows
-the device calendar, while Work History retains its established Monday-to-Sunday week.
+Home and Money reread the calendar on appearance, foreground return and calendar-day changes.
+`ReportingPeriod.weekCalendar` pins Monday for all reporting, retaining the supplied timezone and
+calendar. `HistoryWeek` delegates to this policy. Selected periods remain scene-local, not persisted.
 
 `PeriodLoadStore` reuses a successful unchanged selection on warm appearance. Changed selections or
 revisions show a loading state, never zero placeholders. Cancellation reaches the detached worker,
@@ -62,7 +63,14 @@ Route measurement within one shift is still an indivisible operation.
 
 Work retains its current-week query, off-main History measurements, and existing revision behavior.
 The active route reading survives tab changes and extends from accepted samples rather than
-restarting the route walk. Money loads existing financial destinations only when opened.
+restarting the route walk. Money requests immutable expense rows for its bounded selected week and
+uses the same period metrics. A limit-one existence query distinguishes no expenses anywhere from an
+empty week. Category filters reuse the calculator's subtotals without another query or changing net.
+Fuel expansion opts into route measurement, without reading deliveries; ordinary Money loads read no
+routes. Once requested, fuel remains part of that screen's load request even when collapsed.
+`ExpenseActions` resolves only the selected stable identity in the UI context for edits and confirmed
+deletions. `ExpenseService` remains the sole writer; failed saves roll back and do not publish new
+snapshot totals. The full ledger remains an explicit destination for older records.
 Schema v22, export v6, financial definitions, lifecycle ownership and navigation persistence remain
 unchanged.
 

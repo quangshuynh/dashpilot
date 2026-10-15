@@ -1,5 +1,25 @@
 # Testing
 
+## Money workspace and weekly reporting
+
+`MondayReportingTests` pins the October 5-11, 12-18 and 19-25, 2026 headings across timezones and
+Sunday/Monday-first calendars, plus DST, leap-year and cross-year weeks. `MoneyWorkspaceTests` covers
+Sunday/Monday expense and overnight-shift membership, missing/zero/negative values, filtered versus
+overall totals, deterministic row order, date/category corrections, delete cancellation/confirmation,
+duplicate confirmation, failed writes through fresh contexts, optional-fuel parity and v6 export bounds.
+
+The existing expense UI journey covers category emptiness, clearing a filter, authoritative refresh and
+delete cancellation/confirmation. One additional AX5 Money journey covers weekly gross and net coverage,
+category subtotals, large amounts and a long synthetic note, previous-week navigation and returning
+to Work. The essential suite is 38 journeys,
+below its unchanged ceiling of 40; the traceability table names every journey.
+
+Set `TEST_RUNNER_DASHPILOT_MONEY_PROFILE=1` to run `MoneyWorkspaceMeasurementTests` serially. It writes
+`dashpilot-money-profile.md` in the simulator temporary directory, measuring empty and large-history
+loads, warm reuse, week switching, category filtering and add/edit/delete plus refresh. The synthetic
+store holds 10,000 expenses and 3,124 shifts; only 35 expenses and four shifts belong to the selected
+week. These are data-readiness timings, not rendered-frame measurements.
+
 ## Home dashboard and shared loading
 
 `PeriodDataLoaderTests` checks bounded calendar/DST membership, running-shift exclusion, missing and
@@ -8,7 +28,7 @@ expense-only history, corrections and deletion through fresh contexts, recent-fe
 invalidation, failure/retry, warm reuse and cancellation races. Existing calculator suites remain the
 authority for financial edge cases.
 
-The essential UI suite has 37 journeys. Existing navigation and History correction journeys now
+The essential UI suite has 38 journeys. Existing navigation and History correction journeys now
 exercise Home's recent work and refreshed earnings. One new Home journey verifies exact earnings and
 rate coverage at AX5. The app, widgets and both test bundles must be built and warning-audited together.
 
@@ -416,7 +436,7 @@ Testing is layered, and a behaviour is pinned at the lowest layer that can show 
    behaviour is pinned first.
 2. **Integration tests** in the same target run the services against a real SwiftData store,
    migrations from every frozen schema, and the seeded fixtures the journeys launch.
-3. **The essential UI suite** (`DashPilotUITests`, 37 journeys, at most 40) drives what only a
+3. **The essential UI suite** (`DashPilotUITests`, 38 journeys, at most 40) drives what only a
    running app can show: flows across screens and sheets, confirmations guarding a write, navigation,
    state surviving leaving or relaunching the app, onboarding, the Live Activity's controls, and the
    driving surface at the largest accessibility text size. Every pull request runs all of it.

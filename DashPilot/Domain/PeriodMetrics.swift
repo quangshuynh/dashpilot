@@ -670,10 +670,8 @@ nonisolated extension PeriodMetrics {
 
     /// The sentence that has to sit under the figure wherever it appears.
     ///
-    /// Both halves are floors — earnings over the shifts that recorded an
-    /// amount, costs over the expenses that were entered — so their difference
-    /// is an upper bound rather than a result. Saying so is what separates this
-    /// figure from profit.
+    /// Both subtotals can be incomplete. Their difference is not a bound on
+    /// actual profit, so the explanation names what contributed and what did not.
     var netCautionStatement: String {
         """
         Shifts with no amount are not counted, and costs you did not enter are not subtracted. This \

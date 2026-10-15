@@ -10,8 +10,10 @@ Home, Work, and Money use the native tab bar with an independent navigation stac
 Home pairs a compact next-shift panel or Continue Shift action with one cloud-blue recorded-gross
 headline, two supporting time and hourly-rate rows, and three recent completed shifts. Coverage stays
 beside each figure. Empty and failed reads use explanatory text rather than fabricated numbers.
-Work preserves the operational hierarchy and pinned delivery entry. Money offers two
-clear routes into the existing records and summaries. A shared toolbar Settings route appears on
+Work preserves the operational hierarchy and pinned delivery entry. Money extends the financial
+hierarchy with a week selector, Add Expense, a cloud-blue gross headline, ordinary expense and net
+rows, category filtering, and an optional fuel section. Reports and the full ledger remain separate
+navigation destinations. Native list rows avoid nested cards; labels and coverage wrap. A shared toolbar Settings route appears on
 all three roots. Labels, symbols, native selected-tab semantics, and headings identify each place.
 
 The system lays out the tab bar, delivery-entry bar, and transient Undo using safe areas. No device
@@ -101,7 +103,10 @@ The system face keeps native text scaling, familiar glyphs, and consistent app/L
 
 `DashMetric.Emphasis.financial` selects the financial role explicitly. Nothing guesses whether a
 formatted string is money. A missing amount remains ordinary explanatory text, never a financial
-headline displaying zero. Metric values, labels, and coverage wrap rather than shrinking.
+headline displaying zero. Labels, missing-value explanations and coverage wrap rather than shrinking. Money opts into
+keeping complete monetary figures on one line, fitting down to half their scaled size only when
+needed. Secondary figures first move below their labels to use the full row width. Expense rows
+use the same approach, so a negative sign and cents stay attached to their amount at AX5.
 
 The stop marker no longer scales its number down to fit. It has a scaled minimum size and can grow
 horizontally for longer delivery numbers. The full delivery title remains the accessible name.

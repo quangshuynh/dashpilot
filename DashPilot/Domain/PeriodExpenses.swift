@@ -103,9 +103,9 @@ nonisolated struct PeriodExpenseTotals: Equatable, Sendable {
 /// taxable figure. Calling it any of those would assert that every cost of doing
 /// the work is represented, and DashPilot cannot know that: it observes no
 /// purchase, models no vehicle wear, and has no idea what the driver paid for
-/// and never entered. Both halves are floors, so the difference between them is
-/// an **upper bound** on what the period actually netted, and the wording that
-/// travels with it says so.
+/// and never entered. Both halves may be incomplete, so their difference is
+/// not a bound on actual profit. The wording that travels with it says which
+/// records contributed and which costs were not subtracted.
 ///
 /// ## When there is no figure
 ///
