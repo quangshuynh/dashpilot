@@ -3,10 +3,10 @@
 ## Home's weekly overview
 
 Home opens with the next work action and a **This Week** overview of completed shifts. The week
-uses the device's calendar boundaries and assigns each completed shift by its start, including an
+uses Monday-to-Sunday boundaries in the device calendar and timezone and assigns each completed shift by its start, including an
 overnight shift in full. Running shifts never contribute, even if they already have earnings.
-Work History continues to use its established Monday-to-Sunday grouping; Home prints its date range
-so the two calendars remain explicit.
+Home, Work History, Older Weeks, Money, and weekly reports share this convention, including
+previous-period comparisons. Headings show Monday through Sunday inclusively.
 
 The headline is recorded **shift gross earnings**, independent of delivery amounts. Working time
 excludes pauses. Gross per working hour uses the sum of recorded shift earnings divided by the sum
@@ -67,9 +67,8 @@ seconds.
 
 - **A day is not always 24 hours.** It is 23 on the day the clocks go forward and
   25 on the day they go back, and the summary's day boundaries follow that.
-- **A week starts on the driver's own first weekday**, taken from their device
-  settings, rather than on an ISO Monday the app chose for them. This is a
-  consumer app, and a driver's week starts where their calendar says it does.
+- **Every week starts on Monday and ends on Sunday**, regardless of the device's preferred
+  first weekday. Internally it runs from Monday 00:00 up to, but excluding, the following Monday.
 - **Time zone matters, and comes from the same calendar.** Which day a shift
   belongs to is decided in the driver's own zone.
 - **A month is 28, 29, 30 or 31 days**, taken from `Calendar`. Nothing assumes a
@@ -86,7 +85,7 @@ belongs to the day that is beginning, and to that day only.
 | Period | How it is chosen | What decides its bounds |
 | --- | --- | --- |
 | Day | `‹ Today ›` | The driver's calendar |
-| Week | `‹ This Week ›` | The driver's calendar, starting on their own first weekday |
+| Week | `‹ This Week ›` | Monday through Sunday in the driver's calendar and timezone |
 | Month | `‹ This Month ›` | The driver's calendar |
 | Custom | A date-range sheet | Two inclusive dates the driver picked |
 

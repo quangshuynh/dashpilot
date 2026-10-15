@@ -138,12 +138,12 @@ struct ReportingPeriodTests {
 
         #expect(period.end.timeIntervalSince(period.start) == 167 * 3600)
         #expect(period.contains(try date(2026, 3, 8, 12, 0, in: calendar)))
-        #expect(period.contains(try date(2026, 3, 14, 23, 0, in: calendar)))
+        #expect(period.contains(try date(2026, 3, 8, 23, 0, in: calendar)))
     }
 
     // MARK: Weeks
 
-    @Test("A week starts on the calendar's own first weekday")
+    @Test("Every reporting week starts on Monday")
     func weekRespectsTheFirstWeekday() throws {
         let sundayFirst = try calendar(firstWeekday: 1)
         let mondayFirst = try calendar(firstWeekday: 2)
@@ -153,18 +153,18 @@ struct ReportingPeriodTests {
         let sundayWeek = try week(midweek, in: sundayFirst)
         let mondayWeek = try week(midweek, in: mondayFirst)
 
-        #expect(sundayWeek.start == (try date(2026, 3, 8, 0, 0, in: sundayFirst)))
+        #expect(sundayWeek.start == (try date(2026, 3, 9, 0, 0, in: sundayFirst)))
         #expect(mondayWeek.start == (try date(2026, 3, 9, 0, 0, in: mondayFirst)))
-        #expect(sundayWeek != mondayWeek)
+        #expect(sundayWeek == mondayWeek)
     }
 
     @Test("A shift on the first day of the week is in that week, not the one before")
     func weekBoundaryIsHalfOpen() throws {
         let calendar = try calendar()
-        let sunday = try date(2026, 3, 8, 0, 0, in: calendar)
+        let monday = try date(2026, 3, 9, 0, 0, in: calendar)
 
-        #expect(try week(date(2026, 3, 11, 12, 0, in: calendar), in: calendar).contains(sunday))
-        #expect(!(try week(date(2026, 3, 4, 12, 0, in: calendar), in: calendar).contains(sunday)))
+        #expect(try week(date(2026, 3, 11, 12, 0, in: calendar), in: calendar).contains(monday))
+        #expect(!(try week(date(2026, 3, 4, 12, 0, in: calendar), in: calendar).contains(monday)))
     }
 
     @Test("A week spanning a month boundary is one week")
@@ -272,7 +272,7 @@ struct ReportingPeriodTests {
         let period = try week(now, in: calendar)
 
         let range = period.rangeStatement(calendar: calendar)
-        #expect(range.contains("14") && range.contains("20"), "A week's range names both ends: \(range)")
+        #expect(range.contains("15") && range.contains("21"), "A week's range names both ends: \(range)")
         #expect(period.spokenTitle(asOf: now, calendar: calendar).contains(range))
     }
 
@@ -296,9 +296,9 @@ struct ReportingPeriodTests {
             let later = try date(2026, 9, 14, 12, 0, in: calendar)
 
             let weekDates = try week(now, in: calendar).rangeStatement(calendar: calendar, locale: locale)
-            #expect(weekDates.hasPrefix("Jun 14"), "A week starts on its own first day in \(zone): \(weekDates)")
-            #expect(weekDates.hasSuffix("20, 2026"), "…and ends on its own last day: \(weekDates)")
-            #expect(!weekDates.contains("21"), "…never the boundary after it: \(weekDates)")
+            #expect(weekDates.hasPrefix("Jun 15"), "A week starts on its own first day in \(zone): \(weekDates)")
+            #expect(weekDates.hasSuffix("21, 2026"), "…and ends on its own last day: \(weekDates)")
+            #expect(!weekDates.contains("22"), "…never the boundary after it: \(weekDates)")
 
             let month = try #require(ReportingPeriod(unit: .month, containing: now, calendar: calendar))
             let monthDates = month.rangeStatement(calendar: calendar, locale: locale)

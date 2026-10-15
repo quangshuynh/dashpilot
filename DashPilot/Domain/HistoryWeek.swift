@@ -3,43 +3,8 @@ import Foundation
 /// One Monday-to-Sunday week of history, and the rule for which records belong
 /// to it.
 ///
-/// ## Why History has a week of its own
-///
-/// The History list is the screen a driver opens to read what they have just
-/// been doing, and the answer they want is almost always *this week*. Showing
-/// every shift ever recorded puts the most recent one at the top of a list that
-/// grows without limit, so History is scoped to the current week and everything
-/// older is reached through its own screen. Nothing is deleted, archived or
-/// moved: this type decides what is **shown where**, and nothing else.
-///
-/// ## Built from `ReportingPeriod`, not from new boundary arithmetic
-///
-/// Every boundary here comes from ``ReportingPeriod`` with
-/// ``ReportingPeriodUnit/week``, which is the app's one implementation of a
-/// calendar week: `Calendar.dateInterval(of:for:)` decides where a week starts
-/// and ends, the span is half-open, and a week containing a daylight-saving
-/// transition is 167 or 169 hours rather than a fixed 168. This type adds no
-/// second rule for any of that, and it adds no seconds to any date.
-///
-/// ## The one thing it does decide: Monday
-///
-/// A period summary's week starts on the day the **driver's own device** says a
-/// week starts, which in the United States is Sunday. History's week always
-/// starts on **Monday**, because a working week is what this list is scoped to
-/// and a driver reading it should not have to know their calendar's first
-/// weekday to know which shifts they are looking at.
-///
-/// That is expressed by pinning `firstWeekday` on a copy of the driver's own
-/// calendar, in ``mondayFirst(_:)``, and passing the result to
-/// ``ReportingPeriod``. **The time zone, the calendar identifier and every other
-/// setting are the driver's**, so which instant Monday 00:00 is remains a
-/// question their calendar answers, exactly as it does everywhere else in the
-/// app.
-///
-/// It also means History's week and the period summary's week can differ by a
-/// day for a driver whose device starts the week on Sunday. Both screens name
-/// the dates they cover, which is what keeps the difference readable rather
-/// than hidden.
+/// Delegates boundaries to ReportingPeriod's app-wide Monday-to-Sunday policy.
+/// No stored dates change when records are grouped into a week.
 nonisolated struct HistoryWeek: Equatable, Sendable, Hashable, Identifiable {
     /// The underlying calendar period. Every boundary question is answered by
     /// this, never by arithmetic here.
@@ -80,16 +45,11 @@ nonisolated struct HistoryWeek: Equatable, Sendable, Hashable, Identifiable {
     /// `calendar` with its first weekday pinned to Monday, and nothing else
     /// changed.
     ///
-    /// The single place History's Monday rule is expressed. Time zone, calendar
+    /// Compatibility adapter to the shared reporting policy. Time zone, calendar
     /// identifier and locale settings travel through untouched, so this changes
     /// which day a week starts on and never which instant a day starts at.
     static func mondayFirst(_ calendar: Calendar) -> Calendar {
-        var mondayFirst = calendar
-        // 1 is Sunday in every calendar `Foundation` exposes this on, so 2 is
-        // Monday. A named constant rather than a literal at each use, because a
-        // bare `2` in a view would be unreadable.
-        mondayFirst.firstWeekday = 2
-        return mondayFirst
+        ReportingPeriod.weekCalendar(calendar)
     }
 }
 
