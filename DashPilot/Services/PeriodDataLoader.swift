@@ -9,6 +9,7 @@ nonisolated struct PeriodLoadRequest: Equatable, Sendable {
     var includesRouteDetails = false
     var includesExpenseRows = false
     var includesFuelEstimates = false
+    var insightsWindow: InsightsWindow?
 }
 
 /// Only the facts Home requested. Unread routes cannot become missing-mileage claims.
@@ -41,6 +42,16 @@ nonisolated struct PeriodDataSnapshot: Equatable, Sendable {
     let current: PeriodMetrics?
     let previous: PeriodMetrics?
     let money: MoneyPeriodSummary?
+    let insights: InsightsSeries?
+
+    init(overview: HomePeriodSummary, current: PeriodMetrics?, previous: PeriodMetrics?,
+         money: MoneyPeriodSummary?, insights: InsightsSeries? = nil) {
+        self.overview = overview
+        self.current = current
+        self.previous = previous
+        self.money = money
+        self.insights = insights
+    }
 }
 
 nonisolated enum PeriodDataLoader {
@@ -71,6 +82,20 @@ nonisolated enum PeriodDataLoader {
         try Task.checkCancellation()
         let context = ModelContext(container)
         context.autosaveEnabled = false
+        if let window = request.insightsWindow {
+            let shifts = try context.fetch(shifts(in: window.fetchPeriod))
+            var records: [PeriodShiftRecord] = []
+            for shift in shifts {
+                try Task.checkCancellation()
+                records.append(financialRecord(shift, fuel: false))
+            }
+            let expenses = try context.fetch(expenses(in: window.fetchPeriod))
+            let series = try InsightsSeriesBuilder.build(shifts: records, expenses: expenses.map(\.expenseRecord), window: window)
+            try Task.checkCancellation()
+            guard let latest = series.weeks.last else { throw CancellationError() }
+            return PeriodDataSnapshot(overview: HomePeriodSummary(latest.metrics), current: nil,
+                                      previous: nil, money: nil, insights: series)
+        }
         let currentExpenses = try context.fetch(expenses(in: request.period))
         let current = try metrics(in: request.period, details: request.includesRouteDetails,
                                   fuel: request.includesFuelEstimates, expenses: currentExpenses, context: context)
@@ -100,22 +125,27 @@ nonisolated enum PeriodDataLoader {
             if details {
                 records.append(shift.periodRecord(for: shift.recordedDistance()))
             } else {
-                let distance = fuel ? shift.recordedDistance() : RouteDistance.none
-                // Use shared duration and rate definitions without reading deliveries.
-                // Only an explicitly requested fuel perspective reads GPS.
-                records.append(PeriodShiftRecord(
-                    startedAt: shift.startedAt, workingDuration: shift.completedWorkingDuration,
-                    grossEarnings: shift.grossEarnings, recordedDistance: distance,
-                    fuelEstimate: fuel ? shift.fuelEstimate(for: distance) : .unavailable(.milesPerGallonNotRecorded),
-                    hasHourlyTarget: shift.hourlyTarget != nil,
-                    hourlyTargetComparison: HourlyTargetComparison(
-                        rate: shift.completedWorkingDuration.flatMap { duration in
-                            shift.grossEarnings.flatMap { ShiftMetricsCalculator.grossPerHour(of: $0, over: duration) }
-                        }, target: shift.hourlyTarget)
-                ))
+                records.append(financialRecord(shift, fuel: fuel))
             }
         }
         return PeriodMetricsCalculator().metrics(of: records, expenses: expenses.map(\.expenseRecord), in: period)
+    }
+
+    /// The shared financial path never realizes deliveries and reads routes only
+    /// for an explicit fuel request. Working time retains pause subtraction.
+    private static func financialRecord(_ shift: Shift, fuel: Bool) -> PeriodShiftRecord {
+        let duration = shift.completedWorkingDuration
+        let distance = fuel ? shift.recordedDistance() : RouteDistance.none
+        return PeriodShiftRecord(
+            startedAt: shift.startedAt, workingDuration: duration,
+            grossEarnings: shift.grossEarnings, recordedDistance: distance,
+            fuelEstimate: fuel ? shift.fuelEstimate(for: distance) : .unavailable(.milesPerGallonNotRecorded),
+            hasHourlyTarget: shift.hourlyTarget != nil,
+            hourlyTargetComparison: HourlyTargetComparison(
+                rate: duration.flatMap { duration in
+                    shift.grossEarnings.flatMap { ShiftMetricsCalculator.grossPerHour(of: $0, over: duration) }
+                }, target: shift.hourlyTarget)
+        )
     }
 }
 
