@@ -34,6 +34,8 @@ struct ExpenseEditor: View {
     @State private var occurredAt = Date.now
     @State private var noteText = ""
     @State private var message: String?
+    @State private var isConfirmingDelete = false
+    @State private var deletionFailure: String?
 
     /// The present, for the bound on the date picker.
     ///
@@ -70,6 +72,19 @@ struct ExpenseEditor: View {
                 }
             }
         }
+        .confirmationDialog("Delete Expense?", isPresented: $isConfirmingDelete, titleVisibility: .visible) {
+            Button("Delete Expense", role: .destructive, action: delete)
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            if let expense {
+                Text("Delete \(expense.category.title), \(expense.amount.formatted(locale: locale))? This cannot be undone.")
+            }
+        }
+        .alert("Expense Not Deleted", isPresented: Binding(
+            get: { deletionFailure != nil }, set: { if !$0 { deletionFailure = nil } }
+        )) {
+            Button("OK", role: .cancel) { deletionFailure = nil }
+        } message: { Text(deletionFailure ?? "That expense could not be deleted.") }
         .onAppear(perform: seed)
         .onChange(of: scenePhase) { _, phase in
             // `.active` only, for the reason the summary screen ignores
@@ -164,7 +179,7 @@ struct ExpenseEditor: View {
 
     private var deleteSection: some View {
         Section {
-            Button("Delete Expense", role: .destructive, action: delete)
+            Button("Delete Expense", role: .destructive) { isConfirmingDelete = true }
                 .dashFont(.body)
                 .frame(maxWidth: .infinity)
                 .accessibilityIdentifier("deleteExpenseButton")
@@ -231,7 +246,7 @@ struct ExpenseEditor: View {
             try ExpenseService(context: modelContext).delete(expense)
             dismiss()
         } catch {
-            message = (error as? any LocalizedError)?.errorDescription
+            deletionFailure = (error as? any LocalizedError)?.errorDescription
                 ?? "That expense could not be deleted."
         }
     }

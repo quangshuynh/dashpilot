@@ -44,6 +44,16 @@ Expenses are selected by their **own dates**, never through a shift. A single sh
 therefore carries none, because no expense belongs to a shift. See
 [Recorded expenses](expenses.md).
 
+### Monday-to-Sunday selection and v6 compatibility
+
+Weekly report selections now consistently use Monday through Sunday in the reporting timezone.
+Export v6 continues to carry the selected period's explicit `periodStart` and
+`periodEndExclusive` instants. A week selection can therefore contain different Sunday/Monday records
+than an earlier locale-first selection; this is an intentional selection-policy change. The scope keys,
+financial definitions, Decimal strings, privacy rules and 42-column CSV shape are unchanged. Existing
+files and stored timestamps are never rewritten. Consumers must use the explicit bounds instead of
+reconstructing a week from their locale. No selected-period identifiers are persisted.
+
 ## Export format version
 
 Every file states `formatVersion: 6`.

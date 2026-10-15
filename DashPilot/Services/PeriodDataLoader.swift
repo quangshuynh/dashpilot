@@ -7,6 +7,8 @@ nonisolated struct PeriodLoadRequest: Equatable, Sendable {
     let period: ReportingPeriod
     var previous: ReportingPeriod?
     var includesRouteDetails = false
+    var includesExpenseRows = false
+    var includesFuelEstimates = false
 }
 
 /// Only the facts Home requested. Unread routes cannot become missing-mileage claims.
@@ -38,6 +40,7 @@ nonisolated struct PeriodDataSnapshot: Equatable, Sendable {
     let overview: HomePeriodSummary
     let current: PeriodMetrics?
     let previous: PeriodMetrics?
+    let money: MoneyPeriodSummary?
 }
 
 nonisolated enum PeriodDataLoader {
@@ -52,7 +55,8 @@ nonisolated enum PeriodDataLoader {
     static func expenses(in period: ReportingPeriod) -> FetchDescriptor<Expense> {
         let start = period.start
         let end = period.end
-        return FetchDescriptor(predicate: #Predicate { $0.occurredAt >= start && $0.occurredAt < end })
+        return FetchDescriptor(predicate: #Predicate { $0.occurredAt >= start && $0.occurredAt < end },
+                               sortBy: [SortDescriptor(\Expense.occurredAt, order: .reverse), SortDescriptor(\Expense.id)])
     }
 
     static var recentShifts: FetchDescriptor<Shift> {
@@ -64,17 +68,30 @@ nonisolated enum PeriodDataLoader {
 
     /// Called off main. Models live and die inside this separate read context.
     static func load(_ request: PeriodLoadRequest, in container: ModelContainer) throws -> PeriodDataSnapshot {
+        try Task.checkCancellation()
         let context = ModelContext(container)
         context.autosaveEnabled = false
-        let current = try metrics(in: request.period, details: request.includesRouteDetails, context: context)
-        let previous = try request.previous.map { try metrics(in: $0, details: request.includesRouteDetails, context: context) }
+        let currentExpenses = try context.fetch(expenses(in: request.period))
+        let current = try metrics(in: request.period, details: request.includesRouteDetails,
+                                  fuel: request.includesFuelEstimates, expenses: currentExpenses, context: context)
+        let previous = try request.previous.map { try metrics(in: $0, details: request.includesRouteDetails, fuel: false,
+                                                       expenses: context.fetch(expenses(in: $0)), context: context) }
+        try Task.checkCancellation()
+        var money: MoneyPeriodSummary?
+        if request.includesExpenseRows {
+            var anyExpense = FetchDescriptor<Expense>()
+            anyExpense.fetchLimit = 1
+            let hasAnyExpense = try !currentExpenses.isEmpty || !context.fetch(anyExpense).isEmpty
+            money = MoneyPeriodSummary(metrics: current, rows: currentExpenses.map(\.presentation), hasAnyExpense: hasAnyExpense,
+                                       includesFuelEstimates: request.includesFuelEstimates || request.includesRouteDetails)
+        }
         try Task.checkCancellation()
         return PeriodDataSnapshot(overview: HomePeriodSummary(current),
                                   current: request.includesRouteDetails ? current : nil,
-                                  previous: request.includesRouteDetails ? previous : nil)
+                                  previous: request.includesRouteDetails ? previous : nil, money: money)
     }
 
-    private static func metrics(in period: ReportingPeriod, details: Bool, context: ModelContext) throws -> PeriodMetrics {
+    private static func metrics(in period: ReportingPeriod, details: Bool, fuel: Bool, expenses: [Expense], context: ModelContext) throws -> PeriodMetrics {
         try Task.checkCancellation()
         let shifts = try context.fetch(shifts(in: period))
         var records: [PeriodShiftRecord] = []
@@ -83,10 +100,14 @@ nonisolated enum PeriodDataLoader {
             if details {
                 records.append(shift.periodRecord(for: shift.recordedDistance()))
             } else {
-                // Use the same duration and hourly-rate definitions without reading deliveries or GPS.
+                let distance = fuel ? shift.recordedDistance() : RouteDistance.none
+                // Use shared duration and rate definitions without reading deliveries.
+                // Only an explicitly requested fuel perspective reads GPS.
                 records.append(PeriodShiftRecord(
                     startedAt: shift.startedAt, workingDuration: shift.completedWorkingDuration,
-                    grossEarnings: shift.grossEarnings, hasHourlyTarget: shift.hourlyTarget != nil,
+                    grossEarnings: shift.grossEarnings, recordedDistance: distance,
+                    fuelEstimate: fuel ? shift.fuelEstimate(for: distance) : .unavailable(.milesPerGallonNotRecorded),
+                    hasHourlyTarget: shift.hourlyTarget != nil,
                     hourlyTargetComparison: HourlyTargetComparison(
                         rate: shift.completedWorkingDuration.flatMap { duration in
                             shift.grossEarnings.flatMap { ShiftMetricsCalculator.grossPerHour(of: $0, over: duration) }
@@ -94,8 +115,7 @@ nonisolated enum PeriodDataLoader {
                 ))
             }
         }
-        let expenses = try context.fetch(expenses(in: period)).map(\.expenseRecord)
-        return PeriodMetricsCalculator().metrics(of: records, expenses: expenses, in: period)
+        return PeriodMetricsCalculator().metrics(of: records, expenses: expenses.map(\.expenseRecord), in: period)
     }
 }
 

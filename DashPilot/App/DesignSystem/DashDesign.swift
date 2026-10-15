@@ -300,12 +300,16 @@ struct DashMetric: View {
     /// `false` where ``value`` is a sentence standing in for a missing figure.
     var isFigure = true
     var emphasis: Emphasis = .standard
+    /// Keep a complete monetary figure together without shrinking its qualifiers.
+    var keepsFigureTogether = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: DashSpacing.sm) {
             Text(value)
                 .dashFont(isFigure ? emphasis.role : .body)
                 .foregroundStyle(isFigure ? .primary : .secondary)
+                .lineLimit(isFigure && keepsFigureTogether ? 1 : nil)
+                .minimumScaleFactor(isFigure && keepsFigureTogether ? 0.5 : 1)
                 .fixedSize(horizontal: false, vertical: true)
             Text(label)
                 .dashFont(.metricLabel)
@@ -330,7 +334,8 @@ struct DashMetric: View {
 /// fit and stack where they do not, and always stack at accessibility sizes,
 /// because a shortened title beside a shortened figure is worse than a second
 /// line and the first thing a truncation takes is the word that makes a figure
-/// honest. Nothing shrinks to fit.
+/// honest. Labels and explanations never shrink. Monetary figures can opt in
+/// to bounded fitting after the layout has given them their own full-width line.
 ///
 /// Where the figure does not exist the caller passes the words that say so and
 /// `isFigure: false`, which draws them in the quieter colour rather than with
@@ -343,6 +348,7 @@ struct DashValueRow: View {
     /// Draws the value in the emphasis role: the result a group of lines
     /// arrives at, such as the net at the foot of a ledger.
     var isProminent = false
+    var keepsFigureTogether = false
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
@@ -356,7 +362,9 @@ struct DashValueRow: View {
                     HStack(alignment: .firstTextBaseline, spacing: DashSpacing.md) {
                         titleText
                         Spacer(minLength: DashSpacing.md)
-                        valueText.multilineTextAlignment(.trailing)
+                        valueText
+                            .fixedSize(horizontal: isFigure && keepsFigureTogether, vertical: true)
+                            .multilineTextAlignment(.trailing)
                     }
                     VStack(alignment: .leading, spacing: DashSpacing.xs) {
                         titleText
@@ -386,6 +394,8 @@ struct DashValueRow: View {
             .dashFont(isProminent ? .emphasis : .body)
             .monospacedDigit()
             .foregroundStyle(isFigure ? .primary : .secondary)
+            .lineLimit(isFigure && keepsFigureTogether ? 1 : nil)
+            .minimumScaleFactor(isFigure && keepsFigureTogether ? 0.5 : 1)
             .fixedSize(horizontal: false, vertical: true)
     }
 }

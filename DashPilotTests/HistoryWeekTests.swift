@@ -12,7 +12,7 @@ import Testing
 ///
 /// What is deliberately **not** re-proved here: that a week is half-open, that
 /// it is 167 hours across a spring-forward, that it survives a month boundary,
-/// or that a calendar's own first weekday is honoured. ``ReportingPeriod`` owns
+/// or how the shared Monday boundary is calculated. ``ReportingPeriod`` owns
 /// all of that and `ReportingPeriodTests` already holds it. These tests cover
 /// what this type adds: Monday whatever the device says, and the split.
 @Suite("History weeks")

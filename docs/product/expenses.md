@@ -6,6 +6,33 @@ built out of records the driver typed, and nothing else.
 
 > Every amount and note in this documentation is synthetic.
 
+## Money workspace
+
+Money opens on the current Monday-to-Sunday week, with previous/next week navigation and a This Week
+reset. The date range names the selected days. Add Expense stays near the top. Recorded shift gross
+shows contributing completed-shift coverage; delivery earnings remain independent. Recorded expenses
+count only entered costs dated inside the selected week. Net after recorded expenses subtracts those
+costs only when both earnings and expenses have recorded values. It can be negative and is not profit
+or a tax figure. An expense-only week shows its costs without inventing zero earnings or a net.
+
+The expense list is newest first, with stable identity breaking equal-date ties. Choose all expenses
+or one of the five categories. The labelled filtered subtotal changes with the list; the overview's
+expenses and net still include every category. Category subtotals expand below the records. No records
+anywhere, no records this week, no matching category, and failed loading have distinct states.
+
+Tap an expense to use the existing editor. Editor deletion and swipe deletion each ask once before
+removing the selected record. Cancel changes nothing. Failed changes are shown and remain unsaved.
+Changing an expense's date or category refreshes the affected lists and summaries after a saved write.
+
+Estimated fuel consumption is a separate expandable section, based on recorded miles and the saved
+assumptions of each shift. It carries shift, mileage and partial-route coverage. Recorded fuel purchases
+and estimated consumption are different views of cost; estimates are never subtracted from the recorded
+net. Routes are loaded only after the section is requested.
+
+All Recorded Expenses opens the full ledger. Period Summaries starts on Money's selected week and
+provides days, weeks, months, custom ranges, comparisons and explicit JSON/CSV export. No new expense
+ledger, storage shape, category or financial calculation is introduced.
+
 ## What an expense is
 
 Four facts, all entered by the driver:
@@ -165,8 +192,8 @@ The figure is the difference between two subtotals of things the driver typed:
 
 It is called **net after recorded expenses**, in full, everywhere it appears. It
 is never shortened to "net", and never called profit, take-home pay, earnings
-after costs or a taxable amount. Both halves are floors, so their difference is
-an **upper bound** on what the period actually netted.
+after costs or a taxable amount. Both subtotals may be incomplete, so their difference is
+not a bound on actual profit.
 
 The figure may be **negative**. A period whose recorded costs exceed its recorded
 earnings is a fact, not an error.
@@ -204,7 +231,7 @@ sentence about shifts, and the day can be exported.
 
 ## Recording and correcting
 
-Expenses live on their own screen, reached from **Money > Recorded Expenses**. Money also opens
+Expenses appear in the selected Money week; **Money > All Recorded Expenses** opens the full ledger. Money also opens
 **Period Summaries**, including existing period comparisons and export. An expense belongs to a
 date, not a shift or delivery; there is still one ledger and one editor. Settings is available from
 the toolbar on each workspace root.
@@ -212,7 +239,7 @@ the toolbar on each workspace root.
 - **Adding is a draft.** Nothing is written until Save; Cancel writes nothing.
 - **Editing replaces every fact at once**, so a refused edit leaves the record
   exactly as it was.
-- **Deleting removes only that record.** Nothing else in the app changes, and
+- **Deleting asks once for confirmation and removes only that record.** Nothing else in the app changes, and
   deleting a *shift* never deletes an expense: the two are unrelated rows.
 - **A date cannot be in the future.** An expense is something that already
   happened, and a mistyped year would silently drop the record out of every

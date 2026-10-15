@@ -98,7 +98,8 @@ final class DashPilotUITests: XCTestCase {
 
     @MainActor
     private func selectWorkspace(_ title: String, in app: XCUIApplication) {
-        let tab = app.tabBars.buttons[title]
+        // iPad presents native workspace tabs in the top toolbar.
+        let tab = app.tabBars.firstMatch.exists ? app.tabBars.buttons[title] : app.buttons.matching(identifier: title).firstMatch
         XCTAssertTrue(tab.appears())
         if !tab.isSelected {
             let start = Date.now
@@ -119,6 +120,42 @@ final class DashPilotUITests: XCTestCase {
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
+    }
+
+    /// Positions a tall financial row below the navigation bar for evidence.
+    /// This changes screenshot framing only; journey assertions run separately.
+    @MainActor
+    private func attachMoneyScreenshot(_ name: String, focusing element: XCUIElement, in app: XCUIApplication) {
+        let top = app.navigationBars.firstMatch.frame.maxY + 16
+        let tabBar = app.tabBars.firstMatch
+        let bottom = tabBar.exists && tabBar.frame.minY > top
+            ? tabBar.frame.minY - 16 : app.frame.maxY - 20
+        let distance = min(max(element.frame.minY - top, 0), bottom - top - 40)
+        if distance > 20 {
+            let start = app.coordinate(withNormalizedOffset: .zero)
+                .withOffset(CGVector(dx: app.frame.midX, dy: bottom - 20))
+            start.press(forDuration: 0.1, thenDragTo: start.withOffset(CGVector(dx: 0, dy: -distance)),
+                        withVelocity: .slow, thenHoldForDuration: 0.3)
+        }
+        attachScreenshot(name)
+    }
+
+    /// Scrolls the form itself when a narrow keyboard covers the usual swipe origin.
+    @MainActor
+    private func scrollEditorTo(_ element: XCUIElement, in app: XCUIApplication) -> Bool {
+        for _ in 0..<20 {
+            if element.exists && element.isHittable { return true }
+            let top = app.navigationBars.firstMatch.frame.maxY + 20
+            let bottom = app.keyboards.firstMatch.exists
+                ? app.keyboards.firstMatch.frame.minY - 20 : app.frame.maxY - 70
+            guard bottom > top else { return false }
+            let origin = app.coordinate(withNormalizedOffset: .zero)
+            origin.withOffset(CGVector(dx: app.frame.midX, dy: bottom)).press(
+                forDuration: 0.1,
+                thenDragTo: origin.withOffset(CGVector(dx: app.frame.midX, dy: top)),
+                withVelocity: .slow, thenHoldForDuration: 0.3)
+        }
+        return element.exists && element.isHittable
     }
 
     /// Launches against an empty throwaway store at a given text size.
@@ -361,6 +398,81 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertTrue(scrollUntilHittable(app.buttons["homeMoneyButton"], in: app))
         app.buttons["homeMoneyButton"].tap()
         XCTAssertTrue(app.navigationBars["Money"].appears())
+    }
+
+    /// Money's coverage, category selection and navigation remain usable at AX5.
+    @MainActor
+    func testMoneyFinancialWorkspaceAtLargestTextSize() throws {
+        // The opt-in visual pass uses the same assertions at default size.
+        // Ordinary essential runs always exercise AX5.
+        let visualDefault = ProcessInfo.processInfo.environment["DASHPILOT_MONEY_VISUAL_DEFAULT"] == "1"
+        let app = launchWithPeriodSummary(atTextSize: visualDefault ? nil : Self.accessibilityXXXLTextSize)
+        selectWorkspace("Money", in: app)
+        let gross = app.descendants(matching: .any)["moneyGross"]
+        XCTAssertTrue(scrollUntilHittable(gross, in: app))
+        XCTAssertTrue(waitForLabel(gross, toContain: "$206.25"))
+        XCTAssertTrue(gross.label.contains("2 of 3 completed shifts"))
+        attachScreenshot("money-overview")
+        attachMoneyScreenshot("money-ax5-gross", focusing: gross, in: app)
+        let net = app.descendants(matching: .any)["moneyNet"]
+        XCTAssertTrue(scrollUntilHittable(net, in: app))
+        XCTAssertTrue(waitForLabel(net, toContain: "$67.66"))
+        XCTAssertTrue(net.label.contains("not profit"))
+        attachMoneyScreenshot("money-ax5-net", focusing: net, in: app)
+        if visualDefault {
+            let fuel = app.buttons["Estimated fuel consumption"]
+            XCTAssertTrue(scrollUntilHittable(fuel, in: app))
+            fuel.tap()
+            let estimate = app.descendants(matching: .any)["moneyEstimatedFuel"]
+            XCTAssertTrue(scrollUntilHittable(estimate, in: app), app.debugDescription)
+            XCTAssertTrue(estimate.label.contains("1 of 3"))
+            XCTAssertTrue(estimate.label.lowercased().contains("partial"))
+            attachMoneyScreenshot("money-estimated-fuel", focusing: estimate, in: app)
+            XCTAssertTrue(scrollToTop(reaching: app.buttons["moneyPreviousWeek"], in: app))
+        }
+        let filter = app.buttons["moneyCategoryFilter"]
+        XCTAssertTrue(scrollUntilHittable(filter, in: app))
+        filter.tap()
+        app.buttons["Fuel"].tap()
+        let subtotal = app.descendants(matching: .any)["moneyFilteredSubtotal"]
+        XCTAssertTrue(scrollUntilHittable(subtotal, in: app))
+        XCTAssertTrue(waitForLabel(subtotal, toContain: "$42.10"))
+        attachMoneyScreenshot("money-ax5-filter", focusing: subtotal, in: app)
+        let expense = app.descendants(matching: .any).matching(identifier: "expenseRow").firstMatch
+        XCTAssertTrue(scrollUntilHittable(expense, in: app))
+        expense.tap()
+        let field = app.textFields["expenseAmountField"]
+        XCTAssertTrue(field.appears())
+        clear(field, in: app)
+        enter("1000000", into: field, in: app)
+        attachScreenshot("money-expense-editing")
+        let note = app.descendants(matching: .any)["expenseNoteField"]
+        XCTAssertTrue(scrollEditorTo(note, in: app))
+        note.tap()
+        XCTAssertTrue(waitUntil { hasKeyboardFocus(note) })
+        // A multiline field places its cursor at the tap. Insert a valid long
+        // note addition without assuming that the cursor starts at the end.
+        note.typeText("Synthetic supplies: insulated bags, cleaning materials, and charging accessories. ")
+        XCTAssertTrue(waitUntil { (note.value as? String)?.contains("charging accessories") == true })
+        XCTAssertGreaterThan((note.value as? String)?.count ?? 0, 100)
+        XCTAssertLessThanOrEqual((note.value as? String)?.count ?? 0, 120)
+        app.buttons["saveExpenseButton"].tap()
+        XCTAssertTrue(app.buttons["saveExpenseButton"].disappears())
+        XCTAssertTrue(scrollUntilHittable(expense, in: app))
+        XCTAssertTrue(expense.label.contains("$1,000,000.00"))
+        XCTAssertTrue(expense.label.contains("charging accessories"))
+        attachMoneyScreenshot("money-large-expense", focusing: expense, in: app)
+        XCTAssertTrue(scrollToTop(reaching: app.buttons["moneyPreviousWeek"], in: app))
+        XCTAssertTrue(scrollUntilHittable(net, in: app))
+        XCTAssertTrue(waitForLabel(net, toContain: "999,890.24"))
+        XCTAssertTrue(net.label.contains("-"), "A supported negative net keeps its sign")
+        attachMoneyScreenshot("money-negative-net", focusing: net, in: app)
+        XCTAssertTrue(scrollToTop(reaching: app.buttons["moneyPreviousWeek"], in: app))
+        app.buttons["moneyPreviousWeek"].tap()
+        XCTAssertTrue(scrollUntilHittable(app.descendants(matching: .any)["moneyExpensesEmpty"], in: app))
+        attachScreenshot("money-previous-week")
+        selectWorkspace("Work", in: app)
+        XCTAssertTrue(app.navigationBars["Work"].appears(), "Work remains one tap away")
     }
 
     // MARK: The welcome
@@ -754,6 +866,9 @@ final class DashPilotUITests: XCTestCase {
     @MainActor
     func testExpensesAreRecordedRefusedCorrectedAndSummarised() throws {
         let app = launchWithEmptyStore()
+        selectWorkspace("Money", in: app)
+        XCTAssertTrue(app.buttons["moneyAddExpenseButton"].appears())
+        attachScreenshot("money-empty-overview")
         openExpenses(in: app)
         let empty = app.descendants(matching: .any)["expensesEmptyState"]
         XCTAssertTrue(empty.exists)
@@ -776,8 +891,10 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertTrue(row.label.contains("Fuel"), "And its category: \(row.label)")
         XCTAssertFalse(empty.exists)
 
+        attachScreenshot("expense-recorded")
         row.tap()
         XCTAssertTrue(field.appears())
+        attachScreenshot("expense-editor")
         XCTAssertEqual(field.value as? String, "42.1", "The editor opens on what was recorded")
         clear(field, in: app)
         enter("50.00", into: field, in: app)
@@ -786,6 +903,18 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertTrue(waitForLabel(row, toContain: "$50.00"), "The correction is what the list shows")
 
         app.navigationBars.buttons.element(boundBy: 0).tap()
+        let moneyTotal = app.descendants(matching: .any)["moneyExpenses"]
+        XCTAssertTrue(scrollToTop(reaching: moneyTotal, in: app))
+        XCTAssertTrue(waitForLabel(moneyTotal, toContain: "$50.00"))
+        attachScreenshot("money-expense-only")
+        let filter = app.buttons["moneyCategoryFilter"]
+        XCTAssertTrue(scrollUntilHittable(filter, in: app))
+        filter.tap()
+        app.buttons["Supplies"].tap()
+        XCTAssertTrue(app.descendants(matching: .any)["moneyExpensesEmpty"].appears())
+        attachScreenshot("money-category-empty")
+        app.buttons["moneyClearFilter"].tap()
+        XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "expenseRow").firstMatch.appears())
         openPeriodSummary(in: app)
         XCTAssertTrue(
             app.descendants(matching: .any)["periodEmptyState"].appears(),
@@ -808,7 +937,24 @@ final class DashPilotUITests: XCTestCase {
         let delete = app.buttons["deleteExpenseButton"]
         XCTAssertTrue(delete.appears())
         delete.tap()
+        let confirmation = app.buttons.matching(NSPredicate(format: "label == %@ AND identifier != %@", "Delete Expense", "deleteExpenseButton")).firstMatch
+        XCTAssertTrue(confirmation.appears())
+        attachScreenshot("expense-delete-confirmation")
+        app.buttons["Cancel"].firstMatch.tap()
+        XCTAssertTrue(confirmation.disappears())
+        XCTAssertTrue(field.exists, "Cancelling leaves the editor and record intact")
+        delete.tap()
+        XCTAssertTrue(confirmation.appears())
+        confirmation.tap()
         XCTAssertTrue(empty.appears())
+        recordExpense("5", in: app)
+        XCTAssertTrue(row.appears())
+        row.swipeLeft()
+        app.buttons["deleteExpenseSwipeButton"].tap()
+        XCTAssertTrue(confirmation.appears())
+        attachScreenshot("expense-swipe-delete-confirmation")
+        confirmation.tap()
+        XCTAssertTrue(empty.appears(), "Swipe deletion also removes only the confirmed record")
     }
 
     /// Park and Pause are different states of a running shift, told apart by
@@ -3729,9 +3875,10 @@ final class DashPilotUITests: XCTestCase {
     private func openPeriodSummary(in app: XCUIApplication) {
         selectWorkspace("Money", in: app)
         let link = app.buttons["periodSummaryLink"]
-        XCTAssertTrue(link.appears(), "Money offers a way into the summaries")
+        XCTAssertTrue(scrollUntilHittable(link, in: app), "Money offers a way into the summaries")
         link.tap()
         XCTAssertTrue(app.descendants(matching: .any)["periodTitle"].appears())
+        selectPeriod("Day", in: app)
     }
 
     @MainActor
@@ -3790,11 +3937,11 @@ final class DashPilotUITests: XCTestCase {
     }
 
     /// Whether today's week starts and ends in today's month, by the device's
-    /// own calendar, which is the one Period Summary's weeks use (unlike
-    /// History, which is Monday to Sunday). The journey runs on the same
+    /// timezone, with the app-wide Monday-to-Sunday policy. The journey runs on the same
     /// simulator as the app, so both read the same calendar.
     private static func currentWeekIsInsideCurrentMonth(now: Date = .now) -> Bool {
-        let calendar = Calendar.current
+        var calendar = Calendar.current
+        calendar.firstWeekday = 2
         guard let week = calendar.dateInterval(of: .weekOfYear, for: now),
               let month = calendar.dateInterval(of: .month, for: now) else { return false }
         return week.start >= month.start && week.end <= month.end
@@ -3807,7 +3954,7 @@ final class DashPilotUITests: XCTestCase {
     private func openExpenses(in app: XCUIApplication) {
         selectWorkspace("Money", in: app)
         let link = app.buttons["expensesLink"].firstMatch
-        XCTAssertTrue(link.appears(), "Money offers a way into recorded expenses")
+        XCTAssertTrue(scrollUntilHittable(link, in: app), "Money offers a way into recorded expenses")
         link.tap()
         XCTAssertTrue(app.buttons["addExpenseButton"].appears())
     }

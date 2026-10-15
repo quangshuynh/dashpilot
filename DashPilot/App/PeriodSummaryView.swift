@@ -64,6 +64,11 @@ struct PeriodSummaryView: View {
     /// produced.
     private let comparisons = PeriodComparisonCalculator()
 
+    init(initialPeriod: ReportingPeriod? = nil) {
+        _unit = State(initialValue: initialPeriod?.unit ?? .day)
+        _anchor = State(initialValue: initialPeriod.map { $0.contains(.now) ? .now : $0.start } ?? .now)
+    }
+
     var body: some View {
         List {
             Section {
@@ -435,8 +440,8 @@ struct PeriodSummaryView: View {
     /// records do not have.
     ///
     /// The caution line is not optional and is not a footnote: both halves are
-    /// subtotals of what the driver entered, so the difference is an upper bound
-    /// on what they actually netted, and the figure is meaningless without that.
+    /// potentially incomplete subtotals of what the driver entered. Their
+    /// difference cannot establish actual profit.
     private func netRow(_ metrics: PeriodMetrics) -> some View {
         DashValueRow(
             title: metrics.netTitle,

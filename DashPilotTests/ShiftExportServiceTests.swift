@@ -224,11 +224,11 @@ struct ShiftExportServiceTests {
             try service.export(.period(day), as: .json, exportedAt: ExportFixture.start).fileName
                 == "DashPilot-Day-2026-06-17.json"
         )
-        // 17 June 2026 is a Wednesday, and this calendar's week starts on
-        // Sunday, so the week began on the 14th.
+        // 17 June 2026 is a Wednesday. Every reporting week begins on
+        // Monday, so its exported start date is the 15th.
         #expect(
             try service.export(.period(week), as: .csv, exportedAt: ExportFixture.start).fileName
-                == "DashPilot-Week-2026-06-14.csv"
+                == "DashPilot-Week-2026-06-15.csv"
         )
         #expect(
             try service.export(.allHistory, as: .json, exportedAt: ExportFixture.start).fileName

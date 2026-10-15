@@ -570,8 +570,7 @@ enum PreviewSupport {
         let today = calendar.startOfDay(for: now)
 
         // A day in this week that is not today, so the day and the week views
-        // genuinely differ. Which day that is depends on the driver's own first
-        // weekday, so it is derived rather than assumed.
+        // differ. Derive it from the shared Monday-to-Sunday reporting policy.
         let otherDay = otherDayThisWeek(from: today, now: now, calendar: calendar)
 
         // Today, three hours, with an amount and a partial route.

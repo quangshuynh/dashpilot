@@ -2,8 +2,8 @@ import Foundation
 
 /// The kinds of span DashPilot summarises completed shifts over.
 ///
-/// Three of them are calendar periods the driver's own calendar defines — a day,
-/// a week, a month. The fourth is a range the driver picked by its dates.
+/// Three are calendar periods: a day, a Monday-to-Sunday week, and a month.
+/// The fourth is a range the driver picked by its dates.
 ///
 /// A unit is a **selection boundary and nothing else**. None of them changes what
 /// a figure means, which shifts contribute to one, or how a rate is worked out:
@@ -71,18 +71,9 @@ nonisolated enum ReportingPeriodUnit: String, CaseIterable, Sendable, Hashable, 
 ///
 /// ## Built by `Calendar`, never by arithmetic on seconds
 ///
-/// A day is not 86,400 seconds. It is 23 hours on the day the clocks go forward
-/// and 25 on the day they go back, which weekday a week starts on depends on
-/// the driver's own calendar settings, and a month is 28, 29, 30 or 31 days
-/// long. Every boundary here comes from `Calendar.dateInterval(of:for:)`, which
-/// knows all of that. Nothing in this type adds a fixed number of seconds to
-/// reach a boundary, and nothing assumes a period's length.
-///
-/// The calendar is supplied by the caller rather than read from
-/// `Calendar.current` inside, so a test can pin a time zone and a first weekday
-/// and get the same answer on every machine. The app passes the driver's own
-/// calendar, which is why a week starts on the day *their* device says it does
-/// rather than on an ISO Monday this app chose for them.
+/// Calendar operations preserve timezone and daylight-saving boundaries. Every
+/// reporting week is Monday through Sunday, regardless of locale preferences.
+/// The supplied calendar still defines days, months, and the reporting timezone.
 ///
 /// ## Half-open
 ///
@@ -114,11 +105,19 @@ nonisolated struct ReportingPeriod: Equatable, Sendable, Hashable {
     /// Returns `nil` for ``ReportingPeriodUnit/custom``, which has no calendar
     /// period containing a date — use ``init(from:through:calendar:)``.
     init?(unit: ReportingPeriodUnit, containing date: Date, calendar: Calendar = .autoupdatingCurrent) {
+        let calendar = unit == .week ? Self.weekCalendar(calendar) : calendar
         guard let component = unit.component,
               let interval = calendar.dateInterval(of: component, for: date) else { return nil }
         self.unit = unit
         start = interval.start
         end = interval.end
+    }
+
+    /// The authoritative week policy for every workspace, report and export selection.
+    static func weekCalendar(_ calendar: Calendar) -> Calendar {
+        var result = calendar
+        result.firstWeekday = 2
+        return result
     }
 
     /// The custom range covering the **inclusive** calendar dates `startDate`
