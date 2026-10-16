@@ -450,7 +450,9 @@ final class DashPilotUITests: XCTestCase {
             XCTAssertTrue(scrollUntilHittable(chart, in: app))
             attachMoneyScreenshot("insights-hourly-chart", focusing: chart, in: app)
         }
-        XCTAssertTrue(scrollUntilHittable(value, in: app))
+        // At AX5 the week menu fills the usual drag origin. A slow press there
+        // highlights the menu instead of scrolling; use the list gutter.
+        XCTAssertTrue(scrollUntilHittable(value, in: app, dragOriginX: 0.03))
         XCTAssertTrue(waitForLabel(value, toContain: "Gross per working hour"))
         attachMoneyScreenshot("insights-hourly-\(atLargestSize ? "ax5" : "default")", focusing: value, in: app)
         let report = app.buttons["insightsReportLink"]
@@ -3413,7 +3415,8 @@ final class DashPilotUITests: XCTestCase {
     private func scrollUntilHittable(
         _ element: XCUIElement,
         in app: XCUIApplication,
-        maxSwipes: Int = 10
+        maxSwipes: Int = 10,
+        dragOriginX: CGFloat = 0.5
     ) -> Bool {
         for _ in 0..<maxSwipes {
             if element.isHittable { return revealAboveEntryBar(element, in: app) }
@@ -3422,7 +3425,7 @@ final class DashPilotUITests: XCTestCase {
             // the top, after which a downward search never finds it again.
             let window = app.windows.firstMatch.frame
             if element.exists, element.frame.minY > window.midY {
-                let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.6))
+                let start = app.coordinate(withNormalizedOffset: CGVector(dx: dragOriginX, dy: 0.6))
                 let distance = min(element.frame.maxY - window.maxY * 0.6 + 24, window.height * 0.45)
                 start.press(
                     forDuration: 0.1,
