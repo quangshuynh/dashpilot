@@ -11,8 +11,8 @@ duplicate confirmation, failed writes through fresh contexts, optional-fuel pari
 The existing expense UI journey covers category emptiness, clearing a filter, authoritative refresh and
 delete cancellation/confirmation. One additional AX5 Money journey covers weekly gross and net coverage,
 category subtotals, large amounts and a long synthetic note, previous-week navigation and returning
-to Work. The essential suite is 38 journeys,
-below its unchanged ceiling of 40; the traceability table names every journey.
+to Work. The essential suite is 40 journeys,
+at its unchanged ceiling of 40; the traceability table names every journey.
 
 Set `TEST_RUNNER_DASHPILOT_MONEY_PROFILE=1` to run `MoneyWorkspaceMeasurementTests` serially. It writes
 `dashpilot-money-profile.md` in the simulator temporary directory, measuring empty and large-history
@@ -28,7 +28,7 @@ expense-only history, corrections and deletion through fresh contexts, recent-fe
 invalidation, failure/retry, warm reuse and cancellation races. Existing calculator suites remain the
 authority for financial edge cases.
 
-The essential UI suite has 38 journeys. Existing navigation and History correction journeys now
+The essential UI suite has 40 journeys. Existing navigation and History correction journeys now
 exercise Home's recent work and refreshed earnings. One new Home journey verifies exact earnings and
 rate coverage at AX5. The app, widgets and both test bundles must be built and warning-audited together.
 
@@ -436,7 +436,7 @@ Testing is layered, and a behaviour is pinned at the lowest layer that can show 
    behaviour is pinned first.
 2. **Integration tests** in the same target run the services against a real SwiftData store,
    migrations from every frozen schema, and the seeded fixtures the journeys launch.
-3. **The essential UI suite** (`DashPilotUITests`, 38 journeys, at most 40) drives what only a
+3. **The essential UI suite** (`DashPilotUITests`, 40 journeys, at most 40) drives what only a
    running app can show: flows across screens and sheets, confirmations guarding a write, navigation,
    state surviving leaving or relaunching the app, onboarding, the Live Activity's controls, and the
    driving surface at the largest accessibility text size. Every pull request runs all of it.
@@ -648,3 +648,27 @@ checkout through its own `#filePath` and disables itself where that checkout is 
     move the UI journeys into a clearly named separate job, not to drop them.
 
 The documentation workflows are described under [Building](building.md#continuous-integration).
+
+## Insights verification
+
+The essential suite now contains **40 journeys**, retaining all 38 Interval 3 journeys and adding
+`testInsightsWeeklyValuesAndSelectedReport` and `testInsightsRemainReadableAtLargestTextSize`.
+Traceability is in the [UI suite audit](ui-suite-audit.md). These cover entry from Money, exact values
+without chart gestures, selected-week reports, empty history, and returning to active Work.
+
+`InsightsSeriesTests` pins Monday boundaries, DST and cross-year weeks, deterministic dates, ordered
+sparse/empty series, missing versus zero, paired rates, expense reconciliation, negative qualified
+net and comparison eligibility. `InsightsLoaderTests` covers bounded fetches, pause-excluded working
+time, correction refresh, immutable snapshots, cancellation and superseded ranges. Existing shared
+loader tests cover failed/retry states, saves, warm reuse and off-main aggregation.
+
+The debug-only `-dashpilot-seeded-insights` fixture is synthetic and in memory. It includes partial
+coverage, a missing week, a recorded-zero week, five expense categories and active work. It is
+registered as a throwaway store and cannot start a real Live Activity.
+
+`InsightsMeasurementTests` is enabled with `TEST_RUNNER_DASHPILOT_INSIGHTS_PROFILE=1`. It measures
+cold loading, warm reuse, tab return, corrections, selection and range changes over 3,124 shifts and
+10,000 expenses. Run serially (`-parallel-testing-enabled NO`), alongside the existing Home, Money
+and History opt-in probes. Results are written to `dashpilot-insights-profile.md` in the simulator
+app's temporary directory. These are loader/data-preparation timings, never chart frame timings.
+UI journeys separately print navigation-to-readable-value duration, including XCTest overhead.
