@@ -558,8 +558,32 @@ enum PreviewSupport {
         try! seededPeriodSummaryContainer(now: now)
     }
 
-    /// The same fixture, built through a throwing call so a UI test launch can
-    /// report a store failure rather than trapping inside it.
+    /// Bounded Insights fixture, with sparse earnings, explicit zero and active work.
+    static func seededInsightsContainer(now: Date = .now) throws -> ModelContainer {
+        let container = try ModelContainerFactory.makeInMemoryContainer()
+        let context = container.mainContext
+        let calendar = Calendar.autoupdatingCurrent
+        guard let window = InsightsWindow(endingAt: now, calendar: calendar) else { return container }
+        for (index, week) in window.weeks.enumerated() where index != 2 {
+            for item in 0..<3 {
+                let start = week.start.addingTimeInterval(Double(item * 18000))
+                let shift = Shift(startedAt: start)
+                context.insert(shift)
+                try shift.end(at: start.addingTimeInterval(14400))
+                if item < 2 || index != 7 {
+                    try shift.setGrossEarnings(index == 6 ? .zero : Money(amount: Decimal((index + 1) * 15)))
+                }
+            }
+            for (categoryIndex, category) in ExpenseCategory.allCases.enumerated() {
+                context.insert(try Expense(occurredAt: week.start, amount: Money(minorUnits: categoryIndex * 2550), category: category))
+            }
+        }
+        context.insert(Shift(startedAt: now.addingTimeInterval(-120)))
+        try context.save()
+        return container
+    }
+
+    /// The period fixture throws so a UI launch can report a store failure.
     static func seededPeriodSummaryContainer(
         now: Date = .now,
         calendar: Calendar = .autoupdatingCurrent

@@ -28,6 +28,9 @@ enum AppModelContainer {
         #if DEBUG
         // The UI test fixtures, which must never touch a real driver's store.
         // Debug builds only, and every one of them is in memory.
+        if LaunchArgument.isPresent(LaunchArgument.seededInsights) {
+            return try PreviewSupport.seededInsightsContainer()
+        }
         if LaunchArgument.isPresent(LaunchArgument.seededActiveDelivery) {
             return try PreviewSupport.seededActiveDeliveryContainer()
         }

@@ -400,6 +400,89 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Money"].appears())
     }
 
+    @MainActor
+    func testInsightsWeeklyValuesAndSelectedReport() throws {
+        try exerciseInsights(atLargestSize: false)
+    }
+
+    @MainActor
+    func testInsightsRemainReadableAtLargestTextSize() throws {
+        try exerciseInsights(atLargestSize: true)
+    }
+
+    @MainActor
+    private func exerciseInsights(atLargestSize: Bool) throws {
+        let app = XCUIApplication()
+        app.launchArguments += ["-dashpilot-seeded-insights"]
+        if atLargestSize { app.launchArguments += ["-UIPreferredContentSizeCategoryName", Self.accessibilityXXXLTextSize] }
+        launchInPortrait(app)
+        selectWorkspace("Money", in: app)
+        let link = app.buttons["insightsLink"]
+        XCTAssertTrue(link.appears())
+        let begin = Date.now
+        link.tap()
+        XCTAssertTrue(app.navigationBars["Insights"].appears())
+        attachScreenshot("insights-top-\(atLargestSize ? "ax5" : "default")")
+        if !atLargestSize {
+            let chart = app.descendants(matching: .any).matching(identifier: "insightsTrendChart").firstMatch
+            XCTAssertTrue(scrollUntilHittable(chart, in: app))
+            attachMoneyScreenshot("insights-earnings-chart", focusing: chart, in: app)
+        }
+        let value = app.descendants(matching: .any)["insightsSelectedValue"]
+        XCTAssertTrue(scrollUntilHittable(value, in: app))
+        XCTAssertTrue(waitForLabel(value, toContain: "$240.00"))
+        XCTAssertTrue(value.label.contains("2 of 3 completed shifts"))
+        print("Insights open to readable selected value: \(Date.now.timeIntervalSince(begin)) s (XCTest navigation and readiness, not frame timing)")
+        attachMoneyScreenshot("insights-overview-\(atLargestSize ? "ax5" : "default")", focusing: value, in: app)
+        let previous = app.buttons["insightsPreviousWeek"]
+        revealInsights(previous, in: app)
+        attachMoneyScreenshot("insights-week-controls", focusing: previous, in: app)
+        previous.tap()
+        XCTAssertTrue(scrollUntilHittable(value, in: app))
+        XCTAssertTrue(waitForLabel(value, toContain: "$0.00"))
+        attachMoneyScreenshot("insights-selected-zero-week", focusing: value, in: app)
+        let metric = app.buttons["insightsMetricPicker"]
+        revealInsights(metric, in: app)
+        metric.tap()
+        app.buttons["Gross per working hour"].tap()
+        if !atLargestSize {
+            let chart = app.descendants(matching: .any).matching(identifier: "insightsTrendChart").firstMatch
+            XCTAssertTrue(scrollUntilHittable(chart, in: app))
+            attachMoneyScreenshot("insights-hourly-chart", focusing: chart, in: app)
+        }
+        XCTAssertTrue(scrollUntilHittable(value, in: app))
+        XCTAssertTrue(waitForLabel(value, toContain: "Gross per working hour"))
+        attachMoneyScreenshot("insights-hourly-\(atLargestSize ? "ax5" : "default")", focusing: value, in: app)
+        let report = app.buttons["insightsReportLink"]
+        XCTAssertTrue(scrollUntilHittable(report, in: app))
+        report.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["periodTitle"].appears())
+        // This report is nested inside Insights; the shared helper expects a
+        // one-level destination directly under the selected workspace.
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        XCTAssertTrue(app.navigationBars["Insights"].appears())
+        let expense = app.descendants(matching: .any)["insightsExpenseTotal"]
+        XCTAssertTrue(scrollUntilHittable(expense, in: app))
+        XCTAssertTrue(expense.label.contains("$255.00"))
+        attachMoneyScreenshot("insights-expenses-\(atLargestSize ? "ax5" : "default")", focusing: expense, in: app)
+        let earlier = app.buttons["insightsEarlierWeeks"]
+        XCTAssertTrue(scrollToTop(reaching: earlier, in: app))
+        earlier.tap()
+        let empty = app.descendants(matching: .any)["insightsEmpty"]
+        XCTAssertTrue(scrollUntilHittable(empty, in: app))
+        attachMoneyScreenshot("insights-empty-\(atLargestSize ? "ax5" : "default")", focusing: empty, in: app)
+        selectWorkspace("Work", in: app)
+        XCTAssertTrue(scrollUntilHittable(app.buttons["endShiftButton"], in: app))
+    }
+
+    @MainActor
+    private func revealInsights(_ element: XCUIElement, in app: XCUIApplication) {
+        // AX5 moves controls below the first viewport. Restore the known top
+        // anchor, then realize the desired List row by scrolling down to it.
+        XCTAssertTrue(scrollToTop(reaching: app.buttons["insightsEarlierWeeks"], in: app))
+        XCTAssertTrue(scrollUntilHittable(element, in: app))
+    }
+
     /// Money's coverage, category selection and navigation remain usable at AX5.
     @MainActor
     func testMoneyFinancialWorkspaceAtLargestTextSize() throws {
