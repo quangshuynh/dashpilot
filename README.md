@@ -37,7 +37,7 @@ measure.
 
 Home shows completed-week recorded gross earnings, working time, hourly performance and recent work,
 with coverage beside each figure. It also starts or continues a shift. Work holds delivery controls
-and History. Money shows weekly recorded earnings, expenses and qualified net, with expense editing and reports.
+and History. Money shows weekly recorded earnings, expenses and qualified net, with expense editing, weekly [Insights](docs/product/insights.md) and reports.
 Every reporting week runs Monday through Sunday. Settings is in each workspace toolbar.
 
 - **Shift tracking.** Start, pause, resume and end a shift, with relaunch recovery if iOS ends the

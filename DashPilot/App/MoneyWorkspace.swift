@@ -27,6 +27,10 @@ struct MoneyWorkspace: View {
     var body: some View {
         List {
             Section {
+                NavigationLink { InsightsView(initialPeriod: period) } label: {
+                    Label("Insights", systemImage: "chart.bar.xaxis").frame(minHeight: 44)
+                }
+                .accessibilityIdentifier("insightsLink")
                 weekSelector
                 Button { actions.editing = .new } label: {
                     Label("Add Expense", systemImage: "plus").dashFont(.emphasis).frame(minHeight: 44)

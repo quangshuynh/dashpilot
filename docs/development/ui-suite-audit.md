@@ -13,7 +13,9 @@ capture growth across tab navigation, Undo from Home, and AX5 controls above the
 Historical fixture helpers explicitly enter Work; financial helpers enter Money. The older test
 names below are retained so CI identifiers remain stable.
 
-DashPilot's UI suite is **38 essential journeys**, and every pull request runs all of them after the
+Interval 4A retains all 38 journeys and adds default-size and AX5 Insights journeys, for 40 total.
+
+DashPilot's UI suite is **40 essential journeys**, and every pull request runs all of them after the
 build and the whole domain suite. This page records why the suite has that shape: what the red runs
 before it had in common, how each of the 82 journeys it replaced was classified, which product risk
 each remaining journey covers and which domain or integration suite covers the rest, and the CI that
@@ -231,6 +233,8 @@ section names one that no longer exists.
 
 | Risk | Journey | Below the UI |
 | --- | --- | --- |
+| Insights opens from Money, exposes exact weekly values without chart gestures, opens the selected report and returns to active Work | `testInsightsWeeklyValuesAndSelectedReport` | `InsightsSeriesTests`, `InsightsLoaderTests`, `PeriodDataLoaderTests` |
+| Insights values, period controls and expense breakdown remain readable at AX5 | `testInsightsRemainReadableAtLargestTextSize` | `InsightsSeriesTests`, `PeriodComparisonTests` |
 | Shift earnings are offered only after driving, recorded and edited | `testAddsAndEditsEarningsFromDetail` | `ShiftEarningsTests`, `MoneyInputTests`, `ShiftEarningsPersistenceTests` |
 | A delivery's amount and a tip are offered only after driving and keep their own records | `testAddsAndEditsDeliveryEarningsAndATipFromDetail` | `DeliveryEarningsTests`, `DeliveryTipTests`, `DeliveryTipServiceTests`, `DeliveryTipMetricsTests` |
 | Expenses are recorded, refused, corrected, deleted and reach the day they belong to | `testExpensesAreRecordedRefusedCorrectedAndSummarised` | `ExpenseTests`, `PeriodExpenseMetricsTests`, `ExpensePersistenceTests` |

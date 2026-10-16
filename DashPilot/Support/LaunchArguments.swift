@@ -56,6 +56,10 @@ nonisolated enum LaunchArgument {
     /// only, and in memory, so it can never touch a real store.
     static let seededPeriodSummary = "-dashpilot-seeded-period-summary"
 
+    /// Eight synthetic weeks, including missing and zero amounts, plus active work.
+    /// Debug only, in memory, and registered as a throwaway store below.
+    static let seededInsights = "-dashpilot-seeded-insights"
+
     /// Runs against a throwaway store holding three consecutive days of
     /// synthetic completed shifts, anchored to today.
     ///
@@ -316,6 +320,7 @@ nonisolated enum LaunchArgument {
         seededActiveDelivery,
         seededPickupHistory,
         seededPeriodSummary,
+        seededInsights,
         seededPeriodComparison,
         seededExpectedPay,
         seededStackedOffer,

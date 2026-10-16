@@ -163,7 +163,7 @@ later leaves every earlier shift where it is. It is an estimate rather than a re
 covers recorded miles rather than miles driven, and it is not profit, take-home pay or a tax figure.
 See [Estimated fuel and net](estimated-fuel.md).
 
-**Persistence.** Schema v14, with migrations from every earlier version, covered by tests
+**Persistence.** Schema v22, with migrations from every earlier version, covered by tests
 that open stores written under each older version. A store that fails to open is surfaced as a
 visible state rather than a crash, and the failure screen deliberately offers no "reset the
 database" action.
@@ -174,7 +174,7 @@ Taxes and mileage deductions, recurring costs, receipts, gas-price lookup, a tip
 breakdown, per-delivery mileage, customer identity, merchant scoring, ranking or profitability, offer
 profitability, automatic delivery or pickup detection, any classifier that decides whether a vehicle
 is moving, geocoding, maps, route visualisation,
-quarterly, yearly or all-time totals, trends or comparisons across more than two periods, importing
+quarterly, yearly or all-time totals, predictions, importing
 an exported file, backup, sync, home-screen widgets and recommendations.
 
 Deliveries are recorded, and three things are built on them. One is the shift time at least one
@@ -187,11 +187,11 @@ no earnings grouped by place, no comparison between shifts and no prediction.
 
 Shifts are aggregated over a day, a week, a calendar month or a chosen date range, and no further;
 see [Period summaries](period-summaries.md). A period may be read beside the equivalent period
-immediately before it, as two sets of records and the differences between them, with no judgement,
-score or trend attached. A period, a shift or the whole history can be written to
-a JSON or CSV file the driver shares themselves, see [History export](history-export.md). No route is drawn on a map, and no mileage or live rate is
-shown while a shift is still running. There is no undo for a deleted shift and no backup of any
-kind.
+immediately before it, as two sets of records and the differences between them, with no judgement
+or score attached. Weekly Insights adds historical trend charts with explicit coverage. A period,
+a shift or the whole history can be written to a JSON or CSV file the driver shares themselves,
+see [History export](history-export.md). No route is drawn on a map. Active work shows recorded
+mileage and qualified live rates. There is no undo for a deleted shift and no backup of any kind.
 
 ## What the numbers are not
 
@@ -253,3 +253,10 @@ engineering, network interception, scraping, automatic offer acceptance or rejec
 interaction with another delivery app, and anything intended to circumvent another platform's
 restrictions. Delivery-platform information that cannot be obtained through legitimate public
 mechanisms stays manual or absent.
+
+## Weekly Insights
+
+[Insights](insights.md) lives inside Money and shows eight bounded weekly earnings and hourly-rate
+points, exact values with coverage, recorded expense categories and a comparison with the preceding
+week. Missing amounts remain missing. Current weeks are explicitly incomplete. Charts explain
+historical records and do not predict future earnings.

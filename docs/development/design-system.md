@@ -20,6 +20,17 @@ The system lays out the tab bar, delivery-entry bar, and transient Undo using sa
 height or inset is hardcoded. The existing entry-bar accessibility1 text cap remains; the rest of
 the Work list can grow to AX5 and scroll. Home and Money introduce no custom animation.
 
+## Insights inside Money
+
+Insights inherits the native list, blue accent, cloud summary surface and standard-width tabular
+financial figures. A single trend picker switches between weekly earnings and gross per working
+hour, avoiding duplicate dashboards. Native Charts columns start at zero; gaps stay gaps, zero is
+marked with a dot and nonzero partial coverage with a triangle. Partial zero values retain the dot;
+their incomplete coverage is explained in text. Exact values and coverage are available in
+text. The category breakdown uses ranked horizontal bars paired with readable amounts. Native week
+controls are the primary selection path. Accessibility text sizes replace charts with readable selected values and expandable
+weekly text rows instead of compressing labels. There is no custom animation or color-only judgment.
+
 ## Character
 
 The signature is an open financial figure on a quiet cloud-blue surface, followed immediately by

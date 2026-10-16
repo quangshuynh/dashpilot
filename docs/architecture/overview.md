@@ -39,13 +39,22 @@ outside its List. Their existing editors keep their navigation and confirmation 
 delivery row is refreshed or recycled. The delivery panel requests the review destination; the
 workspace owns its presentation.
 
-Home, Money and Period Summaries share `PeriodDataLoader`, a bounded read through a separate model
+Home, Money, Insights and Period Summaries share `PeriodDataLoader`, a bounded read through a separate model
 context. Only immutable Sendable results cross back to the main actor. Home requests earnings,
 working time, their coverage, the existing hourly-target summary, and the expense-record count.
 It never reads route samples or deliveries. Full summaries request their selected and preceding
 periods, measuring routes and adapting delivery records off main before calling the same calculator.
 Neither view aggregates in its body. Home separately fetches at most three completed shift models
 for the existing row and detail navigation, ordered by start time and stable identifier.
+
+Insights adds `InsightsWindow`, `InsightsWeek`, `InsightsSeries` and `InsightsSeriesBuilder`.
+The window bounds a single shift fetch and expense fetch to eight displayed weeks plus one preceding
+comparison week. The loader's shared financial adapter excludes routes and deliveries. The builder
+runs `PeriodMetricsCalculator` for those weeks off main, preserving its `ExpenseTotalsCalculator`
+and target-snapshot rules. Selecting a loaded week reads immutable values and calls the existing
+comparison calculator; it does not query the store or rebuild the series. Changing the displayed
+range uses the same request-generation and cancellation mechanism as other reports. The view never
+presents unread route or delivery fields as missing-data claims.
 
 `PeriodLoading` owns screen-local invalidation. Relevant `ModelContext.didSave` notifications change
 a revision; route-sample-only, settings-only and vehicle-only saves do not. This is conservative:
