@@ -141,14 +141,15 @@ struct OnboardingView: View {
                 .accessibilityHidden(true)
             }
 
-            ViewThatFits(in: .horizontal) {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(spacing: DashSpacing.sm) {
+                    primaryButton
+                    backButton
+                }
+            } else {
                 HStack(spacing: DashSpacing.lg) {
                     backButton
                     primaryButton
-                }
-                VStack(spacing: DashSpacing.md) {
-                    primaryButton
-                    backButton
                 }
             }
         }
@@ -213,46 +214,45 @@ nonisolated struct OnboardingPage: Identifiable, Sendable {
         OnboardingPage(
             id: "welcome",
             artwork: "onboarding-welcome",
-            title: "Your deliveries. Your record.",
-            message: """
-                DashPilot keeps your own record of each shift: the time you work, the miles your \
-                route records, your deliveries, what you earn and what you spend.
-                """
+            title: "Make every hour count.",
+            message: "Your delivery work, in one place. DashPilot helps you record your shifts, understand your money and look back on what worked.",
+            points: [
+                Point(symbol: "house", text: "Home shows this week's completed work. Start Shift when you're ready."),
+                Point(symbol: "gearshape", text: "No setup required. You can revisit this welcome in Settings anytime.")
+            ]
         ),
         OnboardingPage(
             id: "shift",
-            artwork: "onboarding-shift",
-            title: "See how your work adds up.",
-            message: "After each shift, the figures are worked out from what you recorded, and say what they are based on.",
+            artwork: "onboarding-road",
+            title: "Track your work.",
+            message: "Work keeps your shift and delivery controls together. Record each step when it is safe to stop.",
             points: [
-                Point(symbol: "clock", text: "Working time, and how much of it was on deliveries"),
-                Point(symbol: "point.topleft.down.to.point.bottomright.curvepath", text: "Your route and the miles it recorded"),
-                Point(symbol: "hourglass", text: "How long pickups kept you waiting"),
-                Point(symbol: "dollarsign.circle", text: "Earnings, expenses and what they come to per hour and per mile")
+                Point(symbol: "list.number", text: "Add a delivery or stacked offer, then record arrival, pickup and delivery."),
+                Point(symbol: "parkingsign.circle", text: "Park stops route recording while working time continues. Pause stops both for a break."),
+                Point(symbol: "point.topleft.down.to.point.bottomright.curvepath", text: "Recorded mileage covers the route captured. Gaps stay gaps.")
             ]
         ),
         OnboardingPage(
             id: "road",
-            artwork: "onboarding-road",
-            title: "Less tapping while you're working.",
-            message: "Large controls do one thing each, so you can record a step at a stop and get back to driving.",
+            artwork: "onboarding-shift",
+            title: "Understand your money.",
+            message: "Record shift earnings after you finish. Money brings weekly earnings, recorded expenses and historical Insights together.",
             points: [
-                Point(symbol: "parkingsign.circle", text: "Park when you stop, and Resume Driving when you leave"),
-                Point(symbol: "list.number", text: "One clear next step on each delivery"),
-                Point(symbol: "lock.iphone", text: "The same controls on your Lock Screen"),
-                Point(symbol: "mic", text: "Or ask Siri")
+                Point(symbol: "dollarsign.circle", text: "Shift and delivery earnings are separate records. Missing amounts are never zero."),
+                Point(symbol: "chart.bar", text: "Insights shows completed work and its coverage. Fuel estimates stay separate from recorded expenses."),
+                Point(symbol: "target", text: "Want a benchmark? Set an optional hourly earnings target in Settings for future shifts. Amounts use USD.")
             ]
         ),
         OnboardingPage(
             id: "local",
             artwork: "onboarding-local",
-            title: "Your work stays with you.",
-            message: """
-                DashPilot keeps everything on this iPhone. It has no account and does not connect to \
-                your DoorDash, Uber, Amazon, Walmart or any other delivery app, so it records only \
-                what you tell it and what this phone measures. You can export your history whenever \
-                you choose.
-                """
+            title: "Your data stays yours.",
+            message: "DashPilot stores your records on this device, with no account or automatic uploads. It does not connect to DoorDash, Uber, Amazon, Walmart or any other delivery app.",
+            points: [
+                Point(symbol: "location", text: "Location access is explained and requested where you enable route recording, never in this welcome."),
+                Point(symbol: "square.and.arrow.up", text: "Export your history only when you choose. No platform data is imported."),
+                Point(symbol: "play.circle", text: "Start on Home. Your shift controls will open in Work.")
+            ]
         )
     ]
 }
