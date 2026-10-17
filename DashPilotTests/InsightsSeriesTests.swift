@@ -57,6 +57,52 @@ struct InsightsSeriesTests {
         #expect(label == week.rangeStatement(calendar: calendar, locale: locale))
     }
 
+    @Test(arguments: ["America/New_York", "America/Los_Angeles", "Pacific/Kiritimati"])
+    func mondayRolloverUsesReportingTimezone(zone: String) throws {
+        var calendar = self.calendar
+        calendar.timeZone = try #require(TimeZone(identifier: zone))
+        let monday = try #require(calendar.date(from: DateComponents(year: 2026, month: 10, day: 19)))
+        let before = try #require(InsightsWindow(endingAt: monday.addingTimeInterval(-1), calendar: calendar))
+        let after = try #require(InsightsWindow(endingAt: monday, calendar: calendar))
+        #expect(before.weeks.last?.end == monday)
+        #expect(after.weeks.last?.start == monday)
+        #expect(Array(before.weeks.dropFirst()) == Array(after.weeks.dropLast()))
+        let shifts = [
+            PeriodShiftRecord(startedAt: monday.addingTimeInterval(-1), isCompleted: true,
+                              workingDuration: 7200, grossEarnings: Money(amount: 40)),
+            PeriodShiftRecord(startedAt: monday, isCompleted: true,
+                              workingDuration: 3600, grossEarnings: .zero)
+        ]
+        let series = try InsightsSeriesBuilder.build(shifts: shifts, expenses: [], window: after)
+        #expect(series.weeks[6].metrics.recordedGrossEarnings == Money(amount: 40))
+        #expect(series.weeks[7].metrics.recordedGrossEarnings == .zero)
+        // An overnight shift remains wholly in its starting week.
+        #expect(series.weeks[6].metrics.workingDuration == 7200)
+    }
+
+    @Test func sameInstantCanBelongToDifferentLocalWeeks() throws {
+        var west = calendar
+        west.timeZone = try #require(TimeZone(identifier: "America/Los_Angeles"))
+        let instant = try #require(calendar.date(from: DateComponents(year: 2026, month: 10, day: 19, hour: 1)))
+        let eastWeek = try #require(InsightsWindow(endingAt: instant, calendar: calendar)?.weeks.last)
+        let westWeek = try #require(InsightsWindow(endingAt: instant, calendar: west)?.weeks.last)
+        #expect(calendar.component(.day, from: eastWeek.start) == 19)
+        #expect(west.component(.day, from: westWeek.start) == 12)
+        #expect(eastWeek.contains(instant) && westWeek.contains(instant))
+    }
+
+    @Test func largeExactAmountsKeepCentsAndCoverage() throws {
+        let window = try window()
+        let week = try #require(window.weeks.last)
+        let amount = try #require(Money(exact: "99999999.99"))
+        let series = try build([record(week, money: amount), record(week, money: .zero), record(week)], window: window)
+        let metrics = try #require(series.weeks.last?.metrics)
+        #expect(metrics.recordedGrossEarnings == amount)
+        #expect(metrics.earningsCoverage == MetricCoverage(contributingCount: 2, eligibleCount: 3))
+        #expect(metrics.recordedGrossEarnings?.formatted(locale: Locale(identifier: "en_US")) == "$99,999,999.99")
+        #expect(metrics.grossPerWorkingHour.amount == Money(exact: "49999999.995"))
+    }
+
     @Test func emptyAndSparseWeeksStayMissing() throws {
         let window = try window()
         let empty = try build(window: window)
