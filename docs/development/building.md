@@ -7,14 +7,15 @@ bootstrap script. Cloning it and opening it is the whole setup.
 
 | Requirement | Version |
 | --- | --- |
-| Xcode | 26.6 or later |
+| Xcode | A version including the iOS 26.5 SDK or newer |
 | iOS deployment target | 26.5 |
 | Swift | Swift 5 language mode, with `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` |
 | Dependencies | None |
 | Targets | `DashPilot`, plus the `DashPilotWidgets` extension it embeds |
 
-Xcode 26.6 is required because the project's deployment target is iOS 26.5, and an Xcode without the
-iOS 26.5 SDK refuses to build it.
+The deployment target is iOS 26.5. Check `xcodebuild -showsdks` and select a compatible installed
+simulator. The Interval 4B verification host uses Xcode 27.1; that is a tested host, not a new
+minimum deployment target.
 
 ## Schemes
 
@@ -55,8 +56,16 @@ Substitute any installed iPhone simulator for `iPhone 17`. To see what is instal
 xcrun simctl list devices available
 ```
 
-Adding `clean` before the action (`xcodebuild clean test ...`) is what the project treats as the
-release-gate build, because it catches the integration failures an incremental build hides.
+For the clean verification build, include the app, embedded widget and both test targets together:
+
+```sh
+xcodebuild clean build-for-testing -project DashPilot.xcodeproj -scheme DashPilot \
+  -destination 'platform=iOS Simulator,name=iPhone 17' \
+  -derivedDataPath DerivedData CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
+```
+
+Then run each complete suite using `test-without-building` with the same destination and derived
+data path. Keep UI tests serial with `-parallel-testing-enabled NO`. See [Testing](testing.md).
 
 ## The typeface
 

@@ -282,13 +282,14 @@ the same minutes. Resuming the shift first is one tap.
 
 **It belongs to the shift, never to a delivery.** Whether the vehicle is moving is a fact about the
 driver and their vehicle: a driver shopping for one order while carrying another has one vehicle and
-it is parked. So there is one stretch at a time however many deliveries are open, no delivery starts
-or ends one, and nothing about [stacked deliveries](delivery-lifecycle.md#stacked-deliveries) divides
-it.
+it is parked. There is one stretch at a time however many deliveries are open. Neither delivery
+records nor [stacked deliveries](delivery-lifecycle.md#stacked-deliveries) divide it.
 
 Leaving the state is always explicit. `Resume Driving` is one tap, pausing the shift closes it, and
-ending the shift closes it at the end instant. Nothing resumes because a speed changed, because a
-position moved or because a delivery advanced.
+ending the shift closes it at the end instant. Movement never resumes recording. With
+[Resume driving after delivery progress](settings.md#resume-driving-after-delivery-progress)
+enabled, recording Picked Up or Delivered can close the parked stretch once that stop has nothing
+left to do. The setting is off by default and never resumes a paused shift.
 
 The running shift and the shift's Lock Screen card both say `Parked` for as long as the state lasts,
 and both say plainly that the shift is still running, because forgetting to leave the state is the

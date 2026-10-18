@@ -672,3 +672,17 @@ cold loading, warm reuse, tab return, corrections, selection and range changes o
 and History opt-in probes. Results are written to `dashpilot-insights-profile.md` in the simulator
 app's temporary directory. These are loader/data-preparation timings, never chart frame timings.
 UI journeys separately print navigation-to-readable-value duration, including XCTest overhead.
+
+## Onboarding and accessibility verification
+
+The existing first-launch journey checks all four pages, completion persistence and skip persistence.
+The existing Settings replay journey traverses all four pages at AX5, scrolls their content, checks
+finish and Back, and returns with Close. These changes keep the suite at 40 journeys.
+
+`InsightsSeriesTests` additionally checks Monday rollover in three timezones, the same instant in
+different local weeks, overnight assignment and exact large monetary values with partial coverage.
+These complement the existing DST, historical selection, zero and missing-data cases.
+
+Use the [accessibility matrix](accessibility.md) for simulator and physical-device inspection.
+Opt-in loader probes establish bounded data preparation only; a fast loader is not evidence of
+rendered chart frame performance. No screenshot refresh or hardware VoiceOver pass is implied by CI.

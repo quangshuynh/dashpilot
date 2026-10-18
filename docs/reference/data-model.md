@@ -1,7 +1,7 @@
 # Data model
 
 Eleven persisted entities, and a small set of value types derived from them. Current schema
-version: **v18**.
+version: **v22**.
 
 ## `Shift`
 

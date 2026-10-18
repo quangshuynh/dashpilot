@@ -58,7 +58,7 @@ reconstructing a week from their locale. No selected-period identifiers are pers
 
 Every file states `formatVersion: 6`.
 
-**This is not the SwiftData schema version**, which is currently v18. The two describe different
+**This is not the SwiftData schema version**, which is currently v22. The two describe different
 things and are free to move independently:
 
 - The schema version describes how a database is laid out on one device. Nothing outside the app has

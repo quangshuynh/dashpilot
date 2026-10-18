@@ -28,7 +28,6 @@ rather than a store reset.
 | 18.0.0 | Adds `Delivery.pickupProvenanceRawValue`, an optional `String` holding how a pickup was recorded. Backfills nothing; every migrated pickup reads as unknown |
 | 19.0.0 | Adds `RouteSuspension.pickupWorkflowDeliveryID`, an optional `UUID` naming the delivery a parked stretch was for, and `DriverSettings.usesParkAndResumeForPickups` and `handlesStackedOrdersInOrder`, two `Bool`s declared `false`; removes `DriverSettings.recordsPickupWhenParking`. Backfills nothing; the workflow reads off and no stretch is associated |
 | 20.0.0 | Adds `Delivery.sharedPickupID` and `Delivery.sharedDropOffID`, optional `UUID`s deliveries share when the driver said they are collected at the same pickup or go to the same drop-off, and `RouteSuspension.pickupWorkflowSharedPickupDeliveryIDs`, a `[UUID]` declared empty, naming the other deliveries a parked stretch was for. Backfills nothing; every migrated delivery is independent |
-
 | 21.0.0 | Adds `DriverSettings.resumesDrivingAfterDeliveryProgress`, a `Bool` declared `false`. Backfills nothing; every migrated driver has it off |
 | 22.0.0 | Adds `Shift.targetGrossPerWorkingHourAmount` and `DriverSettings.targetGrossPerWorkingHourAmount`, two optional `Decimal`s holding a shift's own target hourly earnings and the default the next shift copies. Backfills nothing; no migrated shift has a target |
 

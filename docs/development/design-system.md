@@ -187,3 +187,14 @@ These are concepts, not approved or generated assets:
 Explore the Continuous W first with a readable lowercase `worklane` wordmark. Check light, dark,
 tinted, monochrome, and small sizes. Do not depend on gradients or fine linework. The current
 DashPilot icon and public name remain unchanged until a separately approved rebrand and name review.
+
+## Welcome and financial readability
+
+The four-page welcome introduces Home, active Work, Money and local-first privacy using the existing
+illustrations. It explains optional future-shift targets and fixed USD presentation without adding
+setup fields or permission prompts. Its completion key and version are unchanged. At accessibility
+sizes, primary and Back controls stack while page content scrolls independently.
+
+Home keeps monetary figures together using the bounded fitting already present in Money. Labels
+and coverage remain scalable. Missing earnings in shift detail identify the metric for VoiceOver.
+See the [accessibility verification matrix](accessibility.md) for evidence requirements and limits.

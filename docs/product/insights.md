@@ -59,3 +59,15 @@ The screen loads eight displayed weeks plus the preceding comparison week. It do
 monthly, annual or all-time charts. No chart aggregates are persisted, and no routes or deliveries are
 requested for this screen. [Architecture](../architecture/overview.md) describes the shared cancellable
 loader. [Testing](../development/testing.md) describes synthetic probes and simulator verification.
+
+## Reporting timezone and rollover
+
+Weeks follow the reporting Calendar's timezone, rather than UTC or the timezone where an amount
+was entered. The same instant can fall on Sunday in one timezone and Monday in another. Changing
+the reporting timezone can therefore change which week contains a shift's start or an expense's
+date. Records themselves are not rewritten, and an overnight shift is never split.
+
+The current range refreshes when the calendar day changes or the app becomes active. A selected
+historical range stays selected; **Latest Weeks** returns to the current week. Current-week
+comparisons explain that the week is in progress. The domain tests cover the exact Monday boundary,
+DST, differing timezone membership, missing and partial weeks, and large Decimal amounts.

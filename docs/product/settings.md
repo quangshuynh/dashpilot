@@ -2,7 +2,7 @@
 
 DashPilot keeps a small set of reusable preferences so that figures a driver
 would otherwise retype on every shift are typed once. It is reached from the gear
-in the top left of the main screen.
+in the toolbar of Home, Work and Money.
 
 It opens with the **default vehicle** the next shift will record, then the
 **vehicles** the driver works in, the **gas price** they last paid, an optional
@@ -34,9 +34,10 @@ Personal Target
   Target hourly earnings   $25.00 / working hour
   Recorded on your next shift
 
-Pickup Workflow
+Pickup & Parking
   Pick up orders with Park & Resume          ( off )
   Handle stacked orders in order             ( off )
+  Resume driving after delivery progress     ( off )
 
 About
   Welcome to DashPilot
@@ -46,9 +47,9 @@ About
 With nothing selected the first section says `No vehicle selected` and that the
 next shift records no miles per gallon, rather than drawing an empty card.
 Starting a shift is never refused over it. Nothing about the vehicle or the gas
-price reaches a shift already running. The two pickup switches are the only
-preferences that act during a shift, and only at the moment Park or Resume
-Driving is pressed.
+price reaches a shift already running. The pickup and parking switches act on recorded actions
+during a shift, including Park, Resume Driving and, when enabled, pickup or delivery progress.
+They never infer vehicle movement.
 
 ## The vehicle and the gas price are defaults for the next shift
 
@@ -337,11 +338,12 @@ paused or ended. It is offered only in the app.
 ## Welcome to DashPilot
 
 `About` → `Welcome to DashPilot` opens the four-screen introduction a new driver sees on first
-launch: what DashPilot records, what that adds up to, how it keeps tapping down while driving, and
-that it is local-first and connected to no delivery platform. It asks for no permission and changes
-nothing. It is shown once, automatically, only to an install with no recorded shift; a driver
+launch: Home and starting a shift, Work and delivery tracking, Money and historical Insights, and
+local-first privacy. It also points to optional targets and states that amounts use USD. It asks
+for no permission and changes no work records. It is shown once, automatically, only to an install with no recorded shift; a driver
 updating with history already recorded is not stopped by it. Whether it has been seen is kept on the
-device, outside the store, and is never exported.
+device, outside the store, and is never exported. Skip and finish both preserve completion.
+See [Your first shift](first-shift.md) for a short walkthrough.
 
 ## Acknowledgements
 
