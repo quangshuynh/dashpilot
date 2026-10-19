@@ -1624,7 +1624,8 @@ final class DashPilotUITests: XCTestCase {
         history.element(boundBy: 1).tap()
         let earnings = app.descendants(matching: .any)["shiftDetailEarnings"]
         XCTAssertTrue(earnings.appears())
-        XCTAssertEqual(earnings.label, "No amount recorded")
+        XCTAssertEqual(earnings.label, "Shift gross earnings, no amount recorded")
+        attachScreenshot("detail-missing-earnings")
         // Driving sits under the summary and the performance figures.
         let unrouted = app.descendants(matching: .any)["shiftDetailRecordedMileage"]
         XCTAssertTrue(scrollTo(unrouted, in: app))
@@ -1638,6 +1639,7 @@ final class DashPilotUITests: XCTestCase {
         history.element(boundBy: 0).tap()
         XCTAssertTrue(earnings.appears())
         XCTAssertTrue(earnings.label.contains("$86.25"), "Detail shows the tapped shift's amount: \(earnings.label)")
+        attachScreenshot("detail-recorded-earnings")
 
         // Scrolled to rather than assumed on screen: this shift records
         // deliveries, so the route section sits below a taller shift section
