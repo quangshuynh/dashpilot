@@ -581,9 +581,11 @@ final class DashPilotUITests: XCTestCase {
 
         let next = app.buttons["nextOnboardingButton"]
         XCTAssertEqual(next.label, "Get Started")
+        attachScreenshot("onboarding-welcome")
         for page in 2...4 {
             next.tap()
             XCTAssertTrue(waitForLabel(step, toContain: "Step \(page) of 4"))
+            attachScreenshot("onboarding-page-\(page)")
         }
         XCTAssertTrue(app.buttons["onboardingBackButton"].exists, "A driver can go back")
         XCTAssertFalse(app.buttons["skipOnboardingButton"].exists, "The last screen has its own way out")
@@ -602,6 +604,18 @@ final class DashPilotUITests: XCTestCase {
         launchInPortrait(again)
         XCTAssertTrue(again.buttons["startShiftButton"].appears())
         XCTAssertFalse(again.staticTexts["onboardingStep"].exists, "Shown once, not on every launch")
+
+        again.terminate()
+        app.launchArguments = [Self.inMemoryStoreArgument, Self.onboardingFreshArgument]
+        launchInPortrait(app)
+        let skip = app.buttons["skipOnboardingButton"]
+        XCTAssertTrue(skip.appears())
+        skip.tap()
+        XCTAssertTrue(app.buttons["startShiftButton"].appears())
+        app.terminate()
+        launchInPortrait(again)
+        XCTAssertTrue(again.buttons["startShiftButton"].appears())
+        XCTAssertFalse(again.staticTexts["onboardingStep"].exists, "Skipping also persists")
     }
 
     /// The welcome reopens from Settings, reads at the largest text size with
@@ -623,6 +637,19 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertTrue(next.isHittable, "The primary control is reachable at the largest size")
         XCTAssertGreaterThanOrEqual(onPixelGrid(next.frame.height), 44)
         attachScreenshot("onboarding-largest-text")
+
+        for page in 2...4 {
+            next.tap()
+            XCTAssertTrue(waitForLabel(app.staticTexts["onboardingStep"], toContain: "Step \(page) of 4"))
+            let scroll = app.scrollViews.firstMatch
+            scroll.swipeUp()
+            attachScreenshot("onboarding-largest-text-page-\(page)")
+        }
+        let finish = app.buttons["finishOnboardingButton"]
+        XCTAssertTrue(finish.isHittable)
+        XCTAssertGreaterThanOrEqual(onPixelGrid(finish.frame.height), 44)
+        app.buttons["onboardingBackButton"].tap()
+        XCTAssertTrue(waitForLabel(app.staticTexts["onboardingStep"], toContain: "Step 3 of 4"))
 
         let close = app.buttons["skipOnboardingButton"]
         XCTAssertEqual(close.label, "Close", "Reopened, it closes rather than skips")
@@ -1597,7 +1624,8 @@ final class DashPilotUITests: XCTestCase {
         history.element(boundBy: 1).tap()
         let earnings = app.descendants(matching: .any)["shiftDetailEarnings"]
         XCTAssertTrue(earnings.appears())
-        XCTAssertEqual(earnings.label, "No amount recorded")
+        XCTAssertEqual(earnings.label, "Shift gross earnings, no amount recorded")
+        attachScreenshot("detail-missing-earnings")
         // Driving sits under the summary and the performance figures.
         let unrouted = app.descendants(matching: .any)["shiftDetailRecordedMileage"]
         XCTAssertTrue(scrollTo(unrouted, in: app))
@@ -1611,6 +1639,7 @@ final class DashPilotUITests: XCTestCase {
         history.element(boundBy: 0).tap()
         XCTAssertTrue(earnings.appears())
         XCTAssertTrue(earnings.label.contains("$86.25"), "Detail shows the tapped shift's amount: \(earnings.label)")
+        attachScreenshot("detail-recorded-earnings")
 
         // Scrolled to rather than assumed on screen: this shift records
         // deliveries, so the route section sits below a taller shift section

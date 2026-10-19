@@ -269,7 +269,7 @@ struct CompletedShiftDetailView: View {
             } else {
                 DashMetric(value: "No amount recorded", label: "Recorded earnings", isFigure: false)
                     .accessibilityElement(children: .ignore)
-                    .accessibilityLabel("No amount recorded")
+                    .accessibilityLabel("Shift gross earnings, no amount recorded")
             }
         }
         .accessibilityIdentifier("shiftDetailEarnings")

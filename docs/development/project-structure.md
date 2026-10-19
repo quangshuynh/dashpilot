@@ -5,7 +5,7 @@ DashPilot/
   App/            SwiftUI scene shell, Home/Work/Money workspaces, delivery controls, editors, shift detail, failure state, preview fixtures
   Domain/         Framework-independent value types and calculations
   Export/         The external file contract: export records, encoders, file writing
-  Intents/        App Intents: the six lifecycle actions performable with no screen
+  Intents/        App Intents: the nine lifecycle actions performable with no screen
   Models/         SwiftData @Model types
   Persistence/    Versioned schema, migration plan, container construction
   Services/       Application services that own state transitions, and platform adapters

@@ -247,12 +247,13 @@ are shift operations and are refused by no number of deliveries, because one dri
 however many orders are in the car. Park and Resume Driving run `ParkVehicleService`, which the
 app's buttons run too: it saves the vehicle state through `ShiftService` first, and only then, if the
 driver turned on `Pick up orders with Park & Resume`, calls `DeliveryService.markArrivedAtPickup` (on
-Park) or `markPickedUp` (on Resume, for the delivery the parked stretch stores) for the one delivery
-the rule names. A refused delivery step never undoes the vehicle state, and the suspension names its
+Park) or `markPickedUp` (on Resume) for the delivery and shared pickup set stored on the parked
+stretch. A refused delivery step never undoes the vehicle state, and the suspension names its
 delivery by identifier and joins none. On screen the question does not arise: with three
 deliveries running there are three cards, each with its own button. A sentence has no card, so a step
-is recorded only while **exactly one** delivery is in progress; with more, nothing is recorded and the
-refusal names the count. That is `DeliveryService`'s own principle, where every mutation takes its
+through the generic next-step action is recorded only while **exactly one** delivery is in progress;
+with more, nothing is recorded and the refusal names the count. That is `DeliveryService`'s own
+principle, where every mutation takes its
 delivery as a parameter and nothing resolves a target internally, applied where there is nobody to
 supply one.
 

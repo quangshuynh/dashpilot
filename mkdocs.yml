@@ -97,37 +97,40 @@ validation:
     not_found: warn
 
 nav:
-  - Home: index.md
-  - Product:
-      - Overview: product/overview.md
-      - Shift workflow: product/shift-workflow.md
-      - Delivery lifecycle: product/delivery-lifecycle.md
-      - Voice and system actions: product/voice-actions.md
-      - Shift Live Activity: product/live-activity.md
-      - Pickup identity: product/pickup-identity.md
-      - Pickup wait: product/pickup-wait.md
-      - Recorded mileage: product/recorded-mileage.md
-      - Earnings and metrics: product/earnings-and-metrics.md
-      - Recorded expenses: product/expenses.md
-      - Estimated fuel and net: product/estimated-fuel.md
-      - Settings and vehicles: product/settings.md
-      - Period summaries: product/period-summaries.md
+  - Getting Started:
+      - Introduction: index.md
+      - Product overview: product/overview.md
+      - Building and running: development/building.md
+      - First shift: product/first-shift.md
+  - Using the App:
+      - Home and Work: product/shift-workflow.md
+      - Deliveries: product/delivery-lifecycle.md
+      - Money and expenses: product/expenses.md
       - Insights: product/insights.md
-      - History export: product/history-export.md
-  - Architecture:
-      - Overview: architecture/overview.md
+      - History and reports: product/period-summaries.md
+      - Settings: product/settings.md
+      - Voice and system actions: product/voice-actions.md
+      - Live Activity: product/live-activity.md
+      - Pickup places: product/pickup-identity.md
+      - Pickup waits: product/pickup-wait.md
+  - Understanding Your Data:
+      - Earnings and coverage: product/earnings-and-metrics.md
+      - Recorded mileage: product/recorded-mileage.md
+      - Fuel estimates: product/estimated-fuel.md
+      - Exports: product/history-export.md
+      - Privacy: architecture/privacy.md
+  - Development:
+      - Architecture: architecture/overview.md
       - Persistence: architecture/persistence.md
       - Migrations: architecture/migrations.md
       - Location: architecture/location.md
       - Route measurement: architecture/route-measurement.md
       - Money and metrics: architecture/money-and-metrics.md
-      - Privacy: architecture/privacy.md
-  - Development:
-      - Building: development/building.md
+      - Design system: development/design-system.md
+      - Accessibility: development/accessibility.md
       - Testing: development/testing.md
       - UI suite audit: development/ui-suite-audit.md
       - Project structure: development/project-structure.md
-      - Design system: development/design-system.md
       - Platform terminology: development/platform-terminology.md
       - Release readiness: development/release-readiness.md
       - Release notes draft: development/release-notes-draft.md

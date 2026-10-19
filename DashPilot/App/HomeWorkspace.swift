@@ -88,7 +88,7 @@ struct HomeWorkspace: View {
                     }
                     .frame(minHeight: 44)
                 }
-                .accessibilityHint("Recorded expenses and period summaries.")
+                .accessibilityHint("Weekly earnings, recorded expenses, Insights and period summaries.")
                 .accessibilityIdentifier("homeMoneyButton")
             }
         }
@@ -143,7 +143,7 @@ struct HomeWorkspace: View {
             } else {
                 DashMetric(value: summary.earnings?.formatted(locale: locale) ?? "Earnings not recorded",
                            label: "Recorded gross earnings", detail: basis(summary.earningsCoverage),
-                           isFigure: summary.earnings != nil, emphasis: .financial)
+                           isFigure: summary.earnings != nil, emphasis: .financial, keepsFigureTogether: true)
                     .padding(.vertical, DashSpacing.md)
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel("Recorded gross earnings. \(summary.earnings?.formatted(locale: locale) ?? "Earnings not recorded"). \(basis(summary.earningsCoverage))")
@@ -158,7 +158,7 @@ struct HomeWorkspace: View {
                 DashValueRow(title: "Gross per working hour",
                              value: summary.hourlyRate.amount.map { "\($0.formatted(locale: locale))/hr" } ?? "Not available",
                              detail: summary.hourlyRate.isAvailable ? basis(summary.hourlyRate.coverage) : "Needs recorded earnings and positive working time on the same shift.",
-                             isFigure: summary.hourlyRate.isAvailable)
+                             isFigure: summary.hourlyRate.isAvailable, keepsFigureTogether: true)
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel("Gross earnings per working hour. \(summary.hourlyRate.amount?.formatted(locale: locale) ?? "Not available"). \(basis(summary.hourlyRate.coverage)). Based on shifts with recorded earnings and positive working time.")
                     .accessibilityIdentifier("homeHourlyRate")

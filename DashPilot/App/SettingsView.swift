@@ -240,7 +240,7 @@ struct SettingsView: View {
             Text(
                 """
                 Optional. Finished shifts compare their gross earnings per working hour with the \
-                target they started with. It is your benchmark, not what a shift should pay.
+                target they started with. It is your benchmark, not what a shift should pay. Amounts use USD; currency cannot be changed.
                 """
             )
         }

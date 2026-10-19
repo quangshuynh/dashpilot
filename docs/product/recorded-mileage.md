@@ -94,9 +94,10 @@ While a shift is recorded as parked:
   where it is driven off from is not counted. That stretch was not recorded, so it is not measured.
 
 Leaving the state is always the driver's. `Resume Driving` is one tap, pausing the shift leaves it,
-and ending the shift closes it at the end. Nothing resumes because a speed changed, because a
-position moved or because a delivery advanced: the app would be deciding the driver had walked back
-to their car, and the cost of deciding that wrongly is a walk recorded as vehicle mileage.
+and ending the shift closes it at the end. With the optional
+[resume-after-progress setting](settings.md#resume-driving-after-delivery-progress), recording Picked Up
+or Delivered may also resume recording when the stop is clear. No speed or position change resumes
+it. The setting acts on recorded actions, not observed vehicle movement.
 
 The running shift and the Lock Screen both say `Parked` for as long as the state lasts, because
 forgetting to leave it is the expensive way this goes wrong. The Lock Screen card shows exactly one

@@ -1,6 +1,6 @@
 ---
 hide:
-  - navigation
+  - toc
 ---
 
 # DashPilot
@@ -24,6 +24,15 @@ Drivers who want a truthful record of their own work: how long a shift ran, how 
 recorded, what it paid, and what those two facts imply per hour and per recorded mile. It is also
 a worked example of a small SwiftUI and SwiftData application that takes persistence, permissions,
 monetary precision and honest wording seriously.
+
+## Find your way around
+
+**Home** starts or continues your shift and shows current-week completed work. **Work** contains
+active delivery controls and History. **Money** brings together weekly earnings, expenses, Insights
+and reports. Each workspace has a Settings gear. Reporting weeks run Monday through Sunday.
+
+[Start your first shift](product/first-shift.md){ .md-button .md-button--primary }
+[Explore Insights](product/insights.md){ .md-button }
 
 ## The workflow that exists today
 
@@ -58,8 +67,8 @@ with the reason any of them could not be derived.
 - **Nothing derived is stored.** Recorded mileage, a delivery's state, delivery active time and all
   three rates are recomputed from the stored route, timestamps, deliveries and amount every time they
   are shown, so the store never holds two answers to the same question.
-- **Decimal money.** No monetary value passes through binary floating point, in memory or in the
-  store. See [Money and metrics](architecture/money-and-metrics.md).
+- **Decimal money.** Authoritative money and exact labels use Decimal. Chart geometry and compact
+  axis labels alone use binary floating point. See [Money and metrics](architecture/money-and-metrics.md).
 - **Deliberate location handling.** Authorization, accuracy, the system-wide Location Services
   switch, sample filtering and capture continuity are modelled separately and tested separately.
   See [Location](architecture/location.md).
@@ -98,8 +107,9 @@ The full list, including the parts that are simply not built yet, is on
 
 !!! note "Documentation status"
 
-    This site documents schema v19 and export format version 6: the shift, route, parked, pause,
+    This site documents schema v22 and export format version 6: the shift, route, parked, pause,
     delivery lifecycle, offer grouping, correction, pickup identity, pickup wait, earnings, tips,
-    expected pay, settings and vehicle, weekly History, period summary, period comparison, history
+    expected pay, settings, vehicles, optional targets, Home / Work / Money, weekly Insights,
+    weekly History, period summary, period comparison, history
     export, recorded expense, estimated fuel and net, voice action and Live Activity work completed so
     far. Every amount, coordinate, route, note and business name in it is synthetic.

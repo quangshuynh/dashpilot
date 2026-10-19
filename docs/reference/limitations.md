@@ -38,20 +38,20 @@ and one they cannot.
   still, and a driver who parks, drives somewhere else and comes back records a stretch parked over
   driving nobody measured.
 - **Forgetting to leave the state costs the rest of the shift's route.** The app says `Parked` on the
-  running shift and on the Lock Screen for as long as it lasts, and both halves can now be recorded
-  by voice or from the Lock Screen so that a driver with full hands has no excuse to put it off. It
-  stops there: nothing resumes on a timer, on a speed or on a delivery advancing, because a rule that
-  guessed would record a walk as vehicle mileage on the day it guessed wrong.
+  running shift and on the Lock Screen for as long as it lasts, and both controls are available
+  by voice or from the Lock Screen. Optional resume after recorded delivery progress can close the
+  stretch when the stop is cleared. Movement and timers never resume it.
 - **The stretches parked are not matched to the gaps they leave.** A shift whose recording had
   already stopped produces no gap by parking, and the route keeps no record of which stop is which,
   so the two facts are stated side by side and never as a correspondence.
 
 ## Voice and system actions
 
-- **Eight actions only.** Start a shift, pause it, resume it, end it, park the vehicle, drive again,
-  start a delivery, record that delivery's next event. Nothing else DashPilot does is reachable
+- **Nine actions only.** Start a shift, pause it, resume it, end it, park the vehicle, drive again,
+  start a delivery, record that delivery's next event, and the dedicated Delivered action for stacked
+  work. Nothing else DashPilot does is reachable
   without the screen.
-- **A spoken delivery step needs exactly one delivery in progress.** With two or more, nothing is
+- **The generic next-step action needs exactly one delivery in progress.** With two or more, nothing is
   recorded and the refusal names the count. This is a refusal, not a gap: a sentence names no
   particular order, and guessing one would write an event into a delivery the driver did not mean.
 - **A shift started or resumed by voice records no route until the app is opened**, because a
@@ -574,9 +574,9 @@ parking` whose pickups stores may still hold.
   distance they missed is not, because nothing can say.
 - **Delivery active time is summed per shift, never unioned across shifts.** Two shifts that overlap
   in clock time — which the app cannot produce, but a store could hold — would be counted twice.
-- **Two periods, and no more.** A period is compared with the equivalent period immediately before
-  it and with nothing else: no third period, no series, no chart, no trend line, no best or worst
-  day, no streak, no goal and no projection. Nothing extrapolates a period that has not finished.
+- **Period reports compare adjacent equivalent periods.** Money's Insights separately shows eight
+  weeks of historical trends and the preceding-week comparison. There are no predictions, best-day
+  rankings or extrapolated unfinished periods.
 - **A comparison is between records, not between weeks of work.** More recorded is not better and
   less recorded is not worse; the app holds what the driver entered and never saw the work.
 - **A percentage change is often withheld, and that is the normal case.** It is stated only when both
@@ -698,12 +698,9 @@ parking` whose pickups stores may still hold.
 - **History shows one week, and there is no way to widen it.** The default list is the current
   Monday-to-Sunday week and the older weeks are a separate screen. There is no All Shifts list, no
   search, no filter by date, amount or pickup place, and no setting for how much History shows.
-- **History's week always starts on Monday; a period summary's week starts on the day the device
-  says a week starts.** For a driver whose calendar starts the week on Sunday, the two screens
-  describe weeks a day apart. Both name the dates they cover, so the difference is readable rather
-  than hidden, but nothing reconciles them. The weekly summaries in Older Weeks total History's
-  Monday week, so on such a device a week there and the period summary's "week" are different spans,
-  each labelled with its own dates.
+- **All reporting weeks use Monday through Sunday in the reporting timezone.** History, Home,
+  Money, reports, Insights and weekly export selection share this policy. Changing timezone can
+  change period membership without changing recorded timestamps. Overnight shifts are not split.
 - **Older Weeks reads every older shift when it is opened.** The root screen reads only the current
   week and a count, but the Older Weeks screen fetches every completed shift outside the week and
   groups them: about 20 ms at six months of synthetic work with full routes and about 100 ms at five
@@ -780,14 +777,14 @@ parking` whose pickups stores may still hold.
 
 ## Engineering
 
-- **Measurement is repeated per view.** The history row and the detail screen each measure a shift's
-  route when they appear, so opening a shift walks its route a second time. This is acceptable at
-  current route sizes, and caching is a deliberate decision deferred until there is a measurement
-  behind it.
+- **Completed-shift detail still measures its route on the main actor.** History measures each
+  week's routes off main and supplies row distances. Home, Money and Insights use bounded financial
+  reads; reports measure routes off main. Opening detail still performs a separate route walk.
 - **Test-only app code exists.** The debug-only seeded-history and seeded-pickup-history launch
   paths are app code that exists for tests. Both are in-memory and DEBUG-gated, and each is one more launch path to keep honest.
 - **UI tests can fail environmentally.** XCUITest under parallel simulator load has been observed
   failing in the accessibility server rather than on an assertion. See
   [Testing](../development/testing.md#continuous-integration).
-- **The documentation site has not been published yet.** The deployment workflow exists; enabling
-  GitHub Pages for the repository is a manual step that has not been taken.
+- **Documentation publication is separate from validation.** The existing
+  [documentation site](https://quangshuynh.github.io/dashpilot/) is available. A local strict build
+  does not deploy pending edits; the existing GitHub Pages workflow handles publication.

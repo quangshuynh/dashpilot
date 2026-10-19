@@ -59,7 +59,7 @@ nonisolated enum ModelContainerFactory {
                 configurations: configuration
             )
             AppLog.persistence.info(
-                "Opened store (inMemory: \(inMemory, privacy: .public), schema: \(DashPilotSchemaV13.versionIdentifier.description, privacy: .public))"
+                "Opened store (inMemory: \(inMemory, privacy: .public), schema: \(DashPilotSchemaV22.versionIdentifier.description, privacy: .public))"
             )
             return container
         } catch {
