@@ -373,6 +373,7 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Money"].appears())
         attachScreenshot("money-workspace")
         openSettings(in: app)
+        attachScreenshot("settings-overview")
         goBack(in: app)
         selectWorkspace("Home", in: app)
         XCTAssertTrue(scrollToTop(reaching: app.buttons["homeHistoryButton"], in: app))
@@ -684,6 +685,7 @@ final class DashPilotUITests: XCTestCase {
         // state to what is displayed is covered by the service tests instead.
         XCTAssertTrue(app.descendants(matching: .any)["routeCaptureStatus"].exists)
         XCTAssertFalse(startButton.exists, "Only one shift may be running at a time")
+        attachScreenshot("work-active-no-deliveries")
 
         endButton.tap()
 
@@ -1067,6 +1069,7 @@ final class DashPilotUITests: XCTestCase {
         attachScreenshot("expense-swipe-delete-confirmation")
         confirmation.tap()
         XCTAssertTrue(empty.appears(), "Swipe deletion also removes only the confirmed record")
+        attachScreenshot("expense-deletion-completed")
     }
 
     /// Park and Pause are different states of a running shift, told apart by
@@ -1490,6 +1493,7 @@ final class DashPilotUITests: XCTestCase {
         attachScreenshot("home-recent-work")
         recent.tap()
         XCTAssertTrue(waitForLabel(app.descendants(matching: .any)["shiftDetailEarnings"], toContain: "$70.00"))
+        attachScreenshot("detail-summary")
         goBack(in: app)
         XCTAssertTrue(scrollUntilHittable(app.buttons["homeHistoryButton"], in: app))
         app.buttons["homeHistoryButton"].tap()
@@ -1518,6 +1522,7 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertFalse(summary.label.contains("0.0 mi"), "Missing is never a zero")
         XCTAssertTrue(scrollUntilHittable(history.firstMatch, in: app))
         XCTAssertLessThan(summary.frame.minY, history.firstMatch.frame.minY, "The figures come before the shifts")
+        attachScreenshot("history-current-week")
 
         // Export All History means the store, not the week on screen.
         XCTAssertTrue(scrollToTop(reaching: app.buttons["exportAllHistoryButton"], in: app))
@@ -2105,6 +2110,7 @@ final class DashPilotUITests: XCTestCase {
         app.buttons["closeOfferCorrectionButton"].tap()
         XCTAssertTrue(scrollTo(heading, in: app))
         XCTAssertTrue(heading.label.contains("2 deliveries accepted together"), "Leaving changed nothing")
+        attachScreenshot("work-grouped-offer")
 
         XCTAssertTrue(scrollTo(correct, in: app))
         correct.tap()
