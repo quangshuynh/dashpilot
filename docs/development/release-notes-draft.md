@@ -1,11 +1,30 @@
 # Release notes draft
 
-**0.1.0** was tagged and released on October 3, 2026, with the notes below. **0.1.1** is a draft:
-nothing has been tagged or released for it. See [Release readiness](release-readiness.md).
+**0.1.0** was released on October 3, 2026; **0.1.1** was released on October 7, 2026.
+The next version below is a proposal, not a tag or an authorized release.
+See [Release readiness](release-readiness.md).
+
+## DashPilot 0.2.0 (proposed)
+
+- Home, Work and Money organize starting work, active delivery controls and financial history.
+- Home summarizes completed work for the current Monday-Sunday week, with coverage beside each metric.
+- Money brings weekly recorded expenses, category filtering and clearly qualified net figures together.
+- Weekly Insights shows recorded gross earnings, paired hourly rates and expense categories, with
+  readable text alternatives at accessibility sizes.
+- A refreshed welcome introduces the workspaces and optional future-shift hourly targets.
+- Updated documentation and synthetic simulator screenshots describe the current application.
+- The app declares its app-local onboarding preference use in a privacy manifest.
+
+Public identity remains DashPilot. The working name Worklane is not approved.
+SwiftData remains v22 and export remains v6. Recorded mileage can be partial; missing amounts stay
+missing, shift and delivery earnings remain independent, and fuel estimates are not recorded expenses.
+Physical-device accessibility, Live Activity and long-shift battery checks remain outstanding.
 
 ---
 
-## DashPilot 0.1.1 (draft)
+<span id="dashpilot-011-draft"></span>
+
+## DashPilot 0.1.1
 
 A hardening release from a real shift on October 3, 2026.
 

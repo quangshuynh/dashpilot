@@ -1,7 +1,8 @@
 # Persistence
 
-SwiftData is the only store. There is no cache, no file export, no defaults-backed copy of shift
-data and no remote database.
+SwiftData holds the work records. There is no defaults-backed copy of shift data and no remote
+database. The onboarding completion version uses app-local UserDefaults. Explicit
+[file exports](../product/history-export.md) are separate from persistence and cannot be imported.
 
 ## Container construction
 
@@ -21,7 +22,7 @@ device.
 
 | Entry point | Used by | Behaviour |
 | --- | --- | --- |
-| `makeContainer()` | The app | Current schema, migration plan, on-disk store |
+| `makeAppContainer()` | The app | Current schema, migration plan, on-disk store |
 | `makeContainer(at:)` | Tests | The same, at an explicit URL, so a store can be closed and reopened |
 | `makeContainer(versionedSchema:at:)` | Tests | A store opened under a historical version *without* the plan, so a test can write a store shaped the way an older build would have left it |
 | `makeInMemoryContainer()` | Tests, previews | Current schema and plan, nothing on disk |
@@ -30,10 +31,10 @@ device.
 
 Eleven entities. Their fields are listed under [Data model](../reference/data-model.md).
 
-`Shift` holds a start timestamp, an optional end timestamp, an optional gross earnings amount and
-the two optional figures its fuel estimate is worked out under. Everything else about a shift,
+`Shift` holds its identity, lifecycle timestamps, optional gross earnings, and snapshots of its
+vehicle name, fuel assumptions and hourly target. Measurements about a shift,
 including its lifecycle state, its durations, its distance, its rates, its estimated fuel and its
-estimated net, is derived when it is asked for.
+estimated net, are derived when requested.
 
 `ShiftPause` stores when the driver recorded pausing and, once they resume, when they recorded
 resuming. It is a row rather than a flag on `Shift` because a boolean could say a shift is paused now
@@ -49,9 +50,10 @@ from a shopping trip coming off somebody's hours. It joins the shift and never a
 driver shopping for one order while carrying another has one vehicle and it is parked.
 
 `Delivery` stores five timestamps, its shift and the offer it arrived in. Its state is derived from
-which of those timestamps exist rather than stored beside them, so nothing in the store can disagree
-with the events it summarises. Nothing identifying a restaurant, a customer or an address is stored,
-and no amount is attributed to a delivery.
+which of those timestamps exist rather than stored beside them. It also holds optional driver-entered
+pickup-place, expected-pay and gross-earnings facts, plus shared-stop identifiers and pickup provenance.
+Customer details and addresses are not stored. Delivery gross remains independent of shift gross;
+neither amount is inferred from the other.
 
 `Offer` stores when the driver recorded accepting one piece of work, and holds the deliveries it
 contained. It exists because one acceptance can contain more than one dropoff, and before it the
@@ -199,7 +201,7 @@ its deliveries.
 Membership is by date. A period contains an expense if its `occurredAt` falls in the period, by the
 same half-open rule that puts a shift in one. Two consequences follow directly from the shape: no
 **recorded** cost is attached to a shift or a delivery, so no recorded net exists at shift level, and
-deleting a shift cascades to nothing, because an expense has no relationship to be cascaded along,
+deleting a shift cascades to no expense, because an expense has no relationship to be cascaded along,
 and the cost happened whether or not the shift's record is still there. A shift's estimated net after
 fuel is not a counter-example: its subtrahend comes from that shift's own recorded mileage and its
 own recorded assumptions, and no expense enters it.

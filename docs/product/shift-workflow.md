@@ -1,6 +1,6 @@
 # Shift workflow
 
-A shift is the unit everything else attaches to. This page follows one from the driver's side; the
+A shift groups its deliveries, pauses and recorded route. Expenses have their own dates and remain independent. This page follows one from the driver's side; the
 implementation is described under [Architecture](../architecture/overview.md).
 
 ```mermaid
@@ -30,6 +30,8 @@ flowchart TD
 ```
 
 ## Starting a shift
+
+![Work with a running shift and no delivery yet](../images/screenshots/home-active-no-deliveries.png){ width="260" }
 
 Home and Work offer a start control while no shift is running. Starting from Home opens Work. The panel answers what starting now
 would record: a quiet `No shift in progress`, then **Next shift records** with the selected vehicle's
@@ -634,10 +636,9 @@ The boundary comes from `Calendar`, never from a count of seconds. A week holdin
 change is 167 or 169 hours and is still one week, and a week running from December into January is
 one week in two years.
 
-History's week always starts on Monday, which is the one place it differs from a period summary's
-week: that one starts on the day the driver's **device** says a week starts, which in the United
-States is Sunday. Both screens name the dates they cover, so the difference is readable rather than
-hidden. Nothing else differs, and no figure moves.
+History, Home, Money, Insights and period summaries all use the same Monday-first reporting
+calendar, regardless of the device's preferred first weekday. Each screen names its dates.
+Changing the reporting timezone can change membership without changing a recorded timestamp.
 
 Everything before this week is under **View Older Weeks**, a row at the end of the History section,
 present only when there is something older. It says how much is behind it (`3 weeks · 3 shifts`) and

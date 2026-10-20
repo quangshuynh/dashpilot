@@ -2,6 +2,8 @@
 
 ## Home's weekly overview
 
+![Home's completed-week overview with earnings coverage](../images/screenshots/home-workspace.png){ width="260" }
+
 Home opens with the next work action and a **This Week** overview of completed shifts. The week
 uses Monday-to-Sunday boundaries in the device calendar and timezone and assigns each completed shift by its start, including an
 overnight shift in full. Running shifts never contribute, even if they already have earnings.
@@ -514,7 +516,8 @@ driver stepped to, and its figures do not change underneath them.
 
 ## What is deliberately absent
 
-- **No charts.** Figures are read as text.
+- **No charts in a period report.** Figures are read as text. Money's separate
+  [Insights](insights.md) screen provides weekly charts and accessible exact values.
 - **No third period.** A period is compared with the one immediately before it and
   with nothing else: no series, no trend line, no best or worst day and no streak.
 - **No merchant ranking or profitability by place.** The pickup-place count is a
