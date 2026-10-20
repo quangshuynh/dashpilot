@@ -374,6 +374,15 @@ final class DashPilotUITests: XCTestCase {
         attachScreenshot("money-workspace")
         openSettings(in: app)
         attachScreenshot("settings-overview")
+        let target = app.buttons["hourlyTargetRow"]
+        XCTAssertTrue(scrollUntilHittable(target, in: app))
+        target.tap()
+        XCTAssertTrue(app.textFields["hourlyTargetField"].appears())
+        attachScreenshot("settings-hourly-target")
+        app.buttons["cancelHourlyTargetButton"].tap()
+        XCTAssertTrue(app.navigationBars["Settings"].appears())
+        XCTAssertTrue(scrollUntilHittable(app.switches["pickupWorkflowToggle"], in: app))
+        attachScreenshot("settings-pickup-parking")
         goBack(in: app)
         selectWorkspace("Home", in: app)
         XCTAssertTrue(scrollToTop(reaching: app.buttons["homeHistoryButton"], in: app))
@@ -804,6 +813,7 @@ final class DashPilotUITests: XCTestCase {
     @MainActor
     func testTheDaySummaryStatesEachFigureWithItsCoverage() throws {
         let app = launchWithPeriodSummary()
+        attachMoneyScreenshot("home-partial-coverage", focusing: app.descendants(matching: .any)["homeEarnings"], in: app)
         openPeriodSummary(in: app)
 
         // Earnings: a subtotal, called recorded, with the shifts behind it, and
@@ -820,6 +830,7 @@ final class DashPilotUITests: XCTestCase {
             "A subtotal is called recorded, never the day's earnings: \(earnings.label)"
         )
         XCTAssertFalse(earnings.label.contains("$37.65"), "The net is a separate figure, in its own section")
+        attachScreenshot("period-summary")
         let shiftCount = app.descendants(matching: .any)["periodShiftCount"]
         XCTAssertTrue(scrollTo(shiftCount, in: app))
         XCTAssertTrue(waitForLabel(shiftCount, toContain: "2 completed shifts"), "Showed: \(shiftCount.label)")
@@ -3214,6 +3225,7 @@ final class DashPilotUITests: XCTestCase {
         let camry = vehicleRow(containing: "2012 Toyota Camry", in: app)
         XCTAssertTrue(camry.appears())
         XCTAssertFalse(camry.label.contains("Selected"), "Adding a vehicle is not choosing one: \(camry.label)")
+        attachScreenshot("settings-vehicles")
 
         // Correcting the first one moves neither the list nor the selection.
         let edit = app.buttons["Edit 2020 Honda Civic"]
