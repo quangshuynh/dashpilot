@@ -5,6 +5,8 @@ import orders or earnings from another app. No account, target or financial setu
 
 ## A short welcome
 
+![The first welcome page, with Get Started and Skip](../images/screenshots/onboarding-welcome.png){ width="260" }
+
 The four welcome pages introduce the app, tracking work, understanding money and local-first
 privacy. Use **Next** and **Back**, or **Skip** to start exploring immediately. Skipping and finishing
 both mark the welcome as seen. An established install with recorded shifts is not interrupted.

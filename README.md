@@ -15,11 +15,12 @@
 </p>
 
 <p align="center">
-  <img src="docs/images/screenshots/work-workspace.png" alt="Work with an active shift and stacked delivery controls" width="250">
-  <img src="docs/images/screenshots/detail-summary.png" alt="A completed shift with recorded earnings, time and mileage" width="250">
+  <img src="docs/images/screenshots/home-workspace.png" alt="Home with completed-week earnings and explicit coverage" width="220">
+  <img src="docs/images/screenshots/work-workspace.png" alt="Work with an active shift and stacked delivery controls" width="220">
+  <img src="docs/images/screenshots/money-workspace.png" alt="Money with recorded earnings, expenses and qualified net" width="220">
 </p>
 
-*Existing screenshots use synthetic records and may differ from the current layout.*
+*Current simulator captures with synthetic records. [Screenshot details](https://quangshuynh.github.io/dashpilot/development/release-readiness/#documentation-and-screenshots).*
 
 ## Your work, clearly recorded
 

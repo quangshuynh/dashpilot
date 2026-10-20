@@ -5,6 +5,8 @@ Home, Work and Money remain the three tabs. Work and its active controls stay on
 
 ## Reading the history
 
+![Weekly earnings chart with a selected week and coverage](../images/screenshots/insights-earnings.png){ width="260" }
+
 The range contains eight consecutive Monday-to-Sunday weeks, ending with Money's selected week.
 Earlier Weeks steps back eight weeks; Latest Weeks returns to the current week. The range follows
 `ReportingPeriod.weekCalendar`, including the reporting timezone, DST and year boundaries. Internally
@@ -34,6 +36,8 @@ including empty ones. A series without qualifying money explains the absence ins
 All arithmetic and exact labels use Decimal-backed `Money`. Binary floating point is used only to
 position marks and format chart axes. Axes use USD, compact labels and a zero baseline. No money is
 inferred from delivery records, missing records, chart geometry or historical patterns.
+
+![Recorded expense categories with exact amounts, including recorded zero](../images/screenshots/insights-expenses.png){ width="260" }
 
 ## Previous week
 

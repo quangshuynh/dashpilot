@@ -279,7 +279,9 @@ deliberately small.
 Pickup-place names are work history. For a driver who works a small area they are close to a
 description of where that driver is, so they are treated the same way coordinates and earnings are.
 
-- They stay on the device. There is no network code, no lookup, no sync and no export.
+- They stay on the device unless the driver explicitly exports and shares history. Standard
+  [exports](history-export.md) include display names, never normalized pickup-place keys.
+  There is no network lookup or sync.
 - **They are never logged.** The `pickup-place` log category records that a place was assigned,
   changed, removed, reused, created, renamed or merged, and which rule refused an operation — never
   the spelling typed, never the normalised key derived from it, and never how many deliveries a

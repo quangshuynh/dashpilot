@@ -373,6 +373,16 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Money"].appears())
         attachScreenshot("money-workspace")
         openSettings(in: app)
+        attachScreenshot("settings-overview")
+        let target = app.buttons["hourlyTargetRow"]
+        XCTAssertTrue(scrollUntilHittable(target, in: app))
+        target.tap()
+        XCTAssertTrue(app.textFields["hourlyTargetField"].appears())
+        attachScreenshot("settings-hourly-target")
+        app.buttons["cancelHourlyTargetButton"].tap()
+        XCTAssertTrue(app.navigationBars["Settings"].appears())
+        XCTAssertTrue(scrollUntilHittable(app.switches["pickupWorkflowToggle"], in: app))
+        attachScreenshot("settings-pickup-parking")
         goBack(in: app)
         selectWorkspace("Home", in: app)
         XCTAssertTrue(scrollToTop(reaching: app.buttons["homeHistoryButton"], in: app))
@@ -684,6 +694,7 @@ final class DashPilotUITests: XCTestCase {
         // state to what is displayed is covered by the service tests instead.
         XCTAssertTrue(app.descendants(matching: .any)["routeCaptureStatus"].exists)
         XCTAssertFalse(startButton.exists, "Only one shift may be running at a time")
+        attachScreenshot("work-active-no-deliveries")
 
         endButton.tap()
 
@@ -802,6 +813,7 @@ final class DashPilotUITests: XCTestCase {
     @MainActor
     func testTheDaySummaryStatesEachFigureWithItsCoverage() throws {
         let app = launchWithPeriodSummary()
+        attachMoneyScreenshot("home-partial-coverage", focusing: app.descendants(matching: .any)["homeEarnings"], in: app)
         openPeriodSummary(in: app)
 
         // Earnings: a subtotal, called recorded, with the shifts behind it, and
@@ -818,6 +830,7 @@ final class DashPilotUITests: XCTestCase {
             "A subtotal is called recorded, never the day's earnings: \(earnings.label)"
         )
         XCTAssertFalse(earnings.label.contains("$37.65"), "The net is a separate figure, in its own section")
+        attachScreenshot("period-summary")
         let shiftCount = app.descendants(matching: .any)["periodShiftCount"]
         XCTAssertTrue(scrollTo(shiftCount, in: app))
         XCTAssertTrue(waitForLabel(shiftCount, toContain: "2 completed shifts"), "Showed: \(shiftCount.label)")
@@ -1067,6 +1080,7 @@ final class DashPilotUITests: XCTestCase {
         attachScreenshot("expense-swipe-delete-confirmation")
         confirmation.tap()
         XCTAssertTrue(empty.appears(), "Swipe deletion also removes only the confirmed record")
+        attachScreenshot("expense-deletion-completed")
     }
 
     /// Park and Pause are different states of a running shift, told apart by
@@ -1490,6 +1504,7 @@ final class DashPilotUITests: XCTestCase {
         attachScreenshot("home-recent-work")
         recent.tap()
         XCTAssertTrue(waitForLabel(app.descendants(matching: .any)["shiftDetailEarnings"], toContain: "$70.00"))
+        attachScreenshot("detail-summary")
         goBack(in: app)
         XCTAssertTrue(scrollUntilHittable(app.buttons["homeHistoryButton"], in: app))
         app.buttons["homeHistoryButton"].tap()
@@ -1518,6 +1533,7 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertFalse(summary.label.contains("0.0 mi"), "Missing is never a zero")
         XCTAssertTrue(scrollUntilHittable(history.firstMatch, in: app))
         XCTAssertLessThan(summary.frame.minY, history.firstMatch.frame.minY, "The figures come before the shifts")
+        attachScreenshot("history-current-week")
 
         // Export All History means the store, not the week on screen.
         XCTAssertTrue(scrollToTop(reaching: app.buttons["exportAllHistoryButton"], in: app))
@@ -2105,6 +2121,7 @@ final class DashPilotUITests: XCTestCase {
         app.buttons["closeOfferCorrectionButton"].tap()
         XCTAssertTrue(scrollTo(heading, in: app))
         XCTAssertTrue(heading.label.contains("2 deliveries accepted together"), "Leaving changed nothing")
+        attachScreenshot("work-grouped-offer")
 
         XCTAssertTrue(scrollTo(correct, in: app))
         correct.tap()
@@ -3208,6 +3225,7 @@ final class DashPilotUITests: XCTestCase {
         let camry = vehicleRow(containing: "2012 Toyota Camry", in: app)
         XCTAssertTrue(camry.appears())
         XCTAssertFalse(camry.label.contains("Selected"), "Adding a vehicle is not choosing one: \(camry.label)")
+        attachScreenshot("settings-vehicles")
 
         // Correcting the first one moves neither the list nor the selection.
         let edit = app.buttons["Edit 2020 Honda Civic"]

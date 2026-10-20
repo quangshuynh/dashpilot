@@ -8,6 +8,8 @@ built out of records the driver typed, and nothing else.
 
 ## Money workspace
 
+![Money's selected week, earnings coverage, recorded expenses and net](../images/screenshots/money-workspace.png){ width="260" }
+
 Money opens on the current Monday-to-Sunday week, with previous/next week navigation and a This Week
 reset. The date range names the selected days. Add Expense stays near the top. Recorded shift gross
 shows contributing completed-shift coverage; delivery earnings remain independent. Recorded expenses
@@ -28,6 +30,8 @@ Estimated fuel consumption is a separate expandable section, based on recorded m
 assumptions of each shift. It carries shift, mileage and partial-route coverage. Recorded fuel purchases
 and estimated consumption are different views of cost; estimates are never subtracted from the recorded
 net. Routes are loaded only after the section is requested.
+
+![Fuel category filtering and the separate partial-route fuel estimate](../images/screenshots/money-filter-fuel.png){ width="260" }
 
 All Recorded Expenses opens the full ledger. Period Summaries starts on Money's selected week and
 provides days, weeks, months, custom ranges, comparisons and explicit JSON/CSV export. No new expense

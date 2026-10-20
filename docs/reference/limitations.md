@@ -592,9 +592,9 @@ parking` whose pickups stores may still hold.
   describe no wait anybody experienced.
 - **No merchant analysis.** The distinct pickup-place count is a count; no earnings, wait or score is
   grouped by place.
-- **Aggregates are recomputed on every view.** A period's routes are measured when it is selected, so
-  a week of long routes is measured again each time the driver switches to it. Acceptable at current
-  route sizes; caching is deferred until there is a measurement behind it.
+- **Aggregates are derived, never persisted.** Unchanged requests can reuse a screen's current
+  result. Selecting a different report or invalidating its records reloads it, including route
+  measurement off the main actor. There is no global aggregate cache.
 
 ## Recorded expenses
 
@@ -689,9 +689,9 @@ parking` whose pickups stores may still hold.
   [Shift Live Activity](../product/live-activity.md).
 - **No screen has been judged on a physical iPhone in the new design.** The layouts were checked on
   the simulator at the default size and the largest accessibility size.
-- **History's first shift is below the fold on a phone.** The current week now opens with its own
-  summary, so on the root screen a driver scrolls past the shift panel, Location and that summary
-  before reaching the first row. The summary is the answer most visits want, which is why it leads.
+- **History's first shift can be below the fold on a phone.** Work places active controls and
+  Location before the current-week summary and its rows. Home's View History opens the dedicated
+  History list, which begins with the same summary.
 
 ## History
 

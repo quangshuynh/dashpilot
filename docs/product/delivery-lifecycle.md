@@ -14,6 +14,8 @@ the app is closed.
 
 ## The five states
 
+![A delivery's recorded state and its next lifecycle action](../images/screenshots/home-one-delivery.png){ width="260" }
+
 ```mermaid
 stateDiagram-v2
     [*] --> accepted: Start Delivery
