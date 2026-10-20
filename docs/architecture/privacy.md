@@ -60,6 +60,15 @@ there is nothing to configure, disable or trust.
   place, a merchant or an amount. A name shows up in share sheets, notifications and folder listings,
   often on someone else's screen.
 
+## App-local preferences and privacy manifest
+
+The welcome completion version is stored in `UserDefaults` under `onboarding.completedVersion`.
+It describes this installation's introduction screens, is not exported, and does not change any work
+record. `PrivacyInfo.xcprivacy` declares app-local preference access with reason `CA92.1`, no tracking
+and no collected data types. The manifest does not change what the app records or sends.
+See [release readiness](../development/release-readiness.md#privacy-as-a-submission-would-describe-it)
+for the separate archive and submission checks.
+
 ## The logging rule
 
 `AppLog` defines the OSLog subsystem and categories. Logs record lifecycle, state transitions,
