@@ -302,6 +302,20 @@ struct ShiftService {
     /// - Throws: ``ShiftLifecycleError/noActiveShift`` if none is running, or
     ///   ``ShiftLifecycleError/storeUnavailable(underlying:)`` if the store cannot
     ///   be read or written.
+    /// Refuses, with the count named, if `shift` still has a delivery in
+    /// progress. The one statement of that rule, read by ``endActiveShift(at:)``
+    /// and by a Live Activity's first End Shift tap, which must refuse at once
+    /// rather than offer a confirmation the end would then refuse.
+    static func ensureEndable(_ shift: Shift) throws {
+        let unfinished = shift.activeDeliveries
+        if !unfinished.isEmpty {
+            AppLog.shift.notice(
+                "Refused to end a shift: \(unfinished.count, privacy: .public) deliveries still in progress"
+            )
+            throw ShiftLifecycleError.activeDeliveriesInProgress(count: unfinished.count)
+        }
+    }
+
     @discardableResult
     func endActiveShift(at date: Date = .now) throws -> Shift {
         guard let shift = try activeShift() else {
@@ -319,13 +333,7 @@ struct ShiftService {
         //
         // Every unfinished delivery blocks, not just the first: with stacked
         // orders, finishing one of three leaves two that still happened.
-        let unfinished = shift.activeDeliveries
-        if !unfinished.isEmpty {
-            AppLog.shift.notice(
-                "Refused to end a shift: \(unfinished.count, privacy: .public) deliveries still in progress"
-            )
-            throw ShiftLifecycleError.activeDeliveriesInProgress(count: unfinished.count)
-        }
+        try Self.ensureEndable(shift)
 
         // A driver must always be able to end a shift. If the device clock has
         // moved behind the recorded start, ending at the start records a zero

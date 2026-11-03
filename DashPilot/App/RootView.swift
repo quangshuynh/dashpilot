@@ -51,6 +51,11 @@ struct RootView: View {
     /// The welcome, shown once to a new driver. See ``OnboardingPolicy``.
     @State private var isShowingOnboarding = false
 
+    /// The recap on screen, latched from ``PostShiftRecapRequests`` only while
+    /// the app is in front and no shift is running.
+    @State private var presentedRecap: PostShiftRecapRequest?
+    private var recaps: PostShiftRecapRequests { .shared }
+
     /// What "now" is, for deciding which Monday-to-Sunday week History is
     /// showing.
     ///
@@ -172,6 +177,18 @@ struct RootView: View {
         .sheet(isPresented: $isExportingHistory) {
             ShiftExportSheet(scope: .allHistory)
         }
+        .sheet(item: $presentedRecap, onDismiss: { recaps.dismiss() }) { request in
+            PostShiftRecapView(shiftID: request.id) {
+                presentedRecap = nil
+            } viewDetails: { shift in
+                presentedRecap = nil
+                var path = NavigationPath()
+                path.append(shift)
+                workPath = path
+                navigation.selection = .work
+            }
+        }
+        .onChange(of: recaps.shiftID) { _, _ in presentRecapIfReady() }
         .fullScreenCover(isPresented: $isShowingOnboarding) {
             OnboardingView(context: .firstLaunch) {
                 OnboardingRecord.markCompleted()
@@ -258,6 +275,9 @@ struct RootView: View {
             // app, so the surface is reconciled on return like the
             // permission beside it.
             liveActivity.reconcile()
+            // A shift ended from the Lock Screen while the app was away is
+            // offered here, on the first return, if the process survived.
+            presentRecapIfReady()
         case .background:
             routeCapture.enterBackground()
         case .inactive:
@@ -270,6 +290,24 @@ struct RootView: View {
         @unknown default:
             break
         }
+    }
+
+    /// Presents a pending recap if this is a moment it may interrupt: the app
+    /// is in front, no shift is running and nothing else is being asked.
+    ///
+    /// A recap for a shift followed by a new one is dropped rather than shown
+    /// over active work; the ended shift is in History either way.
+    private func presentRecapIfReady() {
+        guard let shiftID = recaps.shiftID, presentedRecap == nil else { return }
+        // The query can still hold the shift that has just ended until it next
+        // refreshes, so a running shift is one with no end, not merely a row.
+        guard activeShift?.endedAt != nil || activeShift == nil else {
+            recaps.dismiss()
+            return
+        }
+        guard scenePhase == .active, pendingEarningsConfirmation == nil,
+              !isExportingHistory, !isShowingOnboarding else { return }
+        presentedRecap = PostShiftRecapRequest(id: shiftID)
     }
 
     @ViewBuilder
@@ -477,7 +515,11 @@ struct RootView: View {
         // has already closed. `synchronize()` afterwards restarts capture if the
         // end did not go through, which is why stopping first latches nothing.
         routeCapture.prepareForShiftEnd()
-        perform { try ShiftService(context: modelContext).endActiveShift() }
+        perform {
+            let ended = try ShiftService(context: modelContext).endActiveShift()
+            // Only after the end is written: a refused end offers no recap.
+            recaps.post(shiftID: ended.id)
+        }
         routeCapture.synchronize()
         // A finished shift has no Live Activity. Reconciling ends it, and does
         // so immediately rather than leaving a card on the Lock Screen saying a

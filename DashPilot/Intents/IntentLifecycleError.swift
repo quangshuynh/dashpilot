@@ -28,6 +28,12 @@ nonisolated enum IntentLifecycleError: Error {
     /// A Lock Screen Delivered named a delivery that is no longer the one
     /// ``OrderedDeliveryCompletion`` chooses, because the card was out of date.
     case deliveredTargetChanged
+    /// Confirm End was pressed with no matching confirmation pending: it
+    /// expired, was withdrawn or was already used. Nothing was ended.
+    case endConfirmationExpired
+    /// Confirm End named another shift or an earlier confirmation than the one
+    /// pending, because the card was out of date. Nothing was ended.
+    case endConfirmationStale
     /// The local store could not be opened at all, so no service could run.
     case storeUnavailable
 }
@@ -42,6 +48,8 @@ nonisolated extension IntentLifecycleError: Equatable {
             lhsCount == rhsCount
         case (.noDeliveryPickedUp, .noDeliveryPickedUp): true
         case (.deliveredTargetChanged, .deliveredTargetChanged): true
+        case (.endConfirmationExpired, .endConfirmationExpired): true
+        case (.endConfirmationStale, .endConfirmationStale): true
         case (.storeUnavailable, .storeUnavailable): true
         default: false
         }
@@ -68,6 +76,10 @@ nonisolated extension IntentLifecycleError: LocalizedError {
             "No delivery in progress is picked up, so nothing was recorded as delivered."
         case .deliveredTargetChanged:
             "The Lock Screen was out of date, so nothing was recorded. Check the card and try again."
+        case .endConfirmationExpired:
+            "The shift is still running. Confirm End expired, so tap End Shift again to end it."
+        case .endConfirmationStale:
+            "The shift is still running. The Lock Screen was out of date, so nothing was ended."
         case .storeUnavailable:
             "DashPilot could not open its local data store, so nothing was recorded."
         }

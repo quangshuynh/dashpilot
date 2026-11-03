@@ -198,7 +198,8 @@ nonisolated enum ShiftActivityContent {
         activeDeliveryTimers: [ShiftActivityDeliveryTimer],
         asOf: Date,
         locale: Locale = .autoupdatingCurrent,
-        parkLeads: Bool = false
+        parkLeads: Bool = false,
+        pendingEnd: ShiftActivityEndConfirmation? = nil
     ) -> ShiftActivityAttributes.ContentState {
         // The one delivery's next step, or else Delivered for one of several.
         // Never both: the second exists only where the first has no answer.
@@ -221,8 +222,22 @@ nonisolated enum ShiftActivityContent {
             completedDeliveryCount: metrics.deliverySummary.completed,
             deliveryStatus: deliveryInProgress?.statusDescription,
             activeDeliveryTimers: activeDeliveryTimers,
-            controls: controls(for: metrics, nextStep: step, parkLeads: parkLeads)
+            controls: confirming(
+                pendingEnd,
+                in: controls(for: metrics, nextStep: step, parkLeads: parkLeads)
+            )
         )
+    }
+
+    /// While an end is pending, the card asks one question and offers its two
+    /// answers, Keep Shift first. Only where End Shift is itself on offer: a
+    /// shift the store would refuse to end is never shown a Confirm End.
+    private static func confirming(
+        _ pendingEnd: ShiftActivityEndConfirmation?,
+        in controls: [ShiftActivityControl]
+    ) -> [ShiftActivityControl] {
+        guard let pendingEnd, controls.contains(.end) else { return controls }
+        return [.keepShift(pendingEnd), .confirmEnd(pendingEnd)]
     }
 
     /// The controls this shift may offer, in the order they are shown.
@@ -294,7 +309,8 @@ extension Shift {
         for recordedDistance: RouteDistance,
         asOf referenceDate: Date,
         locale: Locale = .autoupdatingCurrent,
-        parkLeads: Bool = false
+        parkLeads: Bool = false,
+        pendingEnd: PendingShiftEnd? = nil
     ) -> ShiftActivityAttributes.ContentState {
         // Numbered rather than bare, because a timer has to say which delivery
         // it belongs to, and `NumberedDelivery` is the one place that decides
@@ -316,7 +332,11 @@ extension Shift {
             activeDeliveryTimers: ShiftActivityDeliveryTimer.rows(for: active),
             asOf: referenceDate,
             locale: locale,
-            parkLeads: parkLeads
+            parkLeads: parkLeads,
+            // Only a confirmation for this shift, still valid at this instant.
+            pendingEnd: pendingEnd.flatMap {
+                $0.shiftID == id && $0.isValid(at: referenceDate) ? $0.reference : nil
+            }
         )
     }
 }

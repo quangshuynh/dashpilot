@@ -47,6 +47,22 @@ nonisolated enum ShiftActivityDeliveryStep: String, Codable, Hashable, Sendable,
     }
 }
 
+/// Which pending end-of-shift confirmation a Lock Screen control was drawn for.
+///
+/// Opaque identifiers only: the shift the confirmation belongs to, and a token
+/// minted when End Shift was first tapped. The app compares both against its
+/// own record before anything is written, so a card drawn for another shift, or
+/// for an earlier confirmation, records nothing.
+nonisolated struct ShiftActivityEndConfirmation: Codable, Hashable, Sendable {
+    let shiftID: UUID
+    let token: UUID
+
+    init(shiftID: UUID, token: UUID) {
+        self.shiftID = shiftID
+        self.token = token
+    }
+}
+
 /// One control the Live Activity offers.
 ///
 /// The list of them is built by the app, from the store, and this type is only
@@ -99,6 +115,15 @@ nonisolated enum ShiftActivityControl: Codable, Hashable, Sendable {
     /// printed so the driver sees which order the press records, and the
     /// identifier travels with the press so a stale card records nothing.
     case nextDelivered(number: Int, deliveryID: UUID)
+    /// The second tap of ending the shift.
+    ///
+    /// Offered only for a few seconds after ``end`` was tapped, and only for the
+    /// confirmation it carries. The app refuses it once that confirmation has
+    /// expired, been cancelled or been used, or if the shift running is not the
+    /// one it names: the card is a snapshot, and the store decides.
+    case confirmEnd(ShiftActivityEndConfirmation)
+    /// Withdrawing a pending end, which leaves the shift exactly as it was.
+    case keepShift(ShiftActivityEndConfirmation)
 
     /// The printed button label.
     var title: String {
@@ -111,6 +136,8 @@ nonisolated enum ShiftActivityControl: Codable, Hashable, Sendable {
         case .resumeDriving: "Resume Driving"
         case let .deliveryStep(step): step.title
         case let .nextDelivered(number, _): "Delivered \(number)"
+        case .confirmEnd: "Confirm End"
+        case .keepShift: "Keep Shift"
         }
     }
 
@@ -131,6 +158,8 @@ nonisolated enum ShiftActivityControl: Codable, Hashable, Sendable {
         case .resumeDriving: "Resume driving"
         case let .deliveryStep(step): step.spokenLabel
         case let .nextDelivered(number, _): "Mark delivery \(number) delivered"
+        case .confirmEnd: "Confirm ending this shift now"
+        case .keepShift: "Keep shift running and cancel ending"
         }
     }
 
@@ -150,6 +179,10 @@ nonisolated enum ShiftActivityControl: Codable, Hashable, Sendable {
         case .resumeDriving: "car.fill"
         case let .deliveryStep(step): step.symbolName
         case .nextDelivered: ShiftActivityDeliveryStep.complete.symbolName
+        // Not the glyph End Shift carries, so the second tap reads as a
+        // different question from the first.
+        case .confirmEnd: "stop.circle.fill"
+        case .keepShift: "arrow.uturn.backward"
         }
     }
 
@@ -172,8 +205,10 @@ nonisolated enum ShiftActivityControl: Codable, Hashable, Sendable {
     /// route.
     var isProminent: Bool {
         switch self {
-        case .resume, .resumeDriving, .park, .deliveryStep, .nextDelivered, .startDelivery: true
-        case .pause, .end: false
+        // Keep Shift takes the emphasis while a confirmation is pending, so the
+        // safe answer is the one that stands out.
+        case .resume, .resumeDriving, .park, .deliveryStep, .nextDelivered, .startDelivery, .keepShift: true
+        case .pause, .end, .confirmEnd: false
         }
     }
 
@@ -189,6 +224,8 @@ nonisolated enum ShiftActivityControl: Codable, Hashable, Sendable {
         case .resumeDriving: "activityControl.resumeDriving"
         case .deliveryStep: "activityControl.deliveryStep"
         case .nextDelivered: "activityControl.nextDelivered"
+        case .confirmEnd: "activityControl.confirmEnd"
+        case .keepShift: "activityControl.keepShift"
         }
     }
 

@@ -334,6 +334,10 @@ struct ShiftActivityControlButton: View {
                 Button(intent: RecordDeliveryProgressFromActivityIntent()) { label }
             case let .nextDelivered(_, deliveryID):
                 Button(intent: RecordDeliveredFromActivityIntent(deliveryID: deliveryID)) { label }
+            case let .confirmEnd(confirmation):
+                Button(intent: ConfirmEndShiftFromActivityIntent(confirmation)) { label }
+            case let .keepShift(confirmation):
+                Button(intent: KeepShiftFromActivityIntent(confirmation)) { label }
             }
         }
         .buttonStyle(.bordered)
@@ -348,12 +352,12 @@ struct ShiftActivityControlButton: View {
             .lineLimit(1)
     }
 
-    /// Red only on End, which is the one action here a driver cannot undo from
-    /// this surface.
+    /// Red only on End and its confirmation, which end the one action here a
+    /// driver cannot undo from this surface.
     private var tint: Color {
         switch control {
-        case .end: .red
-        case .pause, .resume, .startDelivery, .park, .resumeDriving, .deliveryStep, .nextDelivered:
+        case .end, .confirmEnd: .red
+        case .pause, .resume, .startDelivery, .park, .resumeDriving, .deliveryStep, .nextDelivered, .keepShift:
             ShiftActivityPalette.accent
         }
     }

@@ -48,6 +48,12 @@ nonisolated struct InsightsSeries: Equatable, Sendable {
     let window: InsightsWindow
     let weeks: [InsightsWeek]
     var hasRecords: Bool { weeks.contains { $0.metrics.hasAnyRecords } }
+
+    /// This series if it was built for `window`, otherwise `nil`. A load that
+    /// finishes after the driver moved to other weeks is never shown for them.
+    func showing(_ window: InsightsWindow?) -> InsightsSeries? {
+        self.window == window ? self : nil
+    }
 }
 
 /// No chart arithmetic: the existing calculators own every total, rate and coverage.
@@ -64,5 +70,30 @@ nonisolated enum InsightsSeriesBuilder {
             previous = metrics
         }
         return InsightsSeries(window: window, weeks: points)
+    }
+}
+
+/// Which weeks the trend chart labels, and with what.
+///
+/// Every other week, always including the newest, so four labels share the
+/// axis on any phone rather than eight. A label names its month only where the
+/// month changes from the label before it ("Sep 14", "28", "Oct 12", "26"), so
+/// each one is short and none is ambiguous. Exact ranges are never read from
+/// these: the selected-week menu and the weekly values give them in full.
+nonisolated enum InsightsAxisLabels {
+    static func labels(for weeks: [ReportingPeriod], calendar: Calendar, locale: Locale) -> [(week: ReportingPeriod, label: String)] {
+        let labelled = weeks.enumerated()
+            .filter { (weeks.count - 1 - $0.offset).isMultiple(of: 2) }
+            .map(\.element)
+        let style = Date.FormatStyle(locale: locale, calendar: calendar, timeZone: calendar.timeZone)
+        var previousMonth: Int?
+        return labelled.map { week in
+            let month = calendar.component(.month, from: week.start)
+            defer { previousMonth = month }
+            let label = month == previousMonth
+                ? week.start.formatted(style.day())
+                : week.start.formatted(style.month(.abbreviated).day())
+            return (week, label)
+        }
     }
 }

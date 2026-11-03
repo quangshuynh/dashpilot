@@ -44,14 +44,18 @@ struct LiveActivityPreviewSection: View {
     private var content: ShiftActivityAttributes.ContentState {
         // Touched so the queries above are dependencies of this body.
         _ = (deliveries.map(\.state), suspensions.map(\.isOpen), settings.first?.pickupWorkflowPreferences)
+        let now = Date.now
         let distance = (try? ActiveShiftRouteService(context: modelContext).measurement(extending: nil, of: shift))?
             .recordedDistance ?? .none
         return ShiftLiveActivityService.content(
             for: shift,
             recordedDistance: distance,
-            asOf: .now,
+            asOf: now,
             locale: .autoupdatingCurrent,
-            context: modelContext
+            context: modelContext,
+            // Observed, so a confirmation started or withdrawn from this card
+            // redraws it the way ActivityKit would.
+            pendingEnd: ShiftEndConfirmationStore.shared.pending(for: shift.id, at: now)
         )
     }
 }

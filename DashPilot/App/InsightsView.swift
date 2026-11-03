@@ -9,8 +9,7 @@ struct InsightsView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.dynamicTypeSize) private var typeSize
     @State private var now = Date.now
-    @State private var endingAt: Date?
-    @State private var selection: Date?
+    @State private var navigation: InsightsNavigation
     @State private var metric = InsightsMetric.earnings
     @State private var loader = PeriodLoadStore()
     @State private var retryRevision = 0
@@ -20,47 +19,43 @@ struct InsightsView: View {
         _now = State(initialValue: now)
         // A historical Money selection stays fixed. The latest range follows
         // calendar changes, rather than freezing the week when Insights opened.
-        _endingAt = State(initialValue: initialPeriod?.contains(now) == true ? nil : initialPeriod?.start)
+        _navigation = State(initialValue: InsightsNavigation(initialPeriod: initialPeriod, asOf: now))
     }
 
-    private var window: InsightsWindow? {
-        InsightsWindow(endingAt: endingAt ?? now, calendar: calendar)
-    }
+    private var window: InsightsWindow? { navigation.window(asOf: now, calendar: calendar) }
+    /// Decided by the calendar, so the week controls never wait for a load.
+    private var selectedPeriod: ReportingPeriod? { navigation.selectedPeriod(asOf: now, calendar: calendar) }
+    /// Loaded figures, only ever for the window on screen.
     private var series: InsightsSeries? {
-        guard case .loaded(let snapshot) = loader.state, snapshot.insights?.window == window else { return nil }
-        return snapshot.insights
+        guard case .loaded(let snapshot) = loader.state else { return nil }
+        return snapshot.insights?.showing(window)
     }
     private var selected: InsightsWeek? {
-        guard let series else { return nil }
-        return series.weeks.first { $0.id == selection } ?? series.weeks.last
+        series?.weeks.first { $0.period == selectedPeriod }
     }
 
     var body: some View {
         List {
-            rangeSection
-            if let series, let selected {
-                if !series.hasRecords {
-                    Section {
-                        DashNotice(title: "No records in these weeks", message: "Completed shifts and dated expenses appear here when you record them. Explore earlier weeks or return to Money to add an expense.", symbol: "chart.bar")
-                            .accessibilityIdentifier("insightsEmpty")
+            if let window, let selectedPeriod {
+                rangeSection(window)
+                weekSection(window, selectedPeriod: selectedPeriod)
+                if let series, let selected {
+                    if series.hasRecords {
+                        trendSection(series, selected: selected)
+                        expenseSection(selected)
+                        comparisonSection(selected)
+                        Section {
+                            Text("Completed shifts belong to the week they started. Expenses belong to their recorded dates. Pauses are excluded from working time. Corrections update this history.")
+                            Text("Shift gross and delivery gross are independent. Only shift gross appears here. These records describe past work, not future earnings.")
+                            Text("Open the selected week report for recorded mileage, delivery history, saved hourly target context and export options.")
+                        } header: { Text("About these records") }
+                            .dashFont(.body)
                     }
-                } else {
-                    trendSection(series, selected: selected)
-                    expenseSection(selected)
-                    comparisonSection(selected)
-                    Section {
-                        Text("Completed shifts belong to the week they started. Expenses belong to their recorded dates. Pauses are excluded from working time. Corrections update this history.")
-                        Text("Shift gross and delivery gross are independent. Only shift gross appears here. These records describe past work, not future earnings.")
-                        Text("Open the selected week report for recorded mileage, delivery history, saved hourly target context and export options.")
-                    } header: { Text("About these records") }
-                        .dashFont(.body)
+                } else if loader.state == .failed {
+                    PeriodLoadFailure { retryRevision += 1 }
                 }
-            } else if window == nil {
-                Section { Text("This reporting range is unavailable. Check your calendar settings.") }
-            } else if loader.state == .failed {
-                PeriodLoadFailure { retryRevision += 1 }
             } else {
-                Section { ProgressView("Loading weekly history…") }
+                Section { Text("This reporting range is unavailable. Check your calendar settings.") }
             }
         }
         .dashCanvas()
@@ -74,49 +69,132 @@ struct InsightsView: View {
         .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in now = .now; retryRevision += 1 }
     }
 
-    private var rangeSection: some View {
+    private func rangeSection(_ window: InsightsWindow) -> some View {
         Section {
             VStack(alignment: .leading, spacing: DashSpacing.md) {
                 Text("Eight weeks of history").dashFont(.title)
                 Text("Monday through Sunday").dashFont(.body).foregroundStyle(.secondary)
-                if let window, let first = window.weeks.first, let last = window.weeks.last {
+                if let first = window.weeks.first, let last = window.weeks.last {
                     Text((first.start..<last.lastInstant).formatted(Date.IntervalFormatStyle(date: .abbreviated, time: .omitted, locale: locale, calendar: calendar, timeZone: calendar.timeZone)))
                         .dashFont(.supporting).fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("insightsRange")
                 }
             }
             .padding(.vertical, DashSpacing.md)
             .listRowBackground(ShiftActivityPalette.cloud)
-            adaptiveControls {
+            pairedControls {
                 Button {
-                    endingAt = window?.precedingWeek.start; selection = nil
+                    navigation.showEarlierWeeks(asOf: now, calendar: calendar)
                 } label: { navigationLabel("Earlier Weeks", symbol: "chevron.left") }
+                .accessibilityLabel("Earlier weeks")
+                .accessibilityHint("Shows the eight weeks before these")
                 .accessibilityIdentifier("insightsEarlierWeeks")
-                if !typeSize.isAccessibilitySize { Spacer() }
-                Button { endingAt = nil; selection = nil } label: {
-                    Text("Latest Weeks").fixedSize(horizontal: false, vertical: true).frame(minHeight: 44)
+            } trailing: {
+                Button { navigation.showLatestWeeks() } label: {
+                    navigationLabel("Latest Weeks", symbol: nil, trailing: true)
                 }
-                    .disabled(window?.weeks.last?.contains(now) == true)
+                .disabled(!navigation.canShowLatestWeeks(asOf: now, calendar: calendar))
+                .accessibilityIdentifier("insightsLatestWeeks")
+            }
+        }
+    }
+
+    /// The selected week and the controls that move it. Drawn from the
+    /// calendar alone, so they are present while figures load, after a refresh
+    /// and for weeks with nothing recorded.
+    private func weekSection(_ window: InsightsWindow, selectedPeriod: ReportingPeriod) -> some View {
+        Section {
+            Menu {
+                Picker("Selected week", selection: Binding(
+                    get: { selectedPeriod.start },
+                    set: { navigation.select($0, asOf: now, calendar: calendar) }
+                )) {
+                    ForEach(window.weeks.reversed(), id: \.start) { week in
+                        Text(week.rangeStatement(calendar: calendar, locale: locale)).tag(week.start)
+                    }
+                }
+            } label: {
+                menuLabel("Selected week", value: selectedPeriod.rangeStatement(calendar: calendar, locale: locale))
+            }
+            .accessibilityLabel("Selected week")
+            .accessibilityValue(selectedPeriod.rangeStatement(calendar: calendar, locale: locale))
+            .accessibilityIdentifier("insightsWeekPicker")
+            pairedControls {
+                Button {
+                    navigation.selectPrevious(asOf: now, calendar: calendar)
+                } label: { navigationLabel("Previous Week", symbol: "chevron.left") }
+                .disabled(!navigation.canSelectPrevious(asOf: now, calendar: calendar))
+                .accessibilityIdentifier("insightsPreviousWeek")
+            } trailing: {
+                Button {
+                    navigation.selectNext(asOf: now, calendar: calendar)
+                } label: { navigationLabel("Next Week", symbol: "chevron.right", trailing: true) }
+                .disabled(!navigation.canSelectNext(asOf: now, calendar: calendar))
+                .accessibilityIdentifier("insightsNextWeek")
+            }
+            if selectedPeriod.contains(now) {
+                Text("Week in progress. Only completed shifts contribute so far.")
+                    .dashFont(.body).accessibilityIdentifier("insightsInProgress")
+            }
+            if let series, let selected {
+                if series.hasRecords {
+                    metricRow(selected, identifier: "insightsSelectedValue")
+                    DashValueRow(title: "Working time", value: selected.metrics.workingDuration.map(DurationText.short) ?? "Not recorded",
+                                 detail: selected.metrics.workingCoverage.statement(noun: "completed shift") + ". Pauses excluded.")
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel("Working time, \(selected.metrics.workingDuration.map(DurationText.spoken) ?? "not recorded"). \(selected.metrics.workingCoverage.statement(noun: "completed shift")). Pauses excluded.")
+                    NavigationLink { PeriodSummaryView(initialPeriod: selected.period) } label: {
+                        Label("Open Selected Week Report", systemImage: "calendar")
+                            .fixedSize(horizontal: false, vertical: true).frame(minHeight: 44)
+                    }
+                    .accessibilityIdentifier("insightsReportLink")
+                } else {
+                    DashNotice(title: "No records in these weeks", message: "Completed shifts and dated expenses appear here when you record them. Explore earlier weeks or return to Money to add an expense.", symbol: "chart.bar")
+                        .accessibilityIdentifier("insightsEmpty")
+                }
+            } else if loader.state != .failed {
+                ProgressView("Loading weekly history…")
+                    .accessibilityIdentifier("insightsLoading")
+            }
+        } header: { Text("Selected week") }
+    }
+
+    /// Two controls side by side where both labels fit on one line each, and
+    /// stacked where they do not, so neither label wraps mid-word on a narrow
+    /// screen or at a large text size.
+    private func pairedControls<Leading: View, Trailing: View>(
+        @ViewBuilder leading: () -> Leading,
+        @ViewBuilder trailing: () -> Trailing
+    ) -> some View {
+        let leading = leading()
+        let trailing = trailing()
+        return ViewThatFits(in: .horizontal) {
+            HStack(spacing: DashSpacing.md) {
+                leading.lineLimit(1)
+                Spacer(minLength: DashSpacing.md)
+                trailing.lineLimit(1)
+            }
+            VStack(alignment: .leading, spacing: DashSpacing.md) {
+                leading
+                trailing
+            }
+        }
+        .frame(minHeight: 44)
+        .buttonStyle(.borderless)
+    }
+
+    @ViewBuilder private func navigationLabel(_ title: String, symbol: String?, trailing: Bool = false) -> some View {
+        if typeSize.isAccessibilitySize || symbol == nil {
+            Text(title)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(minHeight: 44, alignment: .leading)
+        } else if let symbol, trailing {
+            HStack(spacing: DashSpacing.sm) {
+                Text(title)
+                Image(systemName: symbol).accessibilityHidden(true)
             }
             .frame(minHeight: 44)
-            .buttonStyle(.borderless)
-        }
-    }
-
-    @ViewBuilder private func adaptiveControls<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-        if typeSize.isAccessibilitySize {
-            VStack(alignment: .leading, spacing: DashSpacing.xl, content: content)
-        } else {
-            HStack(content: content)
-        }
-    }
-
-    @ViewBuilder private func navigationLabel(_ title: String, symbol: String) -> some View {
-        if typeSize.isAccessibilitySize {
-            Text(title)
-                .lineLimit(nil)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-        } else {
+        } else if let symbol {
             Label(title, systemImage: symbol)
                 .frame(minHeight: 44, alignment: .leading)
         }
@@ -149,55 +227,12 @@ struct InsightsView: View {
             .accessibilityIdentifier("insightsMetricPicker")
             if !typeSize.isAccessibilitySize {
                 if series.weeks.contains(where: { metric.amount($0) != nil }) {
-                    trendChart(series)
+                    trendChart(series, selected: selected)
                 } else {
                     Text(metric == .earnings ? "No shift earnings recorded in these weeks." : "No week has both recorded shift earnings and valid positive working time.")
                         .dashFont(.body).foregroundStyle(.secondary)
                 }
             }
-            Menu {
-                Picker("Selected week", selection: Binding(get: { selected.id }, set: { selection = $0 })) {
-                    ForEach(series.weeks.reversed()) { week in
-                        Text(week.period.rangeStatement(calendar: calendar, locale: locale)).tag(week.id)
-                    }
-                }
-            } label: {
-                menuLabel("Selected week", value: selected.period.rangeStatement(calendar: calendar, locale: locale))
-            }
-            .accessibilityLabel("Selected week")
-            .accessibilityValue(selected.period.rangeStatement(calendar: calendar, locale: locale))
-            .accessibilityIdentifier("insightsWeekPicker")
-            adaptiveControls {
-                Button {
-                    selection = selected.period.previous(using: calendar)?.start
-                } label: { navigationLabel("Previous Week", symbol: "chevron.left") }
-                .disabled(selected.id == series.weeks.first?.id)
-                .opacity(selected.id == series.weeks.first?.id ? 0.4 : 1)
-                .accessibilityIdentifier("insightsPreviousWeek")
-                if !typeSize.isAccessibilitySize { Spacer() }
-                Button {
-                    selection = selected.period.next(using: calendar)?.start
-                } label: { navigationLabel("Next Week", symbol: "chevron.right") }
-                .disabled(selected.id == series.weeks.last?.id)
-                .opacity(selected.id == series.weeks.last?.id ? 0.4 : 1)
-                .accessibilityIdentifier("insightsNextWeek")
-            }
-            .frame(minHeight: 44)
-            .buttonStyle(.borderless)
-            if selected.period.contains(now) {
-                Text("Week in progress. Only completed shifts contribute so far.")
-                    .dashFont(.body).accessibilityIdentifier("insightsInProgress")
-            }
-            metricRow(selected, identifier: "insightsSelectedValue")
-            DashValueRow(title: "Working time", value: selected.metrics.workingDuration.map(DurationText.short) ?? "Not recorded",
-                         detail: selected.metrics.workingCoverage.statement(noun: "completed shift") + ". Pauses excluded.")
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel("Working time, \(selected.metrics.workingDuration.map(DurationText.spoken) ?? "not recorded"). \(selected.metrics.workingCoverage.statement(noun: "completed shift")). Pauses excluded.")
-            NavigationLink { PeriodSummaryView(initialPeriod: selected.period) } label: {
-                Label("Open Selected Week Report", systemImage: "calendar")
-                    .fixedSize(horizontal: false, vertical: true).frame(minHeight: 44)
-            }
-            .accessibilityIdentifier("insightsReportLink")
             DisclosureGroup("Read All Weekly Values") { weeklyValues(series) }
                 .accessibilityIdentifier("insightsAllValues")
         } header: { Text(metric.title) } footer: {
@@ -229,16 +264,27 @@ struct InsightsView: View {
         }
     }
 
-    private func key(_ week: InsightsWeek) -> String {
-        week.id.formatted(Date.FormatStyle(locale: locale, calendar: calendar, timeZone: calendar.timeZone).month(.abbreviated).day())
-    }
+    /// The chart's category for a week: unique within any eight weeks.
+    private func key(_ week: InsightsWeek) -> String { key(forStart: week.id) }
 
-    private func trendChart(_ series: InsightsSeries) -> some View {
-        VStack(alignment: .leading, spacing: DashSpacing.md) {
-            Chart(series.weeks) { week in
+    private func trendChart(_ series: InsightsSeries, selected: InsightsWeek) -> some View {
+        let labels = InsightsAxisLabels.labels(for: series.weeks.map(\.period), calendar: calendar, locale: locale)
+        let labelled = Dictionary(uniqueKeysWithValues: labels.map { (key(forStart: $0.week.start), $0.label) })
+        return VStack(alignment: .leading, spacing: DashSpacing.md) {
+            Chart {
+                // A band behind the selected week, so the selection is visible
+                // even where its amount is zero or missing.
+                RectangleMark(x: .value("Week starting", key(selected)))
+                    .foregroundStyle(ShiftActivityPalette.accent.opacity(0.14))
+                    .accessibilityHidden(true)
+                ForEach(series.weeks) { week in
                 if let amount = metric.amount(week) {
                     BarMark(x: .value("Week starting", key(week)), y: .value(metric.title, chartValue(amount)))
                         .foregroundStyle(ShiftActivityPalette.accent)
+                        // The selected week stays at full strength; the rest
+                        // recede, so the chart shows which bar the values
+                        // below describe. Shape and position are unchanged.
+                        .opacity(week.id == selected.id ? 1 : 0.55)
                         .accessibilityLabel(week.period.rangeStatement(calendar: calendar, locale: locale))
                         .accessibilityValue("\(amount.formatted(locale: locale)). \(metric.coverageStatement(week))")
                     if amount.isZero || !metric.coverage(week).isComplete {
@@ -247,6 +293,7 @@ struct InsightsView: View {
                             .foregroundStyle(ShiftActivityPalette.accent)
                             .accessibilityHidden(true)
                     }
+                }
                 }
             }
             .chartXScale(domain: series.weeks.map(key))
@@ -263,9 +310,11 @@ struct InsightsView: View {
                 }
             }
             .chartXAxis {
-                AxisMarks(values: series.weeks.enumerated().filter { $0.offset.isMultiple(of: 2) }.map { key($0.element) }) { value in
-                    AxisValueLabel {
-                        if let label = value.as(String.self) { Text(label).fixedSize().foregroundStyle(.primary) }
+                AxisMarks(values: labels.map { key(forStart: $0.week.start) }) { value in
+                    AxisValueLabel(collisionResolution: .greedy) {
+                        if let key = value.as(String.self), let label = labelled[key] {
+                            Text(label).lineLimit(1).foregroundStyle(.primary)
+                        }
                     }
                 }
             }
@@ -274,10 +323,14 @@ struct InsightsView: View {
             .accessibilityIdentifier("insightsTrendChart")
             Text("Week starting · USD\(metric == .hourly ? " per working hour" : "")")
                 .dashFont(.supporting).foregroundStyle(.secondary)
-            Text("Triangle: partial coverage. Dot at zero: recorded zero. A blank week has no qualifying amount. Read all weekly values below for coverage.")
+            Text("Triangle: partial coverage. Dot at zero: recorded zero. A blank week has no qualifying amount. The shaded week is the selected week. Read all weekly values below for coverage.")
                 .dashFont(.supporting).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         }
         .padding(.vertical, DashSpacing.md)
+    }
+
+    private func key(forStart start: Date) -> String {
+        start.formatted(Date.FormatStyle(locale: locale, calendar: calendar, timeZone: calendar.timeZone).month(.abbreviated).day())
     }
 
     private func expenseSection(_ week: InsightsWeek) -> some View {

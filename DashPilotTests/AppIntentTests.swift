@@ -17,7 +17,15 @@ struct AppIntentTests {
     private func withStore(_ body: (ModelContext) async throws -> Void) async throws {
         let context = ModelContext(try ModelContainerFactory.makeInMemoryContainer())
         IntentLifecycleService.testContext = context
-        defer { IntentLifecycleService.testContext = nil }
+        // A confirmation store of the test's own, so no pending end leaks
+        // between tests and no expiry timer outlives one.
+        IntentLifecycleService.testConfirmations = ShiftEndConfirmationStore(schedulesExpiry: false)
+        IntentLifecycleService.testRecaps = PostShiftRecapRequests()
+        defer {
+            IntentLifecycleService.testContext = nil
+            IntentLifecycleService.testConfirmations = nil
+            IntentLifecycleService.testRecaps = nil
+        }
         try await body(context)
     }
 
@@ -586,6 +594,8 @@ struct AppIntentTests {
         #expect(PauseShiftFromActivityIntent.supportedModes == .background)
         #expect(ResumeShiftFromActivityIntent.supportedModes == .background)
         #expect(EndShiftFromActivityIntent.supportedModes == .background)
+        #expect(ConfirmEndShiftFromActivityIntent.supportedModes == .background)
+        #expect(KeepShiftFromActivityIntent.supportedModes == .background)
         #expect(StartDeliveryFromActivityIntent.supportedModes == .background)
         #expect(RecordDeliveryProgressFromActivityIntent.supportedModes == .background)
         #expect(ParkVehicleFromActivityIntent.supportedModes == .background)
@@ -594,6 +604,8 @@ struct AppIntentTests {
         #expect(PauseShiftFromActivityIntent.authenticationPolicy == .alwaysAllowed)
         #expect(ResumeShiftFromActivityIntent.authenticationPolicy == .alwaysAllowed)
         #expect(EndShiftFromActivityIntent.authenticationPolicy == .alwaysAllowed)
+        #expect(ConfirmEndShiftFromActivityIntent.authenticationPolicy == .alwaysAllowed)
+        #expect(KeepShiftFromActivityIntent.authenticationPolicy == .alwaysAllowed)
         #expect(StartDeliveryFromActivityIntent.authenticationPolicy == .alwaysAllowed)
         #expect(RecordDeliveryProgressFromActivityIntent.authenticationPolicy == .alwaysAllowed)
         #expect(ParkVehicleFromActivityIntent.authenticationPolicy == .alwaysAllowed)
@@ -605,6 +617,8 @@ struct AppIntentTests {
         #expect(PauseShiftFromActivityIntent.isDiscoverable == false)
         #expect(ResumeShiftFromActivityIntent.isDiscoverable == false)
         #expect(EndShiftFromActivityIntent.isDiscoverable == false)
+        #expect(ConfirmEndShiftFromActivityIntent.isDiscoverable == false)
+        #expect(KeepShiftFromActivityIntent.isDiscoverable == false)
         #expect(StartDeliveryFromActivityIntent.isDiscoverable == false)
         #expect(RecordDeliveryProgressFromActivityIntent.isDiscoverable == false)
         #expect(RecordDeliveredFromActivityIntent.isDiscoverable == false)
@@ -684,14 +698,60 @@ struct AppIntentTests {
         }
     }
 
-    @Test("Ending from the Live Activity ends the shift")
-    func activityIntentEndsTheShift() async throws {
+    @Test("The Live Activity's first End Shift tap ends nothing; Confirm End for it does")
+    func activityIntentEndsTheShiftOnlyOnConfirmation() async throws {
         try await withStore { context in
             _ = try await StartShiftIntent().perform()
             _ = try await EndShiftFromActivityIntent().perform()
 
             let shift = try #require(try context.fetch(FetchDescriptor<Shift>()).first)
+            #expect(shift.endedAt == nil, "The first tap only asks")
+            let pending = try #require(IntentLifecycleService.testConfirmations?.pending)
+            #expect(pending.shiftID == shift.id)
+
+            _ = try await ConfirmEndShiftFromActivityIntent(pending.reference).perform()
             #expect(shift.endedAt != nil)
+            #expect(IntentLifecycleService.testRecaps?.shiftID == shift.id, "The recap is offered after the end")
+
+            await #expect(throws: IntentLifecycleError.shift(.noActiveShift)) {
+                _ = try await ConfirmEndShiftFromActivityIntent(pending.reference).perform()
+            }
+        }
+    }
+
+    @Test("Keep Shift withdraws the confirmation and writes nothing")
+    func activityKeepShiftLeavesTheShiftRunning() async throws {
+        try await withStore { context in
+            _ = try await StartShiftIntent().perform()
+            _ = try await EndShiftFromActivityIntent().perform()
+            let pending = try #require(IntentLifecycleService.testConfirmations?.pending)
+
+            _ = try await KeepShiftFromActivityIntent(pending.reference).perform()
+            #expect(IntentLifecycleService.testConfirmations?.pending == nil)
+
+            await #expect(throws: IntentLifecycleError.endConfirmationExpired) {
+                _ = try await ConfirmEndShiftFromActivityIntent(pending.reference).perform()
+            }
+            let shift = try #require(try context.fetch(FetchDescriptor<Shift>()).first)
+            #expect(shift.lifecycleState == .running)
+            #expect(IntentLifecycleService.testRecaps?.shiftID == nil)
+        }
+    }
+
+    @Test("A confirmation control whose identifiers do not parse ends nothing")
+    func activityConfirmEndWithUnreadableIdentifiers() async throws {
+        try await withStore { context in
+            _ = try await StartShiftIntent().perform()
+            _ = try await EndShiftFromActivityIntent().perform()
+
+            let unreadable = ConfirmEndShiftFromActivityIntent()
+            unreadable.shiftID = "not an identifier"
+            unreadable.token = "nor this"
+            await #expect(throws: ShiftActivityStaleControl.self) {
+                _ = try await unreadable.perform()
+            }
+            let shift = try #require(try context.fetch(FetchDescriptor<Shift>()).first)
+            #expect(shift.endedAt == nil)
         }
     }
 
