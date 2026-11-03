@@ -11,6 +11,11 @@ See [Release readiness](release-readiness.md).
 - Money brings weekly recorded expenses, category filtering and clearly qualified net figures together.
 - Weekly Insights shows recorded gross earnings, paired hourly rates and expense categories, with
   readable text alternatives at accessibility sizes.
+- Ending a shift from the Live Activity takes a confirmed second tap within eight seconds; Keep
+  Shift or waiting leaves it running.
+- A short recap follows a completed shift, with missing values stated rather than shown as zero.
+- Insights week navigation stays usable across ranges, refreshes and empty weeks, and its chart
+  labels no longer overlap.
 - A refreshed welcome introduces the workspaces and optional future-shift hourly targets.
 - Updated documentation and synthetic simulator screenshots describe the current application.
 - The app declares its app-local onboarding preference use in a privacy manifest.

@@ -139,6 +139,24 @@ A delivery [reopened in the app](delivery-lifecycle.md#taking-back-a-delivery-ma
 is a delivery in progress, so the card's counts and its controls follow it like any other change: the
 snapshot is derived from the store, never from what the card was last told.
 
+### Ending takes two taps
+
+**End Shift on the card ends nothing by itself.** The first tap replaces the controls with
+**Keep Shift** and **Confirm End** for eight seconds. Confirm End ends the shift; Keep Shift, or
+letting the eight seconds pass, returns the card to its usual controls with the shift still running.
+
+The confirmation is checked by the app, not by the card. Confirm End carries the shift and a token
+minted by the first tap, and the shift ends only when both match the confirmation still pending, in
+time, for the shift still running. A press delayed past the window, repeated after the shift ended,
+drawn for an earlier confirmation or for another shift, or racing a second press of the same control
+is refused and writes nothing. The confirmation is held in memory only: if DashPilot is terminated
+between the taps, the driver taps End Shift again. Every end still goes through the same rules as
+the app's own End Shift, so a delivery started between the two taps still blocks it.
+
+A shift ended this way is in History straight away. If DashPilot is still running in the background,
+its [recap](shift-workflow.md#after-a-shift-ends) is offered the next time the app is opened; the app is
+never opened for the driver.
+
 Pausing and ending are both refused while a delivery is in progress, so neither is offered then.
 Ending a **paused** shift is permitted, and closes the pause at the end instant rather than making a
 driver resume work they did not do, so End stays on the card while paused. See

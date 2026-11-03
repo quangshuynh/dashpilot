@@ -8,12 +8,20 @@ Home, Work and Money remain the three tabs. Work and its active controls stay on
 ![Weekly earnings chart with a selected week and coverage](../images/screenshots/insights-earnings.png){ width="260" }
 
 The range contains eight consecutive Monday-to-Sunday weeks, ending with Money's selected week.
-Earlier Weeks steps back eight weeks; Latest Weeks returns to the current week. The range follows
+Earlier Weeks steps back eight weeks and selects the week just before the previous range; Latest
+Weeks returns to the current week. Previous Week and Next Week continue past either end of the
+range, moving it eight weeks at a time; only the week in progress has no Next Week. The selected
+week, its menu and both buttons are decided from the calendar rather than from loaded figures, so
+they stay usable while figures load, after a refresh and for weeks with nothing recorded. Changing
+the Trend keeps the selected week. The range follows
 `ReportingPeriod.weekCalendar`, including the reporting timezone, DST and year boundaries. Internally
 weeks are half-open: Monday at midnight through, but excluding, the next Monday.
 
 The Trend picker switches between recorded gross earnings and gross per working hour. Both use
-columns with a zero baseline, without smoothing or interpolation. The week picker and Previous/Next
+columns with a zero baseline, without smoothing or interpolation. The axis labels every other week,
+ending with the newest, and names a month only where it changes (for example `Sep 21`, `Oct 5`,
+`19`, `Nov 2`); the week menu and weekly values give exact ranges. A shaded band marks the selected
+week, including a week whose amount is zero or missing. The week picker and Previous/Next
 Week buttons select exact dates and values. Charts do not intercept scrolling with selection gestures.
 A triangle identifies nonzero partial coverage; a dot at zero represents a recorded zero, including
 a partial-zero point whose coverage is explained in text. A blank week has
@@ -71,7 +79,7 @@ was entered. The same instant can fall on Sunday in one timezone and Monday in a
 the reporting timezone can therefore change which week contains a shift's start or an expense's
 date. Records themselves are not rewritten, and an overnight shift is never split.
 
-The current range refreshes when the calendar day changes or the app becomes active. A selected
-historical range stays selected; **Latest Weeks** returns to the current week. Current-week
+The current range refreshes when the calendar day changes or the app becomes active. A chosen week
+stays selected while it remains in the range; a historical range stays selected; **Latest Weeks** returns to the current week. Current-week
 comparisons explain that the week is in progress. The domain tests cover the exact Monday boundary,
 DST, differing timezone membership, missing and partial weeks, and large Decimal amounts.

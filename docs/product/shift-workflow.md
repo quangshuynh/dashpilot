@@ -564,6 +564,19 @@ If the device clock has moved behind the recorded start, the end is clamped to t
 open pause's start if there is one. Recording a zero-length shift or a zero-length pause is
 preferable to leaving a driver unable to end their shift until the clock catches up.
 
+## After a shift ends
+
+Once an end has been recorded, the app offers a short **recap**: recorded gross earnings, working
+time, gross per working hour, recorded mileage with its partial-route qualification, and an estimated
+fuel cost labelled as an estimate. A value that was not recorded says **Not recorded** or **Not
+available**, never zero, and an unavailable rate or estimate says why. **Done** closes it; **View Shift
+Details** opens the shift.
+
+Every figure comes from the calculators the shift's own detail screen uses. Nothing is stored for
+the recap. Recorded expenses are not shown beside the estimate, and delivery earnings are never read
+as the shift's gross. A refused end offers no recap, and a recap waiting for a shift ended from the
+[Live Activity](live-activity.md#ending-takes-two-taps) is dropped once another shift starts.
+
 An end recorded later than the driver actually stopped — because DashPilot was not reachable at the
 time — can be corrected afterwards. See [Correcting a shift's end time](#correcting-a-shifts-end-time).
 

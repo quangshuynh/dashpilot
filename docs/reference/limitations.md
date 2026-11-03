@@ -272,6 +272,13 @@ parking` whose pickups stores may still hold.
 - **Text larger than `xLarge` is drawn at `xLarge` on the card.** Past it, two control labels no
   longer fit side by side on the narrowest supported phone and the controls would need a third row.
   The app's own screens follow every size.
+- **The end confirmation lives in memory and its expiry depends on the app running.** If DashPilot
+  is suspended before the eight seconds pass, the card can keep showing Confirm End until the app
+  next runs; pressing it then is refused as expired and the card returns to End Shift. If DashPilot is
+  terminated between the taps, the confirmation is lost and End Shift must be tapped again. The
+  two-tap flow has been exercised on the simulator through the in-app card, not on a Lock Screen.
+- **The post-shift recap is not kept.** A shift ended from the card while DashPilot was terminated
+  offers no recap; it is in History like every other completed shift.
 - **It has never run on a physical device.** The behaviour described here was verified on the iOS
   26.5 simulator, which has no battery, cannot be carried and cannot evict an app under real memory
   pressure.

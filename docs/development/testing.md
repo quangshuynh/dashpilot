@@ -58,6 +58,8 @@ test cannot see, such as a screen that renders a sentence the model never claime
 | Suite | What it holds |
 | --- | --- |
 | Shift Live Activity content | What the shift's Lock Screen card is told, pinned to the app's own figures and wording: working rather than elapsed time, `RouteQuality`'s mileage sentence, the partial marker travelling with the figure, the lifecycle titles, and every delivery step named exactly as the app's own control names it. The controls are asserted against the refusals the services actually raise rather than against a list written in the test, and a sweep checks everything the card can print for an amount, a rate, a place name or a coordinate. The delivery clocks are pinned the same way: each counted from its own `acceptedAt` and named by the app's own numbering, an anchor that does not move as the snapshot is rebuilt, a delivered, cancelled or reopened delivery leaving or rejoining the list rather than freezing, two stacked orders counted separately and never as their sum, the remainder stated past three, and the control list unchanged in every shape |
+| Live Activity end confirmation | The two-tap end through `IntentLifecycleService`: a first tap ending nothing and refused with the end's own sentence while deliveries are open; a valid Confirm End ending exactly its shift, including a paused one, and offering the recap; expiry at and past the window and a clock moved backwards; Keep Shift; a repeated press after success, a stale shift identity or token, and four concurrent presses ending once; a delivery started between the taps still blocking; and the card's Keep Shift and Confirm End labels, symbols, emphasis and coding |
+| Post-shift recap | The recap's figures matching the shift calculators, pauses excluded; missing gross and rates saying Not recorded or Not available with the reason; a recorded zero kept; delivery earnings never read as shift gross; no route, partial route and missing assumptions qualified; and recorded expenses neither shown nor changing the estimate |
 | Live Activity control priority | The exact ordered control set for each important state, built through the one content path the app uses: the delivery step first with the pickup workflow off, Park Vehicle first and emphasised with it on at every step of an order, Resume Driving first whenever parked, the switch followed on the next snapshot, no settings row reading off and creating none, never more than four controls and always exactly one of the parked pair; and deliveries recorded as sharing a stop drawn as one row with one clock only when they are also in one state |
 | Live Activity card layout | The card's own view laid out in the test host and measured: every state, at 370 and 343 points wide and at every text size including the accessibility sizes, under the 160-point Lock Screen limit with a margin (it measured 242 to 296 points with an order in progress before the redesign); sizes past `xLarge` measuring the same as `xLarge`; the Dynamic Island's bottom region within what the island leaves; and the plan itself: controls in the app's order in at most two rows of two, an order outranking the mileage line, the footnote stating the orders without a line and the withheld step, the mileage never drawn without its qualifier, and parked said in the header and never as paused |
 | Shift Live Activity synchronisation | A shift driven from running through paused, resumed and ended as one card and then none, plus what a Lock Screen makes invisible: a relaunch adopting the card its shift already has, a card left behind by a shift that is gone, one describing a different shift, one the driver dismissed, a system that refuses the request, and Live Activities turned off entirely |
@@ -654,7 +656,16 @@ The documentation workflows are described under [Building](building.md#continuou
 The essential suite now contains **40 journeys**, retaining all 38 Interval 3 journeys and adding
 `testInsightsWeeklyValuesAndSelectedReport` and `testInsightsRemainReadableAtLargestTextSize`.
 Traceability is in the [UI suite audit](ui-suite-audit.md). These cover entry from Money, exact values
-without chart gestures, selected-week reports, empty history, and returning to active Work.
+without chart gestures, selected-week reports, the chosen week surviving a Trend change, week controls
+remaining in an empty earlier range, Next Week returning to the latest weeks, and returning to active
+Work. The start-and-end journey confirms the two-tap Live Activity end through the in-app card and
+reads the recap; every journey that ends a shift closes or uses the recap. The count stays 40.
+
+`InsightsNavigationTests` pins week navigation decided from the calendar alone: Earlier and Latest
+Weeks, Previous and Next Week crossing range edges, the week in progress as the only forward bound,
+a chosen week surviving a week rollover, nearest-week resolution, contiguous Monday weeks across
+months, a year end and DST, stale series rejection and the axis-label policy. Five of its cases
+failed against the previous view logic, extracted unchanged, before the fix.
 
 `InsightsSeriesTests` pins Monday boundaries, DST and cross-year weeks, deterministic dates, ordered
 sparse/empty series, missing versus zero, paired rates, expense reconciliation, negative qualified
