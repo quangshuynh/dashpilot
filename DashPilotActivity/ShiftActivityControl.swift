@@ -181,7 +181,7 @@ nonisolated enum ShiftActivityControl: Codable, Hashable, Sendable {
         case .nextDelivered: ShiftActivityDeliveryStep.complete.symbolName
         // Not the glyph End Shift carries, so the second tap reads as a
         // different question from the first.
-        case .confirmEnd: "checkmark.octagon.fill"
+        case .confirmEnd: "stop.circle.fill"
         case .keepShift: "arrow.uturn.backward"
         }
     }

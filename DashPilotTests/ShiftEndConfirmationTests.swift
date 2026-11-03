@@ -1,6 +1,7 @@
 import Foundation
 import SwiftData
 import Testing
+import UIKit
 @testable import DashPilot
 
 /// Ending a shift from the Live Activity takes two taps, and the second is
@@ -285,6 +286,9 @@ struct ShiftEndConfirmationTests {
         #expect(ShiftActivityControl.confirmEnd(reference).spokenLabel.contains("shift"))
         #expect(ShiftActivityControl.keepShift(reference).spokenLabel.contains("shift"))
         #expect(ShiftActivityControl.confirmEnd(reference).symbolName != ShiftActivityControl.end.symbolName)
+        for control in [ShiftActivityControl.confirmEnd(reference), .keepShift(reference)] {
+            #expect(UIImage(systemName: control.symbolName) != nil, "\(control.symbolName) is a system symbol")
+        }
         #expect(!ShiftActivityControl.confirmEnd(reference).isProminent)
     }
 

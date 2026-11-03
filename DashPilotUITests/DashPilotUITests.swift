@@ -433,11 +433,8 @@ final class DashPilotUITests: XCTestCase {
         link.tap()
         XCTAssertTrue(app.navigationBars["Insights"].appears())
         attachScreenshot("insights-top-\(atLargestSize ? "ax5" : "default")")
-        if !atLargestSize {
-            let chart = app.descendants(matching: .any).matching(identifier: "insightsTrendChart").firstMatch
-            XCTAssertTrue(scrollUntilHittable(chart, in: app))
-            attachMoneyScreenshot("insights-earnings-chart", focusing: chart, in: app)
-        }
+        // The selected week and its controls come first, above the trend, so
+        // they are in the first viewport rather than under the tab bar.
         let value = app.descendants(matching: .any)["insightsSelectedValue"]
         XCTAssertTrue(scrollUntilHittable(value, in: app))
         XCTAssertTrue(waitForLabel(value, toContain: "$240.00"))
@@ -448,9 +445,18 @@ final class DashPilotUITests: XCTestCase {
         revealInsights(previous, in: app)
         attachMoneyScreenshot("insights-week-controls", focusing: previous, in: app)
         previous.tap()
-        XCTAssertTrue(scrollUntilHittable(value, in: app))
+        revealInsights(value, in: app)
         XCTAssertTrue(waitForLabel(value, toContain: "$0.00"))
         attachMoneyScreenshot("insights-selected-zero-week", focusing: value, in: app)
+        let weekPicker = app.buttons["insightsWeekPicker"]
+        revealInsights(weekPicker, in: app)
+        let chosenWeek = weekPicker.value as? String
+        XCTAssertNotNil(chosenWeek)
+        if !atLargestSize {
+            let chart = app.descendants(matching: .any).matching(identifier: "insightsTrendChart").firstMatch
+            XCTAssertTrue(scrollUntilHittable(chart, in: app))
+            attachMoneyScreenshot("insights-earnings-chart", focusing: chart, in: app)
+        }
         let metric = app.buttons["insightsMetricPicker"]
         revealInsights(metric, in: app)
         metric.tap()
@@ -460,13 +466,13 @@ final class DashPilotUITests: XCTestCase {
             XCTAssertTrue(scrollUntilHittable(chart, in: app))
             attachMoneyScreenshot("insights-hourly-chart", focusing: chart, in: app)
         }
-        // At AX5 the week menu fills the usual drag origin. A slow press there
-        // highlights the menu instead of scrolling; use the list gutter.
-        XCTAssertTrue(scrollUntilHittable(value, in: app, dragOriginX: 0.03))
+        revealInsights(value, in: app)
         XCTAssertTrue(waitForLabel(value, toContain: "Gross per working hour"))
         attachMoneyScreenshot("insights-hourly-\(atLargestSize ? "ax5" : "default")", focusing: value, in: app)
+        revealInsights(weekPicker, in: app)
+        XCTAssertEqual(weekPicker.value as? String, chosenWeek, "Changing the trend keeps the chosen week")
         let report = app.buttons["insightsReportLink"]
-        XCTAssertTrue(scrollUntilHittable(report, in: app))
+        revealInsights(report, in: app)
         report.tap()
         XCTAssertTrue(app.descendants(matching: .any)["periodTitle"].appears())
         // This report is nested inside Insights; the shared helper expects a
@@ -483,6 +489,18 @@ final class DashPilotUITests: XCTestCase {
         let empty = app.descendants(matching: .any)["insightsEmpty"]
         XCTAssertTrue(scrollUntilHittable(empty, in: app))
         attachMoneyScreenshot("insights-empty-\(atLargestSize ? "ax5" : "default")", focusing: empty, in: app)
+        // Earlier weeks with nothing recorded keep every week control, so the
+        // selection can still move: Next Week returns into the latest weeks.
+        revealInsights(weekPicker, in: app)
+        XCTAssertNotEqual(weekPicker.value as? String, chosenWeek, "Earlier Weeks selected an earlier week")
+        let next = app.buttons["insightsNextWeek"]
+        revealInsights(next, in: app)
+        XCTAssertTrue(next.isEnabled, "An earlier week can always move forward")
+        next.tap()
+        revealInsights(value, in: app)
+        XCTAssertTrue(waitForLabel(value, toContain: "Gross per working hour"), "Back among recorded weeks, same trend")
+        XCTAssertTrue(scrollToTop(reaching: earlier, in: app))
+        XCTAssertFalse(app.buttons["insightsLatestWeeks"].isEnabled, "Next Week reached the latest weeks")
         selectWorkspace("Work", in: app)
         XCTAssertTrue(scrollUntilHittable(app.buttons["endShiftButton"], in: app))
     }
@@ -492,7 +510,9 @@ final class DashPilotUITests: XCTestCase {
         // AX5 moves controls below the first viewport. Restore the known top
         // anchor, then realize the desired List row by scrolling down to it.
         XCTAssertTrue(scrollToTop(reaching: app.buttons["insightsEarlierWeeks"], in: app))
-        XCTAssertTrue(scrollUntilHittable(element, in: app))
+        // At AX5 the week menu fills the usual drag origin. A slow press there
+        // highlights the menu instead of scrolling; use the list gutter.
+        XCTAssertTrue(scrollUntilHittable(element, in: app, dragOriginX: 0.03))
     }
 
     /// Money's coverage, category selection and navigation remain usable at AX5.
@@ -668,10 +688,15 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Settings"].appears())
     }
 
-    /// Start a shift, see it running, end it, and find it in history.
+    /// Start a shift, see it running, end it from the Live Activity in two
+    /// taps, read its recap, and find it in history.
+    ///
+    /// The card is the extension's own view drawn in the app, and its buttons
+    /// perform the same Live Activity intents in this process, so the first End
+    /// Shift tap is proved to end nothing and Keep Shift to leave it running.
     @MainActor
     func testStartsAndEndsAShift() throws {
-        let app = launchWithEmptyStore()
+        let app = launchWithLiveActivityPreview()
         XCTAssertTrue(app.tabBars.buttons["Home"].isSelected)
         selectWorkspace("Work", in: app)
         openSettings(in: app)
@@ -696,7 +721,39 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertFalse(startButton.exists, "Only one shift may be running at a time")
         attachScreenshot("work-active-no-deliveries")
 
-        endButton.tap()
+        // First tap: the card asks, and the shift keeps running.
+        XCTAssertTrue(scrollToTop(reaching: app.descendants(matching: .any)["liveActivityPreview"], in: app))
+        let card = app.descendants(matching: .any)["liveActivityPreview"]
+        card.buttons["activityControl.end"].tap()
+        let keep = card.buttons["activityControl.keepShift"]
+        XCTAssertTrue(keep.appears(), "End Shift asks rather than ends")
+        XCTAssertEqual(activityControls(in: app), ["activityControl.keepShift", "activityControl.confirmEnd"])
+        XCTAssertEqual(card.buttons["activityControl.confirmEnd"].label, "Confirm ending this shift now")
+        XCTAssertTrue(app.descendants(matching: .any)["activeShiftStatus"].exists, "The shift is still running")
+        attachScreenshot("live-activity-confirm-end")
+        keep.tap()
+        XCTAssertTrue(card.buttons["activityControl.end"].appears(), "Keep Shift returns the card to End Shift")
+        XCTAssertTrue(app.descendants(matching: .any)["activeShiftStatus"].exists, "and the shift is still running")
+
+        // Second tap within the window ends it.
+        card.buttons["activityControl.end"].tap()
+        let confirm = card.buttons["activityControl.confirmEnd"]
+        XCTAssertTrue(confirm.appears())
+        confirm.tap()
+
+        // The recap follows a completed end, and says what was not recorded
+        // rather than showing zeros.
+        let gross = app.descendants(matching: .any)["recapGross"]
+        XCTAssertTrue(gross.appears(), "The recap is offered once the end is written")
+        XCTAssertEqual(gross.label, "Recorded gross earnings, not recorded")
+        let fuel = app.descendants(matching: .any)["recapFuel"]
+        XCTAssertTrue(fuel.exists)
+        XCTAssertTrue(fuel.label.hasPrefix("Estimated fuel cost, Not available"), fuel.label)
+        // Whether a route was captured depends on the simulator's location
+        // permission; the wording for each case is covered by the domain tests.
+        XCTAssertTrue(app.descendants(matching: .any)["recapMileage"].label.hasPrefix("Recorded miles, "))
+        attachScreenshot("post-shift-recap")
+        closeRecap(in: app)
 
         XCTAssertTrue(startButton.appears())
         XCTAssertFalse(endButton.exists)
@@ -1162,6 +1219,7 @@ final class DashPilotUITests: XCTestCase {
         let end = app.buttons["endShiftButton"]
         XCTAssertTrue(reachShiftControl(end, in: app))
         end.tap()
+        closeRecap(in: app)
         XCTAssertTrue(startShift.appears())
         XCTAssertTrue(
             scrollUntilHittable(rows(in: app).firstMatch, in: app),
@@ -1792,8 +1850,10 @@ final class DashPilotUITests: XCTestCase {
         // And the shift can now be ended, with the delivery recorded against it.
         XCTAssertTrue(reachShiftControl(app.buttons["endShiftButton"], in: app))
         app.buttons["endShiftButton"].tap()
-        let row = revealHistoryRows(1, in: app).firstMatch
-        row.tap()
+        // View Shift Details opens the shift that just ended from its recap.
+        let details = app.buttons["recapViewDetails"]
+        XCTAssertTrue(details.appears(), "The recap offers the shift's details")
+        details.tap()
         let summary = app.descendants(matching: .any)["shiftDetailDeliverySummary"]
         XCTAssertTrue(scrollTo(summary, in: app))
         XCTAssertEqual(summary.label, "1 delivery completed")
@@ -2263,6 +2323,7 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertTrue(waitForCount(app.buttons.matching(identifier: "deliveryActionButton"), toEqual: 0))
         XCTAssertTrue(reachShiftControl(app.buttons["endShiftButton"], in: app))
         app.buttons["endShiftButton"].tap()
+        closeRecap(in: app)
         openFirstShift(in: app)
         let summary = app.descendants(matching: .any)["shiftDetailDeliverySummary"]
         XCTAssertTrue(scrollTo(summary, in: app))
@@ -3409,8 +3470,18 @@ final class DashPilotUITests: XCTestCase {
         // End is below the delivery section, so it is searched for.
         XCTAssertTrue(reachShiftControl(endButton, in: app))
         endButton.tap()
+        closeRecap(in: app)
 
         assertTheShiftReachedHistory(in: app)
+    }
+
+    /// Closes the recap a completed end offers, after checking it was offered.
+    @MainActor
+    private func closeRecap(in app: XCUIApplication) {
+        let done = app.buttons["recapDone"]
+        XCTAssertTrue(done.appears(), "The recap follows a completed end")
+        done.tap()
+        XCTAssertTrue(done.disappears(), "Done dismisses it")
     }
 
     /// Confirms a shift just ended is listed in History, then returns to the top
@@ -3799,6 +3870,7 @@ final class DashPilotUITests: XCTestCase {
         )
         XCTAssertFalse(app.buttons["shiftDetailDeliveryTipsButton"].exists)
         endButton.tap()
+        closeRecap(in: app)
 
         assertTheShiftReachedHistory(in: app)
     }
