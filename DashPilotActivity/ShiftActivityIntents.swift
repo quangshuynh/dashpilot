@@ -1,7 +1,7 @@
 import AppIntents
 import Foundation
 
-/// The eight actions a driver can take from the shift's Live Activity.
+/// The ten actions a driver can take from the shift's Live Activity.
 ///
 /// Named apart from the intents themselves so there is exactly one switch over
 /// them, in ``ShiftActivityIntentBridge``, rather than a lifecycle call buried
@@ -9,7 +9,12 @@ import Foundation
 nonisolated enum ShiftActivityAction: String, CaseIterable, Sendable {
     case pauseShift
     case resumeShift
+    /// The first tap of End Shift, which asks for confirmation and ends nothing.
     case endShift
+    /// The second tap, which ends the shift only for a confirmation still valid.
+    case confirmEndShift
+    /// Withdrawing a pending confirmation.
+    case keepShift
     case startDelivery
     case recordDeliveryProgress
     case recordDelivered
@@ -38,7 +43,11 @@ nonisolated struct ShiftActivityActionUnavailable: Error, CustomLocalizedStringR
 /// rules, and this is where that is enforced rather than merely intended.
 @MainActor
 enum ShiftActivityIntentBridge {
-    static func perform(_ action: ShiftActivityAction, expectedDelivery: UUID? = nil) throws {
+    static func perform(
+        _ action: ShiftActivityAction,
+        expectedDelivery: UUID? = nil,
+        endConfirmation: ShiftActivityEndConfirmation? = nil
+    ) throws {
         throw ShiftActivityActionUnavailable()
     }
 }
@@ -64,13 +73,29 @@ enum ShiftActivityIntentBridge {
     /// service layer's own sentence is what the driver is shown.
     ///
     /// `expectedDelivery` is the delivery a Delivered control was drawn for,
-    /// and is read by that action only.
-    static func perform(_ action: ShiftActivityAction, expectedDelivery: UUID? = nil) throws {
+    /// and is read by that action only. `endConfirmation` is the pending end a
+    /// Confirm End or Keep Shift control was drawn for, read by those two only.
+    ///
+    /// End Shift never ends anything from here. Its first tap asks for
+    /// confirmation, and only ``IntentLifecycleService/confirmEndShift(_:at:)``,
+    /// given the confirmation it minted, still valid and for the shift still
+    /// running, ends one.
+    static func perform(
+        _ action: ShiftActivityAction,
+        expectedDelivery: UUID? = nil,
+        endConfirmation: ShiftActivityEndConfirmation? = nil
+    ) throws {
         let service = try IntentLifecycleService.forIntent()
         switch action {
         case .pauseShift: _ = try service.pauseShift()
         case .resumeShift: _ = try service.resumeShift()
-        case .endShift: _ = try service.endShift()
+        case .endShift: _ = try service.requestEndShiftConfirmation()
+        case .confirmEndShift:
+            guard let endConfirmation else { throw ShiftActivityStaleControl() }
+            _ = try service.confirmEndShift(endConfirmation)
+        case .keepShift:
+            guard let endConfirmation else { throw ShiftActivityStaleControl() }
+            service.keepShift(endConfirmation)
         case .startDelivery: _ = try service.startDelivery()
         case .recordDeliveryProgress: _ = try service.recordDeliveryProgress()
         case .recordDelivered: _ = try service.recordDelivered(expected: expectedDelivery)
@@ -161,17 +186,25 @@ struct ResumeShiftFromActivityIntent: LiveActivityIntent {
     }
 }
 
-/// Ending the shift from the Lock Screen.
+/// Asking to end the shift from the Lock Screen. **It ends nothing.**
 ///
-/// Offered only under the lifecycle rules that already govern it: refused while
-/// any delivery is open, and permitted on a paused shift, where it closes the
-/// pause at the end instant rather than making the driver resume work they did
-/// not do.
+/// A single tap on a card in a cradle is too easy to make by accident for the
+/// one action on it that cannot be taken back there. This tap only asks: the
+/// card changes to Confirm End and Keep Shift for a few seconds, and the shift
+/// ends only if Confirm End is tapped for that confirmation in that time.
+///
+/// Refused while any delivery is open, by the rule that refuses the end
+/// itself, so a driver is told at the first tap rather than the second.
+/// Permitted on a paused shift, where the eventual end closes the pause at the
+/// end instant rather than making the driver resume work they did not do.
 struct EndShiftFromActivityIntent: LiveActivityIntent {
     static let title: LocalizedStringResource = "End Shift from Live Activity"
 
     static let description: IntentDescription? = IntentDescription(
-        "Ends the shift from its Live Activity. Not available while a delivery is in progress.",
+        """
+        Asks to end the shift from its Live Activity. The shift ends only after you tap Confirm End \
+        within a few seconds. Not available while a delivery is in progress.
+        """,
         categoryName: "Shift"
     )
 
@@ -184,6 +217,97 @@ struct EndShiftFromActivityIntent: LiveActivityIntent {
     @MainActor
     func perform() async throws -> some IntentResult {
         try ShiftActivityIntentBridge.perform(.endShift)
+        return .result()
+    }
+}
+
+/// The second tap of ending the shift from the Lock Screen.
+///
+/// Carries the shift and the confirmation token the card was drawn for, and the
+/// app ends the shift only when both still match a confirmation that has not
+/// expired, been withdrawn or been used. Anything else, including a press
+/// delayed past the window or repeated after the first succeeded, is refused
+/// and writes nothing.
+struct ConfirmEndShiftFromActivityIntent: LiveActivityIntent {
+    static let title: LocalizedStringResource = "Confirm End Shift from Live Activity"
+
+    static let description: IntentDescription? = IntentDescription(
+        """
+        Ends the shift after End Shift was tapped on its Live Activity. If the confirmation has \
+        expired or belongs to another shift, nothing is recorded.
+        """,
+        categoryName: "Shift"
+    )
+
+    static let supportedModes: IntentModes = .background
+    static let isDiscoverable = false
+    static let authenticationPolicy = IntentAuthenticationPolicy.alwaysAllowed
+
+    /// Opaque identifiers, never a name or a place.
+    @Parameter(title: "Shift")
+    var shiftID: String
+
+    @Parameter(title: "Confirmation")
+    var token: String
+
+    init() {}
+
+    init(_ confirmation: ShiftActivityEndConfirmation) {
+        shiftID = confirmation.shiftID.uuidString
+        token = confirmation.token.uuidString
+    }
+
+    @MainActor
+    func perform() async throws -> some IntentResult {
+        // Identifiers that do not parse name no confirmation, so this is the
+        // stale-card refusal rather than an end of whichever shift is running.
+        guard let shift = UUID(uuidString: shiftID), let token = UUID(uuidString: token) else {
+            throw ShiftActivityStaleControl()
+        }
+        try ShiftActivityIntentBridge.perform(
+            .confirmEndShift,
+            endConfirmation: ShiftActivityEndConfirmation(shiftID: shift, token: token)
+        )
+        return .result()
+    }
+}
+
+/// Withdrawing a pending end from the Lock Screen. The shift keeps running and
+/// nothing about it is written.
+struct KeepShiftFromActivityIntent: LiveActivityIntent {
+    static let title: LocalizedStringResource = "Keep Shift from Live Activity"
+
+    static let description: IntentDescription? = IntentDescription(
+        "Cancels ending the shift from its Live Activity. The shift keeps running.",
+        categoryName: "Shift"
+    )
+
+    static let supportedModes: IntentModes = .background
+    static let isDiscoverable = false
+    static let authenticationPolicy = IntentAuthenticationPolicy.alwaysAllowed
+
+    @Parameter(title: "Shift")
+    var shiftID: String
+
+    @Parameter(title: "Confirmation")
+    var token: String
+
+    init() {}
+
+    init(_ confirmation: ShiftActivityEndConfirmation) {
+        shiftID = confirmation.shiftID.uuidString
+        token = confirmation.token.uuidString
+    }
+
+    @MainActor
+    func perform() async throws -> some IntentResult {
+        guard let shift = UUID(uuidString: shiftID), let token = UUID(uuidString: token) else {
+            throw ShiftActivityStaleControl()
+        }
+        try ShiftActivityIntentBridge.perform(
+            .keepShift,
+            endConfirmation: ShiftActivityEndConfirmation(shiftID: shift, token: token)
+        )
         return .result()
     }
 }

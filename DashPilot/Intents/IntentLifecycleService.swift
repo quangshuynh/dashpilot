@@ -49,9 +49,23 @@ struct IntentLifecycleService {
     /// throwaway store must not drive a real system surface.
     private let activity: (any ShiftActivityReconciling)?
 
-    init(context: ModelContext, activity: (any ShiftActivityReconciling)? = nil) {
+    /// The pending Live Activity end, if any. See ``ShiftEndConfirmationStore``.
+    private let confirmations: ShiftEndConfirmationStore
+
+    /// Told when a shift is ended from the Live Activity, so the app can offer
+    /// its recap the next time the driver is looking. See ``PostShiftRecapRequests``.
+    private let recaps: PostShiftRecapRequests?
+
+    init(
+        context: ModelContext,
+        activity: (any ShiftActivityReconciling)? = nil,
+        confirmations: ShiftEndConfirmationStore? = nil,
+        recaps: PostShiftRecapRequests? = nil
+    ) {
         self.context = context
         self.activity = activity
+        self.confirmations = confirmations ?? .shared
+        self.recaps = recaps
     }
 
     #if DEBUG
@@ -68,6 +82,10 @@ struct IntentLifecycleService {
     /// Nothing by default, so a test that only cares about what was written
     /// reaches no system surface at all. Debug builds only.
     static var testActivity: (any ShiftActivityReconciling)?
+
+    static var testConfirmations: ShiftEndConfirmationStore?
+
+    static var testRecaps: PostShiftRecapRequests?
     #endif
 
     /// The service an intent performs with, over the process's own container.
@@ -78,13 +96,19 @@ struct IntentLifecycleService {
     static func forIntent() throws -> IntentLifecycleService {
         #if DEBUG
         if let testContext {
-            return IntentLifecycleService(context: testContext, activity: testActivity)
+            return IntentLifecycleService(
+                context: testContext,
+                activity: testActivity,
+                confirmations: testConfirmations,
+                recaps: testRecaps
+            )
         }
         #endif
         do {
             return IntentLifecycleService(
                 context: try AppModelContainer.shared.get().mainContext,
-                activity: AppShiftLiveActivity.shared
+                activity: AppShiftLiveActivity.shared,
+                recaps: .shared
             )
         } catch {
             AppLog.intents.error("An intent could not open the local store: \(error)")
@@ -122,6 +146,8 @@ struct IntentLifecycleService {
     /// nothing that rule does not already provide.
     func endShift(at date: Date = .now) throws -> IntentLifecycleOutcome {
         let shift = try shiftRefusal { try ShiftService(context: context).endActiveShift(at: date) }
+        // Whatever ended it, a confirmation pending for it is now meaningless.
+        confirmations.clear()
         reconcileActivity()
         AppLog.intents.info("Intent ended a shift")
         // Working, not elapsed: the confirmation says how long the driver
@@ -137,6 +163,79 @@ struct IntentLifecycleService {
     /// The confirmation says that route recording has stopped, because there is
     /// no screen to notice it on and a driver who believed the route was still
     /// being kept would lose the difference without being told.
+    // MARK: Ending from the Live Activity, in two taps
+
+    /// The Live Activity's first End Shift tap: asks for confirmation and ends
+    /// nothing.
+    ///
+    /// Refused at once, by the rule the end itself applies, if the shift still
+    /// has a delivery in progress, so the card never offers a Confirm End the
+    /// store would refuse. Otherwise a confirmation scoped to this shift is
+    /// started, the card is redrawn with Confirm End and Keep Shift, and the
+    /// card returns to End Shift by itself once the window passes.
+    @discardableResult
+    func requestEndShiftConfirmation(at date: Date = .now) throws -> PendingShiftEnd {
+        let shift = try shiftRefusal { () throws -> Shift in
+            guard let shift = try ShiftService(context: context).activeShift() else {
+                throw ShiftLifecycleError.noActiveShift
+            }
+            try ShiftService.ensureEndable(shift)
+            return shift
+        }
+        let activity = activity
+        let request = confirmations.request(for: shift.id, at: date) { activity?.reconcile() }
+        reconcileActivity()
+        AppLog.intents.info("Live Activity asked to confirm ending the shift")
+        return request
+    }
+
+    /// The Live Activity's Confirm End: ends the shift only for the pending
+    /// confirmation it names, in time, for the shift still running.
+    ///
+    /// The checks are made against the app's own record rather than the card,
+    /// in this order, and the first that fails ends nothing:
+    ///
+    /// 1. A shift is running, and it is the one the control was drawn for.
+    /// 2. A confirmation is pending, for that shift and that token.
+    /// 3. It has not expired.
+    ///
+    /// The confirmation is used up in the same main-actor step that accepts it,
+    /// so a repeated or concurrent press of the same control finds nothing
+    /// pending. The end then goes through ``endShift(at:)``, which applies every
+    /// rule a direct end does, including the refusal for open deliveries.
+    func confirmEndShift(_ reference: ShiftActivityEndConfirmation, at date: Date = .now) throws -> IntentLifecycleOutcome {
+        let running = try shiftRefusal { try ShiftService(context: context).activeShift() }
+        guard let running, running.id == reference.shiftID else {
+            AppLog.intents.notice("Refused Confirm End: the control was drawn for another shift")
+            reconcileActivity()
+            throw running == nil ? IntentLifecycleError.shift(.noActiveShift) : IntentLifecycleError.endConfirmationStale
+        }
+        switch confirmations.check(reference, at: date) {
+        case .confirmed:
+            break
+        case .expired:
+            AppLog.intents.notice("Refused Confirm End: no matching confirmation is pending")
+            reconcileActivity()
+            throw IntentLifecycleError.endConfirmationExpired
+        case .stale:
+            AppLog.intents.notice("Refused Confirm End: the control was drawn for an earlier confirmation")
+            reconcileActivity()
+            throw IntentLifecycleError.endConfirmationStale
+        }
+        let outcome = try endShift(at: date)
+        recaps?.post(shiftID: reference.shiftID)
+        return outcome
+    }
+
+    /// The Live Activity's Keep Shift: withdraws the confirmation it names and
+    /// writes nothing about the shift.
+    func keepShift(_ reference: ShiftActivityEndConfirmation) {
+        if confirmations.withdraw(reference) {
+            AppLog.intents.info("Live Activity kept the shift running")
+        }
+        reconcileActivity()
+    }
+
     func pauseShift(at date: Date = .now) throws -> IntentLifecycleOutcome {
         let shift = try shiftRefusal { try ShiftService(context: context).pauseActiveShift(at: date) }
         reconcileActivity()

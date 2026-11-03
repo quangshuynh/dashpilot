@@ -58,6 +58,7 @@ final class ShiftLiveActivityService: ShiftActivityReconciling {
     @ObservationIgnored private let presenter: any ShiftActivityPresenting
     @ObservationIgnored private let now: () -> Date
     @ObservationIgnored private let locale: () -> Locale
+    @ObservationIgnored private let confirmations: ShiftEndConfirmationStore
 
     /// The activity this app is currently keeping up to date, or `nil` when
     /// there is none.
@@ -84,12 +85,14 @@ final class ShiftLiveActivityService: ShiftActivityReconciling {
         context: ModelContext,
         presenter: any ShiftActivityPresenting,
         now: @escaping () -> Date = { .now },
-        locale: @escaping () -> Locale = { .autoupdatingCurrent }
+        locale: @escaping () -> Locale = { .autoupdatingCurrent },
+        confirmations: ShiftEndConfirmationStore? = nil
     ) {
         self.context = context
         self.presenter = presenter
         self.now = now
         self.locale = locale
+        self.confirmations = confirmations ?? .shared
     }
 
     /// Brings the Live Activity into line with the store.
@@ -197,7 +200,8 @@ final class ShiftLiveActivityService: ShiftActivityReconciling {
             recordedDistance: measurement.recordedDistance,
             asOf: reference,
             locale: locale(),
-            context: context
+            context: context,
+            pendingEnd: confirmations.pending(for: shift.id, at: reference)
         )
 
         guard let handle else {
@@ -241,13 +245,15 @@ final class ShiftLiveActivityService: ShiftActivityReconciling {
         recordedDistance: RouteDistance,
         asOf reference: Date,
         locale: Locale,
-        context: ModelContext
+        context: ModelContext,
+        pendingEnd: PendingShiftEnd? = nil
     ) -> ShiftActivityAttributes.ContentState {
         shift.activityContentState(
             for: recordedDistance,
             asOf: reference,
             locale: locale,
-            parkLeads: SettingsService(context: context).pickupWorkflowPreferences().usesParkAndResume
+            parkLeads: SettingsService(context: context).pickupWorkflowPreferences().usesParkAndResume,
+            pendingEnd: pendingEnd
         )
     }
 
