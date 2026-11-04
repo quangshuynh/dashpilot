@@ -515,6 +515,60 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertTrue(scrollUntilHittable(element, in: app, dragOriginX: 0.03))
     }
 
+    /// Three consecutive Previous Week steps each reach an earlier week, records
+    /// or not, and Next Week walks back through the same weeks to the current one.
+    /// Every selector button used to share one List row, so a tap fired This Week
+    /// too and the second step returned to the current week.
+    @MainActor
+    private func assertMoneyWeekBrowsing(in app: XCUIApplication) {
+        let range = app.descendants(matching: .any)["moneyDateRange"]
+        XCTAssertTrue(range.appears())
+        var visited = [range.label]
+        for step in 1...3 {
+            app.buttons["moneyPreviousWeek"].tap()
+            XCTAssertTrue(waitUntil { !visited.contains(range.label) },
+                          "Previous Week step \(step) left \(range.label)")
+            visited.append(range.label)
+        }
+        attachScreenshot("money-three-weeks-back")
+        for expected in visited.dropLast().reversed() {
+            app.buttons["moneyNextWeek"].tap()
+            XCTAssertTrue(waitUntil { range.label == expected }, "Next Week reached \(range.label), not \(expected)")
+        }
+        XCTAssertFalse(app.buttons["moneyNextWeek"].isEnabled, "Nothing is offered past the current week")
+        XCTAssertTrue(range.label.hasPrefix("This Week"), range.label)
+
+        func choose(_ preset: String) {
+            app.buttons["moneyPeriodMenu"].tap()
+            let option = app.buttons["moneyPreset-\(preset)"]
+            XCTAssertTrue(option.appears(), app.debugDescription)
+            option.tap()
+        }
+        choose("lastWeek")
+        XCTAssertTrue(waitUntil { range.label.hasPrefix("Last Week") }, range.label)
+        XCTAssertTrue(range.label.contains(visited[1].components(separatedBy: ", ").dropFirst().joined(separator: ", ")))
+        XCTAssertTrue(app.buttons["moneyNextWeek"].isEnabled)
+        choose("thisMonth")
+        XCTAssertTrue(waitUntil { range.label.hasPrefix("This Month") }, range.label)
+        XCTAssertFalse(app.buttons["moneyPreviousWeek"].exists, "No week arrows for a month")
+        attachScreenshot("money-this-month")
+        choose("customRange")
+        let apply = app.buttons["customRangeApplyButton"]
+        XCTAssertTrue(apply.appears())
+        apply.tap()
+        XCTAssertTrue(waitUntil { range.label.hasPrefix("Custom reporting range") }, range.label)
+        XCTAssertTrue(app.buttons["moneyChangeDates"].exists)
+        XCTAssertFalse(app.buttons["moneyNextWeek"].exists, "No week arrows for a chosen range")
+        let custom = range.label
+        attachScreenshot("money-custom-range")
+        choose("thisWeek")
+        XCTAssertTrue(waitUntil { range.label == visited[0] }, range.label)
+        choose("customRange")
+        XCTAssertTrue(waitUntil { range.label == custom }, "Custom Range keeps its dates")
+        choose("thisWeek")
+        XCTAssertTrue(waitUntil { range.label == visited[0] }, range.label)
+    }
+
     /// Money's coverage, category selection and navigation remain usable at AX5.
     @MainActor
     func testMoneyFinancialWorkspaceAtLargestTextSize() throws {
@@ -583,6 +637,7 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertTrue(net.label.contains("-"), "A supported negative net keeps its sign")
         attachMoneyScreenshot("money-negative-net", focusing: net, in: app)
         XCTAssertTrue(scrollToTop(reaching: app.buttons["moneyPreviousWeek"], in: app))
+        assertMoneyWeekBrowsing(in: app)
         app.buttons["moneyPreviousWeek"].tap()
         XCTAssertTrue(scrollUntilHittable(app.descendants(matching: .any)["moneyExpensesEmpty"], in: app))
         attachScreenshot("money-previous-week")
