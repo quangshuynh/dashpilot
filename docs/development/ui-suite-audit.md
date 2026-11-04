@@ -184,7 +184,7 @@ section names one that no longer exists.
 | Risk | Journey | Below the UI |
 | --- | --- | --- |
 | Home states exact weekly earnings and paired hourly coverage at AX5, with Money reachable | `testHomeFinancialCoverageAtLargestTextSize` | `PeriodDataLoaderTests`, `PeriodMetricsTests`, `HourlyTargetTests` |
-| Money gross coverage, qualified net, category filtering and previous-week navigation at AX5; one-tap Work access | `testMoneyFinancialWorkspaceAtLargestTextSize` | `MoneyWorkspaceTests`, `MondayReportingTests` |
+| Money gross coverage, qualified net, category filtering, three Previous Week steps and back to the current week, Last Week, This Month and Custom Range presets at AX5; one-tap Work access | `testMoneyFinancialWorkspaceAtLargestTextSize` | `MoneyWorkspaceTests`, `MoneyPeriodSelectionTests`, `MondayReportingTests` |
 | The real store opens rather than the failure screen | `testLaunchesIntoShiftScreen` | `PersistenceTests`, every migration suite |
 | A new driver is welcomed once, and finishing it persists across a relaunch | `testFirstLaunchShowsTheWelcomeOnceAndFinishingItPersists` | `OnboardingPolicyTests` |
 | The welcome reopens from Settings and is usable at the largest text size | `testTheWelcomeReopensFromSettingsAtTheLargestTextSize` | `OnboardingPolicyTests` |

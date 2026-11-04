@@ -667,6 +667,17 @@ a chosen week surviving a week rollover, nearest-week resolution, contiguous Mon
 months, a year end and DST, stale series rejection and the axis-label policy. Five of its cases
 failed against the previous view logic, extracted unchanged, before the fix.
 
+`MoneyPeriodSelectionTests` pins Money's period selection from the calendar alone: the November 2026
+Monday weeks on a Sunday-first calendar, three Previous Week steps and back to a calendar-following
+current week, This Week across a Monday rollover, This Month bounds including a leap February,
+inclusive custom ranges with reversed ranges refused, DST and cross-year intervals, and predictable
+preset switching. `MoneyWorkspaceTests` adds month and custom-range category filtering, missing
+versus zero, edit and delete refresh, parity with Home and Insights for the same week, and a
+superseded load that finishes last without replacing the selected week. The essential Money journey
+taps Previous Week three times and Next Week back to the current week, then each preset; before the
+fix its third step failed, because every selector button shared one List row and a tap also ran This
+Week and Next Week.
+
 `InsightsSeriesTests` pins Monday boundaries, DST and cross-year weeks, deterministic dates, ordered
 sparse/empty series, missing versus zero, paired rates, expense reconciliation, negative qualified
 net and comparison eligibility. `InsightsLoaderTests` covers bounded fetches, pause-excluded working

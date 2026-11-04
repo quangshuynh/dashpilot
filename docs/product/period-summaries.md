@@ -24,6 +24,22 @@ opens Work's existing History, and **Open Money** reaches recorded expenses and 
 Expenses recorded without completed work still receive that Money entry point. No expenses recorded
 means no records, not no actual costs.
 
+**Money's reporting period.** A native **Period** menu offers **This Week**, **Last Week**,
+**This Month** and **Custom Range**. Under the menu, a heading names the exact bounds every figure
+describes, such as `Last Week` over `Oct 26 - Nov 1, 2026`. This Week and This Month follow the
+calendar: they are the week or month containing today, bounded by Monday and the following Monday,
+or by the first day of this month and of the next. Last Week opens the week before the current one.
+While a week is selected, Previous and Next arrows browse one Monday-to-Sunday week at a time, with
+or without records, and Next stops at the current week. A month or a chosen range shows no arrows,
+because neither has an unambiguous step. Custom Range asks for two inclusive dates through the same
+date sheet as Period Summaries, refuses an end before the start, and keeps the chosen dates when
+another preset is shown, so choosing Custom Range again returns to them; **Change Dates** edits them.
+The selection is calendar state only: loading, saves, edits, tab changes and returning to the
+foreground never move it, and a result loaded for any other period is never shown for it. Every
+preset uses the same loader and calculator, so gross, expenses, net, category filters and the fuel
+estimate keep their meanings. Insights opens on the selected week, or on the latest week of a month
+or range so far, and Period Summaries opens on the selected period, including a custom range's dates.
+
 New users see an invitation to start a shift and a completed-history empty state. With active work,
 Home names running, parked or paused status and offers **Continue Shift**. Parked time remains working
 time; paused time does not. Start and Continue use the shell's existing actions. Loading has its own

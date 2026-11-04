@@ -58,6 +58,11 @@ struct MoneyWorkspaceMeasurementTests {
         let previousStart = clock.now
         _ = try await Task.detached { try PeriodDataLoader.load(previousRequest, in: container) }.value
         elapsed("Switch to previous week", from: previousStart)
+        let monthRequest = PeriodLoadRequest(period: try #require(ReportingPeriod(unit: .month, containing: date, calendar: calendar)),
+                                             includesExpenseRows: true)
+        let monthStart = clock.now
+        _ = try await Task.detached { try PeriodDataLoader.load(monthRequest, in: container) }.value
+        elapsed("Switch to this month", from: monthStart)
         let service = ExpenseService(context: context)
         let addStart = clock.now
         let expense = try service.record(amount: Money(amount: 15), category: .fuel, occurredAt: period.start)
