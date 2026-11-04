@@ -1,13 +1,16 @@
 import SwiftUI
 
-/// Selected-week finances reuse the report loader, calculator, and expense editor.
+/// Selected-period finances reuse the report loader, calculator, and expense editor.
 /// Category selection affects only the rows and their explicitly filtered subtotal.
+/// ``MoneyPeriodSelection`` decides the period from the calendar alone.
 struct MoneyWorkspace: View {
     @Environment(\.calendar) private var calendar
     @Environment(\.locale) private var locale
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var now = Date.now
-    @State private var selectedWeek: Date?
+    @State private var selection = MoneyPeriodSelection()
+    @State private var isChoosingRange = false
     @State private var category: ExpenseCategory?
     @State private var showsFuel = false
     @State private var hasRequestedFuel = false
@@ -16,8 +19,11 @@ struct MoneyWorkspace: View {
     @State private var actions = ExpenseActions()
 
     private var period: ReportingPeriod? {
-        ReportingPeriod(unit: .week, containing: selectedWeek ?? now, calendar: calendar)
+        selection.period(asOf: now, calendar: calendar)
     }
+    private var preset: MoneyPeriodSelection.Preset? { selection.preset(asOf: now, calendar: calendar) }
+    /// "week", "month" or "range", for sentences about the selection.
+    private var noun: String { period?.unit.stepNoun ?? "period" }
     private var summary: MoneyPeriodSummary? {
         guard case .loaded(let snapshot) = loader.state,
               snapshot.money?.metrics.period == period else { return nil }
@@ -27,18 +33,19 @@ struct MoneyWorkspace: View {
     var body: some View {
         List {
             Section {
-                NavigationLink { InsightsView(initialPeriod: period) } label: {
+                NavigationLink { InsightsView(initialPeriod: selection.insightsWeek(asOf: now, calendar: calendar)) } label: {
                     Label("Insights", systemImage: "chart.bar.xaxis").frame(minHeight: 44)
                 }
                 .accessibilityIdentifier("insightsLink")
-                weekSelector
+                presetMenu
+                periodHeading
                 Button { actions.editing = .new } label: {
                     Label("Add Expense", systemImage: "plus").dashFont(.emphasis).frame(minHeight: 44)
                 }
                 .accessibilityIdentifier("moneyAddExpenseButton")
             }
             if period == nil {
-                Section { DashNotice(title: "This week is unavailable", message: "Check your calendar settings.", symbol: "calendar") }
+                Section { DashNotice(title: "This period is unavailable", message: "Check your calendar settings.", symbol: "calendar") }
             } else if let summary {
                 overview(summary.metrics)
                 expenseSection(summary)
@@ -70,40 +77,133 @@ struct MoneyWorkspace: View {
         .modifier(PeriodLoading(request: period.map {
             PeriodLoadRequest(period: $0, includesExpenseRows: true, includesFuelEstimates: hasRequestedFuel)
         }, store: loader, retryRevision: retryRevision))
+        .sheet(isPresented: $isChoosingRange) {
+            CustomRangeSheet(start: selection.customRange?.start ?? currentWeekStart,
+                             end: selection.customRange?.lastInstant ?? now,
+                             latestSelectableDay: now) { start, end in
+                selection.selectCustom(from: start, through: end, calendar: calendar)
+            }
+        }
         .onChange(of: showsFuel) { _, expanded in if expanded { hasRequestedFuel = true } }
         .onAppear { now = .now }
         .onChange(of: scenePhase) { _, phase in if phase == .active { now = .now } }
         .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in now = .now }
     }
 
-    private var weekSelector: some View {
-        VStack(alignment: .leading, spacing: DashSpacing.sm) {
-            Text(period?.rangeStatement(calendar: calendar, locale: locale) ?? "Week unavailable")
-                .dashFont(.body).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-                .accessibilityIdentifier("moneyDateRange")
-            HStack {
-                Button { selectedWeek = period?.previous(using: calendar)?.start } label: {
-                    Image(systemName: "chevron.left").frame(minWidth: 44, minHeight: 44)
+    private var currentWeekStart: Date {
+        ReportingPeriod(unit: .week, containing: now, calendar: calendar)?.start ?? now
+    }
+
+    /// One native menu row. Each control below sits in its own row or uses a
+    /// bordered style: a List row runs every plain button it holds on one tap,
+    /// which is how Previous Week used to run This Week and Next Week as well.
+    private var presetMenu: some View {
+        Menu {
+            ForEach(MoneyPeriodSelection.Preset.allCases) { option in
+                Button { choose(option) } label: {
+                    if option == preset { Label(option.title, systemImage: "checkmark") } else { Text(option.title) }
                 }
-                .disabled(period == nil)
-                .accessibilityLabel("Previous Money week")
-                .accessibilityIdentifier("moneyPreviousWeek")
-                Spacer(minLength: DashSpacing.xs)
-                Button("This Week") { selectedWeek = nil }
-                    .frame(minHeight: 44)
-                    .disabled(selectedWeek == nil)
-                    .accessibilityLabel("Show this week's finances")
-                Spacer(minLength: DashSpacing.xs)
-                Button { selectedWeek = period?.next(using: calendar)?.start } label: {
-                    Image(systemName: "chevron.right").frame(minWidth: 44, minHeight: 44)
+                .accessibilityIdentifier("moneyPreset-\(option.rawValue)")
+            }
+        } label: {
+            LabeledContent("Period") {
+                HStack(spacing: DashSpacing.xs) {
+                    Text(preset?.title ?? "Earlier Week")
+                    Image(systemName: "chevron.up.chevron.down").imageScale(.small)
                 }
-                .disabled(period == nil || period?.isCurrent(asOf: now) == true)
-                .accessibilityLabel("Next Money week")
-                .accessibilityIdentifier("moneyNextWeek")
+            }
+            .frame(minHeight: 44)
+        }
+        .accessibilityLabel("Reporting period")
+        .accessibilityValue(preset?.title ?? "Earlier week")
+        .accessibilityIdentifier("moneyPeriodMenu")
+    }
+
+    /// Custom Range shows the dates already applied, or asks for some. Cancel
+    /// leaves whatever was selected before.
+    private func choose(_ option: MoneyPeriodSelection.Preset) {
+        if option == .customRange, selection.customRange == nil {
+            isChoosingRange = true
+        } else {
+            selection.select(option, asOf: now, calendar: calendar)
+        }
+    }
+
+    /// Names the exact bounds every figure below describes. Week arrows appear
+    /// only while a week is selected.
+    @ViewBuilder
+    private var periodHeading: some View {
+        if selection.browsesWeeks {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(spacing: DashSpacing.sm) {
+                    periodLabel
+                    HStack { previousButton; Spacer(minLength: DashSpacing.md); nextButton }
+                }
+            } else {
+                HStack(spacing: DashSpacing.sm) { previousButton; periodLabel; nextButton }
+            }
+        } else {
+            VStack(spacing: DashSpacing.sm) {
+                periodLabel
+                if preset == .customRange {
+                    Button { isChoosingRange = true } label: {
+                        Text("Change Dates").frame(maxWidth: .infinity, minHeight: 44)
+                    }
+                    .buttonStyle(.bordered)
+                    .accessibilityLabel("Change custom date range")
+                    .accessibilityIdentifier("moneyChangeDates")
+                }
             }
         }
-        .padding(.vertical, DashSpacing.sm)
+    }
+
+    private var periodLabel: some View {
+        VStack(spacing: DashSpacing.xs) {
+            Text(periodTitle)
+                .dashFont(.emphasis)
+            Text(period?.rangeStatement(calendar: calendar, locale: locale) ?? "")
+                .dashFont(.supporting).foregroundStyle(.secondary)
+        }
+        .multilineTextAlignment(.center)
+        .fixedSize(horizontal: false, vertical: true)
+        .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(spokenPeriod)
+        .accessibilityIdentifier("moneyDateRange")
+    }
+
+    /// Last Week is named as the preset that chose it; every other title is
+    /// the period's own, so a heading never claims a week the dates do not show.
+    private var periodTitle: String {
+        guard let period else { return "Period unavailable" }
+        if preset == .lastWeek { return "Last Week" }
+        return period.title(asOf: now, calendar: calendar, locale: locale)
+    }
+
+    private var spokenPeriod: String {
+        guard let period else { return "Period unavailable" }
+        let spoken = period.spokenTitle(asOf: now, calendar: calendar, locale: locale)
+        return preset == .lastWeek ? "Last Week, \(period.rangeStatement(calendar: calendar, locale: locale))" : spoken
+    }
+
+    private var previousButton: some View {
+        Button { selection.selectPrevious(asOf: now, calendar: calendar) } label: {
+            Image(systemName: "chevron.left").frame(width: 30, height: 30)
+        }
+        .buttonStyle(.bordered)
+        .disabled(!selection.canSelectPrevious(asOf: now, calendar: calendar))
+        .accessibilityLabel("Previous week")
+        .accessibilityIdentifier("moneyPreviousWeek")
+    }
+
+    private var nextButton: some View {
+        Button { selection.selectNext(asOf: now, calendar: calendar) } label: {
+            Image(systemName: "chevron.right").frame(width: 30, height: 30)
+        }
+        .buttonStyle(.bordered)
+        .disabled(!selection.canSelectNext(asOf: now, calendar: calendar))
+        .accessibilityLabel("Next week")
+        .accessibilityIdentifier("moneyNextWeek")
     }
 
     private func overview(_ metrics: PeriodMetrics) -> some View {
@@ -131,7 +231,7 @@ struct MoneyWorkspace: View {
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(metrics.spokenNetStatement(locale: locale))
                 .accessibilityIdentifier("moneyNet")
-        } header: { Text("Selected week") }
+        } header: { Text("Selected \(noun)") }
     }
 
     private func expenseSection(_ summary: MoneyPeriodSummary) -> some View {
@@ -146,14 +246,14 @@ struct MoneyWorkspace: View {
             if let subtotal = summary.subtotal(in: category) {
                 DashValueRow(title: category.map { "\($0.title) subtotal" } ?? "All categories subtotal",
                              value: subtotal.formatted(locale: locale),
-                             detail: "Selected week · \(rows.count) recorded expenses", keepsFigureTogether: true)
+                             detail: "Selected \(noun) · \(rows.count) recorded expenses", keepsFigureTogether: true)
                     .accessibilityElement(children: .combine)
                     .accessibilityIdentifier("moneyFilteredSubtotal")
             }
             if rows.isEmpty {
                 DashNotice(title: !summary.hasAnyExpense ? "No expenses recorded yet"
-                           : summary.rows.isEmpty ? "No expenses this week" : "No expenses in this category",
-                           message: "Add a cost you paid for, or explore another week.", symbol: "creditcard")
+                           : summary.rows.isEmpty ? "No expenses in this \(noun)" : "No expenses in this category",
+                           message: "Add a cost you paid for, or choose another period.", symbol: "creditcard")
                     .accessibilityIdentifier("moneyExpensesEmpty")
                 if category != nil {
                     Button("Clear Filter") { category = nil }.frame(minHeight: 44)
@@ -171,7 +271,7 @@ struct MoneyWorkspace: View {
                 }
             }
         } header: { Text("Expenses · Newest first") } footer: {
-            Text("Filtering changes this list and subtotal. The overview always includes all recorded expenses in the selected week.")
+            Text("Filtering changes this list and subtotal. The overview always includes all recorded expenses in the selected \(noun).")
         }
     }
 

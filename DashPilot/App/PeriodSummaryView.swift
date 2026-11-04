@@ -67,6 +67,12 @@ struct PeriodSummaryView: View {
     init(initialPeriod: ReportingPeriod? = nil) {
         _unit = State(initialValue: initialPeriod?.unit ?? .day)
         _anchor = State(initialValue: initialPeriod.map { $0.contains(.now) ? .now : $0.start } ?? .now)
+        // A range chosen elsewhere opens with its own dates, not this week so far.
+        if let initialPeriod, initialPeriod.unit == .custom {
+            _customStart = State(initialValue: initialPeriod.start)
+            _customEnd = State(initialValue: initialPeriod.lastInstant)
+            _hasSeededCustomRange = State(initialValue: true)
+        }
     }
 
     var body: some View {
