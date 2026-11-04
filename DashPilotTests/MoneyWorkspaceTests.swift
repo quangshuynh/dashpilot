@@ -174,4 +174,125 @@ struct MoneyWorkspaceTests {
         #expect(basic.current == nil)
         #expect(basic.money?.metrics.fuel.estimatedCost == nil)
     }
+
+    // MARK: Flexible periods
+
+    private func shift(at date: Date, gross: Money?) throws {
+        let shift = Shift(startedAt: date)
+        context.insert(shift)
+        try shift.end(at: date.addingTimeInterval(3600))
+        if let gross { try shift.setGrossEarnings(gross) }
+        try context.save()
+    }
+
+    private func day(_ month: Int, _ day: Int, _ hour: Int = 12) -> Date {
+        calendar.date(from: DateComponents(year: 2026, month: month, day: day, hour: hour))!
+    }
+
+    @Test func monthAndCustomRangesFilterCategoriesWithTheSameTotals() async throws {
+        let service = ExpenseService(context: context)
+        try shift(at: day(10, 31), gross: Money(amount: 100))
+        try shift(at: day(11, 1, 0), gross: Money(amount: 50))
+        try shift(at: day(11, 30, 23), gross: nil)
+        try service.record(amount: Money(amount: 30), category: .fuel, occurredAt: day(10, 31))
+        try service.record(amount: Money(amount: 5), category: .supplies, occurredAt: day(11, 1, 0))
+        try service.record(amount: Money(amount: 7), category: .fuel, occurredAt: day(11, 30, 23))
+        try service.record(amount: Money(amount: 99), category: .fuel, occurredAt: calendar.date(from: DateComponents(year: 2026, month: 12, day: 1))!)
+        var selection = MoneyPeriodSelection()
+        selection.select(.thisMonth, asOf: day(11, 3), calendar: calendar)
+        let monthPeriod = try #require(selection.period(asOf: day(11, 3), calendar: calendar))
+        let month = try await load(monthPeriod)
+        #expect(month.metrics.completedShiftCount == 2)
+        #expect(month.metrics.recordedGrossEarnings == Money(amount: 50), "A shift without gross is missing, never zero")
+        #expect(month.metrics.earningsCoverage.contributingCount == 1)
+        #expect(month.metrics.expenses.recordedTotal == Money(amount: 12))
+        #expect(month.subtotal(in: .fuel) == Money(amount: 7))
+        #expect(month.rows(in: .fuel).count == 1)
+        #expect(month.metrics.netAfterRecordedExpenses.amount == Money(amount: 38), "Net uses the recorded subset, with its coverage")
+        let applied1 = selection.selectCustom(from: day(10, 31), through: day(11, 1), calendar: calendar)
+        #expect(applied1)
+        let rangePeriod = try #require(selection.period(asOf: day(11, 3), calendar: calendar))
+        let range = try await load(rangePeriod)
+        #expect(range.metrics.recordedGrossEarnings == Money(amount: 150), "Both chosen days are included")
+        #expect(range.subtotal(in: .fuel) == Money(amount: 30))
+        #expect(range.subtotal(in: .supplies) == Money(amount: 5))
+        #expect(range.metrics.expenses.recordedTotal == Money(amount: 35))
+        #expect(range.metrics.netAfterRecordedExpenses.amount == Money(amount: 115))
+    }
+
+    @Test func editsAndDeletesRefreshAnySelectedPeriod() async throws {
+        let service = ExpenseService(context: context)
+        let expense = try service.record(amount: Money(amount: 20), category: .fuel, occurredAt: day(11, 2))
+        var selection = MoneyPeriodSelection()
+        selection.select(.thisMonth, asOf: day(11, 3), calendar: calendar)
+        let november = try #require(selection.period(asOf: day(11, 3), calendar: calendar))
+        #expect(try await load(november).subtotal(in: .fuel) == Money(amount: 20))
+        try service.update(expense, amount: .zero, category: .parkingAndTolls, occurredAt: day(11, 4), noteText: "")
+        let edited = try await load(november)
+        #expect(edited.subtotal(in: .fuel) == nil)
+        #expect(edited.subtotal(in: .parkingAndTolls) == .zero, "An explicit zero is still a recorded expense")
+        #expect(edited.metrics.expenses.recordedTotal == .zero)
+        try service.delete(expense)
+        let deleted = try await load(november)
+        #expect(deleted.rows.isEmpty)
+        #expect(deleted.metrics.expenses.recordedTotal == nil)
+    }
+
+    @Test func selectedWeekMatchesHomeAndInsights() async throws {
+        try shift(at: day(11, 3), gross: Money(amount: 80))
+        try ExpenseService(context: context).record(amount: Money(amount: 15), category: .fuel, occurredAt: day(11, 3))
+        let now = day(11, 4)
+        let week = try #require(MoneyPeriodSelection().period(asOf: now, calendar: calendar))
+        let money = try await load(week)
+        let container = container
+        let home = try await Task.detached { try PeriodDataLoader.load(PeriodLoadRequest(period: week), in: container) }.value
+        #expect(home.overview.period == money.metrics.period)
+        #expect(home.overview.earnings == money.metrics.recordedGrossEarnings)
+        #expect(home.overview.expenseCount == money.metrics.expenses.recordCount)
+        let window = try #require(InsightsWindow(endingAt: now, calendar: calendar))
+        let insights = try await Task.detached {
+            try PeriodDataLoader.load(PeriodLoadRequest(period: window.fetchPeriod, insightsWindow: window), in: container)
+        }.value
+        let insightsWeek = try #require(insights.insights?.weeks.first { $0.period == week })
+        #expect(insightsWeek.metrics.recordedGrossEarnings == money.metrics.recordedGrossEarnings)
+        #expect(insightsWeek.metrics.expenses.recordedTotal == money.metrics.expenses.recordedTotal)
+        #expect(insightsWeek.metrics.netAfterRecordedExpenses == money.metrics.netAfterRecordedExpenses)
+    }
+
+    /// A load for a week the driver has left finishes last and still cannot
+    /// replace the week they chose.
+    @Test func supersededLoadNeverOverwritesTheSelectedPeriod() async throws {
+        try shift(at: day(11, 3), gross: Money(amount: 80))
+        let now = day(11, 4)
+        var selection = MoneyPeriodSelection()
+        let current = try #require(selection.period(asOf: now, calendar: calendar))
+        selection.selectPrevious(asOf: now, calendar: calendar)
+        selection.selectPrevious(asOf: now, calendar: calendar)
+        let chosen = try #require(selection.period(asOf: now, calendar: calendar))
+        let staleRequest = PeriodLoadRequest(period: current, includesExpenseRows: true)
+        let chosenRequest = PeriodLoadRequest(period: chosen, includesExpenseRows: true)
+        let container = container
+        let store = PeriodLoadStore()
+        let (started, didStart) = AsyncStream<Void>.makeStream()
+        let (gate, release) = AsyncStream<Void>.makeStream()
+        let stale = Task {
+            await store.load(key: .init(request: staleRequest)) {
+                didStart.yield()
+                for await _ in gate { break }
+                return try PeriodDataLoader.load(staleRequest, in: container)
+            }
+        }
+        for await _ in started { break }
+        await store.load(key: .init(request: chosenRequest)) { try PeriodDataLoader.load(chosenRequest, in: container) }
+        release.yield()
+        await stale.value
+        guard case .loaded(let snapshot) = store.state else { Issue.record("Chosen week did not load"); return }
+        #expect(snapshot.money?.metrics.period == chosen)
+        #expect(snapshot.money?.metrics.recordedGrossEarnings == nil, "An empty week stays empty")
+        // A save-driven reload of the same selection keeps it.
+        await store.load(key: .init(request: chosenRequest, revision: 1)) { try PeriodDataLoader.load(chosenRequest, in: container) }
+        #expect(selection.period(asOf: now, calendar: calendar) == chosen)
+        guard case .loaded(let reloaded) = store.state else { Issue.record("Reload failed"); return }
+        #expect(reloaded.money?.metrics.period == chosen)
+    }
 }
