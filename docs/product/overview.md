@@ -8,7 +8,8 @@ route samples your device captures, then explains what those records support. St
 
 **Home, Work and Money.** Home starts or continues a shift, shows current-week completed work and
 recent shifts, and links to History and Money. Work keeps active delivery controls and History
-together. Money shows a selected week's recorded earnings, expenses and qualified net, with Insights
+together. Money shows recorded earnings, expenses and qualified net for this week, last week, this month,
+a custom range or any browsed week, with Insights
 and detailed reports. Settings is in each workspace toolbar. Cold launch opens Work for an unfinished
 shift, otherwise Home. Ordinary tab changes preserve each navigation stack.
 

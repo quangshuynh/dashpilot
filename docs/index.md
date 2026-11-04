@@ -28,8 +28,8 @@ monetary precision and honest wording seriously.
 ## Find your way around
 
 **Home** starts or continues your shift and shows current-week completed work. **Work** contains
-active delivery controls and History. **Money** brings together weekly earnings, expenses, Insights
-and reports. Each workspace has a Settings gear. Reporting weeks run Monday through Sunday.
+active delivery controls and History. **Money** brings together earnings and expenses for a week, a month
+or a chosen range, with Insights and reports. Each workspace has a Settings gear. Reporting weeks run Monday through Sunday.
 
 [Start your first shift](product/first-shift.md){ .md-button .md-button--primary }
 [Explore Insights](product/insights.md){ .md-button }
