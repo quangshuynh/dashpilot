@@ -35,6 +35,14 @@ nonisolated enum ShiftActivityChange: Equatable, Sendable {
 /// ``ShiftActivityAttributes/ContentState/asOf`` is excluded for the same
 /// reason: it is the anchor's other half, and on its own it says nothing.
 ///
+/// **A moved anchor is material.** Time passing never moves it, but correcting
+/// a running shift's start does: the working time read at the same instant is
+/// longer or shorter by exactly the correction. Comparing working durations
+/// alone would call that "time passing" and leave the Lock Screen counting
+/// from the start the driver just corrected away, so the anchor itself is
+/// compared, within ``timerTolerance``. While paused the card shows a frozen
+/// figure rather than a running clock, so there the figure is compared.
+///
 /// The delivery timers are a third, and they are counted as **material** rather
 /// than excluded. Each is an acceptance instant, so time passing does not move
 /// one and no update is needed to keep a delivery's clock right; what has to be
@@ -58,6 +66,11 @@ nonisolated enum ShiftActivityUpdatePolicy {
     /// figure.
     static let routeInterval: TimeInterval = 30
 
+    /// How far the working timer may move between two snapshots and still be
+    /// the same timer. Working time is read to fractions of a second at slightly
+    /// different instants; a correction moves it by whole minutes.
+    static let timerTolerance: TimeInterval = 1
+
     /// What moved between two snapshots.
     static func change(
         from previous: ShiftActivityAttributes.ContentState?,
@@ -75,11 +88,27 @@ nonisolated enum ShiftActivityUpdatePolicy {
             || previous.deliveryStatus != next.deliveryStatus
             || previous.activeDeliveryTimers != next.activeDeliveryTimers
             || previous.controls != next.controls
-        if isMaterial { return .material }
+        if isMaterial || workingTimerMoved(from: previous, to: next) { return .material }
 
         let routeMoved = previous.mileageStatement != next.mileageStatement
             || previous.partialRouteMarker != next.partialRouteMarker
         return routeMoved ? .route : .none
+    }
+
+    /// Whether the working figure the card draws moved for a reason other than
+    /// time passing. Both snapshots must be in the same state, since a pause or
+    /// resume is already material on its own.
+    static func workingTimerMoved(
+        from previous: ShiftActivityAttributes.ContentState,
+        to next: ShiftActivityAttributes.ContentState
+    ) -> Bool {
+        guard previous.isPaused == next.isPaused else { return false }
+        if next.isPaused {
+            return abs(previous.workingDuration - next.workingDuration) >= timerTolerance
+        }
+        let previousAnchor = previous.asOf.addingTimeInterval(-previous.workingDuration)
+        let nextAnchor = next.asOf.addingTimeInterval(-next.workingDuration)
+        return abs(previousAnchor.timeIntervalSince(nextAnchor)) >= timerTolerance
     }
 
     /// Whether a change of this kind should be handed to ActivityKit now.

@@ -17,7 +17,8 @@ shift, otherwise Home. Ordinary tab changes preserve each navigation stack.
 **Shift tracking.** Start, pause, resume and end one shift at a time. Working time excludes pauses.
 Park stops route recording while working time continues; Pause stops both. Optional pickup and
 resume-after-progress settings act on recorded actions, never inferred movement. Unfinished shifts
-and deliveries survive relaunch. See [Shift workflow](shift-workflow.md).
+and deliveries survive relaunch. A shift's start and end can be corrected afterwards, and a running
+shift's start without stopping it. See [Shift workflow](shift-workflow.md).
 
 **Delivery tracking.** Record accepted, arrived at pickup, picked up, delivered or cancelled states.
 Several deliveries may overlap and belong to one or several offers. Drivers can explicitly mark
@@ -32,7 +33,7 @@ state. See [Recorded mileage](recorded-mileage.md).
 **Money.** Shift gross and delivery gross are independent entered facts. Additional delivery tips
 remain separate records. Money includes dated expenses in five categories, confirmed correction and
 deletion, and category filters that do not change period totals. Fuel estimates use saved vehicle
-and price assumptions and are kept separate from recorded expenses. See
+and price assumptions and are shown beside recorded fuel purchases, never combined with them. See
 [Earnings and metrics](earnings-and-metrics.md), [Expenses](expenses.md) and
 [Estimated fuel](estimated-fuel.md).
 

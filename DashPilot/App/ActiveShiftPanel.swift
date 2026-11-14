@@ -172,6 +172,10 @@ struct ActiveShiftPanel: View {
         // pause opens a new capture session. Both change what the figure should
         // say now rather than in a couple of seconds.
         .onChange(of: shift.lifecycleState) { _, _ in measureRoute() }
+        // A corrected start can delete the positions before it, and the
+        // measurement restarts against the new start. Read now rather than on
+        // the next tick.
+        .onChange(of: shift.startedAt) { _, _ in measureRoute() }
     }
 
     /// Which state the shift is in, and when it started.
@@ -498,6 +502,10 @@ struct ActiveShiftControlsPanel: View {
     /// interruption this whole surface is designed against.
     @State private var isCorrectingVehicle = false
 
+    /// Whether the start-time correction sheet is open. Raised only by the
+    /// driver tapping Edit Start, for the reason the vehicle sheet is.
+    @State private var isCorrectingStart = false
+
     private var isPaused: Bool { shift.isPaused }
 
     /// The header's reading, as the shift's figures. `nil` until the route has
@@ -515,6 +523,7 @@ struct ActiveShiftControlsPanel: View {
                 if let metrics {
                     earnings(metrics)
                 }
+                startContext
                 vehicleContext(measuring: routeReading.measurement?.recordedDistance)
                 RouteCaptureStatusView(state: captureState)
             }
@@ -522,6 +531,9 @@ struct ActiveShiftControlsPanel: View {
         .padding(.vertical, DashSpacing.md)
         .sheet(isPresented: $isCorrectingVehicle) {
             ShiftVehicleCorrectionEditor(shift: shift)
+        }
+        .sheet(isPresented: $isCorrectingStart) {
+            ShiftTimeCorrectionEditor(shift: shift)
         }
     }
 
@@ -644,6 +656,35 @@ struct ActiveShiftControlsPanel: View {
             if mayCorrectVehicle(measuring: recordedDistance) {
                 changeVehicleButton
             }
+        }
+    }
+
+    /// When the shift started, with the control that corrects it.
+    ///
+    /// For a driver who tapped Start late, or started the shift after they had
+    /// already begun waiting for offers. Quiet, trailing and borderless like
+    /// Change beside the vehicle: a correction reached deliberately, while
+    /// stopped, never a step in the driving workflow.
+    private var startContext: some View {
+        HStack(alignment: .firstTextBaseline, spacing: DashSpacing.md) {
+            Image(systemName: "clock")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
+            Text("Started \(shift.startedAt.formatted(.dateTime.hour().minute().locale(locale)))")
+                .dashFont(.body)
+                .monospacedDigit()
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("activeShiftStartedAt")
+            Spacer(minLength: DashSpacing.md)
+            Button("Edit Start") { isCorrectingStart = true }
+                .dashFont(.supporting)
+                .frame(minHeight: 44)
+                .contentShape(Rectangle())
+                .buttonStyle(.borderless)
+                .accessibilityLabel("Edit when this shift started")
+                .accessibilityHint("The shift keeps running")
+                .accessibilityIdentifier("editShiftStartButton")
         }
     }
 

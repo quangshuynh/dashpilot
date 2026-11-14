@@ -17,9 +17,13 @@ estimated fuel cost = estimated gallons * gas price per gallon
 and then, on the same screen:
 
 ```
-estimated net after fuel       = recorded shift earnings - estimated fuel cost
-estimated net per working hour = estimated net after fuel / working hours
+estimated net after fuel        = recorded shift earnings - estimated fuel cost
+estimated net per working hour  = estimated net after fuel / working hours
+estimated net per recorded mile = estimated net after fuel / recorded miles
 ```
+
+The recorded miles in the last line are the same miles the fuel was estimated
+over, so both halves of that division describe one route.
 
 The middle step of the first pair is the whole point. Multiplying recorded miles
 by a price per gallon prices a mile as though a mile were a gallon, and is wrong
@@ -144,11 +148,11 @@ no truthful reading of a vehicle that covers nothing on a gallon.
 
 The estimate is derived, never stored. It divides the same recorded mileage every
 other figure on the screen divides, so anything that changes what the route
-measures changes the estimate with it. Correcting a shift's end time is the case
-that matters: moving the end earlier deletes the route recorded after it, the
-distance is measured again from the positions that remain, and the estimate
-follows, with both assumptions untouched. See
-[Correcting a shift's end time](shift-workflow.md#correcting-a-shifts-end-time).
+measures changes the estimate with it. Correcting a shift's times is the case
+that matters: moving the start later or the end earlier deletes the route
+recorded outside the corrected times, the distance is measured again from the
+positions that remain, and the estimate follows, with both assumptions untouched. See
+[Correcting a shift's start and end times](shift-workflow.md#correcting-a-shifts-start-and-end-times).
 
 **Recorded mileage is a floor.** Capture can be interrupted, and the distance
 across a gap is left out rather than guessed, so where the route is partial the
@@ -201,10 +205,10 @@ figures, the gross rates and the route:
 - `Add Fuel Assumptions` / `Edit Fuel Assumptions`
 - then the net, as a ledger in the order the subtraction happens:
   `Recorded earnings`, `Estimated fuel cost` as the amount being subtracted,
-  `Estimated net after fuel` (drawn heavier, as the result) and
-  `Estimated net per working hour`. Where there is no fuel estimate the net
-  says why once, and the fuel line and the hourly line, which would only repeat
-  it, are left out
+  `Estimated net after fuel` (drawn heavier, as the result),
+  `Estimated net per working hour` and `Estimated net per recorded mile`. Where
+  there is no fuel estimate the net says why once, and the fuel line and the two
+  rate lines, which would only repeat it, are left out
 
 The section sits after everything recorded, deliberately. What the driver
 recorded and what the route measured are the trustworthy part of the screen, and
@@ -215,6 +219,27 @@ them.
 duration, count and gross rate is exactly where it was, and only the Costs
 section says what is unavailable and why. A fuel estimate is never a
 precondition for reading a completed shift.
+
+## In the Money workspace
+
+Money's **Fuel and estimated net** section puts the two fuel figures side by
+side, as two separate rows, and never as one total:
+
+| Row | Source | Meaning |
+| --- | --- | --- |
+| `Fuel purchases` | Expenses in the `Fuel` category dated in the period | What the driver recorded paying, whenever that fuel was used |
+| `Estimated fuel used` | Recorded miles and each shift's saved vehicle and gas price | What the period's recorded miles are estimated to have burned, with shift and mileage coverage |
+| Assumptions line | The contributing shifts' snapshots | `At 28 MPG and $3.45 a gallon`, or a range such as `At 25 to 30 MPG and $3.29 to $3.50 a gallon, as each shift recorded` |
+| `Estimated net after fuel` | Recorded gross less estimated fuel | Over the shifts that record both, with that coverage |
+| `Estimated net per working hour` | The same net over working hours | Over the shifts that also record working time |
+| `Estimated net per recorded mile` | The same net over recorded miles | Over the shifts whose estimate has miles greater than zero |
+
+Every period rate is `sum(net) / sum(denominator)` over its own paired subset,
+never an average of per-shift rates, and each says which subset it covers. A
+purchase recorded during a shift is **not** that shift's fuel use, and no
+purchase is subtracted from the estimate or the estimate from net after recorded
+expenses, which includes purchases and never the estimate. A period holding only
+expenses still shows its fuel purchases and says no fuel use is estimated.
 
 ## Working time is the app's existing definition
 

@@ -27,7 +27,7 @@
 - **Home:** start or continue a shift and review this week's completed work.
 - **Work:** record deliveries, including stacked offers, with separate Park and Pause controls.
 - **Money:** review recorded earnings and expenses, explore weekly Insights, and open historical reports.
-- **Your history:** correct records and export them explicitly as JSON or CSV.
+- **Your history:** correct records, including a shift's start and end times, and export them explicitly as JSON or CSV.
 
 DashPilot has no delivery-platform integration. Recorded mileage can be partial; missing amounts
 stay missing. Recorded expenses and fuel estimates remain distinct, and neither net figure is a

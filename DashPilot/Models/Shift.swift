@@ -277,23 +277,16 @@ nonisolated final class Shift {
     /// store.
     ///
     /// - Throws: ``ShiftEndCorrectionRefusal``.
-    func endCorrection(to correctedEnd: Date, nextShiftStartedAt: Date?) throws -> ShiftEndCorrection {
+    func endCorrection(to correctedEnd: Date, nextShiftStartedAt: Date?, now: Date? = nil) throws -> ShiftEndCorrection {
         try ShiftEndCorrection(
             to: correctedEnd,
             startedAt: startedAt,
             recordedEnd: endedAt,
             pauses: pauseIntervals,
             suspensions: routeSuspensionIntervals,
-            deliveryEvents: numberedDeliveries.flatMap { numbered in
-                numbered.delivery.recordedEvents.map { recorded in
-                    RecordedDeliveryEvent(
-                        deliveryNumber: numbered.number,
-                        event: recorded.event,
-                        occurredAt: recorded.occurredAt
-                    )
-                }
-            },
-            nextShiftStartedAt: nextShiftStartedAt
+            deliveryEvents: recordedDeliveryEvents,
+            nextShiftStartedAt: nextShiftStartedAt,
+            now: now
         )
     }
 
@@ -316,6 +309,78 @@ nonisolated final class Shift {
     ///   end the correction was built against.
     func apply(_ correction: ShiftEndCorrection) throws {
         guard endedAt == correction.recordedEnd else { throw ShiftEndCorrectionRefusal.shiftNotCompleted }
+        endedAt = correction.correctedEnd
+    }
+
+    /// Checks a start, and for a finished shift an end, that the driver proposes
+    /// for this shift.
+    ///
+    /// The adapter between the model and ``ShiftTimeCorrection``, holding no
+    /// rule of its own: it gathers this shift's recorded times, pauses, parked
+    /// stretches, delivery events and offer acceptances, and the value type
+    /// decides. Nothing is written. The neighbouring shifts are the caller's,
+    /// because they are the one fact here that is not this shift's own.
+    ///
+    /// - Parameter end: the proposed end, or `nil` to keep the recorded one. A
+    ///   running shift passes `nil`.
+    /// - Throws: ``ShiftTimeCorrectionRefusal``.
+    func timeCorrection(
+        start correctedStart: Date,
+        end correctedEnd: Date?,
+        now: Date,
+        neighbours: ShiftTimeNeighbours
+    ) throws -> ShiftTimeCorrection {
+        try ShiftTimeCorrection(
+            start: correctedStart,
+            end: correctedEnd,
+            recordedStart: startedAt,
+            recordedEnd: endedAt,
+            now: now,
+            pauses: pauseIntervals,
+            suspensions: routeSuspensionIntervals,
+            deliveryEvents: recordedDeliveryEvents,
+            offerAcceptances: offers.map(\.acceptedAt),
+            neighbours: neighbours
+        )
+    }
+
+    /// Every lifecycle event this shift's deliveries record, named by the
+    /// number each delivery carries on screen.
+    var recordedDeliveryEvents: [RecordedDeliveryEvent] {
+        numberedDeliveries.flatMap { numbered in
+            numbered.delivery.recordedEvents.map { recorded in
+                RecordedDeliveryEvent(
+                    deliveryNumber: numbered.number,
+                    event: recorded.event,
+                    occurredAt: recorded.occurredAt
+                )
+            }
+        }
+    }
+
+    /// Rewrites when this shift started and, for a finished shift, when it
+    /// ended.
+    ///
+    /// **The only place `startedAt` is written after the shift is created**, and
+    /// beside the end correction's `apply` the only place `endedAt` moves
+    /// after ``end(at:)``. Nothing else is written: every delivery, offer,
+    /// pause, suspension, amount and snapshot stays as it is. Taking route
+    /// evidence that now lies outside the shift is
+    /// ``ShiftTimeCorrectionService``'s, in the same save.
+    ///
+    /// The one rule kept here is about this row: the correction must have been
+    /// built against the times the shift records **now**. A correction built
+    /// before another write moved either time is refused rather than applied
+    /// over it, and a running shift cannot be handed an end.
+    ///
+    /// - Throws: ``ShiftTimeCorrectionRefusal/end(_:)`` with
+    ///   ``ShiftEndCorrectionRefusal/shiftNotCompleted`` when either recorded
+    ///   time no longer matches the one the correction was built against.
+    func apply(_ correction: ShiftTimeCorrection) throws {
+        guard startedAt == correction.recordedStart, endedAt == correction.recordedEnd else {
+            throw ShiftTimeCorrectionRefusal.end(.shiftNotCompleted)
+        }
+        startedAt = correction.correctedStart
         endedAt = correction.correctedEnd
     }
 

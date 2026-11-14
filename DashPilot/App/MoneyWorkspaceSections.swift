@@ -118,6 +118,7 @@ struct MoneyWorkDetailRows: View {
     @Environment(\.locale) private var locale
 
     var body: some View {
+        totalShiftTime
         duration("Delivery active time", spokenAs: "delivery active time", metrics.deliveryActiveDuration,
                  coverage: metrics.deliveryActiveCoverage, identifier: "moneyDeliveryActiveTime")
         duration("Non-delivery time", spokenAs: "non-delivery time", metrics.nonDeliveryDuration,
@@ -150,6 +151,25 @@ struct MoneyWorkDetailRows: View {
         }
     }
 
+    /// Start to end, pauses included: the time a driver was on shift, set
+    /// beside the working time the summary shows and every hourly rate uses.
+    private var totalShiftTime: some View {
+        let paused = metrics.pausedDuration
+        let detail = [
+            "\(metrics.elapsedCoverage.statement(noun: "completed shift"))",
+            paused.flatMap { $0 >= 60 ? "\(DurationText.short($0)) paused" : nil }
+        ].compactMap { $0 }.joined(separator: " · ")
+        return DashValueRow(title: "Total shift time", value: metrics.elapsedDuration.map(DurationText.short) ?? "Not recorded",
+                            detail: detail, isFigure: metrics.elapsedDuration != nil)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(metrics.elapsedDuration.map {
+                "Total shift time, start to end, \(DurationText.spoken($0))"
+                    + (paused.flatMap { $0 >= 60 ? ", including \(DurationText.spoken($0)) paused" : nil } ?? "")
+                    + ", \(metrics.elapsedCoverage.spokenStatement()). Working time excludes pauses."
+            } ?? "No total shift time recorded.")
+            .accessibilityIdentifier("moneyTotalShiftTime")
+    }
+
     private func duration(_ title: String, spokenAs spokenTitle: String, _ value: TimeInterval?,
                           coverage: MetricCoverage, identifier: String) -> some View {
         DashValueRow(title: title, value: value.map(DurationText.short) ?? "Not measured",
@@ -167,6 +187,152 @@ struct MoneyWorkDetailRows: View {
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(metrics.spokenRateStatement(kind, locale: locale))
             .accessibilityIdentifier(identifier)
+    }
+}
+
+// MARK: Fuel and estimated net
+
+/// Fuel as two separate facts, and what the estimate leaves of recorded gross.
+///
+/// **Purchases and consumption are never combined.** What the driver recorded
+/// paying at the pump comes from Expenses, dated when it was paid; what the
+/// recorded miles are estimated to have burned comes from each shift's saved
+/// vehicle and gas price. A Monday fill-up may be the whole week's fuel or the
+/// next week's, so the two are shown side by side and neither is subtracted
+/// from, added to or reconciled with the other. Net after recorded expenses,
+/// above, includes the purchases and never the estimate.
+///
+/// Purchases come from the financial read and appear at once; every estimate
+/// waits for the route read.
+struct MoneyFuelSection: View {
+    let financial: PeriodMetrics
+    let detail: PeriodMetrics?
+    let detailFailed: Bool
+    let noun: String
+    let retry: () -> Void
+    @Environment(\.locale) private var locale
+
+    var body: some View {
+        Section {
+            purchases
+            if financial.isEmpty {
+                Text("No completed shift in this \(noun), so no fuel use is estimated.")
+                    .dashFont(.body).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("moneyEstimatedFuel")
+            } else if let detail {
+                estimate(detail.fuel)
+                net(detail.estimatedNetAfterFuel)
+            } else if detailFailed {
+                Button("Try Loading Fuel Estimates Again", action: retry)
+                    .frame(minHeight: 44)
+                    .accessibilityIdentifier("moneyFuelRetry")
+            } else {
+                ProgressView("Loading fuel estimates…")
+            }
+        } header: {
+            Text("Fuel and estimated net")
+        } footer: {
+            Text(
+                """
+                Fuel purchases are what you recorded paying. Estimated fuel is worked out from recorded \
+                miles and each shift's saved vehicle and gas price. The two are never added together or \
+                netted against each other, and the estimate is never subtracted from net after recorded \
+                expenses. None of this is profit or a tax figure.
+                """
+            )
+        }
+    }
+
+    private var purchases: some View {
+        let total = financial.recordedFuelPurchases
+        let count = total?.recordCount ?? 0
+        let spoken = total.map {
+            "Recorded fuel purchases, \($0.total.formatted(locale: locale)), across \(count) recorded \(count == 1 ? "expense" : "expenses") dated in this \(noun). What you paid, not what these shifts used."
+        } ?? "No fuel purchase recorded in this \(noun). That is not the same as buying no fuel."
+        return DashValueRow(
+            title: "Fuel purchases",
+            value: total?.total.formatted(locale: locale) ?? "None recorded",
+            detail: total == nil
+                ? "Recorded under Expenses, dated when paid"
+                : "\(count) recorded \(count == 1 ? "purchase" : "purchases") · what you paid, whenever it was used",
+            isFigure: total != nil,
+            keepsFigureTogether: true
+        )
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(spoken)
+        .accessibilityIdentifier("moneyFuelPurchases")
+    }
+
+    @ViewBuilder
+    private func estimate(_ fuel: PeriodFuelEstimate) -> some View {
+        DashValueRow(
+            title: "Estimated fuel used",
+            value: fuel.estimatedCost?.formatted(locale: locale) ?? "Not available",
+            detail: fuel.isAvailable
+                ? [fuel.shiftCoverageStatement, fuel.mileageCoverageStatement(locale: locale)]
+                    .compactMap { $0 }.joined(separator: " · ")
+                : fuel.unavailableExplanation,
+            isFigure: fuel.isAvailable,
+            keepsFigureTogether: true
+        )
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(fuel.spokenStatement(locale: locale))
+        .accessibilityIdentifier("moneyEstimatedFuel")
+        if let assumptions = fuel.assumptions.statement(locale: locale) {
+            Text(assumptions)
+                .dashFont(.supporting).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityLabel("Assumptions: \(fuel.assumptions.spokenStatement(locale: locale) ?? assumptions)")
+                .accessibilityIdentifier("moneyFuelAssumptions")
+        }
+    }
+
+    @ViewBuilder
+    private func net(_ net: PeriodEstimatedNet) -> some View {
+        DashValueRow(
+            title: "Estimated net after fuel",
+            value: net.amount?.formatted(locale: locale) ?? "Not available",
+            detail: net.isAvailable
+                ? "Recorded gross less estimated fuel · \(net.coverageStatement)"
+                : net.unavailability?.explanation,
+            isFigure: net.isAvailable,
+            keepsFigureTogether: true
+        )
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(net.spokenStatement(locale: locale))
+        .accessibilityIdentifier("moneyEstimatedNetAfterFuel")
+        if net.isAvailable {
+            rate("Estimated net per working hour", spokenAs: "estimated net after fuel per working hour",
+                 net.perWorkingHour, basis: "working time", identifier: "moneyEstimatedNetHourly")
+            rate("Estimated net per recorded mile", spokenAs: "estimated net after fuel per recorded mile",
+                 net.perRecordedMile, basis: "recorded miles", identifier: "moneyEstimatedNetPerMile")
+            if net.isAnyRoutePartial {
+                Text("Some routes are partial, so the fuel is a floor and these nets are ceilings.")
+                    .dashFont(.supporting).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("moneyEstimatedNetPartial")
+            }
+        }
+    }
+
+    private func rate(_ title: String, spokenAs spokenTitle: String, _ rate: PeriodRate,
+                      basis: String, identifier: String) -> some View {
+        let coverage = rate.coverage.statement(noun: "shift")
+        return DashValueRow(
+            title: title,
+            value: rate.amount?.formatted(locale: locale) ?? "Not available",
+            detail: rate.isAvailable
+                ? "\(coverage) with an amount, an estimate and \(basis)"
+                : "No shift has an amount, a fuel estimate and \(basis)",
+            isFigure: rate.isAvailable
+        )
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(
+            rate.amount.map { "\($0.formatted(locale: locale)) \(spokenTitle), across \(coverage) with an amount, an estimate and \(basis)." }
+                ?? "No \(spokenTitle)."
+        )
+        .accessibilityIdentifier(identifier)
     }
 }
 

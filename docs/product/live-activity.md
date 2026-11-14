@@ -283,6 +283,12 @@ that changes what the card means: pausing, resuming, a delivery starting, advanc
 control appearing or disappearing. Those go over at once, because a driver who paused and saw no
 acknowledgement would reasonably press it again.
 
+**A moved anchor is one of those things too.** Correcting a running shift's start (see
+[Correcting a shift's start and end times](shift-workflow.md#correcting-a-shifts-start-and-end-times))
+changes the instant the clock counts from without changing anything else on the card, so the anchor
+itself is compared and a moved one is pushed at once. While paused, a changed frozen figure is pushed
+the same way. Time passing never moves the anchor, so it still pushes nothing.
+
 **Which deliveries are being counted is one of those things.** An order finishing at the moment
 another is accepted leaves every count on the card where it was, so the list of clocks is compared
 directly; without that the card would keep counting an order that had already been delivered.

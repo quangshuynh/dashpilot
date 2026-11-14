@@ -137,8 +137,28 @@ in exactly one slice, so slice gross, expenses, shift counts and coverage add ba
 figures; tests assert this for weekly, monthly, long-range and five-year fixtures. Nothing is
 persisted or cached beyond the screen.
 
-Money shows no net per hour. Net after recorded expenses divided by working hours would combine
-costs dated to a period with hours recorded on shifts, the mixed-population rate refused above.
+Money shows no net after recorded expenses per hour. Net after recorded expenses divided by working
+hours would combine costs dated to a period with hours recorded on shifts, the mixed-population rate
+refused above.
+
+It does show **estimated net after fuel** per working hour and per recorded mile, because there the
+numerator and denominator belong to the same shifts. `PeriodEstimatedNet.perWorkingHour` is
+`sum(gross - estimated fuel) / sum(working hours)` over completed shifts with an amount, an estimate
+and working time; `perRecordedMile` is the same net over the recorded miles each estimate was worked
+out from, over shifts whose estimate has miles greater than zero. Each carries its own coverage.
+`PeriodFuelEstimate.assumptions` states the range of fuel economy and gas price the contributing
+shifts recorded, and `PeriodMetrics.recordedFuelPurchases` is the `Fuel` expense total, read beside
+the estimate and never combined with it. `PeriodMetrics.elapsedDuration` totals each completed
+shift's start-to-end time, pauses included, beside the working time every rate divides by.
+
+### Corrected shift times
+
+Every figure above is derived from `Shift.startedAt` and `Shift.endedAt`, so a correction made through
+`ShiftTimeCorrectionService` is the single source every surface reads: nothing caches a duration, a
+rate or a period total to go stale. The correction's one save invalidates period reads (a `Shift` is
+updated), so Home, Money, reports and Insights re-read, and History's week revision includes both
+times. A start corrected across a period boundary moves the whole shift, because membership is
+decided by `startedAt`; both periods are recomputed from the store.
 
 ### Explicit unavailable states
 

@@ -99,6 +99,9 @@ nonisolated struct PeriodShiftRecord: Equatable, Sendable {
     /// counts standings rather than working out a second rate.
     let hourlyTargetComparison: HourlyTargetComparison?
 
+    /// The shift's whole duration, start to end, pauses included, or `nil`.
+    let elapsedDuration: TimeInterval?
+
     init(
         startedAt: Date,
         isCompleted: Bool = true,
@@ -114,7 +117,8 @@ nonisolated struct PeriodShiftRecord: Equatable, Sendable {
         terminalDeliveryCount: Int = 0,
         fuelEstimate: FuelEstimate = .unavailable(.milesPerGallonNotRecorded),
         hasHourlyTarget: Bool = false,
-        hourlyTargetComparison: HourlyTargetComparison? = nil
+        hourlyTargetComparison: HourlyTargetComparison? = nil,
+        elapsedDuration: TimeInterval? = nil
     ) {
         self.startedAt = startedAt
         self.isCompleted = isCompleted
@@ -131,6 +135,13 @@ nonisolated struct PeriodShiftRecord: Equatable, Sendable {
         self.fuelEstimate = fuelEstimate
         self.hasHourlyTarget = hasHourlyTarget
         self.hourlyTargetComparison = hourlyTargetComparison
+        self.elapsedDuration = elapsedDuration
+    }
+
+    /// The elapsed duration where it is a duration at all.
+    var usableElapsedDuration: TimeInterval? {
+        guard let elapsedDuration, elapsedDuration.isFinite, elapsedDuration >= 0 else { return nil }
+        return elapsedDuration
     }
 
     /// The shift's working time, but only when it is a usable measurement.
@@ -239,6 +250,7 @@ nonisolated struct PeriodMetricsCalculator: Equatable, Sendable {
         let shiftCount = shifts.count
 
         let working = total(of: shifts, using: \.usableWorkingDuration, eligibleCount: shiftCount)
+        let elapsed = total(of: shifts, using: \.usableElapsedDuration, eligibleCount: shiftCount)
         let active = total(of: shifts, using: \.measuredDeliveryActiveDuration, eligibleCount: shiftCount)
         let nonDelivery = total(of: shifts, using: \.nonDeliveryDuration, eligibleCount: shiftCount)
 
@@ -312,7 +324,9 @@ nonisolated struct PeriodMetricsCalculator: Equatable, Sendable {
                 atOrAbove: shifts.filter { $0.hourlyTargetComparison.map { $0.standing != .below } == true }.count
             ),
             recordedAdditionalTips: tips.isEmpty ? nil : tips.reduce(Money.zero, +),
-            additionalTipCount: tips.count
+            additionalTipCount: tips.count,
+            elapsedDuration: elapsed.value,
+            elapsedCoverage: elapsed.coverage
         )
     }
 
@@ -335,7 +349,8 @@ nonisolated struct PeriodMetricsCalculator: Equatable, Sendable {
             shiftCoverage: MetricCoverage(contributingCount: covered.count, eligibleCount: shifts.count),
             coveredDistance: distance(of: covered),
             totalDistance: distance(of: shifts),
-            isAnyRoutePartial: consumptions.contains { $0.isRoutePartial }
+            isAnyRoutePartial: consumptions.contains { $0.isRoutePartial },
+            assumptions: PeriodFuelAssumptions(consumptions: consumptions)
         )
     }
 
@@ -378,8 +393,51 @@ nonisolated struct PeriodMetricsCalculator: Equatable, Sendable {
             amount: earnings - fuel,
             coverage: coverage,
             unavailability: nil,
-            isAnyRoutePartial: consumptions.contains { $0.isRoutePartial }
+            isAnyRoutePartial: consumptions.contains { $0.isRoutePartial },
+            perWorkingHour: estimatedNetHourlyRate(of: shifts),
+            perRecordedMile: estimatedNetMileageRate(of: shifts)
         )
+    }
+
+    /// The paired net after fuel per working hour: shifts with an amount, an
+    /// estimate and working time, summed before dividing.
+    private static func estimatedNetHourlyRate(of shifts: [PeriodShiftRecord]) -> PeriodRate {
+        var net = Money.zero
+        var seconds: TimeInterval = 0
+        var contributing = 0
+        for shift in shifts {
+            guard let earnings = shift.grossEarnings, let fuel = shift.fuelEstimate.cost,
+                  let working = shift.usableWorkingDuration, working > 0 else { continue }
+            net = net + (earnings - fuel)
+            seconds += working
+            contributing += 1
+        }
+        let coverage = MetricCoverage(contributingCount: contributing, eligibleCount: shifts.count)
+        guard contributing > 0, let rate = ShiftMetricsCalculator.grossPerHour(of: net, over: seconds) else {
+            return PeriodRate(amount: nil, coverage: coverage)
+        }
+        return PeriodRate(amount: rate, coverage: coverage)
+    }
+
+    /// The paired net after fuel per recorded mile: shifts with an amount, an
+    /// estimate and miles greater than zero, summed before dividing. The miles
+    /// are the estimate's own, so both halves describe the same route.
+    private static func estimatedNetMileageRate(of shifts: [PeriodShiftRecord]) -> PeriodRate {
+        var net = Money.zero
+        var miles = Decimal.zero
+        var contributing = 0
+        for shift in shifts {
+            guard let earnings = shift.grossEarnings, let consumption = shift.fuelEstimate.consumption,
+                  consumption.recordedMiles > 0 else { continue }
+            net = net + (earnings - consumption.cost)
+            miles += consumption.recordedMiles
+            contributing += 1
+        }
+        let coverage = MetricCoverage(contributingCount: contributing, eligibleCount: shifts.count)
+        guard contributing > 0, let rate = net.divided(by: miles, scale: ShiftMetricsCalculator.rateScale) else {
+            return PeriodRate(amount: nil, coverage: coverage)
+        }
+        return PeriodRate(amount: rate, coverage: coverage)
     }
 
     // MARK: Durations
@@ -534,7 +592,8 @@ extension Shift {
             hasHourlyTarget: hourlyTarget != nil,
             // The shift's own rate, by the one definition, against the target
             // it recorded. Nothing here reads the current setting.
-            hourlyTargetComparison: hourlyTargetComparison(for: recordedDistance)
+            hourlyTargetComparison: hourlyTargetComparison(for: recordedDistance),
+            elapsedDuration: completedDuration
         )
     }
 }

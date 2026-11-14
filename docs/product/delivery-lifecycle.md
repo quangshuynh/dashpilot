@@ -462,7 +462,7 @@ pickup moved and its completion did not.
 
 ### It is what unblocks correcting a shift's end
 
-[Correcting a shift's recorded end](shift-workflow.md#correcting-a-shifts-end-time) refuses to
+[Correcting a shift's recorded end](shift-workflow.md#correcting-a-shifts-start-and-end-times) refuses to
 move the end back past anything a delivery recorded, so one late completion pins the shift's end to
 it. The refusal names the blocking delivery and event (`Delivery 1 has Delivered recorded at
 9:47 PM, after the proposed shift end`), and the recovery is to correct that delivery here and then

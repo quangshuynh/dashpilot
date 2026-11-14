@@ -63,11 +63,9 @@ struct CompletedShiftDetailView: View {
     /// and where a grouping mistake is most often noticed.
     @State private var isCorrectingOffers = false
 
-    /// Correcting the moment the shift ended, in its own sheet. Offered here
-    /// because this is the screen that states the end, and because
-    /// ``ShiftEndCorrectionService`` refuses a running shift outright rather
-    /// than relying on no screen offering the control.
-    @State private var isCorrectingEnd = false
+    /// Correcting when the shift started and ended, in its own sheet. Offered
+    /// beside the Started and Ended rows because those are the facts it changes.
+    @State private var isCorrectingTimes = false
 
     /// Recording or changing the fuel economy and gas price this shift's fuel
     /// estimate is worked out under, in its own sheet. Offered here because this
@@ -142,13 +140,12 @@ struct CompletedShiftDetailView: View {
         .dashCanvas()
         .navigationTitle(shift.startedAt.formatted(date: .abbreviated, time: .omitted))
         .navigationBarTitleDisplayMode(.inline)
-        // Keyed by the shift **and its recorded end**, because correcting the end
+        // Keyed by the shift **and its recorded times**, because correcting them
         // is the one action on this screen that changes what the route measures
-        // to: it moves the window the walk is checked against and, for an
-        // earlier end, deletes the positions beyond it. Keyed by the identifier
-        // alone, the screen would keep drawing the mileage it measured on
-        // arrival.
-        .task(id: RouteMeasurementKey(shift: shift.id, endedAt: shift.endedAt)) {
+        // to: it moves the window the walk is checked against and can delete the
+        // positions outside it. Keyed by the identifier alone, the screen would
+        // keep drawing the mileage it measured on arrival.
+        .task(id: RouteMeasurementKey(shift: shift.id, startedAt: shift.startedAt, endedAt: shift.endedAt)) {
             recordedDistance = shift.recordedDistance()
         }
         .sheet(isPresented: $isEditingEarnings) {
@@ -160,8 +157,8 @@ struct CompletedShiftDetailView: View {
         .sheet(isPresented: $isCorrectingOffers) {
             OfferCorrectionView(shift: shift)
         }
-        .sheet(isPresented: $isCorrectingEnd) {
-            ShiftEndCorrectionEditor(shift: shift)
+        .sheet(isPresented: $isCorrectingTimes) {
+            ShiftTimeCorrectionEditor(shift: shift)
         }
         .sheet(isPresented: $isEditingFuel) {
             FuelAssumptionsEditor(shift: shift)
@@ -345,6 +342,18 @@ struct CompletedShiftDetailView: View {
                 )
                 .accessibilityElement(children: .combine)
             }
+            // Beside the two facts it changes, so it is found where a driver
+            // reads a wrong time rather than at the foot of the screen.
+            Button {
+                isCorrectingTimes = true
+            } label: {
+                Label("Edit Shift Time", systemImage: "clock.arrow.circlepath")
+                    .dashFont(.body)
+            }
+            .buttonStyle(.borderless)
+            .frame(minHeight: 44)
+            .accessibilityLabel("Edit when this shift started and ended")
+            .accessibilityIdentifier("editShiftTimeButton")
             if let duration = shift.completedDuration {
                 durationRow(
                     "Elapsed",
@@ -1076,6 +1085,15 @@ struct CompletedShiftDetailView: View {
                     isProminent: false,
                     identifier: "shiftDetailEstimatedNetPerWorkingHour"
                 )
+                // Over the recorded miles the fuel was estimated from, so both
+                // halves describe the same route.
+                netRow(
+                    "Estimated net per recorded mile",
+                    spokenAs: "estimated net after fuel per recorded mile",
+                    net: profitability.estimatedNetPerRecordedMile,
+                    isProminent: false,
+                    identifier: "shiftDetailEstimatedNetPerRecordedMile"
+                )
             }
 
             if profitability.isRoutePartial, profitability.hasAnyFigure {
@@ -1299,36 +1317,23 @@ struct CompletedShiftDetailView: View {
 
     // MARK: Corrections
 
-    /// The corrections that act on the shift as a whole rather than on one
-    /// delivery or one pause, below every figure they change.
+    /// The correction that acts on the deliveries as a group, below every
+    /// figure it changes.
     ///
-    /// Each one rewrites a recorded fact, so they are gathered here, quietly,
-    /// instead of sitting beside the figures with the same weight as the data.
-    /// Every one opens its own sheet that states the consequence before
-    /// anything is written, and the service behind each refuses a running shift
-    /// whatever this screen offers. A correction that belongs to a single
-    /// delivery stays on that delivery's row, and one that belongs to a pause
-    /// on that pause's row, because that is where the fact it changes is.
+    /// Correcting the shift's own times lives beside the Started and Ended rows
+    /// instead, where a driver reads a wrong time. A correction that belongs to
+    /// a single delivery stays on that delivery's row, and one that belongs to a
+    /// pause on that pause's row, because that is where the fact it changes is.
+    ///
+    /// Absent entirely on a shift holding one delivery or none, where there is
+    /// nothing to regroup and an empty section would only be a heading.
+    @ViewBuilder
     private var correctionsSection: some View {
-        Section {
-            // Offered only once the shift has an end to correct; the service
-            // refuses a running shift regardless of what any screen presents.
-            if shift.endedAt != nil {
-                Button {
-                    isCorrectingEnd = true
-                } label: {
-                    Label("Correct End Time", systemImage: "clock.arrow.circlepath")
-                        .dashFont(.body)
-                }
-                .accessibilityLabel("Correct the time this shift ended")
-                .accessibilityIdentifier("correctShiftEndButton")
-            }
-
-            // One control for the whole list rather than one per row: grouping
-            // is a statement about which deliveries arrived together, so it is
-            // corrected by looking at all of them at once. Absent on a shift
-            // holding a single delivery, where there is nothing to regroup.
-            if shift.deliveries.count > 1 {
+        if shift.deliveries.count > 1 {
+            Section {
+                // One control for the whole list rather than one per row:
+                // grouping is a statement about which deliveries arrived
+                // together, so it is corrected by looking at all of them.
                 Button {
                     isCorrectingOffers = true
                 } label: {
@@ -1337,17 +1342,11 @@ struct CompletedShiftDetailView: View {
                 }
                 .accessibilityLabel("Correct which deliveries were accepted together")
                 .accessibilityIdentifier("correctOffersButton")
+            } header: {
+                Text("Corrections")
+            } footer: {
+                Text("Correcting grouping changes only which deliveries arrived together.")
             }
-        } header: {
-            Text("Corrections")
-        } footer: {
-            Text(
-                """
-                Correcting the end time changes elapsed and working time and every rate over them; an \
-                earlier end also removes the route recorded after it, and the editor says so first. \
-                Correcting grouping changes only which deliveries arrived together.
-                """
-            )
         }
     }
 
@@ -2118,13 +2117,14 @@ private struct DeliveryHistoryRow: View {
 
 /// What the route measurement on this screen depends on.
 ///
-/// The shift's identifier answers "is this a different shift"; its recorded end
-/// answers "is this the same shift measured against a different window". Both
-/// have to be in the key, because correcting the end changes the second without
-/// touching the first, and a measurement keyed on the identifier alone would
-/// keep reporting the mileage the screen arrived with.
+/// The shift's identifier answers "is this a different shift"; its recorded
+/// times answer "is this the same shift measured against a different window".
+/// All three have to be in the key, because correcting either time changes the
+/// window without touching the identifier, and a measurement keyed on the
+/// identifier alone would keep reporting the mileage the screen arrived with.
 private struct RouteMeasurementKey: Hashable {
     let shift: UUID
+    let startedAt: Date
     let endedAt: Date?
 }
 

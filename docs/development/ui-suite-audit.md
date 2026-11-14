@@ -15,6 +15,12 @@ names below are retained so CI identifiers remain stable.
 
 Interval 4A retains all 38 journeys and adds default-size and AX5 Insights journeys, for 40 total.
 
+The profitability and shift-time interval keeps the suite at 40. `testStartsAndEndsAShift` now also
+corrects the running shift's start without stopping it and, once the shift is in History, its start
+again from its own details, with Home and Money reading the corrected working time and Money stating
+that no fuel purchase was recorded. `testTheShiftEndIsCorrectedOnceTheDeliveryBlockingItIs` drives
+the same combined editor for the end.
+
 DashPilot's UI suite is **40 essential journeys**, and every pull request runs all of them after the
 build and the whole domain suite. This page records why the suite has that shape: what the red runs
 before it had in common, how each of the 82 journeys it replaced was classified, which product risk
@@ -114,11 +120,11 @@ A journey's duration is its median over the last four full runs on the runner (3
 | `testRemindersStateTheirEvidenceAndAnswerOnlyTheirOwnDelivery` | A | 25 | Kept | A reminder answered from its own card advances only that delivery; staleness is `DeliveryProgressAssistanceTests` |
 | `testReopeningADeliveredDeliveryFromTheShiftsRecord` | A | 18 | Kept | Reopening behind a confirmation |
 | `testStartsASecondDeliveryWhileTheFirstIsRunning` | A | 21 | Kept | Stacked deliveries as separate cards |
-| `testStartsAndEndsAShift` | A | 16 | Kept | The shift lifecycle from Home to History |
+| `testStartsAndEndsAShift` | A | 16 | Kept, and now also corrects the start twice | The shift lifecycle from Home to History, with the running and the finished shift's start corrected and Home and Money following |
 | `testTheDaySummaryStatesEachFigureWithItsCoverage` | A | 29 | Kept, and now also exports the day | The period summary reached and read with its coverage wording; the period export check replaces `testEachPeriodExportsItsOwnRecords` |
 | `testTheOfferSheetRecordsOneOfferOrNothing` | A | 46 | Kept | The several-delivery sheet records one offer or nothing |
 | `testTheRunningShiftAtTheLargestTextSize` | A | 54 | Kept | The driving surface at AX5 |
-| `testTheShiftEndIsCorrectedOnceTheDeliveryBlockingItIs` | A | 198 | Kept | The real recovery: delivery times, then the end, with the route trimmed |
+| `testTheShiftEndIsCorrectedOnceTheDeliveryBlockingItIs` | A | 198 | Kept | The real recovery: delivery times, then the end in the combined shift-time editor, with the route trimmed |
 | `testTheWelcomeReopensFromSettingsAtTheLargestTextSize` | A | 54 | Kept | Reopening the welcome at AX5; found a real presentation defect (a cover on a lazily loaded row) |
 | `testUndoingADeliveryMarkedDeliveredByMistake` | A | 18 | Kept | The immediate Undo of Delivered |
 | `testACompletedShiftsDeliveriesPlacesAndGrouping` | B | 119 | Removed | `DeliveryWordingTests`, `OfferCorrectionServiceTests` (finished shifts allowed); the grouping sheet stays in `testCorrectingGroupingOnARunningShift` |
@@ -194,7 +200,7 @@ section names one that no longer exists.
 
 | Risk | Journey | Below the UI |
 | --- | --- | --- |
-| A shift starts, runs and ends into History | `testStartsAndEndsAShift` | `ShiftTests`, `ShiftServiceTests` |
+| A shift starts, runs and ends into History, and its start can be corrected running and finished | `testStartsAndEndsAShift` | `ShiftTests`, `ShiftServiceTests`, `ShiftTimeCorrectionTests`, `ShiftTimeCorrectionServiceTests` |
 | Park and Pause stay distinct: parked still runs and takes offers, paused stops working time and deliveries | `testParkAndPauseAreDistinctStatesOfTheRunningShift` | `RouteSuspensionTests`, `ShiftPauseServiceTests`, `ShiftPauseTests` |
 | The live route grows, freezes while paused, and records no distance from the break | `testARecordedRouteGrowsFreezesWhilePausedAndLeavesTheBreakOut` | `ActiveShiftRouteServiceTests`, `LocationTrackingServiceTests`, `RouteMileageCalculatorTests` |
 | Nothing a driver should not do at the wheel is offered while a shift runs | `testARunningShiftOffersOnlyWhatItsStateAllows` | `ShiftPauseCorrectionServiceTests`, `ShiftEndCorrectionServiceTests`, `HistoricalDeliveryCancellationServiceTests` |
