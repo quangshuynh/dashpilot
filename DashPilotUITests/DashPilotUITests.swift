@@ -790,7 +790,7 @@ final class DashPilotUITests: XCTestCase {
     /// perform the same Live Activity intents in this process, so the first End
     /// Shift tap is proved to end nothing and Keep Shift to leave it running.
     ///
-    /// Both corrections move the start earlier inside one hour, so the journey
+    /// Both corrections stay inside one hour and in the past, so the journey
     /// drives only the minute wheel and is valid on any day at any hour. The
     /// rules are `ShiftTimeCorrectionTests`; the write, the timer and the Live
     /// Activity push are `ShiftTimeCorrectionServiceTests`.
@@ -835,9 +835,11 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertTrue(card.buttons["activityControl.end"].appears(), "Keep Shift returns the card to End Shift")
         XCTAssertTrue(app.descendants(matching: .any)["activeShiftStatus"].exists, "and the shift is still running")
 
-        // The running shift's start, corrected two minutes earlier. Three whole
-        // minutes have to fit inside this hour for both corrections below; at
-        // the top of an hour that is at most a three-minute wait.
+        // The running shift's start, corrected to two minutes before now, which
+        // is earlier or later than the recorded start depending on how long the
+        // wait below took; both are valid past times. Three whole minutes have
+        // to fit inside this hour for both corrections below; at the top of an
+        // hour that is at most a three-minute wait.
         let editStart = app.buttons["editShiftStartButton"]
         XCTAssertTrue(scrollUntilHittable(editStart, in: app))
         XCTAssertTrue(waitUntil(timeout: 200) { Calendar.current.component(.minute, from: .now) >= 3 })
@@ -897,7 +899,8 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertTrue(completedTime.label.contains("1 of 1 completed shift"))
         XCTAssertFalse(app.descendants(matching: .any)["homeEmptyWeek"].exists)
 
-        // The finished shift's start, one more minute earlier, from its details.
+        // The finished shift's start, one minute before the running correction
+        // put it, from its details.
         selectWorkspace("Work", in: app)
         openFirstShift(in: app)
         let elapsed = app.descendants(matching: .any)["shiftDetailDuration"]
