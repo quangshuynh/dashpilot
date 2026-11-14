@@ -539,6 +539,9 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertTrue(range.label.hasPrefix("This Week"), range.label)
 
         func choose(_ preset: String) {
+            // The menu is the first row; at AX5 a partly scrolled list leaves
+            // it under the navigation bar, where a tap lands on the bar.
+            XCTAssertTrue(scrollToTop(reaching: app.buttons["moneyPeriodMenu"], in: app, swipes: 2))
             app.buttons["moneyPeriodMenu"].tap()
             let option = app.buttons["moneyPreset-\(preset)"]
             XCTAssertTrue(option.appears(), app.debugDescription)
@@ -572,7 +575,7 @@ final class DashPilotUITests: XCTestCase {
     /// At AX5 Money's summary, time and distance, daily list and comparison sit
     /// above the expense rows, so returning to the period controls takes more
     /// than the default six swipes.
-    private static let moneyTopSwipes = 14
+    private static let moneyTopSwipes = 24
     private static let moneyScrollSwipes = 24
 
     /// Money's coverage, category selection and navigation remain usable at AX5.
@@ -670,6 +673,8 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertTrue(scrollToTop(reaching: app.buttons["moneyPreviousWeek"], in: app, swipes: Self.moneyTopSwipes))
         assertMoneyWeekBrowsing(in: app)
         app.buttons["moneyPreviousWeek"].tap()
+        XCTAssertTrue(app.descendants(matching: .any)["moneyPeriodEmpty"].appears(), "A week with no records says so once")
+        XCTAssertFalse(app.descendants(matching: .any)["moneyGross"].exists, "No figures are drawn for a week with no records")
         XCTAssertTrue(scrollUntilHittable(app.descendants(matching: .any)["moneyExpensesEmpty"], in: app, maxSwipes: Self.moneyScrollSwipes))
         attachScreenshot("money-previous-week")
         selectWorkspace("Work", in: app)
@@ -1181,6 +1186,8 @@ final class DashPilotUITests: XCTestCase {
         app.buttons["Supplies"].tap()
         XCTAssertTrue(app.descendants(matching: .any)["moneyExpensesEmpty"].appears())
         attachScreenshot("money-category-empty")
+        // The category breakdown stays above the filter while it applies.
+        XCTAssertTrue(scrollUntilHittable(app.buttons["moneyClearFilter"], in: app))
         app.buttons["moneyClearFilter"].tap()
         XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "expenseRow").firstMatch.appears())
         openPeriodSummary(in: app)
