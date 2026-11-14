@@ -654,6 +654,34 @@ struct ShiftActivityUpdatePolicyTests {
         )
     }
 
+    /// Correcting a running shift's start moves the instant the card counts
+    /// from without changing anything else it shows. Comparing only the working
+    /// figure would read that as time passing and leave the Lock Screen counting
+    /// from the start the driver corrected away.
+    @Test("A moved working-timer anchor is material; a ticking one is not")
+    func movedAnchorIsMaterial() {
+        #expect(
+            ShiftActivityUpdatePolicy.change(from: state(), to: state(workingDuration: 2_400, asOf: 600)) == .material,
+            "Thirty minutes more working time at the same instant is a corrected start"
+        )
+        #expect(
+            ShiftActivityUpdatePolicy.change(from: state(), to: state(workingDuration: 600.4, asOf: 600)) == .none,
+            "Within the tolerance of two readings a moment apart"
+        )
+        #expect(
+            ShiftActivityUpdatePolicy.change(
+                from: state(isPaused: true), to: state(isPaused: true, workingDuration: 600, asOf: 900)
+            ) == .none,
+            "A paused figure is frozen however late it is read"
+        )
+        #expect(
+            ShiftActivityUpdatePolicy.change(
+                from: state(isPaused: true), to: state(isPaused: true, workingDuration: 1_800, asOf: 900)
+            ) == .material,
+            "Correcting a paused shift's start changes the frozen figure"
+        )
+    }
+
     @Test("Pausing, a delivery and a control change are all material")
     func materialChanges() {
         let base = state()

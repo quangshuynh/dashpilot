@@ -50,9 +50,11 @@ struct ActiveShiftRouteService {
     ///   rather than showing a wrong one: a route that could not be read is not
     ///   a route of zero miles.
     func measurement(extending previous: ActiveRouteMeasurement?, of shift: Shift) throws -> ActiveRouteMeasurement {
-        var measurement = previous?.shiftID == shift.id
-            ? previous ?? ActiveRouteMeasurement(shiftID: shift.id)
-            : ActiveRouteMeasurement(shiftID: shift.id)
+        // A different shift, or this shift with a corrected start, is a
+        // different route. See ``ActiveRouteMeasurement/shiftStartedAt``.
+        let fresh = ActiveRouteMeasurement(shiftID: shift.id, shiftStartedAt: shift.startedAt)
+        var measurement = previous.flatMap { $0.continues(shiftID: shift.id, startedAt: shift.startedAt) ? $0 : nil }
+            ?? fresh
 
         let storedRowCount = try rowCount(of: shift)
 
@@ -61,7 +63,7 @@ struct ActiveShiftRouteService {
             return measurement
         case .remeasure:
             AppLog.routeCapture.info("Live route measurement restarted; stored positions no longer match it")
-            measurement = ActiveRouteMeasurement(shiftID: shift.id)
+            measurement = fresh
             let read = try points(of: shift, after: nil)
             measurement.extend(with: read, rowsRead: read.count, storedRowCount: storedRowCount)
         case .extend(let after):

@@ -40,15 +40,25 @@ import Foundation
 /// live figure could otherwise be left standing on rows that no longer exist,
 /// and it is cheap to rule out: a count is one aggregate query.
 ///
-/// The gap it does not close is a store that both gained and lost the same
-/// number of route rows between two readings. Capture only ever appends, and
-/// rows only ever leave with the shift they belong to, so that shape is not one
-/// the app can produce; it is recorded here rather than defended against.
+/// **It starts again when the shift's start moves.** Correcting a running
+/// shift's start later deletes the positions fixed before it, and capture can
+/// append as many new rows before the next reading as the correction removed,
+/// which a row count alone would read as nothing having changed. So the
+/// measurement records the start it was built against, and a different start
+/// is a different route: ``ActiveShiftRouteService`` measures it from scratch.
+///
+/// Capture otherwise only ever appends, and rows otherwise leave only with the
+/// shift they belong to.
 nonisolated struct ActiveRouteMeasurement: Equatable, Sendable {
     /// The shift being measured. A measurement never outlives its shift: a
     /// different shift is a different route, and mixing them would measure the
     /// end of one and the start of the next as one leg.
     let shiftID: UUID
+
+    /// The shift start this measurement was built against, or `nil` for one
+    /// built without it. A reading against a different start is measured again
+    /// from scratch.
+    let shiftStartedAt: Date?
 
     /// The open walk. Its rules are the finished route's rules.
     private(set) var walk: RouteMileageAccumulator
@@ -60,8 +70,9 @@ nonisolated struct ActiveRouteMeasurement: Equatable, Sendable {
     /// discarded still occupies one.
     private(set) var consumedRowCount: Int
 
-    init(shiftID: UUID, maximumSampleInterval: TimeInterval = 120) {
+    init(shiftID: UUID, shiftStartedAt: Date? = nil, maximumSampleInterval: TimeInterval = 120) {
         self.shiftID = shiftID
+        self.shiftStartedAt = shiftStartedAt
         self.walk = RouteMileageAccumulator(maximumSampleInterval: maximumSampleInterval)
         self.consumedRowCount = 0
     }
@@ -100,6 +111,12 @@ nonisolated struct ActiveRouteMeasurement: Equatable, Sendable {
     mutating func extend(with points: some Sequence<RoutePoint>, rowsRead: Int, storedRowCount: Int) {
         walk.append(points)
         consumedRowCount = max(consumedRowCount + rowsRead, storedRowCount)
+    }
+
+    /// Whether this measurement can be extended for `shift` as it is now: the
+    /// same shift, measured against the same start.
+    func continues(shiftID: UUID, startedAt: Date) -> Bool {
+        self.shiftID == shiftID && shiftStartedAt == startedAt
     }
 
     /// What reading the store again should do, given what it now holds.
