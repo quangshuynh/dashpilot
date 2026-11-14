@@ -586,8 +586,8 @@ the recap. Recorded expenses are not shown beside the estimate, and delivery ear
 as the shift's gross. A refused end offers no recap, and a recap waiting for a shift ended from the
 [Live Activity](live-activity.md#ending-takes-two-taps) is dropped once another shift starts.
 
-An end recorded later than the driver actually stopped — because DashPilot was not reachable at the
-time — can be corrected afterwards. See [Correcting a shift's start and end times](#correcting-a-shifts-start-and-end-times).
+An end recorded later than the driver actually stopped, because DashPilot was not reachable at the
+time, can be corrected afterwards. See [Correcting a shift's start and end times](#correcting-a-shifts-start-and-end-times).
 
 ## History
 
