@@ -23,8 +23,11 @@ the Work list can grow to AX5 and scroll. Home and Money introduce no custom ani
 ## Insights inside Money
 
 Insights inherits the native list, blue accent, cloud summary surface and standard-width tabular
-financial figures. A single trend picker switches between weekly earnings and gross per working
-hour, avoiding duplicate dashboards. Native Charts columns start at zero; gaps stay gaps, zero is
+financial figures. A single trend picker switches between weekly earnings, net after recorded expenses
+and gross per working hour, avoiding duplicate dashboards. Money's summary uses compact tiles in a
+two-column grid that becomes one column at accessibility sizes; its daily chart pairs the accent
+blue for recorded gross with the estimate slate for recorded expenses, separated by position as well
+as colour and named in a legend. Native Charts columns start at zero; gaps stay gaps, zero is
 marked with a dot and nonzero partial coverage with a triangle. Partial zero values retain the dot;
 their incomplete coverage is explained in text. Exact values and coverage are available in
 text. The category breakdown uses ranked horizontal bars paired with readable amounts. Native week
