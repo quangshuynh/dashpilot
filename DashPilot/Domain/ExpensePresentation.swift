@@ -19,6 +19,18 @@ nonisolated struct MoneyPeriodSummary: Equatable, Sendable {
     let rows: [ExpensePresentation]
     let hasAnyExpense: Bool
     let includesFuelEstimates: Bool
+    /// The period before, by ``ReportingPeriod/precedingEquivalent(using:)``,
+    /// when requested. Built by the same financial path, so the two compare.
+    var previous: PeriodMetrics? = nil
+    /// The selected period divided into days, weeks or months, when requested.
+    var activity: MoneyActivity? = nil
+
+    /// The financial comparison with the previous period, when the previous
+    /// period is the selected period's preceding equivalent.
+    func comparison(asOf now: Date, calendar: Calendar) -> PeriodComparison? {
+        guard let previous else { return nil }
+        return PeriodComparisonCalculator().comparison(of: metrics, with: previous, asOf: now, calendar: calendar)
+    }
 
     func rows(in category: ExpenseCategory?) -> [ExpensePresentation] {
         guard let category else { return rows }

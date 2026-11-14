@@ -295,4 +295,110 @@ struct MoneyWorkspaceTests {
         guard case .loaded(let reloaded) = store.state else { Issue.record("Reload failed"); return }
         #expect(reloaded.money?.metrics.period == chosen)
     }
+
+    // MARK: Workspace read
+
+    private func workspaceLoad(_ selected: ReportingPeriod) async throws -> MoneyPeriodSummary {
+        let request = PeriodLoadRequest(period: selected, previous: selected.precedingEquivalent(using: calendar),
+                                        includesExpenseRows: true, activityCalendar: calendar)
+        let container = container
+        return try #require(await Task.detached { try PeriodDataLoader.load(request, in: container).money }.value)
+    }
+
+    /// The comparison, the slices and the headline come from one financial
+    /// read, so the chart, the list of days and the summary cannot disagree.
+    @Test func comparisonAndActivityReconcileWithTheSummary() async throws {
+        let service = ExpenseService(context: context)
+        try shift(at: day(11, 2, 9), gross: Money(amount: Decimal(string: "61.40")!))
+        try shift(at: day(11, 2, 10), gross: Money(amount: Decimal(string: "18.60")!)) // overlaps the first
+        try shift(at: day(11, 4, 23), gross: nil)
+        try shift(at: day(10, 27), gross: Money(amount: 40))
+        try service.record(amount: Money(amount: Decimal(string: "22.15")!), category: .fuel, occurredAt: day(11, 6))
+        try service.record(amount: Money(amount: 3), category: .supplies, occurredAt: day(11, 2, 18))
+        let week = try #require(ReportingPeriod(unit: .week, containing: day(11, 4), calendar: calendar))
+        let summary = try await workspaceLoad(week)
+        #expect(summary.metrics.recordedGrossEarnings == Money(amount: 80))
+        #expect(summary.metrics.earningsCoverage == MetricCoverage(contributingCount: 2, eligibleCount: 3))
+        #expect(summary.previous?.period == week.previous(using: calendar))
+        #expect(summary.previous?.recordedGrossEarnings == Money(amount: 40))
+
+        let comparison = try #require(summary.comparison(asOf: day(11, 20), calendar: calendar))
+        let gross = try #require(comparison.entry(.recordedGrossEarnings))
+        #expect(gross.difference == .money(Money(amount: 40)))
+        #expect(!comparison.isCurrentPeriodInProgress)
+
+        let activity = try #require(summary.activity)
+        #expect(activity.granularity == .day)
+        #expect(activity.buckets.count == 7)
+        #expect(activity.buckets.compactMap(\.metrics.recordedGrossEarnings).reduce(.zero, +) == summary.metrics.recordedGrossEarnings)
+        #expect(activity.buckets.compactMap(\.metrics.expenses.recordedTotal).reduce(.zero, +) == summary.metrics.expenses.recordedTotal)
+        let friday = try #require(activity.buckets.first { $0.period.contains(day(11, 6)) })
+        #expect(friday.metrics.isEmpty && friday.metrics.expenses.hasRecords, "An expense-only day keeps its expense")
+        let wednesday = try #require(activity.buckets.first { $0.period.contains(day(11, 4)) })
+        #expect(wednesday.metrics.recordedGrossEarnings == nil, "A shift without gross stays missing")
+        #expect(activity.recordedBuckets.map(\.period.start) == [friday.period.start, wednesday.period.start,
+                                                                  try #require(activity.buckets.first { $0.period.contains(day(11, 2)) }).period.start])
+    }
+
+    @Test func customRangeComparesWithTheRangeOfEqualLengthBeforeIt() async throws {
+        try shift(at: day(10, 29), gross: Money(amount: 10))
+        try shift(at: day(11, 2), gross: Money(amount: 25))
+        let range = try #require(ReportingPeriod(from: day(11, 1), through: day(11, 3), calendar: calendar))
+        let summary = try await workspaceLoad(range)
+        let previous = try #require(summary.previous)
+        #expect(previous.period == ReportingPeriod(from: day(10, 29), through: day(10, 31), calendar: calendar))
+        #expect(previous.recordedGrossEarnings == Money(amount: 10))
+        #expect(summary.comparison(asOf: day(11, 20), calendar: calendar) != nil)
+        #expect(summary.activity?.buckets.count == 3)
+    }
+
+    @Test func anEmptyPeriodHasEmptySlicesAndNoFabricatedFigures() async throws {
+        let week = try #require(ReportingPeriod(unit: .week, containing: day(11, 11), calendar: calendar))
+        let summary = try await workspaceLoad(week)
+        #expect(!summary.metrics.hasAnyRecords)
+        #expect(summary.metrics.grossPerWorkingHour.amount == nil)
+        #expect(summary.metrics.netAfterRecordedExpenses.amount == nil)
+        #expect(summary.activity?.recordedBuckets.isEmpty == true)
+        #expect(summary.activity?.hasChartableAmounts == false)
+    }
+
+    /// Tips stay inside the delivery subtotal and never reach shift gross:
+    /// three facts recorded separately, none derived from another.
+    @Test func tipsAreAPartOfDeliveryPayAndNeverOfShiftGross() async throws {
+        let shifts = ShiftService(context: context)
+        let deliveries = DeliveryService(context: context)
+        let start = day(11, 3, 9)
+        let shift = try shifts.startShift(at: start)
+        var recorded: [Delivery] = []
+        for index in 0..<2 {
+            let accepted = start.addingTimeInterval(TimeInterval(index) * 3_600 + 300)
+            let delivery = try deliveries.startDelivery(at: accepted)
+            try deliveries.markArrivedAtPickup(delivery, at: accepted.addingTimeInterval(300))
+            try deliveries.markPickedUp(delivery, at: accepted.addingTimeInterval(600))
+            try deliveries.markDelivered(delivery, at: accepted.addingTimeInterval(1_500))
+            recorded.append(delivery)
+        }
+        try shifts.endActiveShift(at: start.addingTimeInterval(3 * 3_600))
+        try shift.setGrossEarnings(Money(amount: 30))
+        try recorded[0].setGrossEarnings(Money(amount: 9))
+        _ = try recorded[0].recordAdditionalTip(Money(amount: 4), method: .cash, at: start.addingTimeInterval(9_000))
+        _ = try recorded[0].recordAdditionalTip(Money(amount: Decimal(string: "1.50")!), method: .platform, at: start.addingTimeInterval(9_100))
+        // No platform pay: its tip is not part of any recorded delivery total.
+        _ = try recorded[1].recordAdditionalTip(Money(amount: 6), method: .cash, at: start.addingTimeInterval(9_200))
+        try context.save()
+
+        let week = try #require(ReportingPeriod(unit: .week, containing: start, calendar: calendar))
+        let detailRequest = PeriodLoadRequest(period: week, includesRouteDetails: true)
+        let container = container
+        let detail = try #require(await Task.detached { try PeriodDataLoader.load(detailRequest, in: container).current }.value)
+        #expect(detail.recordedGrossEarnings == Money(amount: 30), "Shift gross is untouched by delivery records")
+        #expect(detail.recordedDeliveryEarnings == Money(amount: Decimal(string: "14.50")!))
+        #expect(detail.recordedAdditionalTips == Money(amount: Decimal(string: "5.50")!))
+        #expect(detail.additionalTipCount == 2)
+        #expect(detail.deliveryEarningsCoverage == MetricCoverage(contributingCount: 1, eligibleCount: 2))
+        #expect(detail.deliveryActiveDuration == TimeInterval(2 * 1_500), "Separate deliveries add; stacked ones would union")
+        let financial = try await workspaceLoad(week)
+        #expect(financial.metrics.recordedGrossEarnings == detail.recordedGrossEarnings)
+        #expect(financial.metrics.recordedAdditionalTips == nil, "The financial read realizes no deliveries")
+    }
 }
