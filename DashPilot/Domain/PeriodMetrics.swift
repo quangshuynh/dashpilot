@@ -358,6 +358,14 @@ nonisolated struct PeriodMetrics: Equatable, Sendable {
     /// How many recorded tips ``recordedAdditionalTips`` adds up.
     var additionalTipCount = 0
 
+    /// Total shift time, from each completed shift's start to its end, pauses
+    /// included: what a driver would call time online. Working time is this
+    /// less the paused time, and every hourly rate divides by working time.
+    var elapsedDuration: TimeInterval? = nil
+
+    /// How many completed shifts ``elapsedDuration`` adds up.
+    var elapsedCoverage: MetricCoverage = .none
+
     /// A period with no completed shift in it.
     ///
     /// Every figure is absent rather than zero. A week nobody drove is not a
@@ -408,6 +416,24 @@ nonisolated struct PeriodMetrics: Equatable, Sendable {
     /// with no shift beside it. Use ``hasAnyRecords`` to decide whether the
     /// period holds anything at all.
     var isEmpty: Bool { completedShiftCount == 0 }
+
+    /// The fuel the driver recorded **buying** in this period, from Expenses, or
+    /// `nil` when no fuel purchase is dated in it.
+    ///
+    /// A recorded fact about money paid, dated when it was paid. It is never
+    /// compared with, subtracted from or added to ``fuel``, the estimate of
+    /// fuel the recorded miles **used**: a fill-up on Monday may be what the
+    /// whole week burned, or next week's, and the app cannot tell which.
+    var recordedFuelPurchases: ExpenseCategoryTotal? {
+        expenses.categoryTotals.first { $0.category == .fuel }
+    }
+
+    /// Paused time across the period's completed shifts: total shift time less
+    /// working time, when both cover the same shifts.
+    var pausedDuration: TimeInterval? {
+        guard let elapsedDuration, let workingDuration, elapsedCoverage == workingCoverage else { return nil }
+        return max(0, elapsedDuration - workingDuration)
+    }
 
     /// Whether DashPilot recorded anything at all in this period — a completed
     /// shift, an expense, or both.

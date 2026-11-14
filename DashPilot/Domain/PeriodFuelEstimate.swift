@@ -69,6 +69,10 @@ nonisolated struct PeriodFuelEstimate: Equatable, Sendable {
     /// says so travels with the figure.
     let isAnyRoutePartial: Bool
 
+    /// The fuel economy and gas price the contributing shifts were estimated
+    /// under, so the assumptions behind the figure are on screen beside it.
+    var assumptions: PeriodFuelAssumptions = .none
+
     /// A period with nothing to estimate over.
     static let none = PeriodFuelEstimate(
         estimatedCost: nil,
@@ -247,6 +251,16 @@ nonisolated struct PeriodEstimatedNet: Equatable, Sendable {
     /// When it is, the fuel is a floor and this net is therefore a **ceiling**.
     let isAnyRoutePartial: Bool
 
+    /// The estimated net divided by working hours, over the shifts that have an
+    /// amount, an estimate **and** working time: `sum(net) / sum(hours)` over
+    /// that one subset, never an average of per-shift rates.
+    var perWorkingHour: PeriodRate = .unavailable(eligibleCount: 0)
+
+    /// The estimated net divided by recorded miles, over the shifts that have
+    /// an amount, an estimate and miles greater than zero. The miles are the
+    /// ones the fuel was estimated over, so both halves describe one route.
+    var perRecordedMile: PeriodRate = .unavailable(eligibleCount: 0)
+
     static let none = PeriodEstimatedNet(
         recordedEarnings: nil,
         estimatedFuel: nil,
@@ -300,5 +314,59 @@ nonisolated extension PeriodEstimatedNet {
             statement += " Some of these routes are partial, so the fuel is a floor and this net is a ceiling."
         }
         return statement
+    }
+}
+
+/// The fuel economy and gas price a period's fuel estimate was worked out
+/// under, as the range across the shifts that contributed to it.
+///
+/// Each shift carries its own snapshot, so a period can hold more than one
+/// vehicle and more than one price. The range says so rather than averaging
+/// them into an assumption no shift recorded.
+nonisolated struct PeriodFuelAssumptions: Equatable, Sendable {
+    let milesPerGallon: ClosedRange<Decimal>?
+    let gasPricePerGallon: ClosedRange<Money>?
+
+    static let none = PeriodFuelAssumptions(milesPerGallon: nil, gasPricePerGallon: nil)
+
+    init(milesPerGallon: ClosedRange<Decimal>?, gasPricePerGallon: ClosedRange<Money>?) {
+        self.milesPerGallon = milesPerGallon
+        self.gasPricePerGallon = gasPricePerGallon
+    }
+
+    /// The range across `consumptions`, or ``none`` for none.
+    init(consumptions: [FuelConsumption]) {
+        let economies = consumptions.map(\.milesPerGallon)
+        let prices = consumptions.map(\.gasPricePerGallon)
+        if let low = economies.min(), let high = economies.max() {
+            milesPerGallon = low...high
+        } else {
+            milesPerGallon = nil
+        }
+        if let low = prices.min(), let high = prices.max() {
+            gasPricePerGallon = low...high
+        } else {
+            gasPricePerGallon = nil
+        }
+    }
+
+    /// `"At 28 MPG and $3.45 a gallon"`, or a range where shifts differ, or
+    /// `nil` when nothing contributed.
+    func statement(locale: Locale = .autoupdatingCurrent) -> String? {
+        guard let economy = milesPerGallon, let price = gasPricePerGallon else { return nil }
+        let input = MilesPerGallonInput(locale: locale)
+        let economyText = economy.lowerBound == economy.upperBound
+            ? "\(input.text(for: economy.lowerBound)) MPG"
+            : "\(input.text(for: economy.lowerBound)) to \(input.text(for: economy.upperBound)) MPG"
+        let priceText = price.lowerBound == price.upperBound
+            ? price.lowerBound.formatted(locale: locale)
+            : "\(price.lowerBound.formatted(locale: locale)) to \(price.upperBound.formatted(locale: locale))"
+        let varies = economy.lowerBound != economy.upperBound || price.lowerBound != price.upperBound
+        return "At \(economyText) and \(priceText) a gallon" + (varies ? ", as each shift recorded" : "")
+    }
+
+    /// The same, with the unit spelled out for VoiceOver.
+    func spokenStatement(locale: Locale = .autoupdatingCurrent) -> String? {
+        statement(locale: locale)?.replacingOccurrences(of: "MPG", with: "miles per gallon")
     }
 }

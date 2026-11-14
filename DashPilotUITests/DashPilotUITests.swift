@@ -633,9 +633,11 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Money"].appears())
         XCTAssertTrue(scrollToTop(reaching: app.buttons["moneyPreviousWeek"], in: app, swipes: Self.moneyTopSwipes))
         if visualDefault {
-            let fuel = app.buttons["Estimated fuel consumption"]
-            XCTAssertTrue(scrollUntilHittable(fuel, in: app, maxSwipes: Self.moneyScrollSwipes))
-            fuel.tap()
+            // Purchases and the estimate are separate rows, and never one total.
+            let purchases = app.descendants(matching: .any)["moneyFuelPurchases"]
+            XCTAssertTrue(scrollUntilHittable(purchases, in: app, maxSwipes: Self.moneyScrollSwipes))
+            XCTAssertTrue(purchases.label.contains("$42.10"), purchases.label)
+            XCTAssertTrue(purchases.label.contains("not what these shifts used"), purchases.label)
             let estimate = app.descendants(matching: .any)["moneyEstimatedFuel"]
             XCTAssertTrue(scrollUntilHittable(estimate, in: app, maxSwipes: Self.moneyScrollSwipes), app.debugDescription)
             XCTAssertTrue(estimate.label.contains("1 of 3"))
@@ -2721,6 +2723,17 @@ final class DashPilotUITests: XCTestCase {
         let working = app.descendants(matching: .any)["moneyWorkingTime"]
         XCTAssertTrue(scrollTo(working, in: app))
         XCTAssertTrue(waitForLabel(working, toContain: "4 hours, 55 minutes"), "Money follows the same times: \(working.label)")
+        let total = app.descendants(matching: .any)["moneyTotalShiftTime"]
+        XCTAssertTrue(scrollUntilHittable(total, in: app))
+        XCTAssertTrue(waitForLabel(total, toContain: "Total shift time, start to end, 4 hours, 55 minutes"), total.label)
+        // The fixture records neither a fuel purchase nor vehicle assumptions,
+        // and the section says both without showing a zero.
+        let purchases = app.descendants(matching: .any)["moneyFuelPurchases"]
+        XCTAssertTrue(scrollUntilHittable(purchases, in: app))
+        XCTAssertTrue(purchases.label.hasPrefix("No fuel purchase recorded"), purchases.label)
+        let estimate = app.descendants(matching: .any)["moneyEstimatedFuel"]
+        XCTAssertTrue(scrollUntilHittable(estimate, in: app))
+        XCTAssertTrue(waitForLabel(estimate, toContain: "No estimated fuel cost"), estimate.label)
     }
 
     /// A running shift's start corrected from the Work panel: only the start

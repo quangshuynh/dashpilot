@@ -23,6 +23,9 @@ nonisolated enum EstimatedNetUnavailability: CaseIterable, Equatable, Sendable {
     /// divide by. Reached by a shift of no length and by one kept paused
     /// throughout.
     case noWorkingTime
+    /// The recorded positions did not move, so there are no miles to divide an
+    /// estimated net by.
+    case zeroRecordedDistance
 }
 
 nonisolated extension EstimatedNetUnavailability {
@@ -37,6 +40,8 @@ nonisolated extension EstimatedNetUnavailability {
             "Add your miles per gallon and a gas price to see an estimated net after fuel."
         case .noWorkingTime:
             "This shift recorded no working time, so there are no hours to divide by."
+        case .zeroRecordedDistance:
+            "The recorded positions did not move, so there are no recorded miles to divide by."
         }
     }
 }
@@ -163,6 +168,11 @@ nonisolated struct ShiftProfitability: Equatable, Sendable {
     /// ``estimatedNetAfterFuel`` over the shift's working hours, or the reason
     /// there is no such figure.
     let estimatedNetPerWorkingHour: EstimatedNet
+    /// The estimated net after fuel divided by the recorded miles the fuel was
+    /// estimated over: the same miles, so numerator and denominator describe
+    /// one route. Recorded miles are a floor on miles driven, so this reads
+    /// higher than a per-mile-driven figure would.
+    let estimatedNetPerRecordedMile: EstimatedNet
 
     /// Whether the estimate behind these figures is over a route known to cover
     /// less than the shift.
@@ -197,6 +207,21 @@ nonisolated struct ShiftProfitability: Equatable, Sendable {
         let net = Self.net(recordedEarnings: recordedEarnings, fuelEstimate: fuelEstimate, workingDuration: workingDuration)
         estimatedNetAfterFuel = net
         estimatedNetPerWorkingHour = Self.hourly(net: net, workingDuration: workingDuration)
+        estimatedNetPerRecordedMile = Self.perMile(net: net, fuelEstimate: fuelEstimate)
+    }
+
+    private static func perMile(net: EstimatedNet, fuelEstimate: FuelEstimate) -> EstimatedNet {
+        switch net {
+        case let .unavailable(reason):
+            return .unavailable(reason)
+        case let .available(amount):
+            // An available net implies an available estimate, which carries the
+            // recorded miles it was worked out over.
+            guard let miles = fuelEstimate.consumption?.recordedMiles, miles > 0,
+                  let rate = amount.divided(by: miles, scale: ShiftMetricsCalculator.rateScale)
+            else { return .unavailable(.zeroRecordedDistance) }
+            return .available(rate)
+        }
     }
 
     private static func net(

@@ -19,7 +19,6 @@ struct MoneyWorkspace: View {
     @State private var selection = MoneyPeriodSelection()
     @State private var isChoosingRange = false
     @State private var category: ExpenseCategory?
-    @State private var showsFuel = false
     @State private var loader = PeriodLoadStore()
     @State private var detailLoader = PeriodLoadStore()
     @State private var retryRevision = 0
@@ -77,7 +76,13 @@ struct MoneyWorkspace: View {
                 }
                 expenseSection(summary)
                 comparisonSection(summary)
-                if !summary.metrics.isEmpty { fuelSection }
+                // An expense-only period still shows the fuel it recorded buying.
+                if !summary.metrics.isEmpty || summary.metrics.recordedFuelPurchases != nil {
+                    MoneyFuelSection(financial: summary.metrics, detail: detail,
+                                     detailFailed: detailLoader.state == .failed, noun: noun) {
+                        detailRetryRevision += 1
+                    }
+                }
             } else if loader.state == .failed {
                 PeriodLoadFailure(retry: { retryRevision += 1 })
             } else {
@@ -275,7 +280,7 @@ struct MoneyWorkspace: View {
                     ProgressView("Loading time and mileage…").accessibilityIdentifier("moneyDetailLoading")
                 }
             } header: { Text("Time, distance and deliveries") } footer: {
-                Text("Delivery active time counts overlapping deliveries once. Recorded mileage is the distance your accepted route samples support, not necessarily everything you drove. Delivery records are independent of shift gross and are never added to it.")
+                Text("Total shift time runs from each start to end; working time excludes pauses and is what hourly rates divide by. Delivery active time counts overlapping deliveries once. Recorded mileage is the distance your accepted route samples support, not necessarily everything you drove. Delivery records are independent of shift gross and are never added to it.")
             }
         }
     }
@@ -339,25 +344,6 @@ struct MoneyWorkspace: View {
             ForEach(rows) { row in ExpenseRecordButton(row: row, actions: actions) }
         } header: { Text("Expenses · Newest first") } footer: {
             Text("Filtering changes this list and subtotal. The summary always includes all recorded expenses in the selected \(noun). Only costs you entered appear; estimated fuel is separate.")
-        }
-    }
-
-    private var fuelSection: some View {
-        Section {
-            DisclosureGroup("Estimated fuel consumption", isExpanded: $showsFuel) {
-                if let detail {
-                    DashValueRow(title: "Estimated fuel cost",
-                                 value: detail.fuel.estimatedCost?.formatted(locale: locale) ?? "Not available",
-                                 detail: detail.fuel.spokenStatement(locale: locale), isFigure: detail.fuel.isAvailable, keepsFigureTogether: true)
-                        .accessibilityElement(children: .ignore)
-                        .accessibilityLabel(detail.fuel.spokenStatement(locale: locale))
-                        .accessibilityIdentifier("moneyEstimatedFuel")
-                } else {
-                    ProgressView("Loading fuel estimates…")
-                }
-                Text("Uses recorded miles and each shift's saved vehicle assumptions. Recorded fuel purchases and estimated consumption are different views of cost. This estimate is never subtracted from net after recorded expenses.")
-                    .dashFont(.supporting).fixedSize(horizontal: false, vertical: true)
-            }
         }
     }
 }

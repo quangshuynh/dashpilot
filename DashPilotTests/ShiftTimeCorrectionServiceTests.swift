@@ -279,6 +279,32 @@ struct ShiftTimeCorrectionServiceTests {
         #expect(shift.completedDuration == TimeInterval(4 * 3600 + 20 * 60))
     }
 
+    @Test("Period rates and times are recomputed from the corrected times, never left stale")
+    func periodRatesFollowTheCorrection() async throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        let shift = try recordedShift(in: context, delivery: false)
+        let week = try #require(ReportingPeriod(unit: .week, containing: nine, calendar: calendar))
+        func read() async throws -> PeriodMetrics {
+            let request = PeriodLoadRequest(period: week, includesRouteDetails: true)
+            return try #require(try await Task.detached { try PeriodDataLoader.load(request, in: container) }.value.current)
+        }
+
+        let before = try await read()
+        #expect(before.grossPerWorkingHour.amount == Money(minorUnits: 2_000), "$100.00 over 5 hours")
+        #expect(before.elapsedDuration == TimeInterval(5 * 3600))
+
+        try service(context).correct(shift, start: at(60))
+
+        let after = try await read()
+        #expect(after.grossPerWorkingHour.amount == Money(minorUnits: 2_500), "$100.00 over 4 hours")
+        #expect(after.workingDuration == TimeInterval(4 * 3600))
+        #expect(after.elapsedDuration == TimeInterval(4 * 3600))
+        #expect(after.recordedGrossEarnings == Money(minorUnits: 10_000), "The amount itself never moves")
+        #expect(after.expenses.recordedTotal == Money(minorUnits: 2_000), "Nor the expense")
+        #expect(after.recordedDistance.metres < before.recordedDistance.metres, "The trimmed route is measured again")
+    }
+
     @Test("A correction's save invalidates period reads")
     func correctionInvalidatesReports() throws {
         let context = ModelContext(try makeContainer())

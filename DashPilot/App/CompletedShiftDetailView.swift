@@ -1085,6 +1085,15 @@ struct CompletedShiftDetailView: View {
                     isProminent: false,
                     identifier: "shiftDetailEstimatedNetPerWorkingHour"
                 )
+                // Over the recorded miles the fuel was estimated from, so both
+                // halves describe the same route.
+                netRow(
+                    "Estimated net per recorded mile",
+                    spokenAs: "estimated net after fuel per recorded mile",
+                    net: profitability.estimatedNetPerRecordedMile,
+                    isProminent: false,
+                    identifier: "shiftDetailEstimatedNetPerRecordedMile"
+                )
             }
 
             if profitability.isRoutePartial, profitability.hasAnyFigure {

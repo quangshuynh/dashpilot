@@ -158,7 +158,8 @@ nonisolated enum PeriodDataLoader {
             hourlyTargetComparison: HourlyTargetComparison(
                 rate: duration.flatMap { duration in
                     shift.grossEarnings.flatMap { ShiftMetricsCalculator.grossPerHour(of: $0, over: duration) }
-                }, target: shift.hourlyTarget)
+                }, target: shift.hourlyTarget),
+            elapsedDuration: shift.completedDuration
         )
     }
 }
