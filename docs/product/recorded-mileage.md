@@ -137,16 +137,16 @@ A shift whose route was recorded before schema v3 carries no evidence of capture
 continuity is inferred from timestamps, the detail screen says so, and such a route is always
 reported as partial, because its short gaps cannot be seen at all.
 
-## Correcting a shift's end re-measures it
+## Correcting a shift's times re-measures it
 
 Recorded mileage belongs to the shift that recorded it, so correcting a shift's end time to an
-earlier moment removes the positions fixed after it and measures the distance again from what
-remains. **It is never scaled by the time removed**: a shift that loses a quarter of its length
+earlier moment, or its start to a later one, removes the positions fixed outside the corrected times
+and measures the distance again from what remains. **It is never scaled by the time removed**: a shift that loses a quarter of its length
 loses whichever positions were in that quarter, which may be all of its route or none of it. Nothing
-is interpolated to the corrected end, so the stretch between the last retained position and the new
-boundary is a capture gap like any other. Correcting an end **later** adds no position and no mile,
-and the shift reports the stretch it did not record as a gap. See
-[Correcting a shift's end time](shift-workflow.md#correcting-a-shifts-end-time).
+is interpolated to the corrected boundary, so the stretch between the nearest retained position and the
+new boundary is a capture gap like any other. Correcting an end **later** or a start **earlier** adds
+no position and no mile, and the shift reports the stretch it did not record as a gap. See
+[Correcting a shift's start and end times](shift-workflow.md#correcting-a-shifts-start-and-end-times).
 
 ## What is derived from it
 

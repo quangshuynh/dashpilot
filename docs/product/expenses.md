@@ -21,7 +21,9 @@ important:
    waiting for routes. Net subtracts recorded costs only when both earnings and expenses have
    recorded values. It can be negative and is not profit or a tax figure. An expense-only period
    shows its costs without inventing zero earnings or a net.
-2. **Time, distance and deliveries.** Delivery active time (overlapping deliveries counted once),
+2. **Time, distance and deliveries.** Total shift time (start to end, pauses included, with the
+   paused time it holds, beside the summary's working time, which excludes pauses and is what every
+   hourly rate divides by), delivery active time (overlapping deliveries counted once),
    non-delivery time, gross per active delivery hour, recorded mileage with partial-route coverage,
    gross per recorded mile, the amount recorded on deliveries and the additional tips inside it.
    These need deliveries and routes, so a second read fills them while the summary is already
@@ -46,19 +48,25 @@ Missing amounts are never drawn as zero: a day with no recorded amount leaves a 
 `$0.00` is marked with a dot and a day whose shifts only partly recorded earnings is marked with a
 triangle. At accessibility text sizes the chart gives way to the list, which states every amount.
 
-Money deliberately shows no net per hour and no platform breakdown. A net hourly figure would divide
-costs dated to a period by hours recorded on shifts, the mixed-population rate this project refuses
-(see [Money and metrics](../architecture/money-and-metrics.md)). DashPilot records no delivery
-platform, so there is nothing honest to group by.
+Money deliberately shows no net-after-recorded-expenses per hour and no platform breakdown. That
+figure would divide costs dated to a period by hours recorded on shifts, the mixed-population rate
+this project refuses (see [Money and metrics](../architecture/money-and-metrics.md)). The hourly and
+per-mile figures Money does show for a net are **estimated net after fuel**, which belongs to the
+same shifts as its denominator (below). DashPilot records no delivery platform, so there is nothing
+honest to group by.
 
 Tap an expense to use the existing editor. Editor deletion and swipe deletion each ask once before
 removing the selected record. Cancel changes nothing. Failed changes are shown and remain unsaved.
 Changing an expense's date or category refreshes the affected lists and summaries after a saved write.
 
-Estimated fuel consumption is a separate expandable section, based on recorded miles and the saved
-assumptions of each shift. It carries shift, mileage and partial-route coverage. Recorded fuel purchases
-and estimated consumption are different views of cost; estimates are never subtracted from the recorded
-net. It uses the same delivery and route read as the time and distance section.
+**Fuel and estimated net** comes last. `Fuel purchases` is the period's recorded `Fuel` expenses,
+from the financial read, shown even for an expense-only period. `Estimated fuel used` is worked out
+from recorded miles and each shift's saved vehicle and gas price, with shift, mileage and
+partial-route coverage and a line stating the assumptions (a range where shifts differ). The two are
+never added together or netted against each other, and the estimate is never subtracted from net
+after recorded expenses. `Estimated net after fuel` with its per-working-hour and per-recorded-mile
+rates follows, each over its own paired subset of shifts. The estimates use the same delivery and
+route read as the time and distance section. See [Estimated fuel and net](estimated-fuel.md#in-the-money-workspace).
 
 ![Fuel category filtering and the separate partial-route fuel estimate](../images/screenshots/money-filter-fuel.png){ width="260" }
 

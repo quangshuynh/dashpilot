@@ -24,7 +24,6 @@ final class DashPilotUITests: XCTestCase {
 
     /// Must match `LaunchArgument.seededLateDeliveryHistory`, for the same reason.
     private static let seededLateDeliveryHistoryArgument = "-dashpilot-seeded-late-delivery-history"
-    private static let seededShiftTimeHistoryArgument = "-dashpilot-seeded-shift-time-history"
 
     /// Must match `LaunchArgument.seededOlderWeeks`, for the same reason.
     private static let seededOlderWeeksArgument = "-dashpilot-seeded-older-weeks"
@@ -302,15 +301,6 @@ final class DashPilotUITests: XCTestCase {
     /// to delivered and `$8.00` per recorded delivery hour until the completion
     /// is corrected to `3 hr 15 min`, which makes those `1 hr 15 min` and
     /// `$9.60`.
-    @MainActor
-    private func launchWithShiftTimeHistory() -> XCUIApplication {
-        let app = XCUIApplication()
-        app.launchArguments.append(Self.seededShiftTimeHistoryArgument)
-        launchInPortrait(app)
-        selectWorkspace("Work", in: app)
-        return app
-    }
-
     @MainActor
     private func launchWithLateDeliveryHistory() -> XCUIApplication {
         let app = XCUIApplication()
@@ -791,12 +781,19 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Settings"].appears())
     }
 
-    /// Start a shift, see it running, end it from the Live Activity in two
-    /// taps, read its recap, and find it in history.
+    /// Start a shift, see it running, correct when it started without stopping
+    /// it, end it from the Live Activity in two taps, read its recap, find it in
+    /// history, and correct its start again from its own details with Home and
+    /// Money following.
     ///
     /// The card is the extension's own view drawn in the app, and its buttons
     /// perform the same Live Activity intents in this process, so the first End
     /// Shift tap is proved to end nothing and Keep Shift to leave it running.
+    ///
+    /// Both corrections move the start earlier inside one hour, so the journey
+    /// drives only the minute wheel and is valid on any day at any hour. The
+    /// rules are `ShiftTimeCorrectionTests`; the write, the timer and the Live
+    /// Activity push are `ShiftTimeCorrectionServiceTests`.
     @MainActor
     func testStartsAndEndsAShift() throws {
         let app = launchWithLiveActivityPreview()
@@ -838,6 +835,36 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertTrue(card.buttons["activityControl.end"].appears(), "Keep Shift returns the card to End Shift")
         XCTAssertTrue(app.descendants(matching: .any)["activeShiftStatus"].exists, "and the shift is still running")
 
+        // The running shift's start, corrected two minutes earlier. Three whole
+        // minutes have to fit inside this hour for both corrections below; at
+        // the top of an hour that is at most a three-minute wait.
+        let editStart = app.buttons["editShiftStartButton"]
+        XCTAssertTrue(scrollUntilHittable(editStart, in: app))
+        XCTAssertTrue(waitUntil(timeout: 200) { Calendar.current.component(.minute, from: .now) >= 3 })
+        let minute = Calendar.current.component(.minute, from: .now)
+        editStart.tap()
+        let summary = app.descendants(matching: .any)["shiftTimeCorrectionSummary"]
+        XCTAssertTrue(summary.appears())
+        XCTAssertTrue(summary.label.hasPrefix("Working time so far"), summary.label)
+        XCTAssertFalse(app.datePickers["shiftTimeCorrectionEndPicker"].exists, "A running shift has no end to correct")
+        setTime(minute: String(format: "%02d", minute - 2), ofPicker: "shiftTimeCorrectionStartPicker", in: app)
+        XCTAssertTrue(waitForLabel(summary, toContain: ", was "), summary.label)
+        attachScreenshot("work-edit-start-time")
+        app.buttons["shiftTimeCorrectionSaveButton"].tap()
+        XCTAssertTrue(waitForDisappearance(of: summary), "A valid correction that deletes nothing saves without asking")
+        let startedAt = app.descendants(matching: .any)["activeShiftStartedAt"]
+        XCTAssertTrue(scrollTo(startedAt, in: app))
+        XCTAssertTrue(waitForLabel(startedAt, toContain: String(format: ":%02d", minute - 2)), startedAt.label)
+        XCTAssertTrue(
+            scrollToTop(reaching: app.descendants(matching: .any)["activeShiftStatus"], in: app),
+            "Still running, not paused or ended"
+        )
+        let working = app.descendants(matching: .any)["workingTime"]
+        XCTAssertTrue(
+            waitUntil { (working.value as? String)?.contains("minute") == true },
+            "The timer counts from the corrected start: \(String(describing: working.value))"
+        )
+
         // Second tap within the window ends it.
         card.buttons["activityControl.end"].tap()
         let confirm = card.buttons["activityControl.confirmEnd"]
@@ -870,6 +897,43 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertTrue(completedTime.label.contains("1 of 1 completed shift"))
         XCTAssertFalse(app.descendants(matching: .any)["homeEmptyWeek"].exists)
 
+        // The finished shift's start, one more minute earlier, from its details.
+        selectWorkspace("Work", in: app)
+        openFirstShift(in: app)
+        let elapsed = app.descendants(matching: .any)["shiftDetailDuration"]
+        XCTAssertTrue(scrollTo(elapsed, in: app))
+        let before = elapsed.label
+        let editTimes = app.buttons["editShiftTimeButton"]
+        XCTAssertTrue(scrollUntilHittable(editTimes, in: app))
+        XCTAssertEqual(editTimes.label, "Edit when this shift started and ended")
+        editTimes.tap()
+        XCTAssertTrue(summary.appears())
+        XCTAssertTrue(summary.label.hasPrefix("Duration, "), summary.label)
+        XCTAssertTrue(app.datePickers["shiftTimeCorrectionEndPicker"].exists, "A finished shift's end is correctable too")
+        XCTAssertFalse(app.buttons["shiftTimeCorrectionSaveButton"].isEnabled, "Nothing has changed yet")
+        setTime(minute: String(format: "%02d", minute - 3), ofPicker: "shiftTimeCorrectionStartPicker", in: app)
+        XCTAssertTrue(waitForLabel(summary, toContain: ", was "), summary.label)
+        let route = app.descendants(matching: .any).matching(identifier: "shiftTimeCorrectionRouteWarning").firstMatch
+        XCTAssertTrue(route.appears())
+        XCTAssertTrue(route.label.hasPrefix("No recorded position is deleted"), route.label)
+        attachScreenshot("history-edit-shift-time")
+        app.buttons["shiftTimeCorrectionSaveButton"].tap()
+        XCTAssertTrue(waitForDisappearance(of: summary))
+        XCTAssertTrue(scrollToTop(reaching: elapsed, in: app))
+        XCTAssertTrue(waitUntil { elapsed.label != before }, "The detail follows at once: \(elapsed.label)")
+        let duration = elapsed.label.components(separatedBy: " elapsed").first ?? elapsed.label
+
+        // Home and Money read the same corrected figure.
+        selectWorkspace("Home", in: app)
+        XCTAssertTrue(scrollUntilHittable(completedTime, in: app))
+        XCTAssertTrue(waitForLabel(completedTime, toContain: duration), "\(duration) on Home: \(completedTime.label)")
+        selectWorkspace("Money", in: app)
+        let moneyWorking = app.descendants(matching: .any)["moneyWorkingTime"]
+        XCTAssertTrue(scrollUntilHittable(moneyWorking, in: app))
+        XCTAssertTrue(waitForLabel(moneyWorking, toContain: duration), "\(duration) in Money: \(moneyWorking.label)")
+        let purchases = app.descendants(matching: .any)["moneyFuelPurchases"]
+        XCTAssertTrue(scrollUntilHittable(purchases, in: app))
+        XCTAssertTrue(purchases.label.hasPrefix("No fuel purchase recorded"), purchases.label)
     }
 
     // MARK: Home
@@ -2665,110 +2729,6 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertTrue(waitForLabel(hourlyRate, toContain: "$30.00"), "Showed: \(hourlyRate.label)")
         XCTAssertTrue(scrollTo(mileage, in: app))
         XCTAssertTrue(waitForLabel(mileage, toContain: "4.5 miles"), "Measured again: \(mileage.label)")
-    }
-
-    /// A finished shift's start and end corrected from its own details: the
-    /// recorded times stated, a start after recorded work refused under the
-    /// start picker, the duration shown changing before saving, and after a
-    /// save that removes no route (so asks nothing) the shift, its rate and
-    /// Money's working time all following the corrected times.
-    ///
-    /// Every move here is earlier and inside one hour, so the journey drives
-    /// only the minute wheel and is valid on any weekday. The rules are
-    /// `ShiftTimeCorrectionTests`.
-    @MainActor
-    func testAFinishedShiftsStartAndEndAreCorrectedFromItsDetails() throws {
-        let app = launchWithShiftTimeHistory()
-        openFirstShift(in: app)
-
-        let elapsed = app.descendants(matching: .any)["shiftDetailDuration"]
-        XCTAssertTrue(scrollTo(elapsed, in: app))
-        XCTAssertEqual(elapsed.label, "5 hours elapsed shift time")
-        let edit = app.buttons["editShiftTimeButton"]
-        XCTAssertTrue(scrollUntilHittable(edit, in: app))
-        XCTAssertEqual(edit.label, "Edit when this shift started and ended")
-        edit.tap()
-
-        let summary = app.descendants(matching: .any)["shiftTimeCorrectionSummary"]
-        XCTAssertTrue(summary.appears())
-        XCTAssertEqual(summary.label, "Duration, 5 hours")
-        XCTAssertTrue(app.descendants(matching: .any)["shiftTimeCorrectionRecordedStart"].label.hasPrefix("Recorded start"))
-        let save = app.buttons["shiftTimeCorrectionSaveButton"]
-        XCTAssertFalse(save.isEnabled, "Nothing has changed yet")
-
-        setTime(minute: "45", ofPicker: "shiftTimeCorrectionStartPicker", in: app)
-        let startRefusal = app.descendants(matching: .any).matching(identifier: "shiftTimeCorrectionStartRefusal").firstMatch
-        XCTAssertTrue(startRefusal.appears())
-        XCTAssertTrue(startRefusal.label.hasPrefix("Delivery 1 has Accepted recorded at "), "Showed: \(startRefusal.label)")
-        XCTAssertFalse(save.isEnabled)
-
-        setTime(minute: "05", ofPicker: "shiftTimeCorrectionStartPicker", in: app)
-        XCTAssertFalse(startRefusal.exists, "No longer refused")
-        XCTAssertTrue(waitForLabel(summary, toContain: "Duration, 5 hours, 10 minutes, was 5 hours"), summary.label)
-        setTime(minute: "00", ofPicker: "shiftTimeCorrectionEndPicker", in: app)
-        XCTAssertTrue(waitForLabel(summary, toContain: "Duration, 4 hours, 55 minutes, was 5 hours"), summary.label)
-        let route = app.descendants(matching: .any).matching(identifier: "shiftTimeCorrectionRouteWarning").firstMatch
-        XCTAssertTrue(route.appears())
-        XCTAssertTrue(route.label.hasPrefix("No recorded position is deleted"), route.label)
-        save.tap()
-
-        XCTAssertTrue(waitForDisappearance(of: summary), "A valid correction that deletes nothing saves without asking")
-        XCTAssertTrue(scrollToTop(reaching: elapsed, in: app))
-        XCTAssertTrue(waitForLabel(elapsed, toContain: "4 hours, 55 minutes"), elapsed.label)
-        let hourlyRate = app.descendants(matching: .any)["shiftDetailHourlyRate"]
-        XCTAssertTrue(scrollTo(hourlyRate, in: app))
-        XCTAssertTrue(waitForLabel(hourlyRate, toContain: "$24.41"), "$120.00 over 4 h 55 min: \(hourlyRate.label)")
-
-        selectWorkspace("Money", in: app)
-        let working = app.descendants(matching: .any)["moneyWorkingTime"]
-        XCTAssertTrue(scrollTo(working, in: app))
-        XCTAssertTrue(waitForLabel(working, toContain: "4 hours, 55 minutes"), "Money follows the same times: \(working.label)")
-        let total = app.descendants(matching: .any)["moneyTotalShiftTime"]
-        XCTAssertTrue(scrollUntilHittable(total, in: app))
-        XCTAssertTrue(waitForLabel(total, toContain: "Total shift time, start to end, 4 hours, 55 minutes"), total.label)
-        // The fixture records neither a fuel purchase nor vehicle assumptions,
-        // and the section says both without showing a zero.
-        let purchases = app.descendants(matching: .any)["moneyFuelPurchases"]
-        XCTAssertTrue(scrollUntilHittable(purchases, in: app))
-        XCTAssertTrue(purchases.label.hasPrefix("No fuel purchase recorded"), purchases.label)
-        let estimate = app.descendants(matching: .any)["moneyEstimatedFuel"]
-        XCTAssertTrue(scrollUntilHittable(estimate, in: app))
-        XCTAssertTrue(waitForLabel(estimate, toContain: "No estimated fuel cost"), estimate.label)
-    }
-
-    /// A running shift's start corrected from the Work panel: only the start
-    /// is offered, saving keeps the shift running, and the panel's start time
-    /// and working timer follow the corrected start.
-    @MainActor
-    func testARunningShiftsStartIsCorrectedWithoutStoppingIt() throws {
-        let app = launchWithEmptyStore()
-        let start = app.buttons["startShiftButton"]
-        XCTAssertTrue(start.appears())
-        start.tap()
-        XCTAssertTrue(app.buttons["pauseShiftButton"].appears())
-
-        let edit = app.buttons["editShiftStartButton"]
-        XCTAssertTrue(scrollUntilHittable(edit, in: app))
-        // Two whole minutes earlier has to be inside this hour, so the journey
-        // drives only the minute wheel. At most two minutes' wait, at the top
-        // of an hour.
-        XCTAssertTrue(waitUntil(timeout: 130) { Calendar.current.component(.minute, from: .now) >= 2 })
-        let minute = String(format: "%02d", Calendar.current.component(.minute, from: .now) - 2)
-        edit.tap()
-
-        let summary = app.descendants(matching: .any)["shiftTimeCorrectionSummary"]
-        XCTAssertTrue(summary.appears())
-        XCTAssertTrue(summary.label.hasPrefix("Working time so far"), summary.label)
-        XCTAssertFalse(app.datePickers["shiftTimeCorrectionEndPicker"].exists, "A running shift has no end to correct")
-        setTime(minute: minute, ofPicker: "shiftTimeCorrectionStartPicker", in: app)
-        app.buttons["shiftTimeCorrectionSaveButton"].tap()
-
-        XCTAssertTrue(waitForDisappearance(of: summary))
-        XCTAssertTrue(app.buttons["pauseShiftButton"].appears(), "Still running, not paused or ended")
-        let started = app.descendants(matching: .any)["activeShiftStartedAt"]
-        XCTAssertTrue(waitForLabel(started, toContain: ":\(minute)"), started.label)
-        let working = app.descendants(matching: .any)["workingTime"]
-        XCTAssertTrue(waitUntil { (working.value as? String)?.contains("minute") == true }, "\(String(describing: working.value))")
     }
 
     /// A pickup place named on a running delivery advances nothing; a second

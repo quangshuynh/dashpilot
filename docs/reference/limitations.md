@@ -147,41 +147,42 @@ parking` whose pickups stores may still hold.
   after any spoken Resume Driving, and the confirmation says so.
 
 
-## Shift end-time correction
+## Shift start and end-time correction
 
-- **Only the end, and only on a finished shift.** A shift's start is not correctable anywhere, and a
-  delivery's own lifecycle times are corrected on the delivery rather than here. A running shift has
-  no recorded end to correct: `End` is what records one, and it stops route recording and reconciles
-  the Lock Screen card as it does.
-- **Route recorded after the corrected end is deleted, permanently.** Moving the end earlier removes
-  those positions from the store. Moving the end later again does not bring them back, and there is
-  no undo, trash or archive. The confirmation states the count before anything is deleted.
+- **A running shift's start only.** A running shift has no recorded end to correct: `End Shift` is
+  what records one, and it stops route recording and reconciles the Lock Screen card as it does. A
+  delivery's own lifecycle times are corrected on the delivery rather than here.
+- **Route outside the corrected times is deleted, permanently.** A start moved later removes the
+  positions before it, and an end moved earlier removes those after it. Moving a time outward again
+  does not bring them back, and there is no undo, trash or archive. The confirmation states the
+  count before anything is deleted.
 - **Recorded mileage is measured again, never scaled.** No distance is ever derived from a duration.
-  The retained positions are measured from their own coordinates against the corrected shift, so the
-  share of the mileage a shift keeps has nothing to do with the share of the time it keeps.
-- **No endpoint is invented.** Nothing is interpolated from the last retained position to the
-  corrected end. The stretch between them is counted as a capture gap, exactly as it would be for any
-  other shift whose recording stopped early.
-- **Moving the end later adds no route and no mileage.** The added stretch has no recording behind
-  it, and DashPilot reports that as one more capture gap and a partial route rather than inventing
-  coverage. There is no separate "this part of the shift was never recorded" marker, and the gap
-  count does not say *where* in the shift the missing stretch is.
-- **A correction is refused rather than resolved.** An end before the shift's start, before anything
-  a delivery recorded, past a recorded pause's own end, or reaching into a later shift is named and
-  refused. Nothing is clamped, and no pause or delivery timestamp is moved to make an end fit. The
-  delivery refusal names the blocking delivery and event so the driver can go and correct it, and
+  The retained positions are measured from their own coordinates against the corrected shift.
+- **No endpoint is invented, and moving a time outward adds no route.** Nothing is interpolated to a
+  corrected boundary. The stretch gained, or the stretch between a boundary and the nearest retained
+  position, is counted as a capture gap and a partial route. The gap count does not say *where* in
+  the shift the missing stretch is.
+- **A correction is refused rather than resolved.** A start at or after the end, a time moved later
+  into the future, a start after anything the shift recorded or an end before it, and either time
+  overlapping another shift are named and refused. Nothing is clamped, and no pause, delivery or other
+  shift is moved to make a time fit. The delivery refusal names the blocking delivery and event, and
   that is the whole of the help it gives: the shift editor corrects no delivery.
-- **A shift holding a pause that was never ended cannot be corrected at all.** That row is a store
-  DashPilot cannot write — ending a shift closes its open pause — and the pause editor refuses it
-  too, so such a shift has no remedy here. Deleting the shift is the only one.
-- **Shifts that already overlap are not repaired.** The editor will not create an overlap with a
-  later shift, but nothing merges, flags or corrects a pair a store already holds.
-- **No end time is suggested.** DashPilot does not infer when a driver stopped from the last position
-  it recorded, the last delivery they completed, or a stationary stretch. The instant is the
-  driver's.
-- **Nothing is logged about a correction beyond that one happened.** The instant, the direction and
-  the number of positions removed are all absent from the log, for the reason no coordinate or amount
-  is ever written to it.
+- **The overlap rule reads the neighbouring shifts only.** It compares the proposed times with the
+  shift recorded before and after them, which is sufficient for a store whose shifts do not overlap.
+  Shifts that already overlap are not repaired, merged or flagged.
+- **A finished shift holding a pause or stretch parked that was never ended cannot have its end
+  corrected.** That row is a store DashPilot cannot write, and the pause editor refuses it too.
+- **Picker reach.** Without a neighbouring shift, a picker offers a day either side of the recorded
+  time. That is a picker bound, not a rule; a correction further out means editing in steps.
+- **A start corrected across a day, week or month boundary moves the whole shift** into the other
+  period, because a shift is reported in the period containing its start and overnight shifts are
+  not split.
+- **A failed save of a running-shift correction discards route positions captured but not yet
+  written**, exactly as a failed pause does, because both share the main context's rollback.
+- **No time is suggested.** DashPilot does not infer when a driver started or stopped from positions,
+  deliveries or a stationary stretch.
+- **Nothing is logged about a correction beyond that one happened**, which side moved and whether the
+  shift was running. Instants and position counts are never logged.
 
 ## Correcting a completed delivery's recorded times
 

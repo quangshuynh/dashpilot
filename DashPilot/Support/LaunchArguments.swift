@@ -212,9 +212,9 @@ nonisolated enum LaunchArgument {
     /// one delivery accepted at 9:40 AM and two short route sessions, all well
     /// inside the shift.
     ///
-    /// For the shift-time correction journey: every minute it sets is inside
-    /// one hour, so it drives only the minute wheel, and the earlier moves it
-    /// saves are valid on any weekday.
+    /// For the shift-time editor's preview and screenshots: the times are off
+    /// the hour, so an earlier start inside the same hour can be chosen with the
+    /// minute wheel alone.
     ///
     /// Every time, amount and coordinate is invented. Debug builds only, and in
     /// memory, so it can never touch a real store.
