@@ -345,6 +345,19 @@ nonisolated struct PeriodMetrics: Equatable, Sendable {
     /// target. Empty for a period in which no shift recorded a target.
     var hourlyTarget: PeriodHourlyTargetSummary = .none
 
+    /// The additional tips recorded on deliveries that contribute to
+    /// ``recordedDeliveryEarnings``: a part of that delivery subtotal, never an
+    /// amount to add to it or to ``recordedGrossEarnings``.
+    ///
+    /// Shift gross and delivery records are independent facts, and a shift's
+    /// amount may already include every one of these tips. Absent, not zero,
+    /// when no contributing delivery carries a tip; tips are never recorded as
+    /// zero. Read only by a load that realizes deliveries.
+    var recordedAdditionalTips: Money? = nil
+
+    /// How many recorded tips ``recordedAdditionalTips`` adds up.
+    var additionalTipCount = 0
+
     /// A period with no completed shift in it.
     ///
     /// Every figure is absent rather than zero. A week nobody drove is not a
@@ -755,6 +768,22 @@ nonisolated extension PeriodMetrics {
         return "Amounts recorded against individual deliveries, \(amount.formatted(locale: locale)), "
             + "\(deliveryEarningsCoverage.spokenStatement(noun: "delivery", pluralNoun: "deliveries")). "
             + "This is a separate record from the shift amounts above and is not added to them."
+    }
+
+    /// The additional tips inside the delivery subtotal: `"$12.00 across 3
+    /// tips"`, or `nil` when no contributing delivery carries one.
+    func additionalTipsStatement(locale: Locale = .autoupdatingCurrent) -> String? {
+        guard let amount = recordedAdditionalTips else { return nil }
+        return "\(amount.formatted(locale: locale)) across \(additionalTipCount) \(additionalTipCount == 1 ? "tip" : "tips")"
+    }
+
+    func spokenAdditionalTipsStatement(locale: Locale = .autoupdatingCurrent) -> String {
+        guard let amount = recordedAdditionalTips else {
+            return "No additional tips recorded on deliveries with recorded pay."
+        }
+        return "Additional tips recorded on deliveries, \(amount.formatted(locale: locale)), "
+            + "across \(additionalTipCount) \(additionalTipCount == 1 ? "tip" : "tips"). "
+            + "Already included in the delivery subtotal, and never added to shift gross."
     }
 
     private static func shiftNoun(_ count: Int) -> String {

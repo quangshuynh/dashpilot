@@ -17,7 +17,10 @@ the Trend keeps the selected week. The range follows
 `ReportingPeriod.weekCalendar`, including the reporting timezone, DST and year boundaries. Internally
 weeks are half-open: Monday at midnight through, but excluding, the next Monday.
 
-The Trend picker switches between recorded gross earnings and gross per working hour. Both use
+The Trend picker switches between recorded gross earnings, net after recorded expenses and gross
+per working hour. Net uses the week's recorded gross less the expenses dated in that week, only when
+both were recorded, so a week without a recorded expense is a gap rather than a net equal to gross.
+A week whose recorded expenses exceed its recorded gross draws below zero. All three use
 columns with a zero baseline, without smoothing or interpolation. The axis labels every other week,
 ending with the newest, and names a month only where it changes (for example `Sep 21`, `Oct 5`,
 `19`, `Nov 2`); the week menu and weekly values give exact ranges. A shaded band marks the selected

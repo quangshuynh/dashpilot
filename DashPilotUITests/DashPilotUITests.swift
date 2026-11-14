@@ -539,6 +539,9 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertTrue(range.label.hasPrefix("This Week"), range.label)
 
         func choose(_ preset: String) {
+            // The menu is the first row; at AX5 a partly scrolled list leaves
+            // it under the navigation bar, where a tap lands on the bar.
+            XCTAssertTrue(scrollToTop(reaching: app.buttons["moneyPeriodMenu"], in: app, swipes: 2))
             app.buttons["moneyPeriodMenu"].tap()
             let option = app.buttons["moneyPreset-\(preset)"]
             XCTAssertTrue(option.appears(), app.debugDescription)
@@ -569,6 +572,12 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertTrue(waitUntil { range.label == visited[0] }, range.label)
     }
 
+    /// At AX5 Money's summary, time and distance, daily list and comparison sit
+    /// above the expense rows, so returning to the period controls takes more
+    /// than the default six swipes.
+    private static let moneyTopSwipes = 24
+    private static let moneyScrollSwipes = 24
+
     /// Money's coverage, category selection and navigation remain usable at AX5.
     @MainActor
     func testMoneyFinancialWorkspaceAtLargestTextSize() throws {
@@ -578,37 +587,62 @@ final class DashPilotUITests: XCTestCase {
         let app = launchWithPeriodSummary(atTextSize: visualDefault ? nil : Self.accessibilityXXXLTextSize)
         selectWorkspace("Money", in: app)
         let gross = app.descendants(matching: .any)["moneyGross"]
-        XCTAssertTrue(scrollUntilHittable(gross, in: app))
+        XCTAssertTrue(scrollUntilHittable(gross, in: app, maxSwipes: Self.moneyScrollSwipes))
         XCTAssertTrue(waitForLabel(gross, toContain: "$206.25"))
         XCTAssertTrue(gross.label.contains("2 of 3 completed shifts"))
         attachScreenshot("money-overview")
         attachMoneyScreenshot("money-ax5-gross", focusing: gross, in: app)
         let net = app.descendants(matching: .any)["moneyNet"]
-        XCTAssertTrue(scrollUntilHittable(net, in: app))
+        XCTAssertTrue(scrollUntilHittable(net, in: app, maxSwipes: Self.moneyScrollSwipes))
         XCTAssertTrue(waitForLabel(net, toContain: "$67.66"))
         XCTAssertTrue(net.label.contains("not profit"))
         attachMoneyScreenshot("money-ax5-net", focusing: net, in: app)
+        let hourly = app.descendants(matching: .any)["moneyHourlyRate"]
+        XCTAssertTrue(scrollUntilHittable(hourly, in: app, maxSwipes: Self.moneyScrollSwipes))
+        XCTAssertTrue(hourly.label.contains("2 of 3"), hourly.label)
+        // Delivery and route figures arrive from their own read, below the summary.
+        let active = app.descendants(matching: .any)["moneyDeliveryActiveTime"]
+        XCTAssertTrue(scrollUntilHittable(active, in: app, maxSwipes: Self.moneyScrollSwipes), app.debugDescription)
+        attachMoneyScreenshot("money-time-distance", focusing: active, in: app)
+        let tips = app.descendants(matching: .any)["moneyAdditionalTips"]
+        XCTAssertTrue(scrollUntilHittable(tips, in: app, maxSwipes: Self.moneyScrollSwipes))
+        XCTAssertTrue(tips.label.contains("never added to shift gross") || tips.label.contains("No additional tips"), tips.label)
+        if visualDefault {
+            let chart = app.descendants(matching: .any)["moneyActivityChart"]
+            XCTAssertTrue(scrollUntilHittable(chart, in: app, maxSwipes: Self.moneyScrollSwipes))
+            attachMoneyScreenshot("money-activity-chart", focusing: chart, in: app)
+        }
+        // Each recorded day opens its own report and returns to the same week.
+        let day = app.descendants(matching: .any).matching(identifier: "moneyActivityRow").firstMatch
+        XCTAssertTrue(scrollUntilHittable(day, in: app, maxSwipes: Self.moneyScrollSwipes))
+        XCTAssertTrue(day.label.contains("Gross") || day.label.contains("Expenses"), day.label)
+        attachMoneyScreenshot("money-by-day", focusing: day, in: app)
+        day.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["periodTitle"].appears())
+        goBack(in: app)
+        XCTAssertTrue(app.navigationBars["Money"].appears())
+        XCTAssertTrue(scrollToTop(reaching: app.buttons["moneyPreviousWeek"], in: app, swipes: Self.moneyTopSwipes))
         if visualDefault {
             let fuel = app.buttons["Estimated fuel consumption"]
-            XCTAssertTrue(scrollUntilHittable(fuel, in: app))
+            XCTAssertTrue(scrollUntilHittable(fuel, in: app, maxSwipes: Self.moneyScrollSwipes))
             fuel.tap()
             let estimate = app.descendants(matching: .any)["moneyEstimatedFuel"]
-            XCTAssertTrue(scrollUntilHittable(estimate, in: app), app.debugDescription)
+            XCTAssertTrue(scrollUntilHittable(estimate, in: app, maxSwipes: Self.moneyScrollSwipes), app.debugDescription)
             XCTAssertTrue(estimate.label.contains("1 of 3"))
             XCTAssertTrue(estimate.label.lowercased().contains("partial"))
             attachMoneyScreenshot("money-estimated-fuel", focusing: estimate, in: app)
-            XCTAssertTrue(scrollToTop(reaching: app.buttons["moneyPreviousWeek"], in: app))
+            XCTAssertTrue(scrollToTop(reaching: app.buttons["moneyPreviousWeek"], in: app, swipes: Self.moneyTopSwipes))
         }
         let filter = app.buttons["moneyCategoryFilter"]
-        XCTAssertTrue(scrollUntilHittable(filter, in: app))
+        XCTAssertTrue(scrollUntilHittable(filter, in: app, maxSwipes: Self.moneyScrollSwipes))
         filter.tap()
         app.buttons["Fuel"].tap()
         let subtotal = app.descendants(matching: .any)["moneyFilteredSubtotal"]
-        XCTAssertTrue(scrollUntilHittable(subtotal, in: app))
+        XCTAssertTrue(scrollUntilHittable(subtotal, in: app, maxSwipes: Self.moneyScrollSwipes))
         XCTAssertTrue(waitForLabel(subtotal, toContain: "$42.10"))
         attachMoneyScreenshot("money-ax5-filter", focusing: subtotal, in: app)
         let expense = app.descendants(matching: .any).matching(identifier: "expenseRow").firstMatch
-        XCTAssertTrue(scrollUntilHittable(expense, in: app))
+        XCTAssertTrue(scrollUntilHittable(expense, in: app, maxSwipes: Self.moneyScrollSwipes))
         expense.tap()
         let field = app.textFields["expenseAmountField"]
         XCTAssertTrue(field.appears())
@@ -627,19 +661,21 @@ final class DashPilotUITests: XCTestCase {
         XCTAssertLessThanOrEqual((note.value as? String)?.count ?? 0, 120)
         app.buttons["saveExpenseButton"].tap()
         XCTAssertTrue(app.buttons["saveExpenseButton"].disappears())
-        XCTAssertTrue(scrollUntilHittable(expense, in: app))
+        XCTAssertTrue(scrollUntilHittable(expense, in: app, maxSwipes: Self.moneyScrollSwipes))
         XCTAssertTrue(expense.label.contains("$1,000,000.00"))
         XCTAssertTrue(expense.label.contains("charging accessories"))
         attachMoneyScreenshot("money-large-expense", focusing: expense, in: app)
-        XCTAssertTrue(scrollToTop(reaching: app.buttons["moneyPreviousWeek"], in: app))
-        XCTAssertTrue(scrollUntilHittable(net, in: app))
+        XCTAssertTrue(scrollToTop(reaching: app.buttons["moneyPreviousWeek"], in: app, swipes: Self.moneyTopSwipes))
+        XCTAssertTrue(scrollUntilHittable(net, in: app, maxSwipes: Self.moneyScrollSwipes))
         XCTAssertTrue(waitForLabel(net, toContain: "999,890.24"))
         XCTAssertTrue(net.label.contains("-"), "A supported negative net keeps its sign")
         attachMoneyScreenshot("money-negative-net", focusing: net, in: app)
-        XCTAssertTrue(scrollToTop(reaching: app.buttons["moneyPreviousWeek"], in: app))
+        XCTAssertTrue(scrollToTop(reaching: app.buttons["moneyPreviousWeek"], in: app, swipes: Self.moneyTopSwipes))
         assertMoneyWeekBrowsing(in: app)
         app.buttons["moneyPreviousWeek"].tap()
-        XCTAssertTrue(scrollUntilHittable(app.descendants(matching: .any)["moneyExpensesEmpty"], in: app))
+        XCTAssertTrue(app.descendants(matching: .any)["moneyPeriodEmpty"].appears(), "A week with no records says so once")
+        XCTAssertFalse(app.descendants(matching: .any)["moneyGross"].exists, "No figures are drawn for a week with no records")
+        XCTAssertTrue(scrollUntilHittable(app.descendants(matching: .any)["moneyExpensesEmpty"], in: app, maxSwipes: Self.moneyScrollSwipes))
         attachScreenshot("money-previous-week")
         selectWorkspace("Work", in: app)
         XCTAssertTrue(app.navigationBars["Work"].appears(), "Work remains one tap away")
@@ -1150,6 +1186,8 @@ final class DashPilotUITests: XCTestCase {
         app.buttons["Supplies"].tap()
         XCTAssertTrue(app.descendants(matching: .any)["moneyExpensesEmpty"].appears())
         attachScreenshot("money-category-empty")
+        // The category breakdown stays above the filter while it applies.
+        XCTAssertTrue(scrollUntilHittable(app.buttons["moneyClearFilter"], in: app))
         app.buttons["moneyClearFilter"].tap()
         XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "expenseRow").firstMatch.appears())
         openPeriodSummary(in: app)

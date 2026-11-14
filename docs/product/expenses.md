@@ -10,17 +10,46 @@ built out of records the driver typed, and nothing else.
 
 ![Money's selected week, earnings coverage, recorded expenses and net](../images/screenshots/money-workspace.png){ width="260" }
 
-Money opens on the current Monday-to-Sunday week, with previous/next week navigation and a This Week
-reset. The date range names the selected days. Add Expense stays near the top. Recorded shift gross
-shows contributing completed-shift coverage; delivery earnings remain independent. Recorded expenses
-count only entered costs dated inside the selected week. Net after recorded expenses subtracts those
-costs only when both earnings and expenses have recorded values. It can be negative and is not profit
-or a tax figure. An expense-only week shows its costs without inventing zero earnings or a net.
+Money opens on the current Monday-to-Sunday week. The Period menu, the exact date heading and the
+week arrows come first; [Period summaries](period-summaries.md) describes the presets and browsing.
+Insights and Add Expense sit in the navigation bar. The screen then reads from most to least
+important:
 
-The expense list is newest first, with stable identity breaking equal-date ties. Choose all expenses
-or one of the five categories. The labelled filtered subtotal changes with the list; the overview's
-expenses and net still include every category. Category subtotals expand below the records. No records
-anywhere, no records this week, no matching category, and failed loading have distinct states.
+1. **Summary.** Recorded shift gross with its completed-shift coverage, then four compact tiles:
+   recorded expenses, net after recorded expenses, gross per working hour and working time. All
+   five come from the first, financial read (shifts and expenses only), so they appear without
+   waiting for routes. Net subtracts recorded costs only when both earnings and expenses have
+   recorded values. It can be negative and is not profit or a tax figure. An expense-only period
+   shows its costs without inventing zero earnings or a net.
+2. **Time, distance and deliveries.** Delivery active time (overlapping deliveries counted once),
+   non-delivery time, gross per active delivery hour, recorded mileage with partial-route coverage,
+   gross per recorded mile, the amount recorded on deliveries and the additional tips inside it.
+   These need deliveries and routes, so a second read fills them while the summary is already
+   visible. Delivery amounts and tips are independent of shift gross and are never added to it.
+3. **By day.** A chart of recorded gross beside recorded expenses for each day so far, then every
+   day that holds a completed shift or an expense, newest first. Expense-only days are listed.
+   Ranges longer than 31 days are divided into Monday-Sunday weeks, and ranges longer than 186
+   days into months, each clipped to the selected range. Each row opens that day's (or week's)
+   full report. The slices are built by the same calculator from the same records as the summary,
+   so they always add back up to it.
+4. **Expenses.** Recorded expenses by category, in category order with a proportional bar; tapping
+   a category filters the list, and tapping it again shows every category; the breakdown stays in
+   place while filtered. The list is newest first, with stable identity breaking equal-date
+   ties. The labelled filtered subtotal changes with the list; the summary's expenses and net still
+   include every category. No records anywhere, no records in the period, no matching category and
+   failed loading have distinct states.
+5. **Compared with the previous period.** Gross, working time, gross per working hour and recorded
+   expenses beside the preceding equivalent period (the week, month or equal-length range before).
+   No percentage is shown while the selected period is in progress.
+
+Missing amounts are never drawn as zero: a day with no recorded amount leaves a gap, a recorded
+`$0.00` is marked with a dot and a day whose shifts only partly recorded earnings is marked with a
+triangle. At accessibility text sizes the chart gives way to the list, which states every amount.
+
+Money deliberately shows no net per hour and no platform breakdown. A net hourly figure would divide
+costs dated to a period by hours recorded on shifts, the mixed-population rate this project refuses
+(see [Money and metrics](../architecture/money-and-metrics.md)). DashPilot records no delivery
+platform, so there is nothing honest to group by.
 
 Tap an expense to use the existing editor. Editor deletion and swipe deletion each ask once before
 removing the selected record. Cancel changes nothing. Failed changes are shown and remain unsaved.
@@ -29,13 +58,13 @@ Changing an expense's date or category refreshes the affected lists and summarie
 Estimated fuel consumption is a separate expandable section, based on recorded miles and the saved
 assumptions of each shift. It carries shift, mileage and partial-route coverage. Recorded fuel purchases
 and estimated consumption are different views of cost; estimates are never subtracted from the recorded
-net. Routes are loaded only after the section is requested.
+net. It uses the same delivery and route read as the time and distance section.
 
 ![Fuel category filtering and the separate partial-route fuel estimate](../images/screenshots/money-filter-fuel.png){ width="260" }
 
 All Recorded Expenses opens the full ledger. Period Summaries starts on Money's selected week and
-provides days, weeks, months, custom ranges, comparisons and explicit JSON/CSV export. No new expense
-ledger, storage shape, category or financial calculation is introduced.
+provides days, weeks, months, custom ranges, comparisons and explicit JSON/CSV export. No expense
+ledger, storage shape or category is added for the workspace.
 
 ## What an expense is
 

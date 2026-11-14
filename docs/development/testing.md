@@ -8,10 +8,19 @@ Sunday/Monday expense and overnight-shift membership, missing/zero/negative valu
 overall totals, deterministic row order, date/category corrections, delete cancellation/confirmation,
 duplicate confirmation, failed writes through fresh contexts, optional-fuel parity and v6 export bounds.
 
+`MoneyActivityTests` covers how a period is divided (days, clipped weeks, clipped months), DST weeks
+and months, midnight and overnight membership, expense-only days, missing versus zero earnings,
+running-shift exclusion, slices drawn only once begun, and reconciliation of slice totals with the
+period's figures across overlapping shifts and five years of synthetic history. `MoneyWorkspaceTests`
+also checks the comparison with the preceding equivalent week and custom range, empty periods, and
+that additional tips stay inside delivery pay and never reach shift gross.
+
 The existing expense UI journey covers category emptiness, clearing a filter, authoritative refresh and
 delete cancellation/confirmation. One additional AX5 Money journey covers weekly gross and net coverage,
-category subtotals, large amounts and a long synthetic note, previous-week navigation and returning
-to Work. The essential suite is 40 journeys,
+the working-hour rate, the delivery and route section and its tips row, opening a day's report from
+the daily list and returning, category subtotals, large amounts and a long synthetic note,
+previous-week navigation and returning to Work. The default-size visual pass also captures the
+activity chart. The essential suite is 40 journeys,
 at its unchanged ceiling of 40; the traceability table names every journey.
 
 Set `TEST_RUNNER_DASHPILOT_MONEY_PROFILE=1` to run `MoneyWorkspaceMeasurementTests` serially. It writes

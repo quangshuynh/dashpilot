@@ -63,6 +63,27 @@ struct MoneyWorkspaceMeasurementTests {
         let monthStart = clock.now
         _ = try await Task.detached { try PeriodDataLoader.load(monthRequest, in: container) }.value
         elapsed("Switch to this month", from: monthStart)
+        let workspaceRequest = PeriodLoadRequest(period: period, previous: period.precedingEquivalent(using: calendar),
+                                                 includesExpenseRows: true, activityCalendar: calendar)
+        let workspaceStart = clock.now
+        let workspace = try await Task.detached { try PeriodDataLoader.load(workspaceRequest, in: container) }.value
+        elapsed("Workspace week with previous week and days", from: workspaceStart)
+        #expect(workspace.money?.activity?.buckets.count == 7)
+        let fiveYearsAgo = try #require(calendar.date(byAdding: .year, value: -5, to: period.start))
+        let fiveYears = try #require(ReportingPeriod(from: fiveYearsAgo, through: period.lastInstant, calendar: calendar))
+        let longRequest = PeriodLoadRequest(period: fiveYears, previous: fiveYears.precedingEquivalent(using: calendar),
+                                            includesExpenseRows: true, activityCalendar: calendar)
+        let longStart = clock.now
+        let long = try await Task.detached { try PeriodDataLoader.load(longRequest, in: container) }.value
+        elapsed("Workspace five-year range with previous range and months", from: longStart)
+        let longSummary = try #require(long.money)
+        #expect(longSummary.activity?.granularity == .month)
+        #expect(longSummary.activity?.buckets.compactMap(\.metrics.recordedGrossEarnings).reduce(.zero, +)
+                == longSummary.metrics.recordedGrossEarnings)
+        let detailRequest = PeriodLoadRequest(period: period, includesRouteDetails: true)
+        let detailStart = clock.now
+        _ = try await Task.detached { try PeriodDataLoader.load(detailRequest, in: container) }.value
+        elapsed("Detail read (deliveries and routes) for selected week", from: detailStart)
         let service = ExpenseService(context: context)
         let addStart = clock.now
         let expense = try service.record(amount: Money(amount: 15), category: .fuel, occurredAt: period.start)

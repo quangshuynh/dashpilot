@@ -10,6 +10,9 @@ nonisolated struct PeriodLoadRequest: Equatable, Sendable {
     var includesExpenseRows = false
     var includesFuelEstimates = false
     var insightsWindow: InsightsWindow?
+    /// When set with ``includesExpenseRows``, Money's activity slices are built
+    /// in this calendar from the same records as the period's figures.
+    var activityCalendar: Calendar?
 }
 
 /// Only the facts Home requested. Unread routes cannot become missing-mileage claims.
@@ -97,18 +100,28 @@ nonisolated enum PeriodDataLoader {
                                       previous: nil, money: nil, insights: series)
         }
         let currentExpenses = try context.fetch(expenses(in: request.period))
-        let current = try metrics(in: request.period, details: request.includesRouteDetails,
-                                  fuel: request.includesFuelEstimates, expenses: currentExpenses, context: context)
-        let previous = try request.previous.map { try metrics(in: $0, details: request.includesRouteDetails, fuel: false,
-                                                       expenses: context.fetch(expenses(in: $0)), context: context) }
+        let currentRecords = try records(in: request.period, details: request.includesRouteDetails,
+                                         fuel: request.includesFuelEstimates, context: context)
+        let currentExpenseRecords = currentExpenses.map(\.expenseRecord)
+        let current = PeriodMetricsCalculator().metrics(of: currentRecords, expenses: currentExpenseRecords, in: request.period)
+        let previous = try request.previous.map { period in
+            try PeriodMetricsCalculator().metrics(
+                of: records(in: period, details: request.includesRouteDetails, fuel: false, context: context),
+                expenses: context.fetch(expenses(in: period)).map(\.expenseRecord), in: period)
+        }
         try Task.checkCancellation()
         var money: MoneyPeriodSummary?
         if request.includesExpenseRows {
             var anyExpense = FetchDescriptor<Expense>()
             anyExpense.fetchLimit = 1
             let hasAnyExpense = try !currentExpenses.isEmpty || !context.fetch(anyExpense).isEmpty
+            let activity = try request.activityCalendar.flatMap { calendar in
+                try MoneyActivityBuilder.build(shifts: currentRecords, expenses: currentExpenseRecords,
+                                               in: request.period, calendar: calendar)
+            }
             money = MoneyPeriodSummary(metrics: current, rows: currentExpenses.map(\.presentation), hasAnyExpense: hasAnyExpense,
-                                       includesFuelEstimates: request.includesFuelEstimates || request.includesRouteDetails)
+                                       includesFuelEstimates: request.includesFuelEstimates || request.includesRouteDetails,
+                                       previous: previous, activity: activity)
         }
         try Task.checkCancellation()
         return PeriodDataSnapshot(overview: HomePeriodSummary(current),
@@ -116,10 +129,11 @@ nonisolated enum PeriodDataLoader {
                                   previous: request.includesRouteDetails ? previous : nil, money: money)
     }
 
-    private static func metrics(in period: ReportingPeriod, details: Bool, fuel: Bool, expenses: [Expense], context: ModelContext) throws -> PeriodMetrics {
+    private static func records(in period: ReportingPeriod, details: Bool, fuel: Bool, context: ModelContext) throws -> [PeriodShiftRecord] {
         try Task.checkCancellation()
         let shifts = try context.fetch(shifts(in: period))
         var records: [PeriodShiftRecord] = []
+        records.reserveCapacity(shifts.count)
         for shift in shifts {
             try Task.checkCancellation()
             if details {
@@ -128,7 +142,7 @@ nonisolated enum PeriodDataLoader {
                 records.append(financialRecord(shift, fuel: fuel))
             }
         }
-        return PeriodMetricsCalculator().metrics(of: records, expenses: expenses.map(\.expenseRecord), in: period)
+        return records
     }
 
     /// The shared financial path never realizes deliveries and reads routes only

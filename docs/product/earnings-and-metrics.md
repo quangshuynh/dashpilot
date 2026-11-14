@@ -168,6 +168,14 @@ at all, and the way to record that no tip arrived is to record none.
   one changes neither.
 - **Not read from anywhere.** DashPilot sees no delivery platform and no payout.
 
+### Tips in a period
+
+Money's time and distance section shows the additional tips recorded in the selected period as their
+own subtotal and count. Only tips on deliveries whose platform pay is recorded are counted, so the
+tip subtotal is always a part of the delivery subtotal shown above it and never a second amount
+beside it. Neither is added to shift gross, which may already include those tips. With no tip
+recorded, the subtotal is absent rather than `$0.00`.
+
 ## Expected pay is not earnings
 
 A delivery **in progress** may carry a second, separate amount: what the driver expects it to pay.

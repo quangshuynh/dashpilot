@@ -117,6 +117,29 @@ amount and its two timestamps.
 The store's versions record *facts a driver entered* — an amount on a shift (v4), an amount on a
 delivery (v7) — never a figure derived from them.
 
+### Money's two reads and its activity slices
+
+Money issues two bounded, cancellable off-main reads for the selected period. The financial read
+fetches completed shifts and expenses only, builds each shift's `PeriodShiftRecord` once, and derives
+from those same records the period's `PeriodMetrics`, the preceding equivalent period's metrics for
+the comparison, and `MoneyActivity`. The detail read realizes deliveries and measures routes for
+delivery active time, recorded mileage, the rates over them, delivery pay, tips and the fuel
+estimate. Each result is shown only when its period equals the selected period, so a switch never
+displays the previous selection's figures, and `PeriodLoadStore` generations keep a superseded read
+from publishing.
+
+`MoneyActivityBuilder` divides the period into days (up to 31 days), Monday-Sunday weeks (up to 186
+days) or months, clipping the first and last slice to the period. Slices come from `Calendar`, so a
+23- or 25-hour day is still one day. Records are grouped into slices once by binary search, and each
+slice is summarised by `PeriodMetricsCalculator` under the usual membership rules: a shift wholly in
+the slice containing its start, an expense in the slice containing its own date. Every record lands
+in exactly one slice, so slice gross, expenses, shift counts and coverage add back up to the period's
+figures; tests assert this for weekly, monthly, long-range and five-year fixtures. Nothing is
+persisted or cached beyond the screen.
+
+Money shows no net per hour. Net after recorded expenses divided by working hours would combine
+costs dated to a period with hours recorded on shifts, the mixed-population rate refused above.
+
 ### Explicit unavailable states
 
 `ShiftRate` is `.available(Money)` or `.unavailable(ShiftRateUnavailability)`. A `Money?` would carry

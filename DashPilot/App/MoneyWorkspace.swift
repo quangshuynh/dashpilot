@@ -3,6 +3,13 @@ import SwiftUI
 /// Selected-period finances reuse the report loader, calculator, and expense editor.
 /// Category selection affects only the rows and their explicitly filtered subtotal.
 /// ``MoneyPeriodSelection`` decides the period from the calendar alone.
+///
+/// Two bounded reads serve the screen. The financial read (shifts and expenses
+/// only) fills the summary, activity, comparison and expenses first. A second
+/// read realizes deliveries and routes for delivery active time, recorded
+/// mileage, the rates over them, delivery pay with tips and the fuel estimate,
+/// and its section waits for it without holding up the figures above.
+/// Each result is shown only for the period it was built for.
 struct MoneyWorkspace: View {
     @Environment(\.calendar) private var calendar
     @Environment(\.locale) private var locale
@@ -13,9 +20,10 @@ struct MoneyWorkspace: View {
     @State private var isChoosingRange = false
     @State private var category: ExpenseCategory?
     @State private var showsFuel = false
-    @State private var hasRequestedFuel = false
     @State private var loader = PeriodLoadStore()
+    @State private var detailLoader = PeriodLoadStore()
     @State private var retryRevision = 0
+    @State private var detailRetryRevision = 0
     @State private var actions = ExpenseActions()
 
     private var period: ReportingPeriod? {
@@ -29,27 +37,47 @@ struct MoneyWorkspace: View {
               snapshot.money?.metrics.period == period else { return nil }
         return snapshot.money
     }
+    /// Delivery and route figures, only ever for the period on screen.
+    private var detail: PeriodMetrics? {
+        guard case .loaded(let snapshot) = detailLoader.state,
+              let current = snapshot.current, current.period == period else { return nil }
+        return current
+    }
 
     var body: some View {
         List {
             Section {
-                NavigationLink { InsightsView(initialPeriod: selection.insightsWeek(asOf: now, calendar: calendar)) } label: {
-                    Label("Insights", systemImage: "chart.bar.xaxis").frame(minHeight: 44)
-                }
-                .accessibilityIdentifier("insightsLink")
                 presetMenu
                 periodHeading
-                Button { actions.editing = .new } label: {
-                    Label("Add Expense", systemImage: "plus").dashFont(.emphasis).frame(minHeight: 44)
+                if let period, period.contains(now) {
+                    Text("\(period.unit == .custom ? "Range" : noun.capitalized) in progress. Only completed shifts contribute so far.")
+                        .dashFont(.supporting).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("moneyInProgress")
                 }
-                .accessibilityIdentifier("moneyAddExpenseButton")
             }
             if period == nil {
                 Section { DashNotice(title: "This period is unavailable", message: "Check your calendar settings.", symbol: "calendar") }
             } else if let summary {
-                overview(summary.metrics)
+                if !summary.metrics.hasAnyRecords {
+                    // A grid of "Not available" figures would say nothing more
+                    // than this, and "0 of 0 shifts" reads like a measurement.
+                    Section {
+                        DashNotice(title: "Nothing recorded in this \(noun)",
+                                   message: "Completed shifts and expenses dated in this \(noun) appear here. Choose another period or add an expense.",
+                                   symbol: "calendar")
+                            .accessibilityIdentifier("moneyPeriodEmpty")
+                    }
+                } else {
+                    MoneySummarySection(metrics: summary.metrics, noun: noun)
+                    workDetailSection(summary.metrics)
+                    if let activity = summary.activity {
+                        MoneyActivitySection(activity: activity, now: now)
+                    }
+                }
                 expenseSection(summary)
-                fuelSection(summary)
+                comparisonSection(summary)
+                if !summary.metrics.isEmpty { fuelSection }
             } else if loader.state == .failed {
                 PeriodLoadFailure(retry: { retryRevision += 1 })
             } else {
@@ -67,16 +95,35 @@ struct MoneyWorkspace: View {
                 }
                 .accessibilityIdentifier("periodSummaryLink")
             } header: { Text("Financial history") } footer: {
-                Text("Explore days, weeks, months and custom dates. Compare previous periods and export your records from a summary.")
+                Text("Insights charts eight weeks at a time. Summaries explore days, weeks, months and custom dates, compare previous periods and export your records.")
             }
         }
         .dashCanvas()
         .navigationTitle("Money")
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                NavigationLink { InsightsView(initialPeriod: selection.insightsWeek(asOf: now, calendar: calendar)) } label: {
+                    Label("Insights", systemImage: "chart.bar.xaxis")
+                }
+                .accessibilityLabel("Insights")
+                .accessibilityHint("Charts eight weeks of recorded history")
+                .accessibilityIdentifier("insightsLink")
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button { actions.editing = .new } label: { Label("Add Expense", systemImage: "plus") }
+                    .accessibilityLabel("Add Expense")
+                    .accessibilityIdentifier("moneyAddExpenseButton")
+            }
+        }
         .workspaceDestinations()
         .modifier(ExpenseActionPresentation(actions: actions))
         .modifier(PeriodLoading(request: period.map {
-            PeriodLoadRequest(period: $0, includesExpenseRows: true, includesFuelEstimates: hasRequestedFuel)
+            PeriodLoadRequest(period: $0, previous: $0.precedingEquivalent(using: calendar),
+                              includesExpenseRows: true, activityCalendar: calendar)
         }, store: loader, retryRevision: retryRevision))
+        .modifier(PeriodLoading(request: period.map {
+            PeriodLoadRequest(period: $0, includesRouteDetails: true)
+        }, store: detailLoader, retryRevision: detailRetryRevision))
         .sheet(isPresented: $isChoosingRange) {
             CustomRangeSheet(start: selection.customRange?.start ?? currentWeekStart,
                              end: selection.customRange?.lastInstant ?? now,
@@ -84,7 +131,6 @@ struct MoneyWorkspace: View {
                 selection.selectCustom(from: start, through: end, calendar: calendar)
             }
         }
-        .onChange(of: showsFuel) { _, expanded in if expanded { hasRequestedFuel = true } }
         .onAppear { now = .now }
         .onChange(of: scenePhase) { _, phase in if phase == .active { now = .now } }
         .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in now = .now }
@@ -93,6 +139,8 @@ struct MoneyWorkspace: View {
     private var currentWeekStart: Date {
         ReportingPeriod(unit: .week, containing: now, calendar: calendar)?.start ?? now
     }
+
+    // MARK: Period controls
 
     /// One native menu row. Each control below sits in its own row or uses a
     /// bordered style: a List row runs every plain button it holds on one tap,
@@ -206,37 +254,65 @@ struct MoneyWorkspace: View {
         .accessibilityIdentifier("moneyNextWeek")
     }
 
-    private func overview(_ metrics: PeriodMetrics) -> some View {
-        Section {
-            DashMetric(value: metrics.recordedGrossEarnings?.formatted(locale: locale) ?? "Earnings not recorded",
-                       label: "Recorded gross earnings",
-                       detail: "Based on \(metrics.earningsCoverage.statement(noun: "completed shift"))",
-                       isFigure: metrics.recordedGrossEarnings != nil, emphasis: .financial, keepsFigureTogether: true)
-                .padding(.vertical, DashSpacing.md)
-                .listRowBackground(ShiftActivityPalette.cloud)
-                .accessibilityElement(children: .combine)
-                .accessibilityIdentifier("moneyGross")
-            DashValueRow(title: "Recorded expenses",
-                         value: metrics.expenses.recordedTotal?.formatted(locale: locale) ?? "No expenses recorded",
-                         detail: metrics.expenseBasisStatement + ". Only costs you entered.",
-                         isFigure: metrics.expenses.hasRecords, keepsFigureTogether: true)
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel(metrics.spokenExpenseStatement(locale: locale))
-                .accessibilityIdentifier("moneyExpenses")
-            DashValueRow(title: metrics.netTitle, value: metrics.netStatement(locale: locale) ?? "Not available",
-                         detail: metrics.netAfterRecordedExpenses.isAvailable
-                            ? "\(metrics.netBasisStatement). \(metrics.netCautionStatement)"
-                            : metrics.netUnavailableExplanation,
-                         isFigure: metrics.netAfterRecordedExpenses.isAvailable, isProminent: true, keepsFigureTogether: true)
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel(metrics.spokenNetStatement(locale: locale))
-                .accessibilityIdentifier("moneyNet")
-        } header: { Text("Selected \(noun)") }
+    // MARK: Time, distance and deliveries
+
+    /// Figures that need deliveries and routes. Working time and the working
+    /// hour rate are in the summary already, from the financial read.
+    @ViewBuilder
+    private func workDetailSection(_ financial: PeriodMetrics) -> some View {
+        if !financial.isEmpty {
+            Section {
+                if let detail {
+                    MoneyWorkDetailRows(metrics: detail)
+                } else if detailLoader.state == .failed {
+                    DashNotice(title: "Couldn't load time and mileage", message: "The figures above are unaffected.",
+                               symbol: "exclamationmark.arrow.trianglehead.2.clockwise.rotate.90")
+                    Button("Try Again") { detailRetryRevision += 1 }
+                        .frame(minHeight: 44)
+                        .accessibilityLabel("Try loading time and mileage again")
+                        .accessibilityIdentifier("moneyDetailRetry")
+                } else {
+                    ProgressView("Loading time and mileage…").accessibilityIdentifier("moneyDetailLoading")
+                }
+            } header: { Text("Time, distance and deliveries") } footer: {
+                Text("Delivery active time counts overlapping deliveries once. Recorded mileage is the distance your accepted route samples support, not necessarily everything you drove. Delivery records are independent of shift gross and are never added to it.")
+            }
+        }
     }
+
+    // MARK: Comparison
+
+    @ViewBuilder
+    private func comparisonSection(_ summary: MoneyPeriodSummary) -> some View {
+        if let comparison = summary.comparison(asOf: now, calendar: calendar),
+           comparison.current.hasAnyRecords || comparison.previousHasRecords {
+            Section {
+                Text(comparison.previousPeriodStatement(asOf: now, calendar: calendar, locale: locale))
+                    .dashFont(.emphasis)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("moneyComparisonPrevious")
+                if let note = comparison.inProgressStatement { Text(note).dashFont(.body).fixedSize(horizontal: false, vertical: true) }
+                if let note = comparison.previousEmptyStatement { Text(note).dashFont(.body).fixedSize(horizontal: false, vertical: true) }
+                // Against a period with nothing recorded every row would read
+                // "compared with Not recorded"; the statement above says it once.
+                if comparison.previousHasRecords {
+                    FinancialComparisonRows(comparison: comparison, identifierPrefix: "moneyComparison")
+                }
+            } header: { Text(comparison.title) } footer: {
+                Text(comparison.cautionStatement)
+            }
+        }
+    }
+
+    // MARK: Expenses
 
     private func expenseSection(_ summary: MoneyPeriodSummary) -> some View {
         let rows = summary.rows(in: category)
         return Section {
+            if !summary.metrics.expenses.categoryTotals.isEmpty {
+                MoneyCategoryBreakdown(totals: summary.metrics.expenses.categoryTotals, selected: category,
+                                       statement: { summary.metrics.categoryStatement($0, locale: locale) }) { category = $0 }
+            }
             Picker("Category", selection: $category) {
                 Text("All expenses").tag(Optional<ExpenseCategory>.none)
                 ForEach(ExpenseCategory.allCases) { Text($0.title).tag(Optional($0)) }
@@ -246,7 +322,7 @@ struct MoneyWorkspace: View {
             if let subtotal = summary.subtotal(in: category) {
                 DashValueRow(title: category.map { "\($0.title) subtotal" } ?? "All categories subtotal",
                              value: subtotal.formatted(locale: locale),
-                             detail: "Selected \(noun) · \(rows.count) recorded expenses", keepsFigureTogether: true)
+                             detail: "Selected \(noun) · \(rows.count) recorded \(rows.count == 1 ? "expense" : "expenses")", keepsFigureTogether: true)
                     .accessibilityElement(children: .combine)
                     .accessibilityIdentifier("moneyFilteredSubtotal")
             }
@@ -261,33 +337,23 @@ struct MoneyWorkspace: View {
                 }
             }
             ForEach(rows) { row in ExpenseRecordButton(row: row, actions: actions) }
-            if category == nil, !summary.metrics.expenses.categoryTotals.isEmpty {
-                DisclosureGroup("Category subtotals") {
-                    ForEach(summary.metrics.expenses.categoryTotals) { total in
-                        DashValueRow(title: total.category.title, value: total.total.formatted(locale: locale), keepsFigureTogether: true)
-                            .accessibilityElement(children: .ignore)
-                            .accessibilityLabel(summary.metrics.categoryStatement(total, locale: locale))
-                    }
-                }
-            }
         } header: { Text("Expenses · Newest first") } footer: {
-            Text("Filtering changes this list and subtotal. The overview always includes all recorded expenses in the selected \(noun).")
+            Text("Filtering changes this list and subtotal. The summary always includes all recorded expenses in the selected \(noun). Only costs you entered appear; estimated fuel is separate.")
         }
     }
 
-    private func fuelSection(_ summary: MoneyPeriodSummary) -> some View {
-        let metrics = summary.metrics
-        return Section {
+    private var fuelSection: some View {
+        Section {
             DisclosureGroup("Estimated fuel consumption", isExpanded: $showsFuel) {
-                if !summary.includesFuelEstimates {
-                    ProgressView("Loading fuel estimates…")
-                } else {
+                if let detail {
                     DashValueRow(title: "Estimated fuel cost",
-                                 value: metrics.fuel.estimatedCost?.formatted(locale: locale) ?? "Not available",
-                                 detail: metrics.fuel.spokenStatement(locale: locale), isFigure: metrics.fuel.isAvailable, keepsFigureTogether: true)
+                                 value: detail.fuel.estimatedCost?.formatted(locale: locale) ?? "Not available",
+                                 detail: detail.fuel.spokenStatement(locale: locale), isFigure: detail.fuel.isAvailable, keepsFigureTogether: true)
                         .accessibilityElement(children: .ignore)
-                        .accessibilityLabel(metrics.fuel.spokenStatement(locale: locale))
+                        .accessibilityLabel(detail.fuel.spokenStatement(locale: locale))
                         .accessibilityIdentifier("moneyEstimatedFuel")
+                } else {
+                    ProgressView("Loading fuel estimates…")
                 }
                 Text("Uses recorded miles and each shift's saved vehicle assumptions. Recorded fuel purchases and estimated consumption are different views of cost. This estimate is never subtracted from net after recorded expenses.")
                     .dashFont(.supporting).fixedSize(horizontal: false, vertical: true)
