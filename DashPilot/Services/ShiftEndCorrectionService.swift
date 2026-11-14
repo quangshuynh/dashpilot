@@ -39,6 +39,8 @@ nonisolated extension ShiftEndCorrectionError: LocalizedError {
             "A shift's end time can be corrected once the shift has ended."
         case .invalidCorrection(.notAfterShiftStart):
             "A shift has to end after it started. Choose a time later than the time this shift began."
+        case .invalidCorrection(.inFuture):
+            "That time has not happened yet. Choose an end time no later than now."
         case .invalidCorrection(.pauseIsOpen):
             """
             This shift records a pause that was never ended, so moving its end time would change how \
@@ -184,14 +186,20 @@ nonisolated extension ShiftEndCorrectionError: LocalizedError {
 @MainActor
 struct ShiftEndCorrectionService {
     private let context: ModelContext
+    private let now: () -> Date
 
     /// How a change is handed to the store. Injectable for the reason
     /// ``ShiftPauseCorrectionService``'s is: every claim here about what a
     /// refused save leaves behind is untestable while the save can only succeed.
     private let commit: (ModelContext) throws -> Void
 
-    init(context: ModelContext, commit: @escaping (ModelContext) throws -> Void = { try $0.save() }) {
+    init(
+        context: ModelContext,
+        now: @escaping () -> Date = { .now },
+        commit: @escaping (ModelContext) throws -> Void = { try $0.save() }
+    ) {
         self.context = context
+        self.now = now
         self.commit = commit
     }
 
@@ -200,11 +208,12 @@ struct ShiftEndCorrectionService {
     /// Rewrites when `shift` ended, and removes the route evidence that a
     /// corrected-earlier end puts outside it.
     ///
-    /// One path for both directions, so an end moved earlier is checked against
-    /// exactly the rules an end moved later is. The only asymmetry is the route,
-    /// and it is an asymmetry of the data rather than of the rules: capture is
-    /// judged against the shift's end as positions arrive, so a shift holds
-    /// nothing after the end it recorded and a later end has nothing to remove.
+    /// **The end-only entry point to ``ShiftTimeCorrectionService``**, which
+    /// holds the one write path for a shift's times: the same deletion of the
+    /// route beyond the end, the same single save and the same rollback. The
+    /// start is passed through unchanged, so it is not judged at all, and every
+    /// refusal is the ``ShiftEndCorrection`` rule this service has always
+    /// raised.
     ///
     /// - Returns: what was applied, so a caller can say what it did without
     ///   re-deriving it from a model that has already moved.
@@ -212,40 +221,28 @@ struct ShiftEndCorrectionService {
     @discardableResult
     func correct(_ shift: Shift, to correctedEnd: Date) throws -> ShiftEndCorrection {
         try requireRecorded(shift)
-
         let correction = try proposed(on: shift, to: correctedEnd)
-
-        // Read before anything is marked deleted: a refusal here must leave the
-        // context with nothing pending at all.
-        let departing = try routeSamples(of: shift, after: correction.routeTrimBoundary)
-
-        for sample in departing { context.delete(sample) }
-
         do {
-            try shift.apply(correction)
-        } catch let error as ShiftEndCorrectionRefusal {
-            // Puts back the rows marked deleted above. Unreachable through this
-            // path — the correction was built from this shift a moment ago — and
-            // that is exactly why the rollback is cheap insurance rather than a
-            // cost.
-            context.rollback()
-            AppLog.shift.notice(
-                "Refused a shift end correction: \(error.logDescription, privacy: .public)"
-            )
-            throw ShiftEndCorrectionError.invalidCorrection(error)
-        }
-
-        try save(describing: "correct a completed shift's end time")
-
-        // Structural only, and deliberately without the instant, the direction
-        // or the number of positions. When a driver stopped working, and how far
-        // they had driven by then, are exactly the facts `AppLog.shift` has never
-        // recorded, and correcting one is not the moment to start.
-        AppLog.shift.info("A completed shift's end time was corrected")
-        if !departing.isEmpty {
-            AppLog.routeCapture.info("Route recorded after a corrected shift end was removed")
+            try ShiftTimeCorrectionService(context: context, now: now, commit: commit)
+                .correct(shift, start: shift.startedAt, end: correctedEnd)
+        } catch let error as ShiftTimeCorrectionError {
+            throw Self.endError(from: error)
         }
         return correction
+    }
+
+    /// The end-only vocabulary for a failure the shared service raised.
+    ///
+    /// A start refusal cannot arise here, because the start does not move and
+    /// an unmoved start is not judged; it is reported as the shift not being
+    /// correctable rather than trapping.
+    private static func endError(from error: ShiftTimeCorrectionError) -> ShiftEndCorrectionError {
+        switch error {
+        case let .invalidCorrection(.end(refusal)): .invalidCorrection(refusal)
+        case .invalidCorrection(.start): .invalidCorrection(.shiftNotCompleted)
+        case .shiftNoLongerExists: .shiftNoLongerExists
+        case let .storeUnavailable(underlying): .storeUnavailable(underlying: underlying)
+        }
     }
 
     // MARK: Asking without writing
@@ -253,13 +250,9 @@ struct ShiftEndCorrectionService {
     /// What the driver's proposed end would be refused for, or `nil` if it would
     /// be accepted.
     ///
-    /// The editor asks this while the picker moves, so the sentence on screen is
-    /// written by the same rule the write will consult rather than by a second
-    /// opinion about it. It mutates nothing and saves nothing.
-    ///
-    /// A store that cannot be read reports ``ShiftEndCorrectionRefusal/shiftNotCompleted``,
-    /// which withholds the save. Offering one that is about to fail on the read
-    /// it just failed would be the worse answer.
+    /// It mutates nothing and saves nothing. A store that cannot be read
+    /// reports ``ShiftEndCorrectionRefusal/shiftNotCompleted``, which withholds
+    /// the save.
     func refusal(on shift: Shift, to correctedEnd: Date) -> ShiftEndCorrectionRefusal? {
         do {
             _ = try proposed(on: shift, to: correctedEnd)
@@ -272,14 +265,8 @@ struct ShiftEndCorrectionService {
     }
 
     /// How many of this shift's retained positions lie after `correctedEnd`, and
-    /// would therefore be deleted.
-    ///
-    /// The figure the confirmation states. A count rather than a fetch, so
-    /// asking the question does not load a route.
-    ///
-    /// Zero for a correction that moves the end later or leaves it where it is,
-    /// which is what makes "confirm before destroying something" and "do not ask
-    /// about a deletion that is not happening" the same check.
+    /// would therefore be deleted. Zero for a correction that moves the end
+    /// later or leaves it where it is.
     func routeEvidenceCount(on shift: Shift, after correctedEnd: Date) -> Int {
         guard let recordedEnd = shift.endedAt, correctedEnd < recordedEnd else { return 0 }
         return shift.routeSampleCount(after: correctedEnd)
@@ -292,7 +279,7 @@ struct ShiftEndCorrectionService {
     private func proposed(on shift: Shift, to correctedEnd: Date) throws -> ShiftEndCorrection {
         let nextStart = try nextShiftStart(after: shift)
         do {
-            return try shift.endCorrection(to: correctedEnd, nextShiftStartedAt: nextStart)
+            return try shift.endCorrection(to: correctedEnd, nextShiftStartedAt: nextStart, now: now())
         } catch let error as ShiftEndCorrectionRefusal {
             AppLog.shift.notice(
                 "Refused a shift end correction: \(error.logDescription, privacy: .public)"
@@ -302,14 +289,8 @@ struct ShiftEndCorrectionService {
     }
 
     /// When the next shift recorded after this one began, or `nil` if this is
-    /// the most recent.
-    ///
-    /// Finished or running: a shift that has started is a shift whose minutes
-    /// are spoken for, and the app's own invariant that at most one shift is
-    /// unfinished is not a reason to leave the running one out of this.
-    ///
-    /// Compared by `startedAt` rather than by end, because a start is the one
-    /// timestamp every shift has.
+    /// the most recent. Finished or running: a shift that has started is a
+    /// shift whose minutes are spoken for.
     private func nextShiftStart(after shift: Shift) throws -> Date? {
         let startedAt = shift.startedAt
         let shiftID = shift.id
@@ -326,59 +307,8 @@ struct ShiftEndCorrectionService {
         }
     }
 
-    /// The positions that leave the shift, or none when the correction takes
-    /// none out of it.
-    ///
-    /// Fetched through the context rather than through ``Shift/routeSamples(after:)``
-    /// because these rows are about to be **deleted**: a read the store refused
-    /// returns an empty array there, and an empty array here would silently
-    /// leave a shift claiming an end its own route reaches past. A failed read
-    /// refuses the whole correction instead, exactly as it does before a shift
-    /// is deleted.
-    private func routeSamples(of shift: Shift, after boundary: Date?) throws -> [RouteSample] {
-        guard let boundary else { return [] }
-        let shiftKey = shift.persistentModelID
-        do {
-            return try context.fetch(
-                FetchDescriptor<RouteSample>(
-                    predicate: #Predicate { $0.shift?.persistentModelID == shiftKey && $0.timestamp > boundary }
-                )
-            )
-        } catch {
-            // Nothing has been marked deleted yet, so there is nothing to roll
-            // back. The reason names no position and no instant.
-            AppLog.routeCapture.error("Failed to read the route a shift end correction would remove: \(error)")
-            throw ShiftEndCorrectionError.storeUnavailable(underlying: error)
-        }
-    }
-
-    // MARK: Writing
-
-    /// Saves a correction, and rolls back if the store refuses.
-    ///
-    /// `operation` is a fixed word naming what was attempted, typed as a
-    /// `StaticString` so nothing a driver recorded can become the value.
-    private func save(describing operation: StaticString) throws {
-        do {
-            try commit(context)
-        } catch {
-            // The whole correction is discarded, end and route together: the
-            // interface must not show a shift the store does not hold, and a
-            // mileage figure derived from positions the store still has must
-            // never outlive the call that attempted to remove them.
-            context.rollback()
-            AppLog.shift.error("Failed to \(operation, privacy: .public): \(error)")
-            throw ShiftEndCorrectionError.storeUnavailable(underlying: error)
-        }
-    }
-
-    /// Whether this row is still one the store holds.
-    ///
-    /// A view can hold a shift across a sheet dismissal, another screen's
-    /// deletion or its own correction, so an object arriving here is not proof
-    /// of a row. Checked before anything is read for writing, for the reason
-    /// ``ShiftPauseCorrectionService`` checks: a half-applied correction is
-    /// worse than a refused one.
+    /// Whether this row is still one the store holds. A half-applied correction
+    /// is worse than a refused one.
     private func requireRecorded(_ shift: Shift) throws {
         guard shift.modelContext != nil, !shift.isDeleted else {
             AppLog.shift.notice("Refused a shift end correction: the shift is not in the store")

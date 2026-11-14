@@ -26,6 +26,15 @@ nonisolated enum ShiftEndCorrectionRefusal: Error, Equatable, Sendable {
     /// delete it, which is a different action with its own confirmation.
     case notAfterShiftStart
 
+    /// The proposed end is later than the moment it is being proposed at.
+    ///
+    /// A shift cannot have ended at an instant that has not happened yet, and an
+    /// end in the future would report working time nobody has worked and leave
+    /// every hourly figure divided by it. The picker is bounded by the present
+    /// too; this is the rule behind that bound, so a draft held open across
+    /// midnight cannot save a time the clock has not reached.
+    case inFuture
+
     /// The shift records a pause the driver never ended.
     ///
     /// A store the app cannot write: ending a shift closes its open pause at the
@@ -107,6 +116,7 @@ nonisolated extension ShiftEndCorrectionRefusal {
     static let allCases: [Self] = [
         .shiftNotCompleted,
         .notAfterShiftStart,
+        .inFuture,
         .pauseIsOpen,
         .cutsThroughRecordedPause,
         .routeSuspensionIsOpen,
@@ -128,6 +138,7 @@ nonisolated extension ShiftEndCorrectionRefusal {
         switch self {
         case .shiftNotCompleted: "shiftNotCompleted"
         case .notAfterShiftStart: "notAfterShiftStart"
+        case .inFuture: "inFuture"
         case .pauseIsOpen: "pauseIsOpen"
         case .cutsThroughRecordedPause: "cutsThroughRecordedPause"
         case .routeSuspensionIsOpen: "routeSuspensionIsOpen"
@@ -234,10 +245,10 @@ nonisolated struct RecordedDeliveryEvent: Equatable, Sendable {
 /// at would rewrite the shift the driver recorded. The instant this type accepts
 /// was typed by the driver on purpose.
 ///
-/// Not a general timestamp correction either. The shift's **start** is not
-/// editable here, and neither is any delivery event: those are different facts
-/// with different collisions, and one editor that moved any of them would be
-/// four corrections wearing one name.
+/// Not a general timestamp correction either. The shift's **start** is judged by
+/// ``ShiftTimeCorrection``, which composes this type for the end side of a
+/// correction that moves both, and no delivery event is editable here: those
+/// are different facts with different collisions.
 nonisolated struct ShiftEndCorrection: Equatable, Sendable {
     /// The end the shift records now.
     let recordedEnd: Date
@@ -295,6 +306,9 @@ nonisolated struct ShiftEndCorrection: Equatable, Sendable {
     ///   - nextShiftStartedAt: when the next shift recorded after this one
     ///     began, or `nil` if this is the most recent. Running or finished: a
     ///     shift that has started is a shift whose minutes are spoken for.
+    ///   - now: the instant the correction is proposed at, or `nil` to skip the
+    ///     future check. The services always pass one; a test about another
+    ///     rule may leave it out.
     /// - Throws: ``ShiftEndCorrectionRefusal``.
     init(
         to correctedEnd: Date,
@@ -303,10 +317,12 @@ nonisolated struct ShiftEndCorrection: Equatable, Sendable {
         pauses: [ShiftPauseInterval],
         suspensions: [RouteSuspensionInterval] = [],
         deliveryEvents: [RecordedDeliveryEvent],
-        nextShiftStartedAt: Date?
+        nextShiftStartedAt: Date?,
+        now: Date? = nil
     ) throws {
         guard let recordedEnd else { throw ShiftEndCorrectionRefusal.shiftNotCompleted }
         guard correctedEnd > startedAt else { throw ShiftEndCorrectionRefusal.notAfterShiftStart }
+        if let now, correctedEnd > now { throw ShiftEndCorrectionRefusal.inFuture }
 
         if let nextShiftStartedAt, correctedEnd > nextShiftStartedAt {
             throw ShiftEndCorrectionRefusal.overlapsAnotherShift
