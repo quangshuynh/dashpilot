@@ -222,6 +222,11 @@ struct MoneyActivitySection: View {
 
     private func chart(_ buckets: [MoneyActivityBucket]) -> some View {
         VStack(alignment: .leading, spacing: DashSpacing.md) {
+            HStack(spacing: DashSpacing.lg) {
+                legendEntry(Self.grossSeries, color: ShiftActivityPalette.accent)
+                legendEntry(Self.expenseSeries, color: ShiftActivityPalette.estimateOutline)
+            }
+            .accessibilityHidden(true)
             Chart {
                 ForEach(buckets) { bucket in
                     let label = bucket.period.rangeStatement(calendar: calendar, locale: locale)
@@ -257,7 +262,10 @@ struct MoneyActivitySection: View {
             }
             .chartForegroundStyleScale([Self.grossSeries: ShiftActivityPalette.accent,
                                         Self.expenseSeries: ShiftActivityPalette.estimateOutline])
-            .chartLegend(position: .top, alignment: .leading)
+            // Drawn outside the chart: the built-in legend inherits the
+            // chart's accessibility label, so VoiceOver read each entry as the
+            // whole chart.
+            .chartLegend(.hidden)
             .chartXScale(domain: (buckets.first?.period.start ?? now)...(buckets.last?.period.end ?? now))
             .chartYScale(domain: .automatic(includesZero: true))
             .chartYAxis {
@@ -284,6 +292,13 @@ struct MoneyActivitySection: View {
                 .dashFont(.supporting).foregroundStyle(.secondary)
         }
         .padding(.vertical, DashSpacing.md)
+    }
+
+    private func legendEntry(_ title: String, color: Color) -> some View {
+        HStack(spacing: DashSpacing.sm) {
+            Circle().fill(color).frame(width: 8, height: 8)
+            Text(title).dashFont(.supporting).foregroundStyle(.secondary)
+        }
     }
 
     /// Chart geometry only. Authoritative amounts and labels remain Decimal-backed Money.
@@ -345,26 +360,31 @@ struct MoneyActivityRow: View {
 // MARK: Category breakdown
 
 /// The selected period's recorded expenses by category, in the categories' own
-/// order. Tapping a category filters the list below to it.
+/// order. Tapping a category filters the list below to it; tapping the
+/// selected one shows every category again. It stays in place while a filter
+/// applies, so choosing one never moves the list under the driver's finger.
 struct MoneyCategoryBreakdown: View {
     let totals: [ExpenseCategoryTotal]
+    let selected: ExpenseCategory?
     let statement: (ExpenseCategoryTotal) -> String
-    let select: (ExpenseCategory) -> Void
+    let select: (ExpenseCategory?) -> Void
     @Environment(\.locale) private var locale
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         let maximum = totals.map(\.total).max() ?? .zero
         ForEach(totals) { total in
-            Button { select(total.category) } label: {
+            let isSelected = selected == total.category
+            Button { select(isSelected ? nil : total.category) } label: {
                 VStack(alignment: .leading, spacing: DashSpacing.sm) {
-                    DashValueRow(title: total.category.title, value: total.total.formatted(locale: locale),
+                    DashValueRow(title: isSelected ? "\(total.category.title) · Showing" : total.category.title,
+                                 value: total.total.formatted(locale: locale),
                                  detail: "\(total.recordCount) recorded \(total.recordCount == 1 ? "expense" : "expenses")",
                                  keepsFigureTogether: true)
                     if !dynamicTypeSize.isAccessibilitySize, maximum > .zero {
                         Chart {
                             BarMark(x: .value("Recorded expenses", chartValue(total.total)), y: .value("Category", total.category.title))
-                                .foregroundStyle(ShiftActivityPalette.estimateOutline)
+                                .foregroundStyle(isSelected ? ShiftActivityPalette.accent : ShiftActivityPalette.estimateOutline)
                         }
                         .chartXScale(domain: 0...chartValue(maximum)).chartXAxis(.hidden).chartYAxis(.hidden)
                         .frame(height: 10).accessibilityHidden(true)
@@ -375,8 +395,8 @@ struct MoneyCategoryBreakdown: View {
             .buttonStyle(.plain)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(statement(total))
-            .accessibilityHint("Shows only \(total.category.title) expenses")
-            .accessibilityAddTraits(.isButton)
+            .accessibilityHint(isSelected ? "Shows every category again" : "Shows only \(total.category.title) expenses")
+            .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
             .accessibilityIdentifier("moneyCategory-\(total.category.rawValue)")
         }
     }

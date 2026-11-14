@@ -59,8 +59,9 @@ struct MoneyWorkspace: View {
             if period == nil {
                 Section { DashNotice(title: "This period is unavailable", message: "Check your calendar settings.", symbol: "calendar") }
             } else if let summary {
-                MoneySummarySection(metrics: summary.metrics, noun: noun)
                 if !summary.metrics.hasAnyRecords {
+                    // A grid of "Not available" figures would say nothing more
+                    // than this, and "0 of 0 shifts" reads like a measurement.
                     Section {
                         DashNotice(title: "Nothing recorded in this \(noun)",
                                    message: "Completed shifts and expenses dated in this \(noun) appear here. Choose another period or add an expense.",
@@ -68,6 +69,7 @@ struct MoneyWorkspace: View {
                             .accessibilityIdentifier("moneyPeriodEmpty")
                     }
                 } else {
+                    MoneySummarySection(metrics: summary.metrics, noun: noun)
                     workDetailSection(summary.metrics)
                     if let activity = summary.activity {
                         MoneyActivitySection(activity: activity, now: now)
@@ -307,8 +309,8 @@ struct MoneyWorkspace: View {
     private func expenseSection(_ summary: MoneyPeriodSummary) -> some View {
         let rows = summary.rows(in: category)
         return Section {
-            if category == nil, !summary.metrics.expenses.categoryTotals.isEmpty {
-                MoneyCategoryBreakdown(totals: summary.metrics.expenses.categoryTotals,
+            if !summary.metrics.expenses.categoryTotals.isEmpty {
+                MoneyCategoryBreakdown(totals: summary.metrics.expenses.categoryTotals, selected: category,
                                        statement: { summary.metrics.categoryStatement($0, locale: locale) }) { category = $0 }
             }
             Picker("Category", selection: $category) {

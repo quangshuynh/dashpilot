@@ -33,7 +33,8 @@ important:
    full report. The slices are built by the same calculator from the same records as the summary,
    so they always add back up to it.
 4. **Expenses.** Recorded expenses by category, in category order with a proportional bar; tapping
-   a category filters the list. The list is newest first, with stable identity breaking equal-date
+   a category filters the list, and tapping it again shows every category; the breakdown stays in
+   place while filtered. The list is newest first, with stable identity breaking equal-date
    ties. The labelled filtered subtotal changes with the list; the summary's expenses and net still
    include every category. No records anywhere, no records in the period, no matching category and
    failed loading have distinct states.
