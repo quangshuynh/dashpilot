@@ -77,6 +77,16 @@ nonisolated struct PeriodShiftRecord: Equatable, Sendable {
     /// ``EffectiveDeliveryEarnings``.
     let recordedDeliveryEarnings: [Money]
 
+    /// The additional tips already inside ``recordedDeliveryEarnings``, one
+    /// entry per recorded tip.
+    ///
+    /// Only tips on deliveries whose platform pay was recorded, so the tips are
+    /// always a part of the delivery subtotal and never a second amount beside
+    /// it. Tips on a delivery with no platform pay are excluded for the reason
+    /// that delivery is: its total is unknown. Nothing adds these to the shift's
+    /// own gross, which may or may not already include them.
+    let recordedAdditionalTips: [Money]
+
     /// Finished deliveries in the shift, whether or not they carry an amount.
     /// The denominator of the delivery-earnings coverage.
     let terminalDeliveryCount: Int
@@ -100,6 +110,7 @@ nonisolated struct PeriodShiftRecord: Equatable, Sendable {
         pickupWaits: [PickupWaitSample] = [],
         pickupPlaceIDs: Set<UUID> = [],
         recordedDeliveryEarnings: [Money] = [],
+        recordedAdditionalTips: [Money] = [],
         terminalDeliveryCount: Int = 0,
         fuelEstimate: FuelEstimate = .unavailable(.milesPerGallonNotRecorded),
         hasHourlyTarget: Bool = false,
@@ -115,6 +126,7 @@ nonisolated struct PeriodShiftRecord: Equatable, Sendable {
         self.pickupWaits = pickupWaits
         self.pickupPlaceIDs = pickupPlaceIDs
         self.recordedDeliveryEarnings = recordedDeliveryEarnings
+        self.recordedAdditionalTips = recordedAdditionalTips
         self.terminalDeliveryCount = terminalDeliveryCount
         self.fuelEstimate = fuelEstimate
         self.hasHourlyTarget = hasHourlyTarget
@@ -241,6 +253,7 @@ nonisolated struct PeriodMetricsCalculator: Equatable, Sendable {
         let waits = shifts.flatMap(\.pickupWaits)
         let waitMetrics = PickupWaitCalculator().metrics(of: waits)
         let deliveryEarnings = shifts.flatMap(\.recordedDeliveryEarnings)
+        let tips = shifts.flatMap(\.recordedAdditionalTips)
 
         return PeriodMetrics(
             period: period,
@@ -297,7 +310,9 @@ nonisolated struct PeriodMetricsCalculator: Equatable, Sendable {
                 withTarget: shifts.filter(\.hasHourlyTarget).count,
                 compared: shifts.filter { $0.hourlyTargetComparison != nil }.count,
                 atOrAbove: shifts.filter { $0.hourlyTargetComparison.map { $0.standing != .below } == true }.count
-            )
+            ),
+            recordedAdditionalTips: tips.isEmpty ? nil : tips.reduce(Money.zero, +),
+            additionalTipCount: tips.count
         )
     }
 
@@ -505,6 +520,12 @@ extension Shift {
             // nothing at all and is counted as uncovered below, exactly as it
             // was before tips existed.
             recordedDeliveryEarnings: deliveries.compactMap { $0.effectiveEarnings.amount },
+            // The same deliveries' tips, so the tip subtotal is always a part
+            // of the delivery subtotal above.
+            recordedAdditionalTips: deliveries.flatMap { delivery in
+                let earnings = delivery.effectiveEarnings
+                return earnings.isRecorded ? earnings.additionalTips : []
+            },
             terminalDeliveryCount: deliveries.filter(\.state.isFinished).count,
             // The shift's own estimate, over the route measurement the caller
             // already has. Nothing here reads a current default: a finished
