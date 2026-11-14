@@ -229,7 +229,7 @@ struct InsightsView: View {
                 if series.weeks.contains(where: { metric.amount($0) != nil }) {
                     trendChart(series, selected: selected)
                 } else {
-                    Text(metric == .earnings ? "No shift earnings recorded in these weeks." : "No week has both recorded shift earnings and valid positive working time.")
+                    Text(metric.noValuesStatement)
                         .dashFont(.body).foregroundStyle(.secondary)
                 }
             }
@@ -321,7 +321,7 @@ struct InsightsView: View {
             .frame(height: 200)
             .accessibilityLabel("\(metric.title), eight weekly values. Use Selected week or Read All Weekly Values for exact amounts and coverage.")
             .accessibilityIdentifier("insightsTrendChart")
-            Text("Week starting · USD\(metric == .hourly ? " per working hour" : "")")
+            Text("Week starting · USD\(metric == .hourly ? " per working hour" : "")\(metric == .net ? " · below zero when recorded expenses exceed recorded gross" : "")")
                 .dashFont(.supporting).foregroundStyle(.secondary)
             Text("Triangle: partial coverage. Dot at zero: recorded zero. A blank week has no qualifying amount. The shaded week is the selected week. Read all weekly values below for coverage.")
                 .dashFont(.supporting).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
@@ -369,21 +369,7 @@ struct InsightsView: View {
                     .dashFont(.emphasis)
                 if let note = comparison.inProgressStatement { Text(note).dashFont(.body) }
                 if let note = comparison.previousEmptyStatement { Text(note).dashFont(.body) }
-                ForEach(comparison.entries.filter { [.recordedGrossEarnings, .workingTime, .rate(.perWorkingHour), .recordedExpenses].contains($0.metric) }) { entry in
-                    VStack(alignment: .leading, spacing: DashSpacing.sm) {
-                        Text(entry.metric.title).dashFont(.emphasis)
-                        Text(entry.valuesStatement(locale: locale)).monospacedDigit()
-                        if !comparison.isCurrentPeriodInProgress, let change = entry.changeStatement(locale: locale) {
-                            Text([change, entry.percentStatement(locale: locale)].compactMap { $0 }.joined(separator: " · "))
-                        }
-                        if let basis = entry.basisStatement { Text(basis).dashFont(.supporting) }
-                        if let refusal = entry.refusalStatement(noun: "week"), entry.percentageRefusal != .currentPeriodInProgress {
-                            Text(refusal).dashFont(.supporting).foregroundStyle(.secondary)
-                        }
-                    }
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityElement(children: .combine)
-                }
+                FinancialComparisonRows(comparison: comparison)
             } header: { Text("Previous week") } footer: {
                 Text("Differences describe entered records. Coverage can change after corrections. Recorded expenses have no known completeness, so no expense percentage is shown.")
             }
@@ -399,25 +385,53 @@ struct InsightsView: View {
 }
 
 private enum InsightsMetric: String, CaseIterable, Identifiable {
-    case earnings, hourly
+    case earnings, net, hourly
     var id: String { rawValue }
-    var title: String { self == .earnings ? "Recorded gross earnings" : "Gross per working hour" }
+    var title: String {
+        switch self {
+        case .earnings: "Recorded gross earnings"
+        case .net: "Net after recorded expenses"
+        case .hourly: "Gross per working hour"
+        }
+    }
     var absentStatement: String { self == .earnings ? "Earnings not recorded" : "Not available" }
     func amount(_ week: InsightsWeek) -> Money? {
-        self == .earnings ? week.metrics.recordedGrossEarnings : week.metrics.grossPerWorkingHour.amount
+        switch self {
+        case .earnings: week.metrics.recordedGrossEarnings
+        case .net: week.metrics.netAfterRecordedExpenses.amount
+        case .hourly: week.metrics.grossPerWorkingHour.amount
+        }
     }
     func coverage(_ week: InsightsWeek) -> MetricCoverage {
-        self == .earnings ? week.metrics.earningsCoverage : week.metrics.grossPerWorkingHour.coverage
+        self == .hourly ? week.metrics.grossPerWorkingHour.coverage : week.metrics.earningsCoverage
     }
     func coverageStatement(_ week: InsightsWeek) -> String {
         let coverage = coverage(week)
         let basis = coverage.statement(noun: "completed shift")
         let status = coverage.hasContributors && !coverage.isComplete ? "Partial coverage. " : ""
-        return status + basis + (self == .hourly ? " with earnings and valid positive working time." : " with recorded earnings.")
+        switch self {
+        case .earnings: return status + basis + " with recorded earnings."
+        case .hourly: return status + basis + " with earnings and valid positive working time."
+        case .net:
+            let expenses = week.metrics.expenses.recordCount
+            return status + basis + " with recorded earnings, less \(expenses) recorded \(expenses == 1 ? "expense" : "expenses")."
+        }
+    }
+    var noValuesStatement: String {
+        switch self {
+        case .earnings: "No shift earnings recorded in these weeks."
+        case .net: "No week has both recorded shift earnings and a recorded expense."
+        case .hourly: "No week has both recorded shift earnings and valid positive working time."
+        }
     }
     var explanation: String {
-        self == .earnings
-            ? "Recorded completed-shift gross only. Missing earnings stay missing; recorded zero remains a value. Running shifts are excluded."
-            : "Recorded gross divided by working hours from the same qualifying shifts. This is not an average of shift rates. Missing earnings and invalid or zero working time do not contribute."
+        switch self {
+        case .earnings:
+            "Recorded completed-shift gross only. Missing earnings stay missing; recorded zero remains a value. Running shifts are excluded."
+        case .net:
+            "Recorded gross less the expenses dated in the same week, shown only when both were recorded. Costs you did not enter are not subtracted and estimated fuel never is. This is not profit."
+        case .hourly:
+            "Recorded gross divided by working hours from the same qualifying shifts. This is not an average of shift rates. Missing earnings and invalid or zero working time do not contribute."
+        }
     }
 }
