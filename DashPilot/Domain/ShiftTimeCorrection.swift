@@ -7,11 +7,15 @@ import Foundation
 /// recorded, and an editor that moved a delivery, a pause or another shift to
 /// make an instant fit would replace their record with one the app invented.
 nonisolated enum ShiftStartCorrectionRefusal: Error, Equatable, Sendable {
-    /// The proposed start has not happened yet.
+    /// The proposed start moves the start later, to an instant that has not
+    /// happened yet.
     ///
     /// A running shift's working time is measured from its start to now, so a
     /// start in the future would report negative work clamped to zero and stop
     /// the timer. A finished shift cannot have started after the present either.
+    /// A start already recorded in the future, which a wrong device clock can
+    /// leave behind, may still move earlier, for the reason
+    /// ``ShiftEndCorrectionRefusal/inFuture`` gives.
     case inFuture
 
     /// The proposed start is at or after the end this shift records.
@@ -223,7 +227,7 @@ nonisolated struct ShiftTimeCorrection: Equatable, Sendable {
     ///   - recordedStart: the start the shift records.
     ///   - recordedEnd: the end the shift records, `nil` while running.
     ///   - now: the instant the correction is proposed at. Neither time may be
-    ///     later.
+    ///     moved later than it.
     ///   - pauses: every pause the shift records.
     ///   - suspensions: every stretch the shift records the vehicle as parked.
     ///   - deliveryEvents: every lifecycle event its deliveries record.
@@ -289,7 +293,9 @@ nonisolated struct ShiftTimeCorrection: Equatable, Sendable {
     }
 
     /// The start-side rules, in the order a driver would resolve them: the
-    /// clock, the shift's own end, its recorded work, then the shifts around it.
+    /// shift's own end, its recorded work, the shifts around it, then the
+    /// clock. A proposed start that both follows recorded work and lies in the
+    /// future names the work, which is the fact the driver can act on.
     private static func judgeStart(
         _ correctedStart: Date,
         recordedStart: Date,
@@ -302,8 +308,6 @@ nonisolated struct ShiftTimeCorrection: Equatable, Sendable {
         offerAcceptances: [Date],
         neighbours: ShiftTimeNeighbours
     ) throws {
-        guard correctedStart <= now else { throw ShiftTimeCorrectionRefusal.start(.inFuture) }
-
         // With the end moving too, the end side judges the pair and names the
         // end; here the recorded end is the one the start has to precede.
         if !endMoves, let recordedEnd, correctedStart >= recordedEnd {
@@ -338,6 +342,9 @@ nonisolated struct ShiftTimeCorrection: Equatable, Sendable {
         // Moving the start earlier past the whole of another shift.
         if correctedStart < recordedStart, let next = neighbours.nextStartedAt, next < recordedStart {
             throw ShiftTimeCorrectionRefusal.start(.overlapsAnotherShift)
+        }
+        if correctedStart > now, correctedStart > recordedStart {
+            throw ShiftTimeCorrectionRefusal.start(.inFuture)
         }
     }
 }

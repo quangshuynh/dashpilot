@@ -1483,17 +1483,59 @@ enum PreviewSupport {
         }
     }
 
-    /// The end-time editor over the fixture above.
+    // MARK: A finished shift for correcting its times
+
+    /// One finished shift from 9:15 AM to 2:15 PM on the current week's
+    /// Tuesday. See ``LaunchArgument/seededShiftTimeHistory``.
+    static func seededShiftTimeHistoryContainer(
+        referenceDate: Date = historyWeekReference()
+    ) throws -> ModelContainer {
+        let container = try ModelContainerFactory.makeInMemoryContainer()
+        let context = ModelContext(container)
+
+        // The reference is Tuesday 09:00.
+        func at(_ minutes: Double) -> Date { referenceDate.addingTimeInterval(minutes * 60) }
+
+        let shift = Shift(startedAt: at(15))
+        context.insert(shift)
+        for (index, minute) in [60.0, 240.0].enumerated() {
+            let session = UUID()
+            for step in 0..<10 {
+                context.insert(
+                    PreviewRouteSample(
+                        timestamp: at(minute).addingTimeInterval(Double(step) * 20),
+                        latitude: 40.0 + (Double(index) * 9_000 + Double(step) * 400) / 111_320.0,
+                        longitude: -75.0,
+                        captureSessionID: session
+                    ).attached(to: shift)
+                )
+            }
+        }
+
+        let delivery = insertedDelivery(on: shift, acceptedAt: at(40), in: context)
+        try? delivery.markArrivedAtPickup(at: at(50))
+        try? delivery.markPickedUp(at: at(55))
+        try? delivery.markDelivered(at: at(70))
+        try? delivery.setGrossEarnings(Money(minorUnits: 1_400))
+        context.insert(delivery)
+
+        try? shift.end(at: at(315))
+        try? shift.setGrossEarnings(Money(minorUnits: 12_000))
+        try? context.save()
+        return container
+    }
+
+    /// The time editor over the fixture above.
     @MainActor
-    static func shiftEndCorrectionEditor() -> some View {
+    static func shiftTimeCorrectionEditor() -> some View {
         // Previews cannot meaningfully recover from a container failure.
-        let container = try! seededLateEndHistoryContainer()
+        let container = try! seededShiftTimeHistoryContainer()
         let context = container.mainContext
         let shift = (try? context.fetch(FetchDescriptor<Shift>()))?.first
 
         return Group {
             if let shift {
-                ShiftEndCorrectionEditor(shift: shift)
+                ShiftTimeCorrectionEditor(shift: shift)
             } else {
                 Text("No synthetic shift")
             }

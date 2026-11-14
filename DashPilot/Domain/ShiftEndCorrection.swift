@@ -26,13 +26,18 @@ nonisolated enum ShiftEndCorrectionRefusal: Error, Equatable, Sendable {
     /// delete it, which is a different action with its own confirmation.
     case notAfterShiftStart
 
-    /// The proposed end is later than the moment it is being proposed at.
+    /// The proposed end moves the end later, to an instant that has not
+    /// happened yet.
     ///
     /// A shift cannot have ended at an instant that has not happened yet, and an
     /// end in the future would report working time nobody has worked and leave
     /// every hourly figure divided by it. The picker is bounded by the present
-    /// too; this is the rule behind that bound, so a draft held open across
-    /// midnight cannot save a time the clock has not reached.
+    /// too; this is the rule behind that bound.
+    ///
+    /// **Only a later end is refused.** An end already recorded in the future,
+    /// which a device clock that was wrong at the time can leave behind, may
+    /// still be moved earlier: that is a correction toward the truth, and
+    /// refusing it would leave the driver no way to repair the row.
     case inFuture
 
     /// The shift records a pause the driver never ended.
@@ -322,7 +327,7 @@ nonisolated struct ShiftEndCorrection: Equatable, Sendable {
     ) throws {
         guard let recordedEnd else { throw ShiftEndCorrectionRefusal.shiftNotCompleted }
         guard correctedEnd > startedAt else { throw ShiftEndCorrectionRefusal.notAfterShiftStart }
-        if let now, correctedEnd > now { throw ShiftEndCorrectionRefusal.inFuture }
+        if let now, correctedEnd > now, correctedEnd > recordedEnd { throw ShiftEndCorrectionRefusal.inFuture }
 
         if let nextShiftStartedAt, correctedEnd > nextShiftStartedAt {
             throw ShiftEndCorrectionRefusal.overlapsAnotherShift

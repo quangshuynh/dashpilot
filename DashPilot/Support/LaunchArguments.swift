@@ -207,6 +207,19 @@ nonisolated enum LaunchArgument {
     /// memory, so it can never touch a real store.
     static let seededLateDeliveryHistory = "-dashpilot-seeded-late-delivery-history"
 
+    /// Runs against a throwaway store holding one **completed** shift from
+    /// 9:15 AM to 2:15 PM on the current week's Tuesday, paying $120.00, with
+    /// one delivery accepted at 9:40 AM and two short route sessions, all well
+    /// inside the shift.
+    ///
+    /// For the shift-time correction journey: every minute it sets is inside
+    /// one hour, so it drives only the minute wheel, and the earlier moves it
+    /// saves are valid on any weekday.
+    ///
+    /// Every time, amount and coordinate is invented. Debug builds only, and in
+    /// memory, so it can never touch a real store.
+    static let seededShiftTimeHistory = "-dashpilot-seeded-shift-time-history"
+
     /// Runs against a throwaway store holding one finished shift in the current
     /// week, with one delivered delivery that records no amount, no tip, no
     /// pickup place and no route.
@@ -330,6 +343,7 @@ nonisolated enum LaunchArgument {
         seededParkedHistory,
         seededLateEndHistory,
         seededLateDeliveryHistory,
+        seededShiftTimeHistory,
         seededFinishedDelivery,
         seededOlderWeeks,
         seededOlderWeeksOnly,

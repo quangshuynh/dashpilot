@@ -160,6 +160,15 @@ struct ShiftTimeCorrectionTests {
         #expect(refusal { try runningCorrection(start: at(11), now: at(10)) } == .start(.inFuture))
     }
 
+    @Test("A time a wrong clock recorded in the future may still move earlier, never later")
+    func futureRecordedTimesMayMoveEarlier() {
+        // Read at 13:00, with the recorded end at 14:00 still ahead.
+        let now = at(240)
+        #expect(refusal { try correction(start: nine, end: at(280), now: now) } == nil, "Earlier, toward the truth")
+        #expect(refusal { try correction(start: nine, end: at(301), now: now) } == .end(.inFuture))
+        #expect(refusal { try runningCorrection(start: at(-5), now: at(-30)) } == nil, "A future start moved earlier")
+    }
+
     @Test("A start after recorded delivery work is refused naming the earliest event")
     func startAfterDeliveryWorkNamesTheEarliestEvent() {
         let accepted = RecordedDeliveryEvent(deliveryNumber: 2, event: .accepted, occurredAt: at(20))

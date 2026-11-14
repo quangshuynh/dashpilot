@@ -52,7 +52,7 @@ import SwiftUI
 ///
 /// The pickers take their calendar and time zone from the environment, and the
 /// times printed here take the environment's locale, exactly as
-/// ``ShiftEndCorrectionEditor`` and ``ShiftPauseEditor`` read them. **Nothing
+/// ``ShiftTimeCorrectionEditor`` and ``ShiftPauseEditor`` read them. **Nothing
 /// here reaches for `Calendar.autoupdatingCurrent`.** What a picker produces is
 /// an **instant**, so a delivery corrected across a daylight-saving change
 /// measures the minutes that really passed rather than the ones the wall clock
